@@ -7,7 +7,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useId, useState } from 'react';
 import {
     ThumbsUp,
     ThumbsDown,
@@ -18,7 +18,13 @@ import {
     Star,
 } from 'lucide-react';
 import { CommunityPost, VoteType, REPORT_REASONS, createReport, updatePost } from '@/lib/community';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { IconButton } from '@/components/ui/IconButton';
+import { RadioGroup } from '@/components/ui/RadioGroup';
 import { useToast } from '@/components/ui/Toast';
+import { Dialog } from '@/components/ui/Dialog';
 
 // =====================================================
 // 投票按钮组件
@@ -36,26 +42,26 @@ export function VoteButtons({
 }) {
     return (
         <div className="flex items-center gap-2">
-            <button
+            <Button unstyled
                 onClick={() => onVote('up')}
                 className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${userVote === 'up'
-                    ? 'bg-green-500/20 text-green-400'
-                    : 'text-foreground-secondary hover:text-green-400'
+                    ? 'bg-success/10 text-success'
+                    : 'text-foreground-secondary hover:text-success'
                     }`}
             >
                 <ThumbsUp className="w-4 h-4" />
                 <span className="text-sm">{upvotes}</span>
-            </button>
-            <button
+            </Button>
+            <Button unstyled
                 onClick={() => onVote('down')}
                 className={`flex items-center gap-1 px-2 py-1 rounded transition-colors ${userVote === 'down'
-                    ? 'bg-red-500/20 text-red-400'
-                    : 'text-foreground-secondary hover:text-red-400'
+                    ? 'bg-danger/10 text-danger'
+                    : 'text-foreground-secondary hover:text-danger'
                     }`}
             >
                 <ThumbsDown className="w-4 h-4" />
                 <span className="text-sm">{downvotes}</span>
-            </button>
+            </Button>
         </div>
     );
 }
@@ -77,6 +83,7 @@ export function ReportModal({
     const [description, setDescription] = useState('');
     const [loading, setLoading] = useState(false);
     const [success, setSuccess] = useState(false);
+    const titleId = useId();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -95,69 +102,54 @@ export function ReportModal({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-            <div className="bg-background rounded-xl w-full max-w-md border border-border">
-                <div className="p-4 border-b border-border">
-                    <h2 className="text-lg font-medium text-foreground">举报{targetType === 'post' ? '帖子' : '评论'}</h2>
+        <Dialog bare open onClose={onClose} busy={loading} labelledBy={titleId}
+            className="dialog-plain dialog-md">
+            <div className="w-full rounded-xl border border-border bg-background">
+                <div className="border-b border-border p-4">
+                    <h2 id={titleId} className="text-lg font-medium text-foreground">举报{targetType === 'post' ? '帖子' : '评论'}</h2>
                 </div>
                 <form onSubmit={handleSubmit} className="p-4 space-y-4">
                     {success ? (
-                        <div className="text-green-400 text-center py-4">
+                        <div className="text-success text-center py-4">
                             举报已提交，感谢您的反馈
                         </div>
                     ) : (
                         <>
                             <div>
                                 <label className="block text-sm text-foreground-secondary mb-2">举报原因 *</label>
-                                <div className="space-y-2">
-                                    {REPORT_REASONS.map(r => (
-                                        <label key={r.value} className="flex items-center gap-2 cursor-pointer">
-                                            <input
-                                                type="radio"
-                                                name="reason"
-                                                value={r.value}
-                                                checked={reason === r.value}
-                                                onChange={(e) => setReason(e.target.value)}
-                                                className="text-purple-600"
-                                            />
-                                            <span className="text-foreground">{r.label}</span>
-                                        </label>
-                                    ))}
-                                </div>
+                                <RadioGroup
+                                    aria-label="举报原因"
+                                    value={reason}
+                                    onChange={setReason}
+                                    options={REPORT_REASONS.map(item => ({ value: item.value, label: item.label }))}
+                                    className="space-y-2"
+                                />
                             </div>
 
                             <div>
                                 <label className="block text-sm text-foreground-secondary mb-1">补充说明</label>
-                                <textarea
+                                <Textarea
                                     value={description}
                                     onChange={(e) => setDescription(e.target.value)}
                                     rows={3}
-                                    className="w-full bg-background-secondary border border-border rounded-lg px-3 py-2 text-foreground focus:outline-none focus:border-accent resize-none"
+                                    className="resize-none rounded-lg bg-background-secondary px-3 py-2"
                                     placeholder="可选"
                                 />
                             </div>
 
                             <div className="flex gap-2 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={onClose}
-                                    className="flex-1 px-4 py-2 text-foreground-secondary hover:text-foreground transition-colors"
-                                >
+                                <Button variant="ghost" className="flex-1" onClick={onClose}>
                                     取消
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={loading || !reason}
-                                    className="flex-1 px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors disabled:opacity-50"
-                                >
-                                    {loading ? '提交中...' : '提交举报'}
-                                </button>
+                                </Button>
+                                <Button type="submit" variant="danger" className="flex-1" loading={loading} loadingText="提交中…" disabled={loading || !reason}>
+                                    提交举报
+                                </Button>
                             </div>
                         </>
                     )}
                 </form>
             </div>
-        </div>
+        </Dialog>
     );
 }
 
@@ -177,6 +169,7 @@ export function EditPostModal({
     const [content, setContent] = useState(post.content);
     const { showToast } = useToast();
     const [loading, setLoading] = useState(false);
+    const titleId = useId();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -195,14 +188,15 @@ export function EditPostModal({
     };
 
     return (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-in fade-in duration-200">
-            <div className="bg-background/95 backdrop-blur-xl rounded-2xl w-full max-w-2xl border border-white/10 max-h-[90vh] overflow-hidden flex flex-col shadow-2xl animate-in zoom-in-95 duration-200">
-                <div className="p-5 border-b border-border/50 flex-shrink-0 bg-gradient-to-r from-purple-500/10 to-indigo-500/10 flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-purple-500/10 flex items-center justify-center text-purple-500 shadow-inner">
-                        <Edit2 className="w-5 h-5" />
+        <Dialog bare open onClose={onClose} busy={loading} labelledBy={titleId}
+            className="dialog-plain dialog-lg">
+            <div className="flex max-h-[90vh] w-full flex-col overflow-hidden rounded-2xl border border-border bg-background">
+                <div className="flex flex-shrink-0 items-center gap-3 border-b border-border/50 bg-accent-light p-5">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-accent-soft text-accent shadow-inner">
+                        <Edit2 className="h-5 w-5" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-bold text-foreground">编辑讨论</h2>
+                        <h2 id={titleId} className="text-lg font-bold text-foreground">编辑讨论</h2>
                         <p className="text-xs text-foreground-secondary">完善你的观点，让讨论更精彩</p>
                     </div>
                 </div>
@@ -210,45 +204,37 @@ export function EditPostModal({
                 <form onSubmit={handleSubmit} className="p-6 space-y-5 overflow-y-auto flex-1">
                     <div>
                         <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">标题</label>
-                        <input
+                        <Input
                             type="text"
                             value={title}
                             onChange={(e) => setTitle(e.target.value)}
-                            className="w-full bg-background-secondary/50 border border-border/50 hover:border-purple-500/50 rounded-xl px-4 py-3 text-foreground font-medium focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all"
+                            className="h-auto bg-background-secondary/50 border-border/50 px-4 py-3 font-medium hover:border-accent/40"
                             placeholder="请输入精炼的标题"
                         />
                     </div>
 
                     <div>
                         <label className="block text-sm font-medium text-foreground-secondary mb-1.5 ml-1">内容</label>
-                        <textarea
+                        <Textarea
                             value={content}
                             onChange={(e) => setContent(e.target.value)}
                             rows={10}
-                            className="w-full bg-background-secondary/50 border border-border/50 hover:border-purple-500/50 rounded-xl px-4 py-3 text-foreground focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500/20 transition-all resize-none leading-relaxed"
+                            className="resize-none rounded-xl bg-background-secondary/50 px-4 py-3 leading-relaxed"
                             placeholder="请输入详细内容"
                         />
                     </div>
 
                     <div className="flex gap-3 pt-2">
-                        <button
-                            type="button"
-                            onClick={onClose}
-                            className="flex-1 px-4 py-2.5 rounded-xl border border-border hover:bg-background-secondary/80 text-foreground-secondary hover:text-foreground transition-all"
-                        >
+                        <Button variant="secondary" size="lg" className="flex-1" onClick={onClose}>
                             取消
-                        </button>
-                        <button
-                            type="submit"
-                            disabled={loading || !title.trim() || !content.trim()}
-                            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white font-medium rounded-xl shadow-lg shadow-purple-500/20 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
-                        >
-                            {loading ? '保存中...' : '保存修改'}
-                        </button>
+                        </Button>
+                        <Button type="submit" size="lg" className="flex-1" loading={loading} loadingText="保存中…" disabled={!title.trim() || !content.trim()}>
+                            保存修改
+                        </Button>
                     </div>
                 </form>
             </div>
-        </div>
+        </Dialog>
     );
 }
 
@@ -277,48 +263,33 @@ export function PostNavBar({
     return (
         <div className="sticky top-0 z-30 bg-background/80 backdrop-blur-md border-b border-border/50">
             <div className="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
-                <button
-                    onClick={onBack}
-                    className="flex items-center gap-2 text-foreground-secondary hover:text-foreground transition-colors p-2 -ml-2 rounded-lg hover:bg-background-secondary/50"
-                >
+                <Button variant="ghost" className="-ml-2" onClick={onBack}>
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
                     <span className="font-medium">返回</span>
-                </button>
+                </Button>
 
                 {(isAuthor || isAdmin) && (
                     <div className="flex items-center gap-1">
-                        <button
-                            onClick={onEdit}
-                            className="p-2 text-foreground-secondary hover:text-purple-500 hover:bg-purple-500/10 rounded-lg transition-colors"
-                            title="编辑"
-                        >
-                            <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={onDelete}
-                            className="p-2 text-foreground-secondary hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors"
-                            title="删除"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </button>
+                        <IconButton label="编辑" title="编辑" onClick={onEdit}>
+                            <Edit2 aria-hidden="true" />
+                        </IconButton>
+                        <IconButton label="删除" title="删除" tone="danger" onClick={onDelete}>
+                            <Trash2 aria-hidden="true" />
+                        </IconButton>
                     </div>
                 )}
                 {isAdmin && (
                     <div className="flex items-center gap-1 ml-1 border-l border-border pl-1">
-                        <button
-                            onClick={() => onAdminAction('pin', !post.is_pinned)}
-                            className={`p-2 rounded-lg transition-colors ${post.is_pinned ? 'text-yellow-500 bg-yellow-500/10' : 'text-foreground-secondary hover:text-yellow-500 hover:bg-yellow-500/10'}`}
-                            title={post.is_pinned ? '取消置顶' : '置顶'}
-                        >
-                            <Pin className="w-4 h-4" />
-                        </button>
-                        <button
-                            onClick={() => onAdminAction('feature', !post.is_featured)}
-                            className={`p-2 rounded-lg transition-colors ${post.is_featured ? 'text-purple-500 bg-purple-500/10' : 'text-foreground-secondary hover:text-purple-500 hover:bg-purple-500/10'}`}
-                            title={post.is_featured ? '取消精华' : '设为精华'}
-                        >
-                            <Star className="w-4 h-4" />
-                        </button>
+                        <IconButton label={post.is_pinned ? '取消置顶' : '置顶'} title={post.is_pinned ? '取消置顶' : '置顶'}
+                            className={post.is_pinned ? 'text-warning bg-warning/10 hover:bg-warning/10 hover:text-warning' : 'hover:text-warning hover:bg-warning/10'}
+                            onClick={() => onAdminAction('pin', !post.is_pinned)}>
+                            <Pin aria-hidden="true" />
+                        </IconButton>
+                        <IconButton label={post.is_featured ? '取消精华' : '设为精华'} title={post.is_featured ? '取消精华' : '设为精华'}
+                            className={post.is_featured ? 'text-accent bg-accent-soft hover:bg-accent-soft hover:text-accent' : 'hover:text-accent hover:bg-accent-soft'}
+                            onClick={() => onAdminAction('feature', !post.is_featured)}>
+                            <Star aria-hidden="true" />
+                        </IconButton>
                     </div>
                 )}
             </div>
@@ -350,12 +321,9 @@ export function PostFooterActions({
                 userVote={postVote}
                 onVote={onVote}
             />
-            <button
-                onClick={onReport}
-                className="text-foreground-secondary hover:text-foreground text-sm flex items-center gap-1.5 transition-colors ml-auto"
-            >
-                <Flag className="w-4 h-4" /> 举报
-            </button>
+            <Button variant="ghost" size="sm" className="ml-auto" onClick={onReport}>
+                <Flag size={16} aria-hidden="true" />举报
+            </Button>
         </div>
     );
 }

@@ -23,12 +23,13 @@ import { useRef } from 'react';
 import Link from 'next/link';
 import { MingRecord, RECORD_CATEGORIES } from '@/lib/records';
 import { useListMotion } from '@/lib/motion/list';
+import { IconButton } from '@/components/ui/IconButton';
+import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { StatePanel, STATE_PRIMARY_ACTION_CLASS, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 
 const VISIBLE_TAG_COUNT = 3;
-const ICON_BUTTON_CLASS = 'flex h-10 w-10 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent md:h-8 md:w-8';
 const META_CHIP_CLASS = 'inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs';
 
 function getArchiveTitle(record: MingRecord) {
@@ -111,27 +112,27 @@ function RecordCard({
 
             {/* 操作始终可见：手机端排在卡片底部，桌面端排在右上角。 */}
             <div className="-mr-2 -mb-2 flex shrink-0 justify-end gap-0.5 md:-mt-1.5 md:mb-0 md:-mr-1.5">
-                <button
-                    type="button"
-                    onClick={onTogglePin}
-                    aria-label={pinLabel}
-                    aria-pressed={!!record.is_pinned}
+                <IconButton
+                    label={pinLabel}
                     title={pinLabel}
-                    className={`${ICON_BUTTON_CLASS} aria-pressed:text-accent`}
+                    expand="none"
+                    onClick={onTogglePin}
+                    aria-pressed={!!record.is_pinned}
+                    className="h-10 w-10 rounded-lg text-foreground-tertiary hover:bg-background-secondary hover:text-foreground md:h-8 md:w-8 aria-pressed:text-accent"
                 >
-                    <Pin className="h-4 w-4" aria-hidden="true" />
-                </button>
+                    <Pin aria-hidden="true" />
+                </IconButton>
                 {showKnowledgeBaseAction ? (
-                    <button type="button" onClick={onAddToKnowledgeBase} aria-label="加入知识库" title="加入知识库" className={ICON_BUTTON_CLASS}>
-                        <BookOpenText className="h-4 w-4" aria-hidden="true" />
-                    </button>
+                    <IconButton label="加入知识库" title="加入知识库" onClick={onAddToKnowledgeBase}>
+                        <BookOpenText aria-hidden="true" />
+                    </IconButton>
                 ) : null}
-                <button type="button" onClick={onEdit} aria-label="编辑记录" title="编辑" className={ICON_BUTTON_CLASS}>
-                    <Pencil className="h-4 w-4" aria-hidden="true" />
-                </button>
-                <button type="button" onClick={onDelete} aria-label="删除记录" title="删除" className={`${ICON_BUTTON_CLASS} hover:bg-danger/10 hover:text-danger`}>
-                    <Trash2 className="h-4 w-4" aria-hidden="true" />
-                </button>
+                <IconButton label="编辑记录" title="编辑" onClick={onEdit}>
+                    <Pencil aria-hidden="true" />
+                </IconButton>
+                <IconButton label="删除记录" title="删除" tone="danger" onClick={onDelete}>
+                    <Trash2 aria-hidden="true" />
+                </IconButton>
             </div>
         </article>
     );
@@ -177,27 +178,23 @@ export function RecordsList({
 
     const pagination = totalPages > 1 ? (
         <nav aria-label="分页" className="mt-6 flex items-center justify-center gap-3">
-            <button
-                type="button"
+            <IconButton
+                label="上一页"
                 onClick={() => onPageChange(Math.max(1, page - 1))}
                 disabled={page === 1}
-                aria-label="上一页"
-                className={ICON_BUTTON_CLASS}
             >
                 <ChevronLeft className="h-5 w-5" aria-hidden="true" />
-            </button>
+            </IconButton>
             <span className="min-w-14 text-center text-sm text-foreground-secondary tabular-nums">
                 {page} / {totalPages}
             </span>
-            <button
-                type="button"
+            <IconButton
+                label="下一页"
                 onClick={() => onPageChange(Math.min(totalPages, page + 1))}
                 disabled={page === totalPages}
-                aria-label="下一页"
-                className={ICON_BUTTON_CLASS}
             >
                 <ChevronRight className="h-5 w-5" aria-hidden="true" />
-            </button>
+            </IconButton>
         </nav>
     ) : null;
 
@@ -220,14 +217,14 @@ export function RecordsList({
                         icon={SearchX}
                         title="没有符合条件的记录"
                         description="换个关键词或分类，或清除筛选查看全部。"
-                        action={<button type="button" onClick={onClearFilters} className={STATE_SECONDARY_ACTION_CLASS}>清除筛选</button>}
+                        action={<Button unstyled type="button" onClick={onClearFilters} className={STATE_SECONDARY_ACTION_CLASS}>清除筛选</Button>}
                     />
                 ) : (
                     <StatePanel
                         icon={FileText}
                         title="还没有记录"
                         description="记下第一条断语或感悟，日后对照印证。"
-                        action={<button type="button" onClick={onCreateNew} className={STATE_PRIMARY_ACTION_CLASS}>新建记录</button>}
+                        action={<Button unstyled type="button" onClick={onCreateNew} className={STATE_PRIMARY_ACTION_CLASS}>新建记录</Button>}
                     />
                 )}
                 {pagination}

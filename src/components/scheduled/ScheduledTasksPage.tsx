@@ -10,6 +10,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { Clock, History, Pause, Play, Plus, RotateCw, Trash2 } from 'lucide-react';
+import { Button, buttonVariants } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
@@ -143,24 +144,24 @@ export function ScheduledTasksPage() {
             <p className="mt-1 text-xs text-foreground-tertiary">当前会员最多 {state.allowance.limit} 个，已用 {state.allowance.used} 个。</p>
           ) : null}
         </div>
-        <button type="button" className="settings-button settings-button-primary inline-flex items-center gap-1.5"
+        <Button
           disabled={state.status !== 'ready' || state.allowance.used >= state.allowance.limit}
           onClick={() => setEditor({ template: 'custom' })}>
           <Plus size={16} aria-hidden="true" />新建定时任务
-        </button>
+        </Button>
       </header>
 
       {state.status === 'loading' ? <div className="flex min-h-[200px] items-center justify-center"><SoundWaveLoader variant="inline" /></div> : null}
       {state.status === 'error' ? (
         <div role="alert" className="settings-alert">
           <span className="min-w-0 flex-1">{state.message}</span>
-          <button type="button" onClick={refresh}>重试</button>
+          <Button variant="ghost" size="xs" onClick={refresh}>重试</Button>
         </div>
       ) : null}
       {state.status === 'ready' && state.schedules.length === 0 ? (
         <div className="rounded-2xl border-[0.5px] border-border bg-background-secondary px-5 py-10 text-center">
           <p className="text-sm text-foreground-secondary">还没有定时任务。可以从「每日早报」开始，或写一条自己的提示词。</p>
-          <button type="button" className="settings-button mt-4" onClick={() => setEditor({ template: 'daily_briefing' })}>使用每日早报模板</button>
+          <Button variant="secondary" className="mt-4" onClick={() => setEditor({ template: 'daily_briefing' })}>使用每日早报模板</Button>
         </div>
       ) : null}
       {state.status === 'ready' && state.schedules.length > 0 ? (
@@ -188,25 +189,22 @@ export function ScheduledTasksPage() {
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {schedule.conversationId ? (
-                      <Link href={`/chat?id=${encodeURIComponent(schedule.conversationId)}`} className="settings-button settings-button-ghost">打开对话</Link>
+                      <Link href={`/chat?id=${encodeURIComponent(schedule.conversationId)}`} className={buttonVariants({ variant: 'ghost' })}>打开对话</Link>
                     ) : null}
-                    <button type="button" className="settings-button settings-button-ghost inline-flex items-center gap-1"
-                      disabled={busyId === schedule.id} onClick={() => { void toggle(schedule); }}>
+                    <Button variant="ghost" disabled={busyId === schedule.id} onClick={() => { void toggle(schedule); }}>
                       {schedule.enabled ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}
                       {schedule.enabled ? '暂停' : '恢复'}
-                    </button>
-                    <button type="button" className="settings-button settings-button-ghost inline-flex items-center gap-1"
-                      disabled={busyId === schedule.id || !schedule.conversationId} onClick={() => { void runNow(schedule); }}>
+                    </Button>
+                    <Button variant="ghost" disabled={busyId === schedule.id || !schedule.conversationId} onClick={() => { void runNow(schedule); }}>
                       <RotateCw size={14} aria-hidden="true" />立即运行
-                    </button>
-                    <button type="button" className="settings-button settings-button-ghost inline-flex items-center gap-1"
-                      onClick={() => { void openHistory(schedule); }}>
+                    </Button>
+                    <Button variant="ghost" onClick={() => { void openHistory(schedule); }}>
                       <History size={14} aria-hidden="true" />运行历史
-                    </button>
-                    <button type="button" className="settings-button settings-button-ghost" onClick={() => setEditor({ schedule })}>编辑</button>
-                    <button type="button" className="settings-button settings-button-ghost inline-flex items-center gap-1 text-danger" onClick={() => setDeleting(schedule)}>
+                    </Button>
+                    <Button variant="ghost" onClick={() => setEditor({ schedule })}>编辑</Button>
+                    <Button variant="ghost" className="text-danger hover:text-danger" onClick={() => setDeleting(schedule)}>
                       <Trash2 size={14} aria-hidden="true" />删除
-                    </button>
+                    </Button>
                   </div>
                 </div>
               </li>
@@ -219,7 +217,7 @@ export function ScheduledTasksPage() {
         <section aria-label="运行历史" className="rounded-2xl border-[0.5px] border-border bg-background-secondary px-5 py-4">
           <div className="flex items-center justify-between gap-3">
             <h2 className="font-display text-lg text-foreground">运行历史 · {history.schedule.name}</h2>
-            <button type="button" className="settings-button settings-button-ghost" onClick={() => setHistory(null)}>关闭</button>
+            <Button variant="ghost" onClick={() => setHistory(null)}>关闭</Button>
           </div>
           {history.loading ? <div className="py-6 text-center"><SoundWaveLoader variant="inline" /></div> : null}
           {history.error ? <p role="alert" className="mt-3 text-sm text-danger">{history.error}</p> : null}

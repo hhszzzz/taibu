@@ -28,12 +28,12 @@ export function PostDetail({
             <header className="mb-8">
                 <div className="flex items-center gap-3 mb-4">
                     {post.is_pinned && (
-                        <span className="bg-yellow-500/10 text-yellow-600 dark:text-yellow-400 px-2.5 py-0.5 rounded-full text-xs font-medium border border-yellow-500/20 flex items-center gap-1">
+                        <span className="bg-warning/10 text-warning px-2.5 py-0.5 rounded-full text-xs font-medium border border-warning/20 flex items-center gap-1">
                             <Pin className="w-3 h-3" /> 置顶
                         </span>
                     )}
                     {post.is_featured && (
-                        <span className="bg-purple-500/10 text-purple-600 dark:text-purple-400 px-2.5 py-0.5 rounded-full text-xs font-medium border border-purple-500/20 flex items-center gap-1">
+                        <span className="bg-accent-soft text-accent px-2.5 py-0.5 rounded-full text-xs font-medium border border-accent/20 flex items-center gap-1">
                             <Star className="w-3 h-3" /> 精华
                         </span>
                     )}
@@ -56,7 +56,7 @@ export function PostDetail({
                                 className="w-10 h-10 rounded-full object-cover border border-border/50 shadow-md"
                             />
                         ) : (
-                            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-indigo-500 flex items-center justify-center text-white text-lg font-medium shadow-md">
+                            <div className="w-10 h-10 rounded-full bg-accent flex items-center justify-center text-on-accent text-lg font-medium shadow-md">
                                 {post.author_name?.charAt(0) || '命'}
                             </div>
                         )}
@@ -68,7 +68,7 @@ export function PostDetail({
                 </div>
             </header>
 
-            <div className="prose prose-purple dark:prose-invert max-w-none text-foreground/90 leading-loose text-lg whitespace-pre-wrap">
+            <div className="prose dark:prose-invert max-w-none text-foreground/90 leading-loose text-lg whitespace-pre-wrap">
                 {post.content}
             </div>
 

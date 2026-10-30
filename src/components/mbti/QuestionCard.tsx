@@ -7,6 +7,7 @@
 'use client'; // 量表点击回调来自客户端测试流程
 
 import { useId } from 'react';
+import { Button } from '@/components/ui/Button';
 import { type MBTIQuestion, type LikertValue } from '@/lib/divination/mbti';
 
 type LikertSide = 'a' | 'neutral' | 'b';
@@ -72,7 +73,7 @@ export function QuestionCard({
                             ? '中立'
                             : `${degree}倾向：${side === 'a' ? question.choice_a.text : question.choice_b.text}`;
                         return (
-                            <button
+                            <Button unstyled
                                 key={value}
                                 type="button"
                                 role="radio"
@@ -85,7 +86,7 @@ export function QuestionCard({
                                     aria-hidden="true"
                                     className={`block rounded-full border-[1.5px] transition-colors duration-150 ${sizeClass} ${isSelected ? tone.selected : `bg-surface ${tone.idle}`}`}
                                 />
-                            </button>
+                            </Button>
                         );
                     })}
                 </div>

@@ -18,7 +18,9 @@ import {
 } from 'lucide-react';
 import { CommunityComment, VoteType } from '@/lib/community';
 import { VoteButtons } from '@/components/community/PostActions';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
+import { Textarea } from '@/components/ui/Textarea';
+import { IconButton } from '@/components/ui/IconButton';
 
 // =====================================================
 // 评论项组件
@@ -57,7 +59,7 @@ function CommentItem({
                             className="w-8 h-8 rounded-full object-cover border border-border/50 shadow-sm z-10"
                         />
                     ) : (
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shadow-sm z-10 ${isAuthor ? 'bg-purple-100 text-purple-600 dark:bg-purple-900/30 dark:text-purple-400' : 'bg-background-tertiary text-foreground-secondary'}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium shadow-sm z-10 ${isAuthor ? 'bg-accent-soft text-accent' : 'bg-background-tertiary text-foreground-secondary'}`}>
                             {comment.author_name?.charAt(0) || '命'}
                         </div>
                     )}
@@ -70,11 +72,11 @@ function CommentItem({
                     <div className="bg-background-secondary/30 rounded-xl p-4 border border-border/50 hover:border-border transition-colors">
                         <div className="flex items-center justify-between mb-2">
                             <div className="flex items-center gap-2">
-                                <span className={`text-sm font-medium ${comment.isPostAuthor ? 'text-purple-600 dark:text-purple-400' : 'text-foreground'}`}>
+                                <span className={`text-sm font-medium ${comment.isPostAuthor ? 'text-accent' : 'text-foreground'}`}>
                                     {comment.author_name}
                                 </span>
                                 {comment.isPostAuthor && (
-                                    <span className="text-[10px] px-1.5 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-full">
+                                    <span className="text-[10px] px-1.5 py-0.5 bg-accent-soft text-accent rounded-full">
                                         楼主
                                     </span>
                                 )}
@@ -83,29 +85,31 @@ function CommentItem({
                                 </span>
                             </div>
                             <div className="relative">
-                                <button
+                                <IconButton
+                                    label="评论操作"
+                                    size="xs"
+                                    className="opacity-0 group-hover/comment:opacity-100 focus-visible:opacity-100"
                                     onClick={() => setShowMenu(!showMenu)}
-                                    className="opacity-0 group-hover/comment:opacity-100 p-1 text-foreground-secondary hover:text-foreground transition-all"
                                 >
-                                    <MoreVertical className="w-4 h-4" />
-                                </button>
+                                    <MoreVertical aria-hidden="true" />
+                                </IconButton>
                                 {showMenu && (
                                     <div className="absolute right-0 top-full mt-1 bg-background rounded-xl shadow-lg border border-border py-1 z-20 min-w-[120px] animate-in fade-in zoom-in-95 duration-200">
                                         {userId && (
-                                            <button
+                                            <Button unstyled
                                                 onClick={() => { onReport(comment.id); setShowMenu(false); }}
                                                 className="w-full px-4 py-2 text-left text-sm text-foreground-secondary hover:bg-background-secondary hover:text-foreground flex items-center gap-2 transition-colors"
                                             >
                                                 <Flag className="w-4 h-4" /> 举报
-                                            </button>
+                                            </Button>
                                         )}
                                         {(isAuthor || isAdmin) && (
-                                            <button
+                                            <Button unstyled
                                                 onClick={() => { onDelete(comment.id); setShowMenu(false); }}
-                                                className="w-full px-4 py-2 text-left text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2 transition-colors"
+                                                className="w-full px-4 py-2 text-left text-sm text-danger hover:bg-danger/10 flex items-center gap-2 transition-colors"
                                             >
                                                 <Trash2 className="w-4 h-4" /> 删除
-                                            </button>
+                                            </Button>
                                         )}
                                     </div>
                                 )}
@@ -124,13 +128,10 @@ function CommentItem({
                                 onVote={(type) => onVote(comment.id, type)}
                             />
                             {userId && (
-                                <button
-                                    onClick={() => onReply(comment.id)}
-                                    className="text-foreground-secondary hover:text-purple-500 text-xs flex items-center gap-1 transition-colors"
-                                >
-                                    <MessageCircle className="w-3.5 h-3.5" />
+                                <Button variant="ghost" size="xs" onClick={() => onReply(comment.id)}>
+                                    <MessageCircle className="w-3.5 h-3.5" aria-hidden="true" />
                                     回复
-                                </button>
+                                </Button>
                             )}
                         </div>
                     </div>
@@ -196,7 +197,7 @@ export function CommentSection({
     return (
         <section>
             <h3 className="text-xl font-bold mb-6 flex items-center gap-2">
-                <MessageSquare className="w-5 h-5 text-purple-500" />
+                <MessageSquare className="w-5 h-5 text-accent" />
                 全部评论 ({comments.length})
             </h3>
 
@@ -205,38 +206,33 @@ export function CommentSection({
                 {userId ? (
                     <form onSubmit={onSubmitComment}>
                         {replyTo && (
-                            <div className="flex items-center justify-between bg-purple-500/10 px-3 py-2 rounded-lg mb-3 border border-purple-500/20">
-                                <span className="text-sm text-purple-600 dark:text-purple-400 font-medium">
+                            <div className="flex items-center justify-between bg-accent-soft px-3 py-2 rounded-lg mb-3 border border-accent/20">
+                                <span className="text-sm text-accent font-medium">
                                     正在回复...
                                 </span>
-                                <button
-                                    type="button"
-                                    onClick={() => onReplyToChange(null)}
-                                    className="text-purple-400 hover:text-purple-600"
-                                >
+                                <IconButton label="取消回复" size="xs" onClick={() => onReplyToChange(null)}>
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
-                                </button>
+                                </IconButton>
                             </div>
                         )}
                         <div className="relative">
-                            <textarea
+                            <Textarea
                                 value={commentContent}
                                 onChange={(e) => onCommentContentChange(e.target.value)}
                                 rows={3}
-                                className="w-full bg-background border border-border/50 rounded-xl p-4 text-foreground focus:outline-none focus:ring-2 focus:ring-purple-500/20 focus:border-purple-500/30 transition-all resize-none shadow-sm"
+                                className="resize-none rounded-xl border-border/50 bg-background p-4 shadow-sm"
                                 placeholder={replyTo ? "写下你的回复..." : "分享你的看法..."}
                             />
-                            <button
+                            <Button
                                 type="submit"
+                                size="sm"
+                                aria-label="发表评论"
+                                className="absolute right-3 bottom-3"
+                                loading={submitting}
                                 disabled={submitting || !commentContent.trim()}
-                                className="absolute right-3 bottom-3 p-2 bg-purple-600 text-white rounded-lg shadow-md hover:bg-purple-700 disabled:opacity-50 disabled:shadow-none transition-all hover:scale-105 active:scale-95"
                             >
-                                {submitting ? (
-                                    <SoundWaveLoader variant="inline" />
-                                ) : (
-                                    <Send className="w-4 h-4" />
-                                )}
-                            </button>
+                                {submitting ? null : <Send className="w-4 h-4" aria-hidden="true" />}
+                            </Button>
                         </div>
                     </form>
                 ) : (

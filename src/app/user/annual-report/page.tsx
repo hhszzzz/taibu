@@ -3,6 +3,9 @@
  */
 'use client';
 
+import { IconButton } from '@/components/ui/IconButton';
+import { Button } from '@/components/ui/Button';
+import { Select } from '@/components/ui/Select';
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
     Calendar,
@@ -98,7 +101,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                     return (
                         <div key={i} className="flex-1 flex flex-col items-center gap-1">
                             <div
-                                className="w-full bg-gradient-to-t from-amber-500 to-orange-400 rounded-t transition-all"
+                                className="w-full bg-gradient-to-t from-warning to-accent rounded-t transition-all"
                                 style={{ height: `${Math.max(height, 4)}%` }}
                             />
                             <span className="text-[10px] text-foreground-secondary">
@@ -134,7 +137,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                         </div>
                         <div className="h-2 bg-background rounded-full overflow-hidden">
                             <div
-                                className="h-full bg-gradient-to-r from-amber-500 to-orange-500"
+                                className="h-full bg-gradient-to-r from-warning to-accent"
                                 style={{ width: `${(count / total) * 100}%` }}
                             />
                         </div>
@@ -166,7 +169,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             <div className="h-10 w-10 rounded-lg bg-foreground/5 animate-pulse" />
                         </div>
                         {/* 总览卡片骨架 */}
-                        <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-6 mb-6">
+                        <div className="bg-gradient-to-br from-warning/10 to-accent/10 border border-warning/20 rounded-2xl p-6 mb-6">
                             <div className="h-6 w-32 rounded bg-foreground/10 animate-pulse mb-4" />
                             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                 {[1, 2, 3, 4].map(i => (
@@ -207,80 +210,63 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <select
+                            <Select
+                                ariaLabel="年份"
                                 value={selectedYear}
-                                onChange={e => setSelectedYear(parseInt(e.target.value))}
-                                className="px-3 py-2 bg-background-secondary border border-border rounded-lg text-sm"
-                            >
-                                {[2026, 2025, 2024].map(year => (
-                                    <option key={year} value={year}>{year}年</option>
-                                ))}
-                            </select>
-                            <button
-                                aria-label="刷新年度报告"
-                                onClick={handleRefresh}
-                                disabled={refreshing}
-                                className="p-2 hover:bg-background-secondary rounded-lg transition-colors"
-                            >
-                                <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-                            </button>
+                                onChange={setSelectedYear}
+                                options={[2026, 2025, 2024].map(year => ({ value: year, label: `${year}年` }))}
+                                className="h-9 w-auto min-w-28"
+                            />
+                            <IconButton label="刷新年度报告" disabled={refreshing} onClick={handleRefresh}>
+                                <RefreshCw className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
+                            </IconButton>
                         </div>
                     </div>
 
                     {/* 移动端操作栏 */}
                     <div className="md:hidden flex items-center justify-between mb-4">
-                        <select
+                        <Select
+                            ariaLabel="年份"
                             value={selectedYear}
-                            onChange={e => setSelectedYear(parseInt(e.target.value))}
-                            className="px-3 py-2 bg-background-secondary border border-border rounded-lg text-sm"
-                        >
-                            {[2026, 2025, 2024].map(year => (
-                                <option key={year} value={year}>{year}年</option>
-                            ))}
-                        </select>
-                        <button
-                            aria-label="刷新年度报告"
-                            onClick={handleRefresh}
-                            disabled={refreshing}
-                            className="p-2 hover:bg-background-secondary rounded-lg transition-colors"
-                        >
-                            <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
-                        </button>
+                            onChange={setSelectedYear}
+                            options={[2026, 2025, 2024].map(year => ({ value: year, label: `${year}年` }))}
+                            className="h-9 w-auto min-w-28"
+                        />
+                        <IconButton label="刷新年度报告" disabled={refreshing} onClick={handleRefresh}>
+                            <RefreshCw className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
+                        </IconButton>
                     </div>
 
                     {error ? (
                         <div className="text-center py-16">
                             <p className="text-foreground-secondary mb-4">{error}</p>
-                            <button
-                                onClick={() => fetchReport()}
-                                className="px-4 py-2 bg-amber-500 text-white rounded-lg hover:bg-amber-600 transition-colors"
-                            >
+                            <Button size="lg" className="bg-warning text-background hover:bg-warning/90" onClick={() => fetchReport()}>
                                 重试
-                            </button>
+                            </Button>
                         </div>
                     ) : report ? (
                         <div className="space-y-6">
                             {/* 总览卡片 */}
-                            <div className="bg-gradient-to-br from-amber-500/10 to-orange-500/10 border border-amber-500/20 rounded-2xl p-6">
+                            <div className="bg-gradient-to-br from-warning/10 to-accent/10 border border-warning/20 rounded-2xl p-6">
                                 <h2 className="text-lg font-bold mb-4 flex items-center gap-2">
-                                    <Calendar className="w-5 h-5 text-amber-500" />
+                                    <Calendar className="w-5 h-5 text-warning" />
                                     {selectedYear}年度总览
                                 </h2>
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
-                                        <div className="text-3xl font-bold text-amber-500">{report.usage.totalAnalyses}</div>
+                                        <div className="text-3xl font-bold text-warning">{report.usage.totalAnalyses}</div>
                                         <div className="text-sm text-foreground-secondary">总分析次数</div>
                                     </div>
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
-                                        <div className="text-3xl font-bold text-orange-500">{report.usage.activeMonths}</div>
+                                        <div className="text-3xl font-bold text-accent">{report.usage.activeMonths}</div>
                                         <div className="text-sm text-foreground-secondary">活跃月份</div>
                                     </div>
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
-                                        <div className="text-3xl font-bold text-red-500">{report.checkin.totalDays}</div>
+                                        <div className="text-3xl font-bold text-danger">{report.checkin.totalDays}</div>
                                         <div className="text-sm text-foreground-secondary">签到天数</div>
                                     </div>
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
-                                        <div className="text-3xl font-bold text-purple-500">{report.usage.totalChats}</div>
+                                        <div className="text-3xl font-bold text-hua-quan">{report.usage.totalChats}</div>
                                         <div className="text-sm text-foreground-secondary">AI 对话</div>
                                     </div>
                                 </div>
@@ -290,12 +276,12 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             {topFeature && topFeature[1] > 0 && (
                                 <div className="bg-background-secondary rounded-2xl border border-border p-6">
                                     <h3 className="font-bold mb-4 flex items-center gap-2">
-                                        <Star className="w-5 h-5 text-amber-500" />
+                                        <Star className="w-5 h-5 text-warning" />
                                         您最常用的功能
                                     </h3>
                                     <div className="flex items-center gap-4">
-                                        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 flex items-center justify-center">
-                                            <Trophy className="w-8 h-8 text-amber-500" />
+                                        <div className="w-16 h-16 rounded-2xl bg-warning/10 flex items-center justify-center">
+                                            <Trophy className="w-8 h-8 text-warning" />
                                         </div>
                                         <div>
                                             <div className="text-xl font-bold">
@@ -310,7 +296,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             {/* 月度趋势 */}
                             <div className="bg-background-secondary rounded-2xl border border-border p-6">
                                 <h3 className="font-bold mb-4 flex items-center gap-2">
-                                    <TrendingUp className="w-5 h-5 text-amber-500" />
+                                    <TrendingUp className="w-5 h-5 text-warning" />
                                     月度使用趋势
                                 </h3>
                                 {renderMonthlyChart()}
@@ -319,7 +305,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             {/* 功能分布 */}
                             <div className="bg-background-secondary rounded-2xl border border-border p-6">
                                 <h3 className="font-bold mb-4 flex items-center gap-2">
-                                    <BarChart3 className="w-5 h-5 text-amber-500" />
+                                    <BarChart3 className="w-5 h-5 text-warning" />
                                     功能使用分布
                                 </h3>
                                 {renderFeatureDistribution()}
@@ -328,16 +314,16 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             {/* 签到成就 */}
                             <div className="bg-background-secondary rounded-2xl border border-border p-6">
                                 <h3 className="font-bold mb-4 flex items-center gap-2">
-                                    <Flame className="w-5 h-5 text-orange-500" />
+                                    <Flame className="w-5 h-5 text-accent" />
                                     签到与积分
                                 </h3>
                                 <div className="grid grid-cols-2 gap-4 text-center">
                                     <div>
-                                        <div className="text-2xl font-bold text-orange-500">{report.checkin.totalDays}</div>
+                                        <div className="text-2xl font-bold text-accent">{report.checkin.totalDays}</div>
                                         <div className="text-sm text-foreground-secondary">累计签到</div>
                                     </div>
                                     <div>
-                                        <div className="text-2xl font-bold text-amber-500">{report.checkin.totalCreditsEarned}</div>
+                                        <div className="text-2xl font-bold text-warning">{report.checkin.totalCreditsEarned}</div>
                                         <div className="text-sm text-foreground-secondary">获得积分</div>
                                     </div>
                                 </div>

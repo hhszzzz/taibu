@@ -10,6 +10,7 @@ import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { MbtiIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { useToast } from '@/components/ui/Toast';
 import { QuestionCard } from '@/components/mbti/QuestionCard';
 import { saveDivinationAction } from '@/lib/divination/save-client';
@@ -160,13 +161,13 @@ export function MBTITestFlow() {
             <div className="flex min-h-[60vh] items-center justify-center bg-background px-4">
                 <div className="flex flex-col items-center gap-4 text-center">
                     <p className="text-sm text-foreground-secondary">题库加载失败，请稍后再试</p>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={() => router.push('/mbti')}
                         className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                     >
                         返回首页
-                    </button>
+                    </Button>
                 </div>
             </div>
         );
@@ -227,32 +228,32 @@ export function MBTITestFlow() {
                     <p aria-live="polite" className="w-full text-center text-xs text-foreground-secondary empty:hidden lg:order-2 lg:w-auto lg:flex-1 lg:text-[0.8125rem]">
                         {gatingNote}
                     </p>
-                    <button
+                    <Button unstyled
                         type="button"
                         onClick={goToPreviousPage}
                         disabled={currentPage === 0}
                         className="h-12 shrink-0 rounded-xl border-[0.5px] border-border-hover bg-surface px-[18px] text-[0.9375rem] text-foreground transition-colors hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-45 disabled:hover:bg-surface lg:order-1 lg:h-[46px] lg:bg-transparent lg:disabled:hover:bg-transparent"
                     >
                         上一页
-                    </button>
+                    </Button>
                     {page.isLastPage ? (
-                        <button
+                        <Button unstyled
                             type="button"
                             onClick={() => { void finishTest(); }}
                             disabled={!allAnswered}
                             className="h-12 flex-1 rounded-xl bg-accent px-[22px] text-[0.9375rem] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent lg:order-3 lg:ml-auto lg:h-[46px] lg:flex-none"
                         >
                             完成测试
-                        </button>
+                        </Button>
                     ) : (
-                        <button
+                        <Button unstyled
                             type="button"
                             onClick={goToNextPage}
                             disabled={!pageComplete}
                             className="h-12 flex-1 rounded-xl bg-accent px-[22px] text-[0.9375rem] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent lg:order-3 lg:ml-auto lg:h-[46px] lg:flex-none"
                         >
                             下一页
-                        </button>
+                        </Button>
                     )}
                 </div>
             </div>

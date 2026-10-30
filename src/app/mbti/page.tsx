@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Play } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 
 import { loadQuestions, type MBTIQuestion, PERSONALITY_BASICS } from '@/lib/divination/mbti';
 
@@ -37,11 +38,10 @@ function MBTIPageContent() {
                     </p>
 
                     {/* 开始按钮 */}
-                    <button
-                        type="button"
+                    <Button
                         onClick={() => router.push('/mbti/test')}
                         disabled={questions.length === 0}
-                        className="mt-2 inline-flex h-12 items-center gap-2 rounded-xl bg-accent px-8 text-base font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
+                        className="mt-2 h-12 rounded-xl px-8 text-base"
                     >
                         {questions.length === 0 ? (
                             <>
@@ -54,7 +54,7 @@ function MBTIPageContent() {
                                 <span>开始测试</span>
                             </>
                         )}
-                    </button>
+                    </Button>
                     <p className="text-[0.8125rem] text-foreground-tertiary">
                         共 {questions.length || 93} 道题目 · 约需 10-15 分钟
                     </p>
@@ -69,7 +69,7 @@ function MBTIPageContent() {
 
                     <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                         {Object.entries(PERSONALITY_BASICS).map(([type, info]) => (
-                            <button
+                            <Button unstyled
                                 key={type}
                                 type="button"
                                 onClick={() => router.push(`/mbti/personality/${type}`)}
@@ -79,7 +79,7 @@ function MBTIPageContent() {
                                 <span className="font-display text-lg tracking-wide">{type}</span>
                                 <span className="text-sm text-accent-strong">{info.title}</span>
                                 <span className="w-full truncate text-xs text-foreground-secondary">{info.description}</span>
-                            </button>
+                            </Button>
                         ))}
                     </div>
                 </section>

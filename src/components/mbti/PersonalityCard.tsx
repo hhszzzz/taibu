@@ -4,6 +4,7 @@
 'use client'; // 需要 useState/useEffect 加载人格详情并控制折叠
 
 import { useState, useEffect } from 'react';
+import { Button } from '@/components/ui/Button';
 import { type Dimension, type MBTIType, type TestResult, type PersonalityData, PERSONALITY_BASICS, loadPersonalityData, getDimensionDescription } from '@/lib/divination/mbti';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 
@@ -128,7 +129,7 @@ export function PersonalityCard({ result, showDimensions = true }: PersonalityCa
                                 key={title}
                                 className="overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface transition-colors hover:border-border-hover"
                             >
-                                <button
+                                <Button unstyled
                                     type="button"
                                     onClick={() => toggleSection(title)}
                                     aria-expanded={expanded}
@@ -141,7 +142,7 @@ export function PersonalityCard({ result, showDimensions = true }: PersonalityCa
                                         ? <ChevronUp className="h-5 w-5 shrink-0 text-foreground-tertiary group-hover:text-accent-strong" aria-hidden="true" />
                                         : <ChevronDown className="h-5 w-5 shrink-0 text-foreground-tertiary group-hover:text-accent-strong" aria-hidden="true" />
                                     }
-                                </button>
+                                </Button>
                                 {expanded && (
                                     <div className="animate-fade-in px-5 pb-5">
                                         <div className="mb-4 h-px w-full bg-border" />

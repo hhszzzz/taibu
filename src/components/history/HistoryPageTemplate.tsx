@@ -13,11 +13,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight, Search, MessageSquare, SearchX } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Input } from '@/components/ui/Input';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { ConfirmDeleteModal } from '@/components/common/ConfirmDeleteModal';
-import { StatePanel, STATE_PRIMARY_ACTION_CLASS, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
+import { Button } from '@/components/ui/Button';
+import { StatePanel, STATE_PRIMARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 import { useToast } from '@/components/ui/Toast';
 import {
     DATA_INDEX_INVALIDATED_EVENT,
@@ -317,7 +319,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                 <label className="relative block md:mt-7">
                     <span className="sr-only">搜索历史记录</span>
                     <Search className="pointer-events-none absolute top-1/2 left-3.5 h-[18px] w-[18px] -translate-y-1/2 text-foreground-tertiary" aria-hidden="true" />
-                    <input
+                    <Input
                         type="search"
                         value={searchQuery}
                         onChange={e => setSearchQuery(e.target.value)}
@@ -340,7 +342,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                             tone="danger"
                             title="加载历史记录失败"
                             description={errorMessage}
-                            action={<button type="button" onClick={() => { void loadItems(); }} className={STATE_SECONDARY_ACTION_CLASS}>重试</button>}
+                            action={<Button variant="secondary" size="xs" onClick={() => { void loadItems(); }}>重试</Button>}
                         />
                     ) : filteredItems.length === 0 ? (
                         trimmedQuery ? (
@@ -348,7 +350,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                                 icon={SearchX}
                                 title={`没有找到与「${trimmedQuery}」相关的记录`}
                                 description="换个关键词，或清除搜索查看全部。"
-                                action={<button type="button" onClick={() => setSearchQuery('')} className={STATE_SECONDARY_ACTION_CLASS}>清除搜索</button>}
+                                action={<Button variant="secondary" size="xs" onClick={() => setSearchQuery('')}>清除搜索</Button>}
                             />
                         ) : (
                             <StatePanel
@@ -376,13 +378,9 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                                 <SoundWaveLoader variant="inline" />
                             </div>
                         ) : appendError ? (
-                            <button
-                                type="button"
-                                onClick={() => { void loadItems({ append: true, offset: nextOffset ?? 0 }); }}
-                                className="h-10 rounded-xl border-[0.5px] border-border-hover px-4 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary"
-                            >
+                            <Button variant="secondary" onClick={() => { void loadItems({ append: true, offset: nextOffset ?? 0 }); }}>
                                 重试加载更多
-                            </button>
+                            </Button>
                         ) : (
                             <div className="text-sm text-foreground-tertiary">
                                 继续下滑加载更多

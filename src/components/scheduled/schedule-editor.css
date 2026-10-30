@@ -16,8 +16,6 @@
 .sched-head-text { flex: 1; min-width: 0; }
 .sched-head h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 400; color: var(--foreground); }
 .sched-head p { margin-top: .375rem; font-size: .8125rem; line-height: 1.55; color: var(--foreground-secondary); }
-.sched-close { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2rem; height: 2rem; border-radius: .5rem; color: var(--foreground-secondary); }
-.sched-close:hover:not(:disabled) { background: var(--fill-field); color: var(--foreground); }
 
 .sched-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1.75rem; padding: 1.25rem 1.75rem 1.75rem; overflow-y: auto; }
 
@@ -79,24 +77,14 @@
 .sched-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .625rem 0; border-bottom: 1px solid var(--fill-field); }
 .sched-toggle-row:last-child { border-bottom: 0; padding-bottom: 0; }
 .sched-toggle-row > div { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
-.sched-toggle-row span { font-size: .875rem; color: var(--foreground); }
+.sched-toggle-row > div > span { font-size: .875rem; color: var(--foreground); }
 .sched-toggle-row small { font-size: .75rem; line-height: 1.45; color: var(--foreground-tertiary); }
-.sched-switch { display: inline-flex; flex-shrink: 0; align-items: center; width: 2.25rem; height: 1.25rem; padding: 2px; border-radius: 999px; background: var(--border-hover); transition: background-color .15s; }
-.sched-switch[aria-checked=true] { background: var(--accent); }
-.sched-switch:disabled { cursor: not-allowed; opacity: .5; }
-.sched-switch > span { width: 1rem; height: 1rem; border-radius: 999px; background: #fff; box-shadow: 0 1px 2px rgb(0 0 0 / .2); transition: transform .15s; }
-.sched-switch[aria-checked=true] > span { transform: translateX(1rem); }
 
 .sched-error { padding: .625rem .75rem; border-radius: .5rem; background: color-mix(in srgb, var(--danger) 8%, transparent); font-size: .8125rem; color: var(--danger); }
 
 /* 底部操作 */
 .sched-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .875rem 1.75rem; border-top: 1px solid var(--border); background: var(--surface); }
 .sched-actions { display: flex; gap: .5rem; }
-.sched-button { display: inline-flex; align-items: center; gap: .375rem; height: 2.25rem; padding: 0 .875rem; border: 1px solid var(--border-hover); border-radius: .5rem; font-size: .8125rem; color: var(--foreground); }
-.sched-button:hover:not(:disabled) { background: var(--fill-field); }
-.sched-button.is-primary { border-color: transparent; background: var(--accent); color: var(--on-accent); }
-.sched-button.is-primary:hover:not(:disabled) { background: var(--accent-hover); }
-.sched-button:disabled { cursor: not-allowed; opacity: .55; }
 
 @media (max-width: 639px) {
     .app-modal.schedule-editor-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
@@ -106,5 +94,5 @@
     .sched-segmented { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     .sched-foot .sched-hint { display: none; }
     .sched-actions { width: 100%; }
-    .sched-button { flex: 1; justify-content: center; }
+    .sched-actions > button { flex: 1; }
 }

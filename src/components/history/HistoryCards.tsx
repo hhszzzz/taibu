@@ -8,6 +8,8 @@
 import type { ReactNode } from 'react';
 import { BookOpenText, Trash2 } from 'lucide-react';
 import type { HistorySummaryItem } from '@/lib/history/registry';
+import { IconButton } from '@/components/ui/IconButton';
+import { Button } from '@/components/ui/Button';
 import { getDefaultHistoryDetail } from '@/lib/history/summary-display';
 
 export interface CardActions {
@@ -36,31 +38,26 @@ function HistoryMeta({ item, formatDate, className = '' }: { item: HistorySummar
     );
 }
 
-const ACTION_BUTTON_CLASS = 'flex h-10 w-10 items-center justify-center rounded-md text-foreground-tertiary transition-colors md:h-8 md:w-8';
-
 export function HistoryCardActionButtons({ actions }: { actions: CardActions }) {
     return (
         <span className="flex shrink-0 gap-0.5">
             {actions.canAddToKnowledgeBase ? (
-                <button
-                    type="button"
-                    onClick={actions.onAddToKb}
-                    aria-label="加入知识库"
+                <IconButton
+                    label="加入知识库"
                     title="加入知识库"
-                    className={`${ACTION_BUTTON_CLASS} hover:bg-background-secondary hover:text-foreground`}
+                    onClick={actions.onAddToKb}
                 >
                     <BookOpenText className="h-[17px] w-[17px]" aria-hidden="true" />
-                </button>
+                </IconButton>
             ) : null}
-            <button
-                type="button"
-                onClick={actions.onDelete}
-                aria-label="删除记录"
+            <IconButton
+                label="删除记录"
                 title="删除"
-                className={`${ACTION_BUTTON_CLASS} hover:bg-danger/10 hover:text-danger`}
+                tone="danger"
+                onClick={actions.onDelete}
             >
                 <Trash2 className="h-[17px] w-[17px]" aria-hidden="true" />
-            </button>
+            </IconButton>
         </span>
     );
 }
@@ -78,7 +75,7 @@ export function HistoryGridCard({ item, actions, viewing, renderDetail }: Histor
     const detail = resolveDetail(item, renderDetail);
     return (
         <article className="flex h-full flex-col rounded-2xl border-[0.5px] border-border bg-surface transition-colors hover:border-border-hover">
-            <button
+            <Button unstyled
                 type="button"
                 onClick={actions.onView}
                 aria-busy={viewing || undefined}
@@ -97,7 +94,7 @@ export function HistoryGridCard({ item, actions, viewing, renderDetail }: Histor
                     <span className="line-clamp-2 text-[15px] leading-relaxed text-foreground">{item.question}</span>
                 ) : null}
                 {detail ? <span className="text-[13px] text-foreground-secondary">{detail}</span> : null}
-            </button>
+            </Button>
             <div className="flex items-center justify-between gap-2 border-t-[0.5px] border-border py-1 pr-1 pl-5 md:py-2 md:pr-2">
                 <HistoryMeta item={item} formatDate={actions.formatDate} />
                 <HistoryCardActionButtons actions={actions} />
@@ -114,7 +111,7 @@ export function HistoryListRow({ item, actions, viewing, renderDetail }: History
     const text = item.question || item.title;
     return (
         <div className="flex items-center gap-2 py-1.5 pr-1 pl-4 md:gap-4 md:py-2 md:pr-2 md:pl-5">
-            <button
+            <Button unstyled
                 type="button"
                 onClick={actions.onView}
                 aria-busy={viewing || undefined}
@@ -126,7 +123,7 @@ export function HistoryListRow({ item, actions, viewing, renderDetail }: History
                 <span className="min-w-0 text-[15px] text-foreground">{text}</span>
                 {detail ? <span className="line-clamp-2 min-w-0 text-[13px] text-foreground-secondary">{detail}</span> : null}
                 <HistoryMeta item={item} formatDate={actions.formatDate} className="basis-full md:ml-auto md:basis-auto md:justify-end" />
-            </button>
+            </Button>
             <HistoryCardActionButtons actions={actions} />
         </div>
     );

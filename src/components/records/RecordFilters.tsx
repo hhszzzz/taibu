@@ -9,6 +9,7 @@
 import { Search } from 'lucide-react';
 import { RecordCategory, RECORD_CATEGORIES } from '@/lib/records';
 import { FilterChip } from '@/components/ui/FilterChip';
+import { Input } from '@/components/ui/Input';
 
 interface RecordFiltersProps {
     search: string;
@@ -33,7 +34,7 @@ export function RecordFilters({
             <label className="relative block md:flex-1">
                 <span className="sr-only">搜索记录</span>
                 <Search className="pointer-events-none absolute top-1/2 left-3.5 h-[18px] w-[18px] -translate-y-1/2 text-foreground-tertiary" aria-hidden="true" />
-                <input
+                <Input
                     type="search"
                     value={search}
                     onChange={(e) => onSearchChange(e.target.value)}

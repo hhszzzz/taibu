@@ -7,10 +7,16 @@
  */
 'use client';
 
+import { Select } from '@/components/ui/Select';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { Button } from '@/components/ui/Button';
+import { IconButton } from '@/components/ui/IconButton';
+import { Switch } from '@/components/ui/Switch';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { useId, useMemo, useRef, useState } from 'react';
 import { PenLine, Sunrise, X } from 'lucide-react';
-import { Modal } from '@/components/ui/Modal';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
 import type { AIReasoningEffort } from '@/types';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
@@ -209,14 +215,14 @@ export function ScheduleEditor({
   );
 
   return (
-    <Modal open={open} onClose={onClose} labelledBy={headingId} busy={saving} className="schedule-editor-dialog">
+    <Dialog bare open={open} onClose={onClose} labelledBy={headingId} busy={saving} className="schedule-editor-dialog">
       <div className="sched-shell">
         <header className="sched-head">
           <div className="sched-head-text">
             <h2 id={headingId}>{editing ? '编辑定时任务' : '新建定时任务'}</h2>
             <p>到点后 Agent 会按下面的内容运行，每一轮都会追加到绑定的对话。</p>
           </div>
-          <button type="button" className="sched-close" aria-label="关闭" disabled={saving} onClick={onClose}><X size={16} /></button>
+          <IconButton label="关闭" title="关闭" size="md" expand="none" className="rounded-lg" disabled={saving} onClick={onClose}><X size={16} aria-hidden="true" /></IconButton>
         </header>
 
         <div className="sched-body">
@@ -224,11 +230,11 @@ export function ScheduleEditor({
             {sectionHead('模板', '只决定初始内容，之后都可以改。')}
             <div className="sched-templates" role="radiogroup" aria-label="任务模板">
               {TEMPLATES.map(({ id, title, detail, icon: Icon }) => (
-                <button key={id} type="button" role="radio" aria-checked={draft.template === id} className="sched-template"
+                <Button unstyled key={id} type="button" role="radio" aria-checked={draft.template === id} className="sched-template"
                   disabled={saving} onClick={() => chooseTemplate(id)}>
                   <span className="sched-template-icon"><Icon size={16} aria-hidden="true" /></span>
                   <span className="sched-template-text"><strong>{title}</strong><small>{detail}</small></span>
-                </button>
+                </Button>
               ))}
             </div>
           </section>}
@@ -236,51 +242,55 @@ export function ScheduleEditor({
           <section className="sched-section">
             {sectionHead('内容')}
             <label className="sched-field"><span>任务名称</span>
-              <input className="sched-input" aria-label="任务名称" value={draft.name} maxLength={AGENT_SCHEDULE_NAME_MAX} disabled={saving}
+              <Input className="sched-input" aria-label="任务名称" value={draft.name} maxLength={AGENT_SCHEDULE_NAME_MAX} disabled={saving}
                 placeholder="例如：每日早报" onChange={event => patch({ name: event.target.value })} />
             </label>
             <label className="sched-field"><span>执行内容</span>
-              <textarea ref={promptRef} className="sched-textarea" aria-label="执行内容" rows={5} value={draft.prompt} maxLength={AGENT_SCHEDULE_PROMPT_MAX}
+              <Textarea ref={promptRef} className="sched-textarea" aria-label="执行内容" rows={5} value={draft.prompt} maxLength={AGENT_SCHEDULE_PROMPT_MAX}
                 disabled={saving} placeholder="例如：结合今天的干支与我的命盘，写一段 200 字以内的晨间提示。"
                 onChange={event => patch({ prompt: event.target.value })} />
             </label>
             <div className="sched-vars">
               <span className="sched-hint">可用变量</span>
-              {PROMPT_VARIABLES.map(token => <button key={token} type="button" className="sched-var" disabled={saving}
-                onClick={() => appendVariable(token)}>{token}</button>)}
+              {PROMPT_VARIABLES.map(token => <Button unstyled key={token} type="button" className="sched-var" disabled={saving}
+                onClick={() => appendVariable(token)}>{token}</Button>)}
             </div>
           </section>
 
           <section className="sched-section">
             {sectionHead('时间')}
-            <div className="sched-segmented" role="radiogroup" aria-label="执行频率">
-              {KINDS.map(kind => <button key={kind.value} type="button" role="radio" aria-checked={draft.kind === kind.value}
-                disabled={saving} onClick={() => patch({ kind: kind.value })}>{kind.label}</button>)}
-            </div>
+            <SegmentedControl
+              ariaLabel="执行频率"
+              mode="radio"
+              indicator={false}
+              value={draft.kind}
+              onChange={kind => patch({ kind })}
+              options={KINDS.map(kind => ({ value: kind.value, label: kind.label, disabled: saving }))}
+              className="sched-segmented h-auto"
+            />
             <div className="sched-grid">
               {draft.kind === 'monthly' && <label className="sched-field"><span>每月日期</span>
                 <span className="sched-with-unit">
-                  <input className="sched-input" aria-label="每月日期" inputMode="numeric" value={draft.monthDay} disabled={saving}
+                  <Input className="sched-input" aria-label="每月日期" inputMode="numeric" value={draft.monthDay} disabled={saving}
                     onChange={event => patch({ monthDay: event.target.value })} />
                   <span>日</span>
                 </span>
               </label>}
               {draft.kind === 'interval' && <label className="sched-field"><span>间隔</span>
                 <span className="sched-with-unit">
-                  <input className="sched-input" aria-label="间隔小时" inputMode="numeric" value={draft.intervalHours} disabled={saving}
+                  <Input className="sched-input" aria-label="间隔小时" inputMode="numeric" value={draft.intervalHours} disabled={saving}
                     onChange={event => patch({ intervalHours: event.target.value })} />
                   <span>小时</span>
                 </span>
               </label>}
               <label className="sched-field"><span>执行时间</span>
-                <input className="sched-input" aria-label="执行时间" type="time" value={draft.time} disabled={saving}
+                <Input className="sched-input" aria-label="执行时间" type="time" value={draft.time} disabled={saving}
                   onChange={event => patch({ time: event.target.value })} />
               </label>
               <label className="sched-field"><span>时区</span>
-                <select className="sched-select" aria-label="时区" value={draft.timezone} disabled={saving}
-                  onChange={event => patch({ timezone: event.target.value })}>
-                  {timeZones(draft.timezone).map(zone => <option key={zone}>{zone}</option>)}
-                </select>
+                <Select className="sched-select" ariaLabel="时区" value={draft.timezone} disabled={saving}
+                  onChange={timezone => patch({ timezone })}
+                  options={timeZones(draft.timezone).map(zone => ({ value: zone, label: zone }))} />
               </label>
             </div>
             {draft.kind === 'weekly' ? (
@@ -288,8 +298,8 @@ export function ScheduleEditor({
                 {AGENT_SCHEDULE_WEEKDAY_LABELS.map((label, index) => {
                   const day = index + 1;
                   const on = draft.weekdays.includes(day);
-                  return <button key={day} type="button" className="sched-day" aria-pressed={on} disabled={saving}
-                    onClick={() => patch({ weekdays: on ? draft.weekdays.filter(item => item !== day) : [...draft.weekdays, day] })}>{label}</button>;
+                  return <Button unstyled key={day} type="button" className="sched-day" aria-pressed={on} disabled={saving}
+                    onClick={() => patch({ weekdays: on ? draft.weekdays.filter(item => item !== day) : [...draft.weekdays, day] })}>{label}</Button>;
                 })}
               </div>
             ) : null}
@@ -301,37 +311,35 @@ export function ScheduleEditor({
             {sectionHead('运行设置')}
             <div className="sched-grid">
               <label className="sched-field"><span>模型</span>
-                <select className="sched-select" aria-label="模型" value={draft.model} disabled={saving}
-                  onChange={event => patch({ model: event.target.value })}>
-                  <option value="">跟随默认模型</option>
-                  {models.map(model => <option key={model.id} value={model.id}>{model.name}</option>)}
-                </select>
+                <Select className="sched-select" ariaLabel="模型" placeholder="跟随默认模型"
+                  value={draft.model || null} disabled={saving}
+                  onChange={model => patch({ model })}
+                  options={models.map(model => ({ value: model.id, label: model.name }))} />
               </label>
               <label className="sched-field"><span>绑定命盘</span>
-                <select className="sched-select" aria-label="绑定命盘" value={draft.baziChartId} disabled={saving}
-                  onChange={event => patch(draft.template === BRIEFING
-                    ? { baziChartId: event.target.value, prompt: dailyBriefingPrompt(event.target.value || null) }
-                    : { baziChartId: event.target.value })}>
-                  <option value="">默认命盘</option>
-                  {charts.map(chart => <option key={chart.id} value={chart.id}>{chart.name}</option>)}
-                </select>
+                <Select className="sched-select" ariaLabel="绑定命盘" placeholder="默认命盘"
+                  value={draft.baziChartId || null} disabled={saving}
+                  onChange={baziChartId => patch(draft.template === BRIEFING
+                    ? { baziChartId, prompt: dailyBriefingPrompt(baziChartId) }
+                    : { baziChartId })}
+                  options={charts.map(chart => ({ value: chart.id, label: chart.name }))} />
               </label>
             </div>
             <div className="sched-toggles">
               <div className="sched-toggle-row">
                 <div><span>推理</span><small>先思考再执行，适合需要分析的晨报与复盘</small></div>
-                <button type="button" role="switch" aria-checked={draft.reasoning} aria-label="推理" className="sched-switch" disabled={saving}
-                  onClick={() => patch({ reasoning: !draft.reasoning })}><span aria-hidden="true" /></button>
+                <Switch aria-label="推理" checked={draft.reasoning} disabled={saving}
+                  onCheckedChange={checked => patch({ reasoning: checked })} />
               </div>
               <div className="sched-toggle-row">
                 <div><span>联网</span><small>允许搜索与调用已接入的连接器</small></div>
-                <button type="button" role="switch" aria-checked={draft.webEnabled} aria-label="联网" className="sched-switch" disabled={saving}
-                  onClick={() => patch({ webEnabled: !draft.webEnabled })}><span aria-hidden="true" /></button>
+                <Switch aria-label="联网" checked={draft.webEnabled} disabled={saving}
+                  onCheckedChange={checked => patch({ webEnabled: checked })} />
               </div>
               <div className="sched-toggle-row">
                 <div><span>完成后通知</span><small>任务结束或失败时推送一条通知</small></div>
-                <button type="button" role="switch" aria-checked={draft.notify} aria-label="完成后通知" className="sched-switch" disabled={saving}
-                  onClick={() => patch({ notify: !draft.notify })}><span aria-hidden="true" /></button>
+                <Switch aria-label="完成后通知" checked={draft.notify} disabled={saving}
+                  onCheckedChange={checked => patch({ notify: checked })} />
               </div>
             </div>
           </section>
@@ -342,13 +350,13 @@ export function ScheduleEditor({
         <footer className="sched-foot">
           <span className="sched-hint">保存后按设定时间运行</span>
           <div className="sched-actions">
-            <button type="button" className="sched-button" disabled={saving} onClick={onClose}>取消</button>
-            <button type="button" className="sched-button is-primary" disabled={saving} onClick={() => { void save(); }}>
-              {saving ? <SoundWaveLoader variant="inline" /> : null}{editing ? '保存' : '创建任务'}
-            </button>
+            <Button variant="secondary" size="md" className="h-9 rounded-lg border-border-hover px-3.5 text-[13px]" disabled={saving} onClick={onClose}>取消</Button>
+            <Button size="md" className="h-9 rounded-lg px-3.5 text-[13px]" loading={saving} loadingText={editing ? '保存' : '创建任务'} disabled={saving} onClick={() => { void save(); }}>
+              {editing ? '保存' : '创建任务'}
+            </Button>
           </div>
         </footer>
       </div>
-    </Modal>
+    </Dialog>
   );
 }

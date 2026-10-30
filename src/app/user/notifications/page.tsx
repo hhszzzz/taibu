@@ -11,10 +11,14 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, Check, CheckCheck, ChevronRight, Gift, Megaphone, Sparkles, Trash2, type LucideIcon } from 'lucide-react';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { Button } from '@/components/ui/Button';
+import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
-import { StatePanel, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
+import { SegmentedControl as SharedSegmentedControl } from '@/components/ui/SegmentedControl';
+import { StatePanel } from '@/components/ui/StatePanel';
 import {
     deleteNotification,
     deleteNotifications,
@@ -54,9 +58,6 @@ const TYPE_FILTER_OPTIONS: Array<{ value: NotificationFilterState['type']; label
     { value: 'promotion', label: '活动' },
 ];
 
-const OUTLINE_BUTTON_CLASS = 'inline-flex h-9 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
-const QUIET_BUTTON_CLASS = 'inline-flex h-9 items-center gap-1.5 rounded-xl px-3 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40 disabled:hover:bg-transparent';
-const ROW_ICON_BUTTON_CLASS = 'flex h-9 w-9 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-background-tertiary hover:text-foreground md:h-7 md:w-7';
 
 /** 分段控件：一组互斥选项，选中项浮起为白底。 */
 function SegmentedControl<T extends string>({ label, options, value, onChange }: {
@@ -66,20 +67,19 @@ function SegmentedControl<T extends string>({ label, options, value, onChange }:
     onChange: (value: T) => void;
 }) {
     return (
-        <div role="group" aria-label={label} className="inline-flex shrink-0 rounded-xl bg-background-secondary p-0.5">
-            {options.map(option => (
-                <button
-                    key={option.value}
-                    type="button"
-                    aria-pressed={value === option.value}
-                    onClick={() => onChange(option.value)}
-                    className="inline-flex h-8 items-center gap-1.5 rounded-lg px-3 text-[13px] text-foreground-secondary transition-colors hover:text-foreground aria-pressed:bg-surface aria-pressed:text-foreground aria-pressed:shadow-[0_1px_2px_rgba(11, 11, 11,0.08)] dark:aria-pressed:bg-background-tertiary"
-                >
-                    {option.label}
-                    {option.badge ? <span className="text-xs text-accent tabular-nums">{option.badge}</span> : null}
-                </button>
-            ))}
-        </div>
+        <SharedSegmentedControl
+            ariaLabel={label}
+            mode="toggle"
+            indicator={false}
+            value={value}
+            onChange={onChange}
+            className="inline-flex shrink-0 gap-0.5 rounded-xl bg-background-secondary p-0.5"
+            optionClassName="h-8 rounded-lg px-3 text-[13px] text-foreground-secondary transition-colors hover:text-foreground aria-pressed:bg-surface aria-pressed:text-foreground aria-pressed:shadow-[var(--shadow-sm)] dark:aria-pressed:bg-background-tertiary"
+            options={options.map(option => ({
+                value: option.value,
+                label: <>{option.label}{option.badge ? <span className="text-xs text-accent tabular-nums">{option.badge}</span> : null}</>,
+            }))}
+        />
     );
 }
 
@@ -130,7 +130,7 @@ function NotificationRow({
         return (
             <li className={`relative before:pointer-events-none before:absolute before:inset-x-3 before:top-0 before:border-t-[0.5px] before:border-border first:before:hidden md:before:inset-x-4 rounded-xl transition-colors ${selected ? 'bg-accent-light' : 'hover:bg-background-secondary/70'}`}>
                 <div className="flex gap-3 px-3 py-3.5 md:px-4">
-                    <input id={checkboxId} type="checkbox" checked={selected} onChange={onToggleSelect} className="mt-1 h-4 w-4 shrink-0 accent-accent" />
+                    <Checkbox id={checkboxId} checked={selected} onCheckedChange={() => onToggleSelect()} className="mt-1" />
                     {/* 整行都能点选，复选框本身仍是唯一的可聚焦控件。 */}
                     <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer">
                         {text}
@@ -154,20 +154,20 @@ function NotificationRow({
                     <div className="mt-1.5 flex min-h-9 items-center gap-3 md:min-h-7">
                         {typeLabel}
                         {notification.link ? (
-                            <button type="button" onClick={onOpen} className="inline-flex items-center text-xs text-accent hover:text-accent-strong">
+                            <Button unstyled type="button" onClick={onOpen} className="inline-flex items-center text-xs text-accent hover:text-accent-strong">
                                 查看详情<ChevronRight className="h-3 w-3" aria-hidden="true" />
-                            </button>
+                            </Button>
                         ) : null}
                         {/* 手机上常显；桌面端悬停或键盘聚焦到该行时出现。 */}
                         <span className="ml-auto flex gap-0.5 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
                             {unread ? (
-                                <button type="button" onClick={onMarkRead} aria-label="标为已读" title="标为已读" className={ROW_ICON_BUTTON_CLASS}>
-                                    <Check className="h-4 w-4" aria-hidden="true" />
-                                </button>
+                                <IconButton label="标为已读" title="标为已读" size="sm" onClick={onMarkRead}>
+                                    <Check aria-hidden="true" />
+                                </IconButton>
                             ) : null}
-                            <button type="button" onClick={onDelete} aria-label="删除通知" title="删除" className={`${ROW_ICON_BUTTON_CLASS} hover:bg-danger/10 hover:text-danger`}>
-                                <Trash2 className="h-4 w-4" aria-hidden="true" />
-                            </button>
+                            <IconButton label="删除通知" title="删除" size="sm" tone="danger" onClick={onDelete}>
+                                <Trash2 aria-hidden="true" />
+                            </IconButton>
                         </span>
                     </div>
                 </div>
@@ -389,19 +389,20 @@ export default function NotificationsPage() {
                     {hasNotifications ? (
                         <div className="-mr-3 flex items-center">
                             {!selectMode ? (
-                                <button type="button" onClick={handleMarkAllRead} disabled={isProcessing || unreadCount === 0} className={QUIET_BUTTON_CLASS}>
+                                <Button variant="ghost" size="sm" onClick={handleMarkAllRead} disabled={isProcessing || unreadCount === 0}>
                                     {isProcessing ? <SoundWaveLoader variant="inline" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
                                     全部已读
-                                </button>
+                                </Button>
                             ) : null}
-                            <button
-                                type="button"
+                            <Button
+                                variant="ghost"
+                                size="sm"
                                 onClick={toggleSelectMode}
                                 aria-pressed={selectMode}
-                                className={`${QUIET_BUTTON_CLASS} aria-pressed:text-accent`}
+                                className="aria-pressed:text-accent"
                             >
                                 {selectMode ? '完成' : '选择'}
-                            </button>
+                            </Button>
                         </div>
                     ) : null}
                 </header>
@@ -430,7 +431,7 @@ export default function NotificationsPage() {
                         tone="danger"
                         title="加载通知失败"
                         description={loadError}
-                        action={<button type="button" onClick={() => setReloadKey(key => key + 1)} className={STATE_SECONDARY_ACTION_CLASS}>重试</button>}
+                        action={<Button variant="secondary" size="xs" onClick={() => setReloadKey(key => key + 1)}>重试</Button>}
                     />
                 ) : !hasNotifications ? (
                     <StatePanel icon={Bell} title="暂无通知" description="系统提醒和功能更新会出现在这里。" />
@@ -465,28 +466,27 @@ export default function NotificationsPage() {
 
                 {!isLoading && nextOffset != null ? (
                     <div className="flex justify-center">
-                        <button type="button" onClick={() => { void loadMore(); }} disabled={loadingMore} className={OUTLINE_BUTTON_CLASS}>
-                            {loadingMore ? <SoundWaveLoader variant="inline" /> : null}
+                        <Button variant="secondary" onClick={() => { void loadMore(); }} loading={loadingMore}>
                             加载更早的通知
-                        </button>
+                        </Button>
                     </div>
                 ) : null}
             </div>
 
             {selectMode && visibleNotifications.length > 0 ? (
                 <div className="fixed inset-x-0 bottom-[calc(var(--sab,0px)+5.5rem)] z-40 flex justify-center px-4 lg:bottom-8">
-                    <div role="toolbar" aria-label="批量操作" className="flex w-full max-w-xl items-center gap-2 rounded-2xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-4 shadow-[0_8px_28px_rgba(11, 11, 11,0.12)]">
+                    <div role="toolbar" aria-label="批量操作" className="flex w-full max-w-xl items-center gap-2 rounded-2xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-4 shadow-[var(--shadow-lg)]">
                         <label className="flex items-center gap-2 text-sm text-foreground">
-                            <input type="checkbox" checked={allSelected} onChange={toggleSelectAll} className="h-4 w-4 accent-accent" />
+                            <Checkbox checked={allSelected} onCheckedChange={() => toggleSelectAll()} />
                             全选
                         </label>
                         <span role="status" className="flex-1 truncate text-sm text-foreground-secondary">已选择 {selectedCount} 项</span>
-                        <button type="button" onClick={handleMarkSelectedRead} disabled={isProcessing || selectedCount === 0} className="h-9 rounded-lg px-3 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-40">
+                        <Button variant="ghost" size="sm" onClick={handleMarkSelectedRead} disabled={isProcessing || selectedCount === 0}>
                             标为已读
-                        </button>
-                        <button type="button" onClick={() => setConfirmBatchDelete(true)} disabled={isProcessing || selectedCount === 0} className="h-9 rounded-lg px-3 text-sm text-danger transition-colors hover:bg-danger/10 disabled:opacity-40">
+                        </Button>
+                        <Button variant="ghost" size="sm" className="text-danger hover:text-danger" onClick={() => setConfirmBatchDelete(true)} disabled={isProcessing || selectedCount === 0}>
                             删除
-                        </button>
+                        </Button>
                     </div>
                 </div>
             ) : null}

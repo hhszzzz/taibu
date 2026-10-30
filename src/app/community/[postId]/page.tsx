@@ -27,6 +27,7 @@ import { loadAdminClientAccessState } from '@/lib/admin/client';
 import { useToast } from '@/components/ui/Toast';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/ui/Button';
 import { PostNavBar, ReportModal, EditPostModal } from '@/components/community/PostActions';
 import { PostDetail } from '@/components/community/PostDetail';
 import { CommentSection } from '@/components/community/CommentSection';
@@ -373,12 +374,9 @@ function PostDetailContent({ postId }: { postId: string }) {
             <div className="min-h-screen bg-background flex items-center justify-center">
                 <div className="text-center">
                     <p className="text-foreground-secondary mb-4">{loadError || '帖子不存在或已被删除'}</p>
-                    <button
-                        onClick={() => { if (loadError) { void loadPost(); } else { router.push('/community'); } }}
-                        className="px-4 py-2 bg-background-secondary rounded-lg hover:bg-background-tertiary transition-colors"
-                    >
+                    <Button variant="secondary" onClick={() => { if (loadError) { void loadPost(); } else { router.push('/community'); } }}>
                         {loadError ? '重试' : '返回社区'}
-                    </button>
+                    </Button>
                 </div>
             </div>
         );

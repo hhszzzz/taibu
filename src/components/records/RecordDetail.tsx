@@ -27,15 +27,18 @@ import {
     updateRecord,
     type ExportData,
 } from '@/lib/records';
-import { Modal } from '@/components/ui/Modal';
+import { Button } from '@/components/ui/Button';
+import { Input } from '@/components/ui/Input';
+import { Textarea } from '@/components/ui/Textarea';
+import { IconButton } from '@/components/ui/IconButton';
+import { Dialog } from '@/components/ui/Dialog';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useToast } from '@/components/ui/Toast';
-import { FILTER_CHIP_CLASS, FilterChip } from '@/components/ui/FilterChip';
+import { FilterChip } from '@/components/ui/FilterChip';
 
 const FIELD_CLASS = 'w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none';
 const LABEL_CLASS = 'mb-1.5 block text-sm text-foreground-secondary';
-const PRIMARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
 const SECONDARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-xl border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
 const NOTE_TIME_FORMAT = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
 
@@ -75,15 +78,14 @@ function DialogHeader({ titleId, title, description, onClose, closeDisabled }: {
                 <h2 id={titleId} className="font-display text-xl text-foreground">{title}</h2>
                 {description ? <p className="mt-1 text-sm text-foreground-secondary">{description}</p> : null}
             </div>
-            <button
-                type="button"
+            <IconButton
+                label="关闭"
                 onClick={onClose}
                 disabled={closeDisabled}
-                aria-label="关闭"
-                className="-mt-1 -mr-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground disabled:opacity-40"
+                className="-mt-1 -mr-2 text-foreground-tertiary"
             >
                 <X className="h-[18px] w-[18px]" aria-hidden="true" />
-            </button>
+            </IconButton>
         </div>
     );
 }
@@ -155,7 +157,7 @@ export function RecordFormModal({
     };
 
     return (
-        <Modal open onClose={onClose} busy={loading} labelledBy={`${id}-title`} initialFocusRef={titleInputRef} className="max-w-lg">
+        <Dialog bare open onClose={onClose} busy={loading} labelledBy={`${id}-title`} initialFocusRef={titleInputRef} className="max-w-lg">
             <DialogHeader
                 titleId={`${id}-title`}
                 title={record ? '编辑记录' : '新建记录'}
@@ -169,7 +171,7 @@ export function RecordFormModal({
 
                 <div>
                     <label htmlFor={`${id}-record-title`} className={LABEL_CLASS}>标题</label>
-                    <input
+                    <Input
                         ref={titleInputRef}
                         id={`${id}-record-title`}
                         type="text"
@@ -185,19 +187,9 @@ export function RecordFormModal({
                     <legend className={LABEL_CLASS}>分类</legend>
                     <div className="flex flex-wrap gap-2">
                         {RECORD_CATEGORIES.map(cat => (
-                            <label key={cat.value} className="cursor-pointer">
-                                <input
-                                    type="radio"
-                                    name={`${id}-category`}
-                                    value={cat.value}
-                                    checked={category === cat.value}
-                                    onChange={() => setCategory(cat.value)}
-                                    className="peer sr-only"
-                                />
-                                <span className={`${FILTER_CHIP_CLASS} peer-checked:border-transparent peer-checked:bg-foreground peer-checked:text-background peer-focus-visible:outline-2 peer-focus-visible:outline-offset-2 peer-focus-visible:outline-accent`}>
-                                    {cat.label}
-                                </span>
-                            </label>
+                            <FilterChip key={cat.value} pressed={category === cat.value} onClick={() => setCategory(cat.value)}>
+                                {cat.label}
+                            </FilterChip>
                         ))}
                     </div>
                 </fieldset>
@@ -205,7 +197,7 @@ export function RecordFormModal({
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                         <label htmlFor={`${id}-event-date`} className={LABEL_CLASS}>事件日期</label>
-                        <input
+                        <Input
                             id={`${id}-event-date`}
                             type="date"
                             value={eventDate}
@@ -215,7 +207,7 @@ export function RecordFormModal({
                     </div>
                     <div>
                         <label htmlFor={`${id}-tags`} className={LABEL_CLASS}>标签</label>
-                        <input
+                        <Input
                             id={`${id}-tags`}
                             type="text"
                             value={tagsInput}
@@ -230,7 +222,7 @@ export function RecordFormModal({
 
                 <div>
                     <label htmlFor={`${id}-content`} className={LABEL_CLASS}>内容</label>
-                    <textarea
+                    <Textarea
                         id={`${id}-content`}
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
@@ -241,13 +233,11 @@ export function RecordFormModal({
                 </div>
 
                 <div className="flex justify-end gap-2 pt-1">
-                    <button type="button" onClick={onClose} disabled={loading} className={SECONDARY_BUTTON_CLASS}>取消</button>
-                    <button type="submit" disabled={loading} className={PRIMARY_BUTTON_CLASS}>
-                        {loading ? '保存中…' : '保存记录'}
-                    </button>
+                    <Button variant="secondary" size="lg" onClick={onClose} disabled={loading}>取消</Button>
+                    <Button type="submit" size="lg" loading={loading} loadingText="保存中…" disabled={loading}>保存记录</Button>
                 </div>
             </form>
-        </Modal>
+        </Dialog>
     );
 }
 
@@ -328,7 +318,7 @@ export function DailyNotes({
 
                 <div className="relative">
                     <label htmlFor={`${id}-note`} className="sr-only">今日小记内容</label>
-                    <textarea
+                    <Textarea
                         id={`${id}-note`}
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
@@ -341,7 +331,7 @@ export function DailyNotes({
                         }}
                         className={`${FIELD_CLASS} resize-none py-3 pr-14 text-sm leading-relaxed`}
                     />
-                    <button
+                    <Button unstyled
                         type="submit"
                         disabled={loading || !content.trim()}
                         aria-label="保存小记"
@@ -349,7 +339,7 @@ export function DailyNotes({
                         className="absolute right-2.5 bottom-2.5 flex h-9 w-9 items-center justify-center rounded-lg bg-accent text-on-accent transition-colors hover:bg-accent/90 disabled:bg-background-tertiary disabled:text-foreground-tertiary"
                     >
                         {loading ? <SoundWaveLoader variant="inline" /> : <ArrowUp className="h-4 w-4" aria-hidden="true" />}
-                    </button>
+                    </Button>
                 </div>
             </form>
 
@@ -373,15 +363,15 @@ export function DailyNotes({
                                     </span>
                                 ) : null}
                                 <p className="min-w-0 flex-1 text-sm leading-6 break-words whitespace-pre-wrap text-foreground">{note.content}</p>
-                                <button
-                                    type="button"
-                                    onClick={() => setDeleteNoteId(note.id)}
-                                    aria-label="删除小记"
+                                <IconButton
+                                    label="删除小记"
                                     title="删除"
-                                    className="-my-1.5 -mr-1.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-foreground-tertiary transition-colors hover:bg-danger/10 hover:text-danger md:h-8 md:w-8"
+                                    tone="danger"
+                                    className="-my-1.5 -mr-1.5 shrink-0 text-foreground-tertiary"
+                                    onClick={() => setDeleteNoteId(note.id)}
                                 >
                                     <Trash2 className="h-4 w-4" aria-hidden="true" />
-                                </button>
+                                </IconButton>
                             </li>
                         );
                     })}
@@ -478,7 +468,7 @@ export function ImportExportModal({
     };
 
     return (
-        <Modal open onClose={onClose} busy={busy} labelledBy={`${id}-title`}>
+        <Dialog bare open onClose={onClose} busy={busy} labelledBy={`${id}-title`}>
             <DialogHeader titleId={`${id}-title`} title="导入 / 导出" onClose={onClose} closeDisabled={busy} />
             <div className="flex flex-col gap-5 p-5 sm:p-6">
                 <FormError message={error} />
@@ -491,9 +481,9 @@ export function ImportExportModal({
                         <Download className="h-4 w-4" aria-hidden="true" />导出数据
                     </h3>
                     <p className="text-sm text-foreground-secondary">把全部记录和小记保存为 JSON 文件。</p>
-                    <button type="button" onClick={handleExport} disabled={busy} className={`${SECONDARY_BUTTON_CLASS} self-start`}>
-                        {exporting ? '导出中…' : '导出 JSON'}
-                    </button>
+                    <Button variant="secondary" size="lg" className="self-start" onClick={handleExport} loading={exporting} loadingText="导出中…" disabled={busy}>
+                        导出 JSON
+                    </Button>
                 </section>
 
                 <section aria-labelledby={`${id}-import`} className="flex flex-col gap-2 border-t-[0.5px] border-border pt-5">
@@ -507,17 +497,19 @@ export function ImportExportModal({
                                 <strong className="font-medium text-danger">替换现有的全部记录和小记</strong>，此操作无法撤销。
                             </p>
                             <div className="flex flex-wrap gap-2">
-                                <button
-                                    type="button"
+                                <Button
+                                    variant="danger"
+                                    size="lg"
                                     onClick={() => { void confirmImport(); }}
+                                    loading={importing}
+                                    loadingText="导入中…"
                                     disabled={importing}
-                                    className="inline-flex h-10 items-center justify-center rounded-xl bg-danger px-4 text-sm font-medium text-white transition-colors hover:bg-danger/90 disabled:opacity-50"
                                 >
-                                    {importing ? '导入中…' : '确认覆盖导入'}
-                                </button>
-                                <button type="button" onClick={() => setPendingImport(null)} disabled={importing} className={SECONDARY_BUTTON_CLASS}>
+                                    确认覆盖导入
+                                </Button>
+                                <Button variant="secondary" size="lg" onClick={() => setPendingImport(null)} disabled={importing}>
                                     取消
-                                </button>
+                                </Button>
                             </div>
                         </div>
                     ) : (
@@ -537,6 +529,6 @@ export function ImportExportModal({
                     )}
                 </section>
             </div>
-        </Modal>
+        </Dialog>
     );
 }

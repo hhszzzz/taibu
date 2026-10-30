@@ -10,6 +10,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { RotateCw, Sparkles, ChevronLeft, BookOpenText } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
+import { Button } from '@/components/ui/Button';
 import { PersonalityCard } from '@/components/mbti/PersonalityCard';
 import { buildViewResult, type TestResult } from '@/lib/divination/mbti';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
@@ -81,7 +82,7 @@ function MBTIResultContent() {
                 {/* 头部导航（桌面端；移动端由顶栏承载） */}
                 <div className="hidden items-center justify-between lg:flex">
                     <Link href="/mbti" className="inline-flex items-center gap-1 text-sm text-foreground-secondary transition-colors hover:text-foreground"><ChevronLeft className="h-4 w-4" aria-hidden="true" />返回 MBTI 首页</Link>
-                    {isTestMode && <button type="button" onClick={() => router.push('/mbti/test')} className="inline-flex h-10 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-sm transition-colors hover:bg-background-secondary"><RotateCw className="h-3.5 w-3.5" aria-hidden="true" />重新测试</button>}
+                    {isTestMode && <Button unstyled type="button" onClick={() => router.push('/mbti/test')} className="inline-flex h-10 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-sm transition-colors hover:bg-background-secondary"><RotateCw className="h-3.5 w-3.5" aria-hidden="true" />重新测试</Button>}
                 </div>
 
                 {/* 性格卡片 */}
@@ -94,14 +95,14 @@ function MBTIResultContent() {
                             <h2 className="inline-flex items-center gap-2 font-display text-[17px] font-medium"><Sparkles className="h-4 w-4 text-clay" aria-hidden="true" />AI 深度分析</h2>
                             <p className="text-sm text-foreground-secondary">带上你的 MBTI 结果进入 AI 对话，由太卜在对话里展开分析。</p>
                         </div>
-                        <button type="button" onClick={handleAsk} className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">问太卜</button>
+                        <Button unstyled type="button" onClick={handleAsk} className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">问太卜</Button>
                     </section>
                 )}
 
                 {/* 底部收藏操作 */}
                 {knowledgeBaseEnabled && !!readingId && (
                     <div className="flex justify-center pt-2">
-                        <button type="button" onClick={() => setKbModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"><BookOpenText className="h-4 w-4" aria-hidden="true" />收藏至知识库</button>
+                        <Button unstyled type="button" onClick={() => setKbModalOpen(true)} className="inline-flex h-11 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground-secondary transition-colors hover:bg-background-secondary hover:text-foreground"><BookOpenText className="h-4 w-4" aria-hidden="true" />收藏至知识库</Button>
                     </div>
                 )}
 

@@ -21,6 +21,7 @@ import {
     toLocalDateKey,
 } from '@/lib/records';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
@@ -54,13 +55,10 @@ function SectionError({
     return (
         <div role="alert" className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border-[0.5px] border-danger/30 bg-danger/5 px-4 py-3.5 text-sm text-danger">
             <p>{message}</p>
-            <button
-                type="button"
-                onClick={() => { void onRetry(); }}
-                className="inline-flex h-9 items-center rounded-lg border-[0.5px] border-danger/30 px-3 text-sm text-danger transition-colors hover:bg-danger/10"
-            >
+            <Button variant="ghost" className="h-9 rounded-lg border-[0.5px] border-danger/30 px-3 text-sm text-danger hover:bg-danger/10 hover:text-danger"
+                onClick={() => { void onRetry(); }}>
                 重试
-            </button>
+            </Button>
         </div>
     );
 }
@@ -335,23 +333,15 @@ function RecordsContent() {
                         <p className="text-[15px] text-foreground-secondary">记下断语、应验与感悟，日后对照印证。</p>
                     </div>
                     <div className="flex w-full items-center justify-end gap-2 md:w-auto">
-                        <button
-                            type="button"
-                            onClick={() => setShowImportExport(true)}
-                            aria-label="导入 / 导出"
-                            className="inline-flex h-11 items-center gap-2 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-[15px] text-foreground transition-colors hover:bg-background-secondary md:px-4"
-                        >
+                        <Button variant="secondary" className="h-11 rounded-xl border-border-hover px-3 text-[15px] md:px-4"
+                            aria-label="导入 / 导出" onClick={() => setShowImportExport(true)}>
                             <ArrowDownUp className="h-4 w-4" aria-hidden="true" />
                             <span className="hidden md:inline" aria-hidden="true">导入 / 导出</span>
-                        </button>
-                        <button
-                            type="button"
-                            onClick={() => setShowRecordForm(true)}
-                            className="inline-flex h-11 items-center gap-2 rounded-xl bg-accent px-[18px] text-[15px] font-medium text-on-accent transition-colors hover:bg-accent/90"
-                        >
+                        </Button>
+                        <Button className="h-11 rounded-xl px-[18px] text-[15px]" onClick={() => setShowRecordForm(true)}>
                             <Plus className="h-4 w-4" aria-hidden="true" />
                             新建记录
-                        </button>
+                        </Button>
                     </div>
                 </header>
 

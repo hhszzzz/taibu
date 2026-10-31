@@ -5,10 +5,6 @@ import type { SettingsCenterTab } from '@/lib/settings-center';
  * 避免界面新增子页后路由白名单没有跟上而 404。
  */
 export const ADMIN_SUBTABS = {
-  'admin-features': [
-    { id: 'toggles', label: '功能开关' },
-    { id: 'keys', label: '激活码' },
-  ],
   'admin-ai-services': [
     { id: 'models', label: '模型管理' },
     { id: 'gateways', label: '网关管理' },

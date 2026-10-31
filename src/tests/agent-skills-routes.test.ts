@@ -6,6 +6,7 @@ import { createMockAuthContext } from './helpers/auth-mock';
 import { DEFAULT_AGENT_EXTENSIONS_POLICY, type AgentExtensionsPolicy } from '../lib/agent/mcp/config';
 import type { SkillFields } from '../lib/agent/skills/input.server';
 import type { SkillRow } from '../lib/agent/skills/store.server';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 const SKILL_ID = '00000000-0000-4000-8000-00000000bb01';
 const CONTENT = '---\nname: case-review\ndescription: 复盘一个命理案例\n---\n先读命盘，再列要点。';
@@ -34,6 +35,7 @@ function asAdmin(t: TestContext) {
 }
 
 function asMember(t: TestContext, options: { membership?: 'free' | 'plus' | 'pro'; policy?: AgentExtensionsPolicy; used?: number; platform?: SkillRow[] } = {}) {
+  mockAIFeatureState(t);
   const { apiUtils, settings, credits, store } = modules();
   t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1'));
   t.mock.method(settings, 'getAgentExtensionsPolicy', async () => options.policy ?? DEFAULT_AGENT_EXTENSIONS_POLICY);

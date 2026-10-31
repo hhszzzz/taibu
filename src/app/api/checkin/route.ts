@@ -9,6 +9,7 @@ import {
     getCheckinStats
 } from '@/lib/user/checkin';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 interface CheckinResponse {
     success: boolean;
@@ -40,6 +41,8 @@ interface CheckinResponse {
 
 // GET - 获取签到状态
 export async function GET(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('checkin', '签到功能当前未启用');
+    if (guard) return guard;
     try {
         const requestUrl = new URL(request.url);
         const perfEnabled = requestUrl.searchParams.get('perf') === '1';
@@ -97,6 +100,8 @@ export async function GET(request: NextRequest) {
 
 // POST - 执行签到
 export async function POST(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('checkin', '签到功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {

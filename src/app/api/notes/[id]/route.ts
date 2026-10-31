@@ -1,10 +1,13 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
@@ -45,6 +48,8 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);

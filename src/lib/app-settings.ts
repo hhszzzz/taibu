@@ -24,11 +24,13 @@ import {
 export const FEATURE_MODULE_IDS = [
   'bazi', 'hepan', 'ziwei', 'tarot', 'liuyao', 'qimen',
   'daliuren', 'meihua', 'xiaoliuren',
-  'taiyi', 'astrology', 'almanac',
   'face', 'palm', 'mbti', 'chat', 'daily', 'monthly',
   'records', 'community', 'knowledge-base', 'mcp-service',
-  'checkin', 'credits', 'charts', 'ai-personalization',
+  'checkin', 'charts', 'ai-personalization',
   'notifications', 'upgrade', 'help', 'agent',
+  // Agent 的细粒度能力：各自可关，关掉后接口与入口一起失效。
+  'skills', 'connectors', 'schedules', 'memory',
+  'shares', 'annual-report',
 ] as const;
 
 export type FeatureModuleId = typeof FEATURE_MODULE_IDS[number];

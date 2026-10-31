@@ -4,8 +4,10 @@ import { NextRequest } from 'next/server';
 
 
 import { createMockScopedDb } from './helpers/db-mock';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 function mockUserContext(t: { after: (fn: () => void) => void }, scoped: ReturnType<typeof createMockScopedDb>) {
+  mockAIFeatureState(t as never);
   const apiUtils = require('../lib/api-utils') as any;
   const original = apiUtils.requireUserContext;
   apiUtils.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });

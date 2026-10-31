@@ -9,6 +9,7 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import type { ChatPreferences } from '@/lib/chat/preferences';
 import type { AgentMemory } from '@/lib/agent/memory';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { CollaborationSettings } from '@/components/settings/CollaborationSettings';
 import { MemoryManagerDialog } from '@/components/settings/MemoryManagerDialog';
 
@@ -18,13 +19,18 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
     const [busy, setBusy] = useState(false), [error, setError] = useState('');
     const controller = useRef<AbortController | null>(null);
     const { showToast } = useToast();
+    const { isFeatureEnabled, loaded: featureTogglesLoaded } = useFeatureToggles();
+    // 记忆开关关闭时整段设置隐藏，接口同时返回 403。
+    const memoryAvailable = !featureTogglesLoaded || isFeatureEnabled('memory');
     const dirty = !!preferences && memoryEnabled !== (preferences.memoryEnabled === true);
     useUnsavedSettingsGuard(dirty);
     useEffect(() => {
         const abort = new AbortController(); controller.current = abort;
         void Promise.all([
             getCurrentUserSettings({ expectedUserId: userId, signal: abort.signal }),
-            requestBrowserJson<{ memories: AgentMemory[] }>('/api/user/agent-memory', { headers: { 'X-Expected-User-Id': userId }, signal: abort.signal }),
+            memoryAvailable
+                ? requestBrowserJson<{ memories: AgentMemory[] }>('/api/user/agent-memory', { headers: { 'X-Expected-User-Id': userId }, signal: abort.signal })
+                : Promise.resolve({ data: { memories: [] }, error: null }),
         ]).then(([settings, memory]) => {
             if (abort.signal.aborted) return;
             if (settings.error || !settings.settings) { setError('读取记忆设置失败，请刷新后重试'); return; }
@@ -33,7 +39,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
             if (!memory.error) setMemoryCount(memory.data?.memories?.length ?? 0);
         }).catch(() => { if (!abort.signal.aborted) setError('读取记忆设置失败，请刷新后重试'); });
         return () => { abort.abort(); controller.current = null; };
-    }, [userId]);
+    }, [userId, memoryAvailable]);
     const save = async () => {
         const active = controller.current;
         if (!preferences) return;
@@ -47,7 +53,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
         } catch { if (active && !active.signal.aborted) showToast('error', '保存记忆设置失败'); }
         finally { if (active && !active.signal.aborted) setBusy(false); }
     };
-    return <><section className="settings-form-section settings-form-section-divided" aria-label="记忆设置">
+    return <>{memoryAvailable ? <section className="settings-form-section settings-form-section-divided" aria-label="记忆设置">
         <div className="settings-form-heading">
             <h3>记忆</h3>
             <p>让太卜记住你的偏好和事实，随时可以查看或删除。</p>
@@ -76,7 +82,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
               onSave={() => void save()}
           /> : null}
         </div>
-    </section>
+    </section> : null}
     <CollaborationSettings userId={userId} />
     <MemoryManagerDialog open={managerOpen} onClose={() => setManagerOpen(false)} userId={userId} onCountChange={setMemoryCount} />
     </>;

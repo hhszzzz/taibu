@@ -24,6 +24,7 @@ import { useAgentActivity } from '@/lib/agent/use-agent-activity';
 import { CHAT_RECORD_VIEW_LABELS, CHAT_RECORD_VIEWS, useChatRecordView, useChatRecordViewDefault, writeChatRecordView, writeChatRecordViewDefault } from '@/lib/chat/chat-record-view';
 import type { ReactNode } from 'react';
 import type { ChatRecordView } from '@/lib/chat/chat-record-view';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 
 interface ChatHeaderProps {
     /** Opens the navigation drawer where the page has no sidebar (phones and tablets). */
@@ -77,6 +78,9 @@ export function ChatHeader({
 }: ChatHeaderProps) {
     const { handleRenameConversation, handleDeleteConversation } = useConversationList();
     const { showToast } = useToast();
+    const { isFeatureEnabled, loaded: featureTogglesLoaded } = useFeatureToggles();
+    // 分享开关关闭时菜单只保留导出，接口同样拒绝读写公开链接。
+    const shareLinksEnabled = !featureTogglesLoaded || isFeatureEnabled('shares');
     const [titleMenu, setTitleMenu] = useState(false);
     const [moreMenu, setMoreMenu] = useState(false);
     const [shareMenu, setShareMenu] = useState(false);
@@ -159,7 +163,7 @@ export function ChatHeader({
                             <Share2 size={15} aria-hidden="true" /><span>分享</span>
                         </MenuTrigger>
                         <MenuContent sideOffset={6} align="end" className="chat-header-menu w-[min(20rem,calc(100vw-2rem))]" aria-label="分享">
-                            <ShareConversationMenu conversationId={conversationId} taskActive={markers.get(conversationId) === 'running' || markers.get(conversationId) === 'awaiting'}
+                            <ShareConversationMenu conversationId={conversationId} shareLinksEnabled={shareLinksEnabled} taskActive={markers.get(conversationId) === 'running' || markers.get(conversationId) === 'awaiting'}
                                 exportBusy={exportBusy} onExport={format => { void downloadExport(format); }} onClose={() => setShareMenu(false)} />
                         </MenuContent>
                     </Menu>

@@ -23,9 +23,13 @@ export const SKILL_FILE_PAGE = 8_000;
 /** A skill that cannot be used now, said so the user or the model can act on it. */
 export class SkillUnavailableError extends Error {}
 
-/** Whether an administrator left the skills scope on; a state that cannot be read counts as off. */
+/** Whether an administrator left skills on, both the module switch and the tool scope; an unreadable state counts as off. */
 export async function skillsScopeEnabled(): Promise<boolean> {
-  return (await readFeatureModuleStateFresh(toAgentToolScopeFeatureId('skills'))).status === 'enabled';
+  const [scope, feature] = await Promise.all([
+    readFeatureModuleStateFresh(toAgentToolScopeFeatureId('skills')),
+    readFeatureModuleStateFresh('skills'),
+  ]);
+  return scope.status === 'enabled' && feature.status === 'enabled';
 }
 
 /**

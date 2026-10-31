@@ -51,12 +51,12 @@ async function knowledgeMentions(db: ScopedDb, userId: string, ids: string[]): P
 
 /** Why this occurrence cannot run now, or null when it can be submitted. */
 async function skipReason(db: ScopedDb, schedule: ScheduleView): Promise<{ reason: SkipReason; message: string } | null> {
-  const [chat, agent] = await Promise.all([
-    readFeatureModuleStateFresh('chat'), readFeatureModuleStateFresh('agent'),
+  const [chat, agent, schedules] = await Promise.all([
+    readFeatureModuleStateFresh('chat'), readFeatureModuleStateFresh('agent'), readFeatureModuleStateFresh('schedules'),
   ]);
-  if (chat.status === 'disabled' || agent.status === 'disabled')
+  if (chat.status === 'disabled' || agent.status === 'disabled' || schedules.status === 'disabled')
     return { reason: 'feature_disabled', message: '功能已关闭，本次运行已跳过。' };
-  if (chat.status === 'unavailable' || agent.status === 'unavailable')
+  if (chat.status === 'unavailable' || agent.status === 'unavailable' || schedules.status === 'unavailable')
     throw new AgentScheduleError('功能状态暂时无法确认', 503, 'FEATURE_STATE_UNAVAILABLE');
   const account = await getUserCreditInfo(schedule.userId, { db });
   if (account.credits <= 0) return { reason: 'insufficient_credits', message: '积分不足，本次运行已跳过。' };

@@ -7,10 +7,12 @@ import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 import { GET as getShare, POST as saveShare, DELETE as revokeShare } from '../app/api/conversations/[id]/share/route';
 import { GET as listShares } from '../app/api/shares/route';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 type Call = { table: string; field: string; value: unknown };
 
 function fixture(t: TestContext) {
+    mockAIFeatureState(t);
     const owner = randomUUID(), id = randomUUID();
     const calls: Call[] = [];
     const rows: Record<string, unknown> = {

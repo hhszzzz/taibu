@@ -38,6 +38,7 @@ const { NAV_REGISTRY, getFeatureModules, getNavItemById, getSidebarToolItems } =
 })();
 
 const ENABLED_FLAGS = {
+  sharesEnabled: true, skillsEnabled: true, connectorsEnabled: true,
   upgradeEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
   mcpServiceEnabled: true, agentEnabled: true, personalizationEnabled: true, helpEnabled: true, isAdmin: false,
 };
@@ -93,7 +94,8 @@ test('settings page addresses and legacy hashes resolve to the same categories',
   for (const tab of ['general', 'personalization', 'byok', 'charts', 'admin-features'] as const) {
     assert.equal(parseSettingsCenterPath('/settings/' + tab)?.tab, parseSettingsCenterHash('#settings/' + tab));
   }
-  assert.deepEqual(parseSettingsCenterPath('/settings/admin-features/keys'), { tab: 'admin-features', subpath: 'keys' });
+  assert.equal(parseSettingsCenterPath('/settings/admin-keys')?.tab, 'admin-keys');
+  assert.equal(isAdminSubtabOwner('admin-features'), false);
   assert.equal(parseSettingsCenterPath('/settings/unknown'), null);
   assert.equal(parseSettingsCenterPath('/bazi'), null);
   assert.equal(getSettingsCenterRouteTarget('admin-ai-services', { subpath: 'gateways' }), '/settings/admin-ai-services/gateways');
@@ -121,8 +123,11 @@ test('checkin is removed from default user-facing tool orders', () => {
 test('shared navigation and admin feature toggles do not expose legacy credits entries', () => {
   assert.equal(NAV_REGISTRY.some(item => item.id === 'user/credits' || item.href === '/user/credits'), false);
   assert.equal(getFeatureModules().some(item => item.id === 'credits' || item.label === '积分流水'), false);
-  for (const id of ['agent', 'taiyi', 'astrology', 'almanac']) {
+  for (const id of ['agent', 'skills', 'connectors', 'schedules', 'memory', 'shares', 'annual-report']) {
     assert.ok(getFeatureModules().some(item => item.id === id), `${id} is available to administrators`);
+  }
+  for (const id of ['credits', 'taiyi', 'astrology', 'almanac']) {
+    assert.equal(getFeatureModules().some(item => item.id === id), false, `${id} is no longer a switch`);
   }
   const headerSource = readFileSync(resolve(process.cwd(), 'src/components/layout/Header.tsx'), 'utf8');
   assert.equal(headerSource.includes("'/user/credits'"), false);

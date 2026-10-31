@@ -56,7 +56,8 @@ export async function availableMcpServers(userId: string, membership: Membership
     && (row.exposure !== 'codemode' || options.codeMode) && meetsTier(membership, row.required_tier));
   let own: McpServerRow[] = [];
   try {
-    const allowance = extensionAllowance((await getAgentExtensionsPolicy()).connectors, membership);
+    const connectorsEnabled = (await readFeatureModuleStateFresh('connectors')).status === 'enabled';
+    const allowance = connectorsEnabled ? extensionAllowance((await getAgentExtensionsPolicy()).connectors, membership) : 0;
     if (allowance > 0) own = (await userMcpServers(userId)).filter((row) => row.is_enabled).slice(0, allowance);
   } catch {
     own = [];

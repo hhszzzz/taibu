@@ -20,12 +20,14 @@ interface ShareConversationMenuProps {
     conversationId: string | null;
     /** A queued or running task freezes the transcript; sharing waits for it. */
     taskActive: boolean;
+    /** 分享开关关闭时只保留导出，不再读写公开链接。 */
+    shareLinksEnabled?: boolean;
     exportBusy: ConversationExportFormat | null;
     onExport: (format: ConversationExportFormat) => void;
     onClose: () => void;
 }
 
-export function ShareConversationMenu({ conversationId, taskActive, exportBusy, onExport, onClose }: ShareConversationMenuProps) {
+export function ShareConversationMenu({ conversationId, taskActive, shareLinksEnabled = true, exportBusy, onExport, onClose }: ShareConversationMenuProps) {
     const { showToast } = useToast();
     const [status, setStatus] = useState<ShareMenuStatus>('loading');
     const [share, setShare] = useState<ConversationShareState | null>(null);
@@ -53,10 +55,10 @@ export function ShareConversationMenu({ conversationId, taskActive, exportBusy, 
     }, []);
 
     useEffect(() => {
-        if (!conversationId) return;
+        if (!conversationId || !shareLinksEnabled) return;
         void load(conversationId);
         return () => { requestSequence.current += 1; };
-    }, [conversationId, load]);
+    }, [conversationId, load, shareLinksEnabled]);
 
     const save = async () => {
         if (!conversationId || busy) return;
@@ -109,38 +111,40 @@ export function ShareConversationMenu({ conversationId, taskActive, exportBusy, 
 
     const locked = taskActive || busy !== null;
     return <>
-        {status === 'loading' && <p className="chat-header-menu-note">正在读取分享状态…</p>}
-        {status === 'error' && <>
-            <p className="chat-header-menu-note">读取分享状态失败。</p>
-            <MenuItem className="chat-header-menu-item" onClick={() => { void load(conversationId); }}>
-                <RefreshCw size={15} aria-hidden="true" />重试
-            </MenuItem>
-        </>}
-        {status === 'ready' && <>
-            <p className="chat-header-menu-note">
-                {taskActive ? '任务进行中，完成后可以分享。'
-                    : share ? '持有链接的任何人都能查看这份只读快照；之后的新消息需「更新链接」才会出现。'
-                        : '创建只读快照链接，持有链接的任何人都可以查看。'}
-            </p>
-            {share ? <>
-                <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={busy !== null} onClick={() => { void copy(); }}>
-                    <Link2 size={15} aria-hidden="true" />复制公开链接
+        {shareLinksEnabled ? <>
+            {status === 'loading' && <p className="chat-header-menu-note">正在读取分享状态…</p>}
+            {status === 'error' && <>
+                <p className="chat-header-menu-note">读取分享状态失败。</p>
+                <MenuItem className="chat-header-menu-item" onClick={() => { void load(conversationId); }}>
+                    <RefreshCw size={15} aria-hidden="true" />重试
                 </MenuItem>
-                <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={locked} onClick={() => { void save(); }}>
-                    <RefreshCw size={15} aria-hidden="true" />{busy === 'save' ? '正在更新…' : '更新链接'}
-                </MenuItem>
-                <MenuItem tone="danger" className="chat-header-menu-item" closeOnClick={false} disabled={busy !== null} onClick={() => { void remove(); }}>
-                    <Trash2 size={15} aria-hidden="true" />{busy === 'delete' ? '正在删除…' : confirmDelete ? '确认删除链接' : '删除链接'}
-                </MenuItem>
-            </> : <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={locked} onClick={() => { void save(); }}>
-                <Link2 size={15} aria-hidden="true" />{busy === 'save' ? '正在创建…' : '创建公开链接'}
-            </MenuItem>}
-            <MenuCheckboxItem className="chat-header-menu-item" checked={includeCharts} closeOnClick={false}
-                disabled={locked} onCheckedChange={setIncludeCharts}>
-                包含命盘与工具结果
-            </MenuCheckboxItem>
-        </>}
-        <MenuSeparator />
+            </>}
+            {status === 'ready' && <>
+                <p className="chat-header-menu-note">
+                    {taskActive ? '任务进行中，完成后可以分享。'
+                        : share ? '持有链接的任何人都能查看这份只读快照；之后的新消息需「更新链接」才会出现。'
+                            : '创建只读快照链接，持有链接的任何人都可以查看。'}
+                </p>
+                {share ? <>
+                    <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={busy !== null} onClick={() => { void copy(); }}>
+                        <Link2 size={15} aria-hidden="true" />复制公开链接
+                    </MenuItem>
+                    <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={locked} onClick={() => { void save(); }}>
+                        <RefreshCw size={15} aria-hidden="true" />{busy === 'save' ? '正在更新…' : '更新链接'}
+                    </MenuItem>
+                    <MenuItem tone="danger" className="chat-header-menu-item" closeOnClick={false} disabled={busy !== null} onClick={() => { void remove(); }}>
+                        <Trash2 size={15} aria-hidden="true" />{busy === 'delete' ? '正在删除…' : confirmDelete ? '确认删除链接' : '删除链接'}
+                    </MenuItem>
+                </> : <MenuItem className="chat-header-menu-item" closeOnClick={false} disabled={locked} onClick={() => { void save(); }}>
+                    <Link2 size={15} aria-hidden="true" />{busy === 'save' ? '正在创建…' : '创建公开链接'}
+                </MenuItem>}
+                <MenuCheckboxItem className="chat-header-menu-item" checked={includeCharts} closeOnClick={false}
+                    disabled={locked} onCheckedChange={setIncludeCharts}>
+                    包含命盘与工具结果
+                </MenuCheckboxItem>
+            </>}
+        </> : null}
+        {shareLinksEnabled ? <MenuSeparator /> : null}
         <MenuItem className="chat-header-menu-item" disabled={exportBusy !== null} onClick={() => { onClose(); onExport('md'); }}>导出 Markdown</MenuItem>
         <MenuItem className="chat-header-menu-item" disabled={exportBusy !== null} onClick={() => { onClose(); onExport('html'); }}>导出 HTML</MenuItem>
     </>;

@@ -54,6 +54,9 @@ const LazyAdminAnnouncementsContent = lazy(async () => ({
 const LazyAdminFeaturesContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminFeaturesContent,
 }));
+const LazyAdminActivationKeysContent = lazy(async () => ({
+  default: (await import('@/components/settings/AccountAdminPanels')).AdminActivationKeysContent,
+}));
 const LazyAdminAIServicesContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminAIServicesContent,
 }));
@@ -187,6 +190,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyAdminAnnouncementsContent />);
     case 'admin-features':
       return renderLazyPanel(<LazyAdminFeaturesContent />);
+    case 'admin-keys':
+      return renderLazyPanel(<LazyAdminActivationKeysContent />);
     case 'admin-ai-services':
       return renderLazyPanel(<LazyAdminAIServicesContent />);
     case 'admin-agent-extensions':
@@ -204,6 +209,9 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
   const activeSubpath = useSettingsCenterSubpath();
   const [mobileNavigation, setMobileNavigation] = useState(false);
   const flags = useMemo<SettingsCenterFlags>(() => ({
+    sharesEnabled: !featureTogglesLoaded || isFeatureEnabled('shares'),
+    skillsEnabled: !featureTogglesLoaded || isFeatureEnabled('skills'),
+    connectorsEnabled: !featureTogglesLoaded || isFeatureEnabled('connectors'),
     upgradeEnabled: !featureTogglesLoaded || isFeatureEnabled('upgrade'),
     chartsEnabled: !featureTogglesLoaded || isFeatureEnabled('charts'),
     knowledgeBaseEnabled: !featureTogglesLoaded || isFeatureEnabled('knowledge-base'),

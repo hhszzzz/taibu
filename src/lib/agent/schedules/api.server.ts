@@ -1,7 +1,7 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
-import { getAgentScheduleLimits, setAgentScheduleLimits } from '@/lib/app-settings';
+import { getAgentScheduleLimits, readFeatureModuleStateFresh, setAgentScheduleLimits } from '@/lib/app-settings';
 import { isValidUUID } from '@/lib/validation';
 import {
   AGENT_SCHEDULE_LIMIT_MAX, AGENT_SCHEDULE_MEMBERSHIP_LABELS, AGENT_SCHEDULE_MEMBERSHIP_TIERS,
@@ -13,6 +13,14 @@ import {
   listAgentScheduleRuns, listAgentSchedules, updateAgentSchedule,
 } from './server';
 import { runAgentScheduleNow } from './runner.server';
+
+/** Feature switch for this area; fail closed when the state cannot be read. */
+async function schedulesGate(): Promise<Response | null> {
+  const state = await readFeatureModuleStateFresh('schedules');
+  if (state.status === 'enabled') return null;
+  if (state.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
+  return jsonError('定时任务功能当前未启用', 403, { code: 'FEATURE_DISABLED' });
+}
 
 const readBody = (request: NextRequest) => request.json().catch(() => null) as Promise<unknown>;
 
@@ -32,6 +40,8 @@ async function member(request: NextRequest) {
 }
 
 export async function readSchedules(request: NextRequest) {
+  const gate = await schedulesGate();
+  if (gate) return gate;
   const context = await member(request);
   if ('response' in context) return context.response;
   try {
@@ -46,6 +56,8 @@ export async function readSchedules(request: NextRequest) {
 }
 
 export async function createSchedule(request: NextRequest) {
+  const gate = await schedulesGate();
+  if (gate) return gate;
   const context = await member(request);
   if ('response' in context) return context.response;
   try {
@@ -58,6 +70,8 @@ export async function createSchedule(request: NextRequest) {
 }
 
 export async function updateSchedule(request: NextRequest, id: string) {
+  const gate = await schedulesGate();
+  if (gate) return gate;
   if (!isValidUUID(id)) return jsonError('定时任务标识无效', 400);
   const context = await member(request);
   if ('response' in context) return context.response;
@@ -91,6 +105,8 @@ export async function updateSchedule(request: NextRequest, id: string) {
 }
 
 export async function removeSchedule(request: NextRequest, id: string) {
+  const gate = await schedulesGate();
+  if (gate) return gate;
   if (!isValidUUID(id)) return jsonError('定时任务标识无效', 400);
   const context = await member(request);
   if ('response' in context) return context.response;
@@ -103,6 +119,8 @@ export async function removeSchedule(request: NextRequest, id: string) {
 }
 
 export async function runScheduleNow(request: NextRequest, id: string) {
+  const gate = await schedulesGate();
+  if (gate) return gate;
   if (!isValidUUID(id)) return jsonError('定时任务标识无效', 400);
   const context = await member(request);
   if ('response' in context) return context.response;
@@ -114,6 +132,8 @@ export async function runScheduleNow(request: NextRequest, id: string) {
 }
 
 export async function readScheduleRuns(request: NextRequest, id: string) {
+  const gate = await schedulesGate();
+  if (gate) return gate;
   if (!isValidUUID(id)) return jsonError('定时任务标识无效', 400);
   const context = await member(request);
   if ('response' in context) return context.response;

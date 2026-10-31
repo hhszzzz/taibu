@@ -3,6 +3,7 @@ import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { isValidUUID } from '@/lib/validation';
 import { validMemory } from '@/lib/agent/memory';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 const MEMORY_COLUMNS = ['id', 'title', 'content', 'kind', 'updated_at'] as const;
 
@@ -14,6 +15,8 @@ async function context(request: NextRequest): Promise<{ error: Response } | { db
     return { db: auth.db, userId: auth.user.id };
 }
 export async function GET(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('memory', '任务记忆功能当前未启用');
+    if (guard) return guard;
     const auth = await context(request);
     if ('error' in auth) return auth.error;
     let memories;
@@ -32,6 +35,8 @@ export async function GET(request: NextRequest) {
     return jsonOk({ memories: memories ?? [] });
 }
 export async function POST(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('memory', '任务记忆功能当前未启用');
+    if (guard) return guard;
     const auth = await context(request);
     if ('error' in auth) return auth.error;
     const body = await request.json().catch(() => null);
@@ -62,6 +67,8 @@ export async function POST(request: NextRequest) {
     return jsonOk({ memory });
 }
 export async function DELETE(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('memory', '任务记忆功能当前未启用');
+    if (guard) return guard;
     const auth = await context(request);
     if ('error' in auth) return auth.error;
     const body = await request.json().catch(() => null);

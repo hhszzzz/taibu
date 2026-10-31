@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createMockScopedDb } from './helpers/db-mock';
 import { NextRequest } from 'next/server';
 import { createMockAuthContext } from './helpers/auth-mock';
-import { mockAIRateLimit } from './helpers/route-mock';
+import { mockAIRateLimit, mockAIFeatureState } from './helpers/route-mock';
 
 
 test('knowledge-base POST should create through transactional rpc', async (t) => {
@@ -100,6 +100,7 @@ test('knowledge-base POST should return 403 when transactional limit is reached'
 });
 
 test('community votes POST should toggle vote through transactional rpc', async (t) => {
+  mockAIFeatureState(t);
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/community/votes/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
@@ -356,6 +357,7 @@ test('knowledge-base id routes fail closed instead of falling back to the system
 });
 
 test('community reports POST should submit and notify via transactional rpc', async (t) => {
+  mockAIFeatureState(t);
   const apiUtils = require('../lib/api-utils') as {
     requireUserContext: typeof import('../lib/api-utils').requireUserContext;
   };
@@ -415,6 +417,7 @@ test('community reports POST should submit and notify via transactional rpc', as
 });
 
 test('community reports POST should return 500 when transactional rpc fails', async (t) => {
+  mockAIFeatureState(t);
   const apiUtils = require('../lib/api-utils') as {
     requireUserContext: typeof import('../lib/api-utils').requireUserContext;
   };
@@ -573,6 +576,7 @@ test('performCheckin should use transactional rpc result', async (t) => {
 });
 
 test('checkin route should return structured status when the user already checked in', async (t) => {
+  mockAIFeatureState(t);
   const apiUtilsModule = require('../lib/api-utils') as any;
   const checkinModule = require('../lib/user/checkin') as any;
   const routePath = require.resolve('../app/api/checkin/route');
@@ -609,6 +613,7 @@ test('checkin route should return structured status when the user already checke
 });
 
 test('checkin route should not forward the user-scoped db client into the service rpc helper', async (t) => {
+  mockAIFeatureState(t);
   const apiUtilsModule = require('../lib/api-utils') as any;
   const checkinModule = require('../lib/user/checkin') as any;
   const routePath = require.resolve('../app/api/checkin/route');
@@ -654,6 +659,7 @@ test('checkin route should not forward the user-scoped db client into the servic
 });
 
 test('checkin route should return structured cap details when credits are full', async (t) => {
+  mockAIFeatureState(t);
   const apiUtilsModule = require('../lib/api-utils') as any;
   const checkinModule = require('../lib/user/checkin') as any;
   const routePath = require.resolve('../app/api/checkin/route');
@@ -693,6 +699,7 @@ test('checkin route should return structured cap details when credits are full',
 });
 
 test('checkin route should return 500 when performCheckin reports a system failure', async (t) => {
+  mockAIFeatureState(t);
   const apiUtilsModule = require('../lib/api-utils') as any;
   const checkinModule = require('../lib/user/checkin') as any;
   const routePath = require.resolve('../app/api/checkin/route');

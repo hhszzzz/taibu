@@ -9,6 +9,7 @@ import {
     getReportSummary,
     type AnnualReportData
 } from '@/lib/annual-report';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 interface AnnualReportResponse {
     success: boolean;
@@ -25,6 +26,8 @@ interface AnnualReportResponse {
 
 // GET - 获取年度报告
 export async function GET(request: NextRequest): Promise<NextResponse<AnnualReportResponse>> {
+    const guard = await ensureFeatureEnabledFresh('annual-report', '年度报告当前未启用');
+    if (guard) return guard as NextResponse<AnnualReportResponse>;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {

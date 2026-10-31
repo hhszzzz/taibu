@@ -15,6 +15,14 @@ import {
   platformSkills, toSkillDetail, toSkillView, updateSkill,
 } from './store.server';
 
+/** Feature switch for this area; fail closed when the state cannot be read. */
+async function skillsGate(): Promise<Response | null> {
+  const state = await readFeatureModuleStateFresh('skills');
+  if (state.status === 'enabled') return null;
+  if (state.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
+  return jsonError('技能功能当前未启用', 403, { code: 'FEATURE_DISABLED' });
+}
+
 /**
  * Settings endpoints for skills, shaped like the connectors': administrators manage the platform's (owner null)
  * through the system identity, users their own through theirs, so row security keeps each to its rows.
@@ -162,22 +170,32 @@ export async function deletePlatformSkill(request: NextRequest, id: string) {
 }
 
 export async function listUserSkills(request: NextRequest) {
+  const gate = await skillsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : list(owner);
 }
 export async function readUserSkill(request: NextRequest, id: string) {
+  const gate = await skillsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : detail(owner, id);
 }
 export async function createUserSkill(request: NextRequest) {
+  const gate = await skillsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : create(owner, request);
 }
 export async function updateUserSkill(request: NextRequest, id: string) {
+  const gate = await skillsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : update(owner, request, id);
 }
 export async function deleteUserSkill(request: NextRequest, id: string) {
+  const gate = await skillsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : remove(owner, id);
 }
@@ -188,6 +206,7 @@ export async function listSkillCommands(request: NextRequest) {
   if (owner instanceof Response) return owner;
   try {
     if ((await readFeatureModuleStateFresh('agent')).status !== 'enabled') return jsonOk({ skills: [] });
+    if ((await readFeatureModuleStateFresh('skills')).status !== 'enabled') return jsonOk({ skills: [] });
     const { membership } = await getUserCreditInfo(owner.userId, {});
     return jsonOk({ skills: await skillCommands(owner.userId, membership) });
   } catch (error) {

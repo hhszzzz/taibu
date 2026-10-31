@@ -59,6 +59,7 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   'mcp-service': withDefaultSize(McpIcon),
   'admin-announcements': withDefaultSize(MegaphoneIcon),
   'admin-features': withDefaultSize(FeatureFlagsIcon),
+  'admin-keys': withDefaultSize(KeyIcon),
   'admin-ai-services': withDefaultSize(ServerIcon),
   'admin-agent-extensions': withDefaultSize(PluginIcon),
 };

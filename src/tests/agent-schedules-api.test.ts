@@ -5,6 +5,7 @@ import type { TestContext } from 'node:test';
 import { randomUUID } from 'node:crypto';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 function request(method: string, body?: unknown) {
   return new NextRequest('http://localhost/api/agent/schedules', {
@@ -14,6 +15,7 @@ function request(method: string, body?: unknown) {
 }
 
 function setup(t: TestContext, options: { used?: number } = {}) {
+  mockAIFeatureState(t);
   const userId = randomUUID();
   let created: Record<string, unknown> | null = null;
   const db = createMockScopedDb({

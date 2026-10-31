@@ -14,6 +14,7 @@ export const SETTINGS_CENTER_TABS = [
   'mcp-service',
   'admin-announcements',
   'admin-features',
+  'admin-keys',
   'admin-ai-services',
   'admin-agent-extensions',
   'help',
@@ -23,6 +24,9 @@ export type SettingsCenterTab = (typeof SETTINGS_CENTER_TABS)[number];
 export type SettingsCenterTabGroup = 'account' | 'extensions' | 'management';
 
 export type SettingsCenterFlags = {
+  sharesEnabled: boolean;
+  skillsEnabled: boolean;
+  connectorsEnabled: boolean;
   upgradeEnabled: boolean;
   chartsEnabled: boolean;
   knowledgeBaseEnabled: boolean;
@@ -69,13 +73,16 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   connectors: { id: 'connectors', label: '连接器', group: 'extensions', beta: true, description: '接入自己的 MCP 服务，让 Agent 在联网任务中调用它们的工具。' },
   'mcp-service': { id: 'mcp-service', label: 'Taibu MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
-  'admin-features': { id: 'admin-features', label: '功能与激活码', group: 'management', description: '统一管理功能开关与激活码发放。' },
+  'admin-features': { id: 'admin-features', label: '功能开关', group: 'management', description: '按模块关闭入口与接口，关闭后前后端同时失效。' },
+  'admin-keys': { id: 'admin-keys', label: '激活码', group: 'management', description: '生成、查看和作废会员与积分激活码。' },
   'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关，查看 Agent 任务和测评结果。' },
   'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', beta: true, description: '管理平台 MCP、联网搜索、技能与智能体角色，并设置用户扩展权限。' },
 };
 
 function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCenterFlags) {
   switch (tab) {
+    case 'shares':
+      return !flags.sharesEnabled;
     case 'upgrade':
       return !flags.upgradeEnabled;
     case 'personalization':
@@ -89,8 +96,9 @@ function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCent
     case 'mcp-service':
       return !flags.mcpServiceEnabled;
     case 'connectors':
+      return !flags.agentEnabled || !flags.connectorsEnabled;
     case 'skills':
-      return !flags.agentEnabled;
+      return !flags.agentEnabled || !flags.skillsEnabled;
     case 'help':
       return !flags.helpEnabled;
     default:
@@ -116,6 +124,11 @@ export function getSettingsCenterDisabledState(
   }
 
   switch (tab) {
+    case 'shares':
+      return {
+        title: '暂未开放',
+        description: '当前分享功能不可用。',
+      };
     case 'upgrade':
       return {
         title: '暂未开放',
@@ -134,12 +147,12 @@ export function getSettingsCenterDisabledState(
     case 'connectors':
       return {
         title: '暂未开放',
-        description: '当前 Agent 不可用，连接器暂时无法使用。',
+        description: !flags.agentEnabled ? '当前 Agent 不可用，连接器暂时无法使用。' : '当前连接器不可用。',
       };
     case 'skills':
       return {
         title: '暂未开放',
-        description: '当前 Agent 不可用，技能暂时无法使用。',
+        description: !flags.agentEnabled ? '当前 Agent 不可用，技能暂时无法使用。' : '当前技能不可用。',
       };
     case 'charts':
       return {

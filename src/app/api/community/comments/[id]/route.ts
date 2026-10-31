@@ -8,11 +8,14 @@ import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
 import { hasNonEmptyStrings } from '@/lib/validation';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 export async function GET(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {
@@ -49,6 +52,8 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {
@@ -97,6 +102,8 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {

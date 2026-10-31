@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 test('records PUT validates and persists related chart fields', async (t) => {
     const apiUtilsModule = require('../lib/api-utils') as any;
@@ -112,6 +113,7 @@ test('community normalizePostInput enforces non-empty title/content for create a
 });
 
 test('community posts PUT reuses shared validation and rejects blank title', async (t) => {
+    mockAIFeatureState(t);
     const apiUtilsModule = require('../lib/api-utils') as any;
     const routePath = require.resolve('../app/api/community/posts/[id]/route');
     const originalRequireUserContext = apiUtilsModule.requireUserContext;

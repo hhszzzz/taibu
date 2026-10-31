@@ -8,6 +8,7 @@ import { mcpServerRow } from './helpers/mcp-fixture';
 import { DEFAULT_AGENT_EXTENSIONS_POLICY, type AgentExtensionsPolicy } from '../lib/agent/mcp/config';
 import { applyMcpSecretChanges } from '../lib/agent/mcp/secrets.server';
 import type { McpServerRow } from '../lib/agent/mcp/store.server';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 const SERVER_ID = '00000000-0000-4000-8000-00000000aa01';
 
@@ -40,6 +41,7 @@ function asAdmin(t: TestContext) {
 }
 
 function asMember(t: TestContext, options: { membership?: 'free' | 'plus' | 'pro'; policy?: AgentExtensionsPolicy; used?: number } = {}) {
+  mockAIFeatureState(t);
   const { apiUtils, settings, credits, store } = modules();
   t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1'));
   t.mock.method(settings, 'getAgentExtensionsPolicy', async () => options.policy ?? DEFAULT_AGENT_EXTENSIONS_POLICY);

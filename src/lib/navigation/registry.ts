@@ -102,7 +102,7 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
 
   // ── Tools ───────────────────────────────────────────────────────────────
   { id: 'chat', href: '/chat', label: '新聊天', icon: ChatIcon, category: 'tool' },
-  { id: 'scheduled', href: '/scheduled', label: '定时任务', icon: ScheduleIcon, featureId: 'agent', requiresAuth: true, beta: true, category: 'tool' },
+  { id: 'scheduled', href: '/scheduled', label: '定时任务', icon: ScheduleIcon, featureId: 'schedules', requiresAuth: true, beta: true, category: 'tool' },
   { id: 'records', href: '/records', label: '命理记录', icon: RecordsIcon, requiresAuth: true, category: 'tool' },
   { id: 'community', href: '/community', label: '社区', icon: CommunityIcon, category: 'tool' },
 
@@ -222,6 +222,12 @@ const adminLabelOverride: Record<string, string> = {
   monthly: '月运',
   'knowledge-base': '知识库',
   'ai-personalization': '个性化',
+  skills: '技能',
+  connectors: '连接器',
+  schedules: '定时任务',
+  memory: '任务记忆',
+  shares: '分享链接',
+  'annual-report': '年度报告',
   notifications: '消息通知',
   upgrade: '订阅',
   help: '帮助',
@@ -233,9 +239,12 @@ const ADMIN_ONLY_FEATURES: { id: string; label: string }[] = [
   { id: 'checkin', label: '签到' },
   { id: 'mcp-service', label: 'MCP 服务' },
   { id: 'agent', label: 'Agent 任务' },
-  { id: 'taiyi', label: '太乙' },
-  { id: 'astrology', label: '西方占星' },
-  { id: 'almanac', label: '黄历与择日' },
+  { id: 'skills', label: '技能' },
+  { id: 'connectors', label: '连接器' },
+  { id: 'schedules', label: '定时任务' },
+  { id: 'memory', label: '任务记忆' },
+  { id: 'shares', label: '分享链接' },
+  { id: 'annual-report', label: '年度报告' },
 ];
 
 /** Lookup a single registry entry by id. */

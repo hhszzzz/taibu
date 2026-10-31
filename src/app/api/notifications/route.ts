@@ -1,6 +1,7 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { getNotificationRetentionCutoffIso } from '@/lib/notification-server';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 function parseIds(value: unknown): string[] {
   if (!Array.isArray(value)) return [];
@@ -8,6 +9,8 @@ function parseIds(value: unknown): string[] {
 }
 
 export async function GET(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('notifications', '通知功能当前未启用');
+    if (guard) return guard;
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 
@@ -78,6 +81,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function PATCH(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('notifications', '通知功能当前未启用');
+    if (guard) return guard;
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 
@@ -130,6 +135,8 @@ export async function PATCH(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('notifications', '通知功能当前未启用');
+    if (guard) return guard;
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 

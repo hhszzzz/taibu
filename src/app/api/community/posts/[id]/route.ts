@@ -10,6 +10,7 @@ import { CommunityComment, normalizePostInput } from '@/lib/community';
 import { loadCommunityAuthorProfileMap, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
 import { getAuthContext, jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 type CommunityCommentRow = Omit<CommunityComment, 'author_name' | 'author_avatar_url' | 'replies'> & {
     user_id: string;
@@ -20,6 +21,8 @@ export async function GET(
     _request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await getAuthContext(_request);
         if (auth.authError) {
@@ -182,6 +185,8 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {
@@ -240,6 +245,8 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {

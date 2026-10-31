@@ -1,5 +1,5 @@
 /**
- * 设置中心的管理页：公告、功能与激活码、AI 服务（含 Agent 任务排障）、Agent 扩展（MCP 服务、技能、智能体角色与用户扩展策略）
+ * 设置中心的管理页：公告、功能开关、激活码、AI 服务（含 Agent 任务排障）、Agent 扩展（MCP 服务、技能、智能体角色与用户扩展策略）
  *
  * 'use client' 标记说明：
  * - 子页跟随路由切换，需要 useState / useEffect 记住访问过的子页并保留其状态
@@ -53,7 +53,6 @@ const LazyAgentScheduleLimitsPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentScheduleLimitsPanel')).AgentScheduleLimitsPanel,
 }));
 
-type AdminFeatureTab = AdminSubTabId<'admin-features'>;
 type AdminAITab = AdminSubTabId<'admin-ai-services'>;
 type AdminExtensionsTab = AdminSubTabId<'admin-agent-extensions'>;
 
@@ -65,8 +64,6 @@ function PanelFallback() {
   );
 }
 
-const resolveAdminFeatureTab = (value: string | null | undefined): AdminFeatureTab =>
-  resolveAdminSubTab('admin-features', value);
 const resolveAdminAITab = (value: string | null | undefined): AdminAITab =>
   resolveAdminSubTab('admin-ai-services', value);
 const resolveAdminExtensionsTab = (value: string | null | undefined): AdminExtensionsTab =>
@@ -123,7 +120,6 @@ function AdminSubtabs<T extends string>({
   );
 }
 
-const renderFeaturePanel = (tab: AdminFeatureTab) => (tab === 'toggles' ? <LazyFeatureTogglePanel /> : <LazyKeyManagementPanel />);
 const renderAIPanel = (tab: AdminAITab, active: boolean) => (
   tab === 'models' ? <LazyAIModelPanel />
     : tab === 'gateways' ? <LazyAIGatewayPanel />
@@ -146,11 +142,17 @@ export function AdminAnnouncementsContent() {
 
 export function AdminFeaturesContent() {
   return (
-    <AdminSubtabs
-      owner="admin-features"
-      resolveTab={resolveAdminFeatureTab}
-      renderPanel={renderFeaturePanel}
-    />
+    <Suspense fallback={<PanelFallback />}>
+      <LazyFeatureTogglePanel />
+    </Suspense>
+  );
+}
+
+export function AdminActivationKeysContent() {
+  return (
+    <Suspense fallback={<PanelFallback />}>
+      <LazyKeyManagementPanel />
+    </Suspense>
   );
 }
 

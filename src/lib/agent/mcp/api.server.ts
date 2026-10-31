@@ -1,7 +1,8 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
-import { getAgentExtensionsPolicy, setAgentExtensionsPolicy } from '@/lib/app-settings';
+import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, setAgentExtensionsPolicy } from '@/lib/app-settings';
+
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -15,6 +16,14 @@ import {
   McpLimitError, countMcpServers, deleteMcpServer, getMcpServerRow, insertMcpServer, invalidatePlatformMcpServers,
   listMcpServerRows, recordMcpServerCheck, toMcpServerView, updateMcpServer,
 } from './store.server';
+
+/** Feature switch for this area; fail closed when the state cannot be read. */
+async function connectorsGate(): Promise<Response | null> {
+  const state = await readFeatureModuleStateFresh('connectors');
+  if (state.status === 'enabled') return null;
+  if (state.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
+  return jsonError('连接器功能当前未启用', 403, { code: 'FEATURE_DISABLED' });
+}
 
 /**
  * Settings endpoints for MCP servers: administrators manage the platform's (owner null) through the system identity,
@@ -169,22 +178,32 @@ export async function testPlatformMcpServer(request: NextRequest, id: string) {
 }
 
 export async function listUserConnectors(request: NextRequest) {
+  const gate = await connectorsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : list(owner);
 }
 export async function createUserConnector(request: NextRequest) {
+  const gate = await connectorsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : create(owner, request);
 }
 export async function updateUserConnector(request: NextRequest, id: string) {
+  const gate = await connectorsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : update(owner, request, id);
 }
 export async function deleteUserConnector(request: NextRequest, id: string) {
+  const gate = await connectorsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : remove(owner, id);
 }
 export async function testUserConnector(request: NextRequest, id: string) {
+  const gate = await connectorsGate();
+  if (gate) return gate;
   const owner = await member(request);
   return owner instanceof Response ? owner : test(owner, request, id);
 }

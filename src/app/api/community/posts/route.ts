@@ -12,8 +12,11 @@ import { anonDb } from '@/lib/db/context.server';
 import { escapeLike } from '@/lib/db/sql-helpers';
 import { withRetry } from '@/lib/retry';
 import { parsePagination } from '@/lib/pagination';
+import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 export async function GET(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const { searchParams } = new URL(request.url);
 
@@ -61,6 +64,8 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
+    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
+    if (guard) return guard;
     try {
         const auth = await requireUserContext(request);
         if ('error' in auth) {

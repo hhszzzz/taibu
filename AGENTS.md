@@ -80,6 +80,12 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
   `y`：功能新增
   `z`：bug 修复
 
+## 分支
+
+- 按工作域用固定分支：MCP → `mcp`，Agent → `taibu-agent`，Core（`packages/core`）→ `core`。
+- 其他改动直接进 `master`，需要隔离时用临时分支（`feat/*`、`fix/*` 等）；合入 `master` 后删除。
+- 固定分支的内容合入 `master` 后同样删除，下次从 `master` 重建，不保留并行副本。
+
 ## 环境变量
 
 - 以 `.env.example` 为准维护变量清单。

@@ -28,8 +28,6 @@ export function AuthEmblem({ size, className = '' }: { size: number; className?:
     return (
         <span className={`auth-emblem ${className}`} style={{ width: size, height: size }} aria-hidden="true">
             <svg className="auth-emblem-ring" viewBox="-100 -100 200 200">
-                <circle r="94" />
-                <circle r="48" />
                 <g className="auth-emblem-lines">
                     {TRIGRAMS.map((lines, index) => (
                         <g key={index} transform={`rotate(${index * 45})`}>

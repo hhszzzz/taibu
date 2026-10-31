@@ -31,7 +31,7 @@
 .auth-fields { display: flex; flex-direction: column; gap: 16px; }
 
 /* 窄屏的品牌行：小号徽记 + 名称，居中放在标题上方。 */
-.auth-compact-brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 18px; font-size: calc(15 / 16 * 1rem); font-weight: 600; letter-spacing: .08em; color: var(--foreground); }
+.auth-compact-brand { display: flex; align-items: center; justify-content: center; gap: 9px; margin-bottom: 18px; font-family: var(--font-brand); font-size: calc(17 / 16 * 1rem); font-weight: 500; letter-spacing: .08em; color: var(--foreground); }
 .auth-compact-mark { display: block; width: 26px; height: 26px; flex-shrink: 0; }
 
 @media (min-width: 900px) {
@@ -56,10 +56,10 @@
 @keyframes auth-sheet-out { to { translate: 0 100%; } }
 
 /* ===== 品牌面板（宽屏左栏） ===== */
-.auth-brand { position: relative; display: none; width: 380px; flex-shrink: 0; flex-direction: column; padding: 24px 28px 28px; overflow: hidden; isolation: isolate; border-right: var(--hairline) solid var(--border); background: color-mix(in srgb, var(--clay) 7%, var(--surface)); }
-.auth-brand::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(58% 42% at 50% 44%, color-mix(in srgb, var(--clay) 14%, transparent), transparent 72%); }
+.auth-brand { position: relative; display: none; width: 380px; flex-shrink: 0; flex-direction: column; padding: 24px 28px 28px; overflow: hidden; isolation: isolate; border-right: var(--hairline) solid var(--border); background: color-mix(in srgb, var(--clay) 3%, var(--surface)); }
+.auth-brand::before { content: ''; position: absolute; inset: 0; z-index: -1; background: radial-gradient(58% 42% at 50% 44%, color-mix(in srgb, var(--clay) 6%, transparent), transparent 72%); }
 @media (min-width: 900px) { .auth-brand { display: flex; } }
-.auth-brand-logo { display: flex; align-items: center; gap: 10px; font-size: calc(15 / 16 * 1rem); font-weight: 600; letter-spacing: .08em; color: var(--foreground); }
+.auth-brand-logo { display: flex; align-items: center; gap: 10px; font-family: var(--font-brand); font-size: calc(17 / 16 * 1rem); font-weight: 500; letter-spacing: .08em; color: var(--foreground); }
 .auth-brand-logo > .auth-brand-mark { display: block; width: 26px; height: 26px; flex-shrink: 0; }
 .auth-brand-hero { display: flex; flex: 1; flex-direction: column; align-items: center; justify-content: center; gap: 30px; text-align: center; }
 .auth-brand-hero > .auth-emblem { animation: auth-emblem-in var(--duration-slow) var(--ease-out) backwards; }
@@ -72,13 +72,12 @@
 /* ===== 徽记 ===== */
 .auth-emblem { position: relative; display: inline-block; flex-shrink: 0; }
 .auth-emblem > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.auth-emblem-ring { color: var(--accent); animation: auth-spin 180s linear infinite; }
-.auth-emblem-ring > circle { fill: none; stroke: currentColor; stroke-width: 1.2; opacity: .3; }
+.auth-emblem-ring { color: var(--foreground); animation: auth-spin 180s linear infinite; }
 .auth-emblem-lines { stroke: currentColor; stroke-width: 4.6; stroke-linecap: round; }
 .auth-emblem-taiji { animation: auth-spin 48s linear infinite reverse; }
-.auth-emblem-yin { fill: var(--accent); }
-.auth-emblem-yang { fill: color-mix(in srgb, var(--accent) 24%, var(--surface)); }
-.auth-emblem-rim { fill: none; stroke: color-mix(in srgb, var(--accent) 72%, transparent); stroke-width: 1.6; }
+.auth-emblem-yin { fill: var(--foreground); }
+.auth-emblem-yang { fill: var(--surface); }
+.auth-emblem-rim { fill: none; stroke: color-mix(in srgb, var(--foreground) 30%, transparent); stroke-width: 1.6; }
 @keyframes auth-spin { to { rotate: 360deg; } }
 
 /* ===== 字段 ===== */

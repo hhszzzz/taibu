@@ -1,6 +1,4 @@
 import 'server-only';
-import type { MembershipType } from '@/lib/user/membership';
-import { isMembershipTier } from '../mcp/config';
 import { SKILL_NAME_MAX, SKILL_NAME_PATTERN } from '../skills/config';
 import {
   AGENT_PROFILE_EFFORTS, AGENT_PROFILE_LIMITS, AGENT_PROFILE_MODES, AGENT_PROFILE_NAME_PATTERN, BUILTIN_AGENT_PROFILE_NAMES, profileTokenProblem,
@@ -19,7 +17,6 @@ export type ProfileFields = {
   model: string | null;
   reasoningEffort: AgentProfileEffort | null;
   modes: AgentProfileMode[];
-  requiredTier: MembershipType;
   enabled: boolean;
   sortOrder: number;
 };
@@ -90,10 +87,6 @@ export function parseProfileInput(body: unknown, partial: boolean): Partial<Prof
     const modes = AGENT_PROFILE_MODES.filter(mode => (body.modes as string[]).includes(mode));
     if (!modes.length) throw new ProfileInputError('至少选择一种用途');
     fields.modes = modes;
-  }
-  if (body.requiredTier !== undefined) {
-    if (!isMembershipTier(body.requiredTier)) throw new ProfileInputError('会员等级无效');
-    fields.requiredTier = body.requiredTier;
   }
   if (body.enabled !== undefined) {
     if (typeof body.enabled !== 'boolean') throw new ProfileInputError('启用状态无效');

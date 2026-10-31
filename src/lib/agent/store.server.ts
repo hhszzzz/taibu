@@ -39,7 +39,7 @@ export interface AgentRunRow {
     /** The IANA zone the user's messages are dated in, from their browser when the task was created. */
     timezone: string;
   };
-  billing: "charged" | "exempt" | "refunded";
+  billing: "metered" | "exempt";
   worker_id: string | null;
   fence: number;
   cancel_requested: boolean;

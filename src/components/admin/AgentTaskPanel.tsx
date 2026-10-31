@@ -54,7 +54,7 @@ const RUN_STATUS: Record<AgentRunStatus, Tone> = {
     failed: { label: '失败', tone: 'bg-danger/10 text-danger' },
     cancelled: { label: '已停止', tone: 'bg-background-secondary text-foreground-tertiary' },
 };
-const BILLING: Record<AgentAdminRun['billing'], string> = { charged: '已扣费', exempt: '免费', refunded: '已退款' };
+const BILLING: Record<AgentAdminRun['billing'], string> = { metered: '按量计费', exempt: '不计费' };
 const LIVE_TASK: Record<Exclude<AgentTaskNode['status'], 'terminal'>, Tone> = {
     pending: { label: '待执行', tone: 'text-foreground-secondary' },
     running: { label: '执行中', tone: 'text-accent' },

@@ -16,10 +16,8 @@ import { config, MemoryStore, row } from './helpers/agent-runtime-fixture';
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
   t.mock.method(sdk, 'isModelAvailable', () => true);
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());
@@ -32,7 +30,7 @@ const ROLE_MODEL = { ...config, id: 'role-model', name: '角色模型' };
 const ARCHIVIST: AgentProfileView = {
   name: 'archivist', builtin: false, displayName: '档案员', description: '整理用户资料与知识库条目', instructions: '只整理资料，不下结论。',
   tools: { inherit: false, allow: ['data', 'knowledge'], deny: ['read_attachment'] }, skills: [], model: ROLE_MODEL.id, reasoningEffort: null,
-  modes: ['parallel', 'background'], requiredTier: 'free', enabled: true, sortOrder: 0, updatedAt: null,
+  modes: ['parallel', 'background'], enabled: true, sortOrder: 0, updatedAt: null,
 };
 const PROFILES = [...BUILTIN_AGENT_PROFILES, ARCHIVIST];
 

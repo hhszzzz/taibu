@@ -36,7 +36,6 @@ interface ChatHeaderProps {
     conversationId: string | null;
     /** Workspace toggle, rendered before the overflow menu. */
     workspaceButton?: ReactNode;
-    membershipType: string;
     knowledgeBaseEnabled: boolean;
     userId?: string | null;
 }
@@ -72,7 +71,6 @@ export function ChatHeader({
     title,
     conversationId,
     workspaceButton,
-    membershipType,
     knowledgeBaseEnabled,
     userId = null,
 }: ChatHeaderProps) {
@@ -118,7 +116,7 @@ export function ChatHeader({
         }
     };
 
-    const canUseKnowledgeBase = membershipType !== 'free' && knowledgeBaseEnabled;
+    const canUseKnowledgeBase = knowledgeBaseEnabled;
     const selectRecordView = (view: ChatRecordView) => writeChatRecordView(userId, view, conversationId);
     const makeRecordViewDefault = () => writeChatRecordViewDefault(userId, recordView);
 

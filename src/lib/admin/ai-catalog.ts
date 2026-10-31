@@ -3,14 +3,13 @@
  */
 import {
     AI_REASONING_EFFORTS,
+    type AIModelPricing,
     type AIReasoningEffort,
     type AIUsageType,
 } from '@/types';
 import { GATEWAY_KEY_PATTERN } from '@/lib/ai/source-runtime';
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
 import { normalizeThinkingLevels } from '@/lib/ai/thinking';
-
-export type CatalogTier = 'free' | 'plus' | 'pro';
 
 export interface AdminGateway {
     id: string;
@@ -45,11 +44,10 @@ export interface AdminModelInput {
     displayName: string;
     vendor: string;
     usageType: AIUsageType;
-    /** 生图模型每张图扣除的积分；仅生图用途使用。 */
-    creditCost: number;
+    /** 美元单价：对话与视觉按每百万 token，生图按每张；未定价的模型平台不提供。 */
+    pricing: AIModelPricing;
     isEnabled: boolean;
     sortOrder: number;
-    requiredTier: CatalogTier;
     supportsVision: boolean;
     isReasoningDefault: boolean;
     /** 勾选的等级即表示支持思考；空数组不发送思考参数。 */
@@ -81,11 +79,23 @@ export const USAGE_TYPES: ReadonlyArray<{ value: AIUsageType; label: string }> =
     { value: 'image', label: '生图' },
 ];
 
-export const TIERS: ReadonlyArray<{ value: CatalogTier; label: string }> = [
-    { value: 'free', label: 'Free' },
-    { value: 'plus', label: 'Plus' },
-    { value: 'pro', label: 'Pro' },
+export type PriceField = keyof AIModelPricing;
+
+/** 各用途要填的单价：对话按 token，生图按张；向量与重排不计费。 */
+export const PRICE_FIELDS: ReadonlyArray<{ key: PriceField; label: string; unit: string; tokens: boolean }> = [
+    { key: 'input', label: '输入', unit: '$/百万 token', tokens: true },
+    { key: 'output', label: '输出', unit: '$/百万 token', tokens: true },
+    { key: 'cacheRead', label: '缓存读取', unit: '$/百万 token', tokens: true },
+    { key: 'cacheWrite', label: '缓存写入', unit: '$/百万 token', tokens: true },
+    { key: 'image', label: '每张图', unit: '$/张', tokens: false },
 ];
+
+export function priceFieldsFor(usageType: AIUsageType) {
+    if (usageType === 'image') return PRICE_FIELDS.filter(field => !field.tokens);
+    return usageType === 'chat' ? PRICE_FIELDS.filter(field => field.tokens) : [];
+}
+
+export const EMPTY_PRICING: AIModelPricing = { input: null, output: null, cacheRead: null, cacheWrite: null, image: null };
 
 export const THINKING_LEVEL_LABELS: Record<AIReasoningEffort, string> = {
     minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高',
@@ -131,8 +141,25 @@ const optionalNumber = (value: unknown, min: number, max: number, integer = fals
     if (!Number.isFinite(number) || number < min || number > max || (integer && !Number.isInteger(number))) return undefined;
     return number;
 };
-const tier = (value: unknown, fallback: CatalogTier): CatalogTier | undefined =>
-    value === undefined ? fallback : TIERS.some(item => item.value === value) ? value as CatalogTier : undefined;
+/** USD with at most four decimals, as numeric(12,4) keeps it. */
+const optionalPrice = (value: unknown): number | null | undefined => {
+    const number = optionalNumber(value, 0, 10_000);
+    if (number === undefined || number === null) return number;
+    const units = number * 10_000;
+    return Math.abs(units - Math.round(units)) < 1e-6 ? Math.round(units) / 10_000 : undefined;
+};
+
+/** 只保存该用途要填的单价，其余清空。 */
+function parsePricing(value: unknown, usageType: AIUsageType): Parsed<AIModelPricing> {
+    const source = isRecord(value) ? value : {};
+    const pricing: AIModelPricing = { ...EMPTY_PRICING };
+    for (const field of priceFieldsFor(usageType)) {
+        const price = optionalPrice(source[field.key]);
+        if (price === undefined) return { error: `${field.label}单价需要是 0 到 10000 之间的数，最多 4 位小数` };
+        pricing[field.key] = price;
+    }
+    return { value: pricing };
+}
 
 export function parseGatewayInput(body: unknown, options: { creating: boolean }): Parsed<AdminGatewayInput> {
     if (!isRecord(body)) return { error: '请求格式错误' };
@@ -182,10 +209,8 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (!vendor || vendor.length > 40) return { error: '请选择或填写供应商' };
     const usageType = body.usageType ?? 'chat';
     if (!USAGE_TYPES.some(item => item.value === usageType)) return { error: '模型用途无效' };
-    const creditCost = optionalNumber(body.creditCost, 0, 1000, true);
-    if (creditCost === undefined) return { error: '每张图积分需要是 0 到 1000 之间的整数' };
-    const requiredTier = tier(body.requiredTier, 'free');
-    if (!requiredTier) return { error: '会员等级无效' };
+    const pricing = parsePricing(body.pricing, usageType as AIUsageType);
+    if ('error' in pricing) return pricing;
     if (body.thinkingLevels !== undefined && (!Array.isArray(body.thinkingLevels)
         || body.thinkingLevels.some(level => !(AI_REASONING_EFFORTS as readonly unknown[]).includes(level)))) {
         return { error: '思考等级无效' };
@@ -214,10 +239,9 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
         value: {
             modelKey, displayName, vendor,
             usageType: usageType as AIUsageType,
-            creditCost: creditCost ?? 1,
+            pricing: pricing.value,
             isEnabled: body.isEnabled !== false,
             sortOrder: sortOrder ?? 0,
-            requiredTier,
             supportsVision: body.supportsVision === true,
             isReasoningDefault: thinkingLevels.length > 0 && body.isReasoningDefault === true,
             thinkingLevels,

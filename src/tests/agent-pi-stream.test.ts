@@ -14,6 +14,7 @@ import { createGuardedAgentModels } from '../lib/agent/model-registry.server';
 import { generateSummary } from '../lib/agent/summary-usage.server';
 import {
   AGENT_GATEWAY_KEY_MESSAGE,
+  AGENT_INSUFFICIENT_BALANCE_MESSAGE,
   AGENT_OUTPUT_EXHAUSTED_MESSAGE,
   AGENT_PUBLIC_STREAM_ERRORS,
   AGENT_REJECTED_KEY_MESSAGE,
@@ -441,4 +442,60 @@ test('summaries keep guarded source fallback and send no thinking fields', async
   assert.equal(gw.requests[1].body.max_tokens, 2000);
   assert.equal(gw.requests[1].body.enable_thinking, undefined);
   assert.equal(result.usage.totalTokens, 8);
+});
+
+test('a platform Agent request is admitted on balance and charged with the usage the provider reported', async () => {
+  const gw = gateway(reply('paid answer'));
+  const events: string[] = [];
+  const charges: Array<{ usage: unknown; estimated: boolean }> = [];
+  const message = await createPiModelStream(config, {
+    fetch: gw.fetch,
+    billing: {
+      admit: async () => { events.push('admit'); return true; },
+      charge: async (usage, estimated) => { events.push('charge'); charges.push({ usage, estimated }); },
+    },
+  })(piModel, context()).result();
+
+  assert.equal(message.stopReason, 'stop');
+  assert.deepEqual(events, ['admit', 'charge']);
+  assert.equal(gw.requests.length, 1);
+  assert.deepEqual(charges, [{
+    usage: { input: 3, output: 5, cacheRead: 0, cacheWrite: 0, reasoning: 1 },
+    estimated: false,
+  }]);
+});
+
+test('a refused balance stops before any request, and an unreadable balance is a transient failure', async () => {
+  const refused = gateway(reply('never sent'));
+  const charges: unknown[] = [];
+  const blocked = await createPiModelStream(config, {
+    fetch: refused.fetch,
+    billing: { admit: async () => false, charge: async (usage) => { charges.push(usage); } },
+  })(piModel, context()).result();
+  assert.equal(blocked.stopReason, 'error');
+  assert.equal(blocked.errorMessage, AGENT_INSUFFICIENT_BALANCE_MESSAGE);
+  assert.equal(refused.requests.length, 0);
+  assert.deepEqual(charges, []);
+
+  const unreadable = gateway(reply('never sent'));
+  const failed = await createPiModelStream(config, {
+    fetch: unreadable.fetch,
+    billing: { admit: async () => { throw new Error('balance backend down'); }, charge: async () => { assert.fail('never charged'); } },
+  })(piModel, context()).result();
+  assert.equal(failed.stopReason, 'error');
+  assert.equal(failed.errorMessage, AGENT_TRANSIENT_ERROR_MESSAGE);
+  assert.equal(unreadable.requests.length, 0);
+});
+
+test('a provider that reports no usage is charged a local estimate', async () => {
+  const gw = gateway(sse([{ delta: { content: 'estimated answer' } }, { finish_reason: 'stop' }]));
+  const charges: Array<{ usage: { input: number; output: number }; estimated: boolean }> = [];
+  const message = await createPiModelStream(config, {
+    fetch: gw.fetch,
+    billing: { admit: async () => true, charge: async (usage, estimated) => { charges.push({ usage: usage as never, estimated }); } },
+  })(piModel, context()).result();
+  assert.equal(message.stopReason, 'stop');
+  assert.equal(charges.length, 1);
+  assert.equal(charges[0]!.estimated, true);
+  assert.ok(charges[0]!.usage.input > 0 && charges[0]!.usage.output > 0);
 });

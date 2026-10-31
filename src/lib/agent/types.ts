@@ -138,19 +138,13 @@ export interface AgentCheckpoint {
 }
 
 export type PiStreamFn = (model: Model<Api>, context: TranscriptContext, options?: SimpleStreamOptions) => AssistantMessageEventStream;
-/**
- * Who a run acts for. Real runs read this from the credits table; an evaluation run supplies a fixed account so it can
- * exercise every model and tool without charging anyone.
- */
-export type AgentAccount = { membership: 'free' | 'plus' | 'pro'; credits: number; expiresAt: Date | null };
-export type AgentAccountProvider = () => Promise<AgentAccount>;
-/** The same for feature modules: an evaluation run does not depend on platform switches. */
+/** Feature modules as a run sees them: an evaluation run does not depend on platform switches. */
 export type AgentFeatureState =
   | { status: 'enabled' }
   | { status: 'disabled' }
   | { status: 'unavailable'; error?: string };
 export type AgentFeatureStateProvider = (id: string) => Promise<AgentFeatureState>;
-export type AgentRunAccess = { account?: AgentAccountProvider; featureState?: AgentFeatureStateProvider };
+export type AgentRunAccess = { featureState?: AgentFeatureStateProvider };
 export interface DomainToolResult<T = unknown> {
   content: Array<{ type: "text"; text: string }>;
   details: T;
@@ -181,8 +175,8 @@ export interface AgentRunView {
   commandMessageIds?: string[];
   queue?: Array<{ sequence: number; mode: 'steer' | 'follow_up' | 'reply'; message: ChatMessage; revision: number; sortOrder: number; state: 'pending' | 'claimed' | 'admitted' | 'consumed' | 'cancelled' }>;
   configuration?: import('@/lib/chat/model-settings').NextTaskConfiguration;
-  /** Settled credit state of this task: one charge covers its replies and follow-ups. */
-  billing?: 'charged' | 'exempt' | 'refunded';
+  /** A metered task pays for each model request from the member's balance; an exempt one runs on their own model. */
+  billing?: 'metered' | 'exempt';
 }
 
 export const AGENT_ACTIVE_STATUSES: AgentRunStatus[] = [

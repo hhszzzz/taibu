@@ -13,7 +13,6 @@ const DAILY_BRIEFING_PROMPT = [
 export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner, adminId }) {
   const owner = randomUUID(), other = randomUUID();
   await sql(`INSERT INTO identity.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
-  await asOwner(`UPDATE public.users SET ai_chat_count=20,membership='plus' WHERE id IN (${quote(owner)},${quote(other)});`);
   const admin = statement => asActor(adminId, statement);
   const parsed = async statement => { const value = await admin(statement); return value ? JSON.parse(value) : null; };
   const utc = async (cadence, timezone, after) => asActor(owner,
@@ -51,27 +50,27 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     await assert.rejects(asActor(owner, `SELECT public.agent_next_run_at('{"kind":"daily","time":"08:00"}'::jsonb,'Fake/Zone',now());`), /AGENT_SCHEDULE_TIMEZONE_INVALID/);
   });
 
-  await t.test('creating a schedule binds one conversation and the tier limit comes from the admin setting', async () => {
-    await asOwner(`INSERT INTO public.app_settings(setting_key,setting_value) VALUES('agent_schedule_limits','{"free":1,"plus":1,"pro":3}'::jsonb)
+  await t.test('creating a schedule binds one conversation and the limit comes from the admin setting', async () => {
+    await asOwner(`INSERT INTO public.app_settings(setting_key,setting_value) VALUES('agent_schedule_limits','{"limit":1}'::jsonb)
       ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value;`);
     const schedule = await create('晨间整理', { kind: 'daily', time: '09:00' });
     assert.ok(schedule.conversation_id);
     assert.equal(schedule.template, 'custom');
     assert.equal(await asActor(owner, `SELECT title FROM public.conversations WHERE id=${quote(schedule.conversation_id)};`), '定时 · 晨间整理');
     // The number is the function's own: the signature has no quota to pass in.
-    assert.equal(await asOwner(`SELECT public.agent_schedule_limit_for(${quote(owner)});`), '1');
+    assert.equal(await asOwner('SELECT public.agent_schedule_limit();'), '1');
     await assert.rejects(create('第二个任务', { kind: 'daily', time: '09:00' }), /AGENT_SCHEDULE_LIMIT/);
-    // Raising the administrator's number raises the ceiling; a downgraded tier tightens it again.
-    await asOwner("UPDATE public.app_settings SET setting_value='{\"free\":1,\"plus\":2,\"pro\":3}'::jsonb WHERE setting_key='agent_schedule_limits';");
-    assert.equal(await asOwner(`SELECT public.agent_schedule_limit_for(${quote(owner)});`), '2');
+    // Raising the administrator's number raises the ceiling; lowering it tightens it again.
+    const limit = value => asOwner(`UPDATE public.app_settings SET setting_value=${json({ limit: value })} WHERE setting_key='agent_schedule_limits';`);
+    await limit(2);
+    assert.equal(await asOwner('SELECT public.agent_schedule_limit();'), '2');
     const second = await create('第二个任务', { kind: 'daily', time: '09:00' });
-    await asOwner(`UPDATE public.users SET membership='free' WHERE id=${quote(owner)};`);
-    assert.equal(await asOwner(`SELECT public.agent_schedule_limit_for(${quote(owner)});`), '1');
+    await limit(1);
     await asOwner(`UPDATE public.agent_schedules SET enabled=false WHERE id=${quote(second.id)};`);
     await assert.rejects(asActor(owner, `SELECT public.update_agent_schedule(${quote(second.id)},'第二个任务','整理今天的重点。','{"kind":"daily","time":"09:00"}'::jsonb,'Asia/Shanghai','{"notify":true}'::jsonb,true);`), /AGENT_SCHEDULE_LIMIT/);
-    await asOwner(`UPDATE public.users SET membership='plus' WHERE id=${quote(owner)};
-      DELETE FROM public.app_settings WHERE setting_key='agent_schedule_limits';
+    await asOwner(`DELETE FROM public.app_settings WHERE setting_key='agent_schedule_limits';
       DELETE FROM public.agent_schedules WHERE user_id=${quote(owner)};`);
+    assert.equal(await asOwner('SELECT public.agent_schedule_limit();'), '20', 'the default when nothing is saved');
   });
 
   await t.test('a manual occurrence is created once, only for its owner or an administrator', async () => {
@@ -133,7 +132,7 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
     await admin(`SELECT public.agent_create_run(${quote(agentRunId)},${quote(owner)},${quote(schedule.conversation_id)},${quote('sched:' + agentRunId)},'hash',
       ${json({ model: 'fixture', reasoning: false, webEnabled: false, systemPrompt: 'fixture', userMessage: { id: 'u1', role: 'user', content: '早上好', createdAt: new Date().toISOString() } })},
-      ${json(checkpoint)},${json(assistant(agentRunId))},NULL,false);`);
+      ${json(checkpoint)},${json(assistant(agentRunId))},NULL,'exempt');`);
     await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.4.0');");
     const agentRun = await parsed("SELECT to_jsonb(public.agent_claim_run('sched-contracts'));");
     await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'running',${quote(agentRunId)},NULL,NULL);`);
@@ -157,7 +156,7 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
     await admin(`SELECT public.agent_create_run(${quote(agentRunId)},${quote(owner)},${quote(schedule.conversation_id)},${quote('ask:' + agentRunId)},'hash',
       ${json({ model: 'fixture', reasoning: false, webEnabled: false, systemPrompt: 'fixture', userMessage: { id: 'u2', role: 'user', content: '早上好', createdAt: new Date().toISOString() } })},
-      ${json(checkpoint)},${json(assistant(agentRunId))},NULL,false);`);
+      ${json(checkpoint)},${json(assistant(agentRunId))},NULL,'exempt');`);
     await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.4.0');");
     const agentRun = await parsed("SELECT to_jsonb(public.agent_claim_run('sched-contracts'));");
     await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'running',${quote(agentRunId)},NULL,NULL);`);
@@ -178,8 +177,8 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     const schedule = await create('跳过通知', { kind: 'daily', time: '08:00' });
     await dueNow(schedule.id);
     const [run] = (await parsed('SELECT coalesce(jsonb_agg(to_jsonb(r)),\'[]\') FROM public.claim_agent_schedules(10) r;')).filter(item => item.schedule_id === schedule.id);
-    await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'skipped',NULL,NULL,'insufficient_credits');`);
-    assert.equal(await asOwner(`SELECT status||':'||skip_reason FROM public.agent_schedule_runs WHERE id=${quote(run.id)};`), 'skipped:insufficient_credits');
+    await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'skipped',NULL,NULL,'insufficient_balance');`);
+    assert.equal(await asOwner(`SELECT status||':'||skip_reason FROM public.agent_schedule_runs WHERE id=${quote(run.id)};`), 'skipped:insufficient_balance');
     assert.equal(await asActor(owner, `SELECT count(*) FROM public.notifications WHERE event_key=${quote('schedule:' + run.id)} AND title LIKE '%已跳过%';`), '1');
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
   });
@@ -201,20 +200,23 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     assert.equal(await fail(), '2');
     const skipped = await nextRun();
     assert.ok(skipped);
-    await admin(`SELECT public.settle_agent_schedule_run(${quote(skipped.id)},'skipped',NULL,NULL,'insufficient_credits');`);
+    await admin(`SELECT public.settle_agent_schedule_run(${quote(skipped.id)},'skipped',NULL,NULL,'insufficient_balance');`);
     assert.equal(await asOwner(`SELECT consecutive_failures FROM public.agent_schedules WHERE id=${quote(schedule.id)};`), '0');
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
   });
 
-  await t.test('a downgrade pauses the schedules beyond the tier limit', async () => {
+  await t.test('lowering the limit pauses the newest schedules beyond it', async () => {
     const first = await create('保留的任务', { kind: 'daily', time: '08:00' });
     const second = await create('超出的任务', { kind: 'daily', time: '09:00' });
-    assert.ok(Number(await admin(`SELECT public.enforce_agent_schedule_limits('{"free":1,"plus":1,"pro":2}'::jsonb);`)) >= 1);
+    await asOwner(`INSERT INTO public.app_settings(setting_key,setting_value) VALUES('agent_schedule_limits','{"limit":1}'::jsonb)
+      ON CONFLICT(setting_key) DO UPDATE SET setting_value=excluded.setting_value;`);
+    assert.ok(Number(await admin('SELECT public.enforce_agent_schedule_limits();')) >= 1);
     assert.equal(await asOwner(`SELECT enabled FROM public.agent_schedules WHERE id=${quote(first.id)};`), 't');
     assert.equal(await asOwner(`SELECT enabled||':'||last_status FROM public.agent_schedules WHERE id=${quote(second.id)};`), 'false:paused');
     assert.equal(await asOwner(`SELECT next_run_at IS NULL FROM public.agent_schedules WHERE id=${quote(second.id)};`), 't');
-    await assert.rejects(asActor(owner, `SELECT public.enforce_agent_schedule_limits('{"free":1}'::jsonb);`), /AGENT_ADMIN_REQUIRED/);
-    await asOwner(`DELETE FROM public.agent_schedules WHERE id IN (${quote(first.id)},${quote(second.id)});`);
+    await assert.rejects(asActor(owner, 'SELECT public.enforce_agent_schedule_limits();'), /AGENT_ADMIN_REQUIRED/);
+    await asOwner(`DELETE FROM public.agent_schedules WHERE id IN (${quote(first.id)},${quote(second.id)});
+      DELETE FROM public.app_settings WHERE setting_key='agent_schedule_limits';`);
   });
 
   await t.test('deleting the bound conversation pauses the schedule with one notice', async () => {
@@ -239,8 +241,7 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
   await t.test('the go-live migration turns each enabled briefing into one schedule', async () => {
     const legacy = randomUUID(), chartId = randomUUID();
     await sql(`INSERT INTO identity.users(id) VALUES(${quote(legacy)});`);
-    await asOwner(`UPDATE public.users SET membership='plus',ai_chat_count=6 WHERE id=${quote(legacy)};
-      INSERT INTO public.bazi_charts(id,user_id,name,birth_date) VALUES(${quote(chartId)},${quote(legacy)},'早报命盘','1990-01-01');
+    await asOwner(`INSERT INTO public.bazi_charts(id,user_id,name,birth_date) VALUES(${quote(chartId)},${quote(legacy)},'早报命盘','1990-01-01');
       ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS daily_briefing_settings jsonb NOT NULL DEFAULT '{}'::jsonb;
       ALTER TABLE public.reminder_subscriptions DROP CONSTRAINT IF EXISTS reminder_subscription_type;
       ALTER TABLE public.reminder_subscriptions ADD CONSTRAINT reminder_subscription_type CHECK (reminder_type = ANY (ARRAY['solar_term','fortune','key_date','daily_briefing']));

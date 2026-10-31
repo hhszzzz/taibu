@@ -154,18 +154,22 @@ test('conversation list filters by Agent mode and rejects unknown modes',async t
     assert.equal((await conversations(request('/api/conversations?mode=agent'))).status,401);
 });
 
-test('enhancement rejects free users and claims quota before every actual call without a debit',async t => {
-    const f=fixture(t); let membership:'free'|'plus'='free'; let attempts=0;
-    const credits=require('../lib/user/credits') as typeof import('../lib/user/credits');
+test('enhancement serves every member on a priced model with a balance, and claims quota before every actual call',async t => {
+    const f=fixture(t); let spendable=0; let attempts=0;
+    const billing=require('../lib/billing/account.server') as typeof import('../lib/billing/account.server');
     const guard=require('../lib/api/ai-feature-guard') as typeof import('../lib/api/ai-feature-guard');
     const configs=require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
     const ai=require('../lib/ai/ai') as typeof import('../lib/ai/ai');
     t.mock.method(guard,'getGlobalAIFeatureGuardResponse',async()=>null);
-    t.mock.method(credits,'getUserAuthInfo',async()=>({effectiveMembership:membership,credits:10,hasCredits:true}));
-    t.mock.method(configs,'getModelConfigAsync',async()=>({id:'fixture',name:'fixture',vendor:'other',requiredTier:'free'}));
+    t.mock.method(billing,'assertSpendable',async()=>{ if (spendable<=0) throw new billing.InsufficientBalanceError(); });
+    const model = { pricing: undefined as { input: number; output: number; cacheRead: null; cacheWrite: null; image: null } | undefined };
+    t.mock.method(configs,'getModelConfigAsync',async()=>({id:'fixture',name:'fixture',vendor:'other',pricing:model.pricing}));
     t.mock.method(ai,'callAI',async (...args: Parameters<typeof ai.callAI>) => { await args[4]?.beforeModelAttempt?.(); attempts++; return '清晰的问题'; });
-    assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,403); assert.equal(attempts,0);
-    membership='plus'; f.rpc(true);
+    assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,403,'an unpriced model is not offered'); assert.equal(attempts,0);
+    model.pricing={input:1,output:2,cacheRead:null,cacheWrite:null,image:null};
+    const refused=await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}));
+    assert.equal(refused.status,402); assert.equal((await refused.json()).code,'INSUFFICIENT_BALANCE'); assert.equal(attempts,0);
+    spendable=1_000_000; f.rpc(true);
     assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,200); assert.equal(attempts,1);
     f.rpc(false); assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,429); assert.equal(attempts,1);
     assert.ok(f.calls.every(call=>call.field==='claim_prompt_enhancement'));

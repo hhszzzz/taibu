@@ -36,13 +36,18 @@ test('model input keeps the thinking ladder in order and only allows a listed de
     assert.ok('value' in parseModelInput(model({ customParameters: { promptCacheKey: true } })));
     assert.match((parseModelInput(model({ modelKey: 'has space' })) as { error: string }).error, /空格/u);
 
-    // 生图模型按张扣积分：默认 1，可设 0 到 1000 的整数。
-    const image = parseModelInput(model({ usageType: 'image', creditCost: 5 }));
+    // 单价只保存该用途要填的字段：对话按 token，生图按张；留空表示未定价。
+    const priced = parseModelInput(model({ pricing: { input: '0.5', output: 2, cacheRead: '', image: 9 } }));
+    assert.ok('value' in priced);
+    assert.deepEqual(priced.value.pricing, { input: 0.5, output: 2, cacheRead: null, cacheWrite: null, image: null });
+    const image = parseModelInput(model({ usageType: 'image', pricing: { input: 1, image: 0.04 } }));
     assert.ok('value' in image);
-    assert.equal(image.value.creditCost, 5);
-    assert.equal((parseModelInput(model()) as { value: { creditCost: number } }).value.creditCost, 1);
-    assert.match((parseModelInput(model({ usageType: 'image', creditCost: -1 })) as { error: string }).error, /每张图积分/u);
-    assert.match((parseModelInput(model({ usageType: 'image', creditCost: 1.5 })) as { error: string }).error, /每张图积分/u);
+    assert.deepEqual(image.value.pricing, { input: null, output: null, cacheRead: null, cacheWrite: null, image: 0.04 });
+    assert.deepEqual((parseModelInput(model()) as { value: { pricing: unknown } }).value.pricing,
+        { input: null, output: null, cacheRead: null, cacheWrite: null, image: null });
+    assert.match((parseModelInput(model({ pricing: { input: -1 } })) as { error: string }).error, /输入单价/u);
+    assert.match((parseModelInput(model({ pricing: { output: 0.00001 } })) as { error: string }).error, /4 位小数/u);
+    assert.match((parseModelInput(model({ usageType: 'image', pricing: { image: 10_001 } })) as { error: string }).error, /每张图单价/u);
 
     // A model without levels stores no default and never defaults to thinking.
     const plain = parseModelInput(model({ thinkingLevels: [], isReasoningDefault: true }));

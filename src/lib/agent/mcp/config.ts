@@ -2,18 +2,6 @@
  * MCP connectors and the extension policy, shared by the server and the settings pages. Platform servers belong to the
  * site (owner null) and are managed by administrators; a user's own connectors only ever serve that user.
  */
-import type { MembershipType } from '@/lib/user/membership';
-
-export const MEMBERSHIP_TIERS = ['free', 'plus', 'pro'] as const satisfies readonly MembershipType[];
-const TIER_RANK: Record<MembershipType, number> = { free: 0, plus: 1, pro: 2 };
-export const MEMBERSHIP_TIER_LABELS: Record<MembershipType, string> = { free: 'Free', plus: 'Plus', pro: 'Pro' };
-export function meetsTier(membership: MembershipType, required: MembershipType) {
-  return TIER_RANK[membership] >= TIER_RANK[required];
-}
-export function isMembershipTier(value: unknown): value is MembershipType {
-  return typeof value === 'string' && (MEMBERSHIP_TIERS as readonly string[]).includes(value);
-}
-
 /**
  * How a server's tools reach the model: offered with every request, found through `tool_search`, callable only from
  * code mode scripts, or not registered at all (search routing still uses the server).
@@ -82,7 +70,6 @@ export type McpServerView = {
   searchTool: string | null;
   fetchTool: string | null;
   routePriority: number;
-  requiredTier: MembershipType;
   enabled: boolean;
   timeoutMs: number;
   maxResultChars: number;
@@ -110,7 +97,6 @@ export type McpServerInput = {
   searchTool?: string | null;
   fetchTool?: string | null;
   routePriority?: number;
-  requiredTier?: MembershipType;
   enabled?: boolean;
   timeoutMs?: number;
   maxResultChars?: number;
@@ -123,7 +109,7 @@ export const MCP_SERVER_TEMPLATES = {
     label: 'Exa',
     input: {
       name: 'exa', displayName: 'Exa', url: 'https://mcp.exa.ai/mcp', exposure: 'hidden',
-      searchTool: 'web_search_exa', fetchTool: 'web_fetch_exa', requiredTier: 'plus',
+      searchTool: 'web_search_exa', fetchTool: 'web_fetch_exa',
       description: 'Exa 联网搜索与网页正文读取。',
     },
     secretHeader: { name: 'x-api-key', placeholder: 'Exa API Key' },
@@ -132,40 +118,31 @@ export const MCP_SERVER_TEMPLATES = {
     label: 'Tavily',
     input: {
       name: 'tavily', displayName: 'Tavily', url: 'https://mcp.tavily.com/mcp/', exposure: 'hidden',
-      searchTool: 'tavily_search', fetchTool: 'tavily_extract', requiredTier: 'plus',
+      searchTool: 'tavily_search', fetchTool: 'tavily_extract',
       description: 'Tavily 联网搜索与网页正文提取。',
     },
     secretHeader: { name: 'authorization', placeholder: 'Bearer tvly-…' },
   },
 } as const satisfies Record<string, { label: string; input: McpServerInput; secretHeader: { name: string; placeholder: string } }>;
 
-/** Whether users may add their own connectors or skills, which tiers, and how many each. */
-export type ExtensionGate = { enabled: boolean; tiers: MembershipType[]; limits: Record<MembershipType, number> };
+/** Whether users may add their own connectors or skills, and how many each may keep; the same for everyone. */
+export type ExtensionGate = { enabled: boolean; limit: number };
 export type AgentExtensionsPolicy = { connectors: ExtensionGate; skills: ExtensionGate };
 export const AGENT_EXTENSIONS_POLICY_KEY = 'agent_extensions_policy';
 export const EXTENSION_LIMIT_MAX: Record<keyof AgentExtensionsPolicy, number> = { connectors: 50, skills: 100 };
 export const DEFAULT_AGENT_EXTENSIONS_POLICY: AgentExtensionsPolicy = {
-  connectors: { enabled: true, tiers: ['plus', 'pro'], limits: { free: 0, plus: 3, pro: 10 } },
-  skills: { enabled: true, tiers: ['free', 'plus', 'pro'], limits: { free: 3, plus: 10, pro: 30 } },
+  connectors: { enabled: true, limit: 10 },
+  skills: { enabled: true, limit: 30 },
 };
 
 function gateOf(value: unknown, fallback: ExtensionGate, max: number, strict: boolean): ExtensionGate {
   const fail = (message: string): never => { throw new Error(message); };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return strict ? fail('扩展策略格式无效') : structuredClone(fallback);
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return strict ? fail('扩展策略格式无效') : { ...fallback };
   const raw = value as Record<string, unknown>;
   const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : strict ? fail('扩展策略缺少开关') : fallback.enabled;
-  let tiers = fallback.tiers;
-  if (Array.isArray(raw.tiers) && raw.tiers.every(isMembershipTier)) tiers = MEMBERSHIP_TIERS.filter(tier => (raw.tiers as string[]).includes(tier));
-  else if (strict) fail('会员等级无效');
-  const limits = { ...fallback.limits };
-  const rawLimits = raw.limits && typeof raw.limits === 'object' ? raw.limits as Record<string, unknown> : null;
-  if (!rawLimits && strict) fail('数量上限无效');
-  for (const tier of MEMBERSHIP_TIERS) {
-    const limit = rawLimits?.[tier];
-    if (Number.isInteger(limit) && (limit as number) >= 0 && (limit as number) <= max) limits[tier] = limit as number;
-    else if (strict) fail(`数量上限须为 0–${max} 的整数`);
-  }
-  return { enabled, tiers: [...tiers], limits };
+  const valid = Number.isInteger(raw.limit) && (raw.limit as number) >= 0 && (raw.limit as number) <= max;
+  if (!valid && strict) fail(`数量上限须为 0–${max} 的整数`);
+  return { enabled, limit: valid ? raw.limit as number : fallback.limit };
 }
 
 /** Stored policy read leniently: a missing or damaged field falls back to its default. */
@@ -187,19 +164,15 @@ export function parseAgentExtensionsPolicy(value: unknown): AgentExtensionsPolic
   };
 }
 
-/** How many of the kind this member may keep in use: zero when the administrator closed it or the tier is excluded. */
-export function extensionAllowance(gate: ExtensionGate, membership: MembershipType) {
-  return gate.enabled && gate.tiers.includes(membership) ? gate.limits[membership] : 0;
+/** How many of the kind a user may keep in use: zero when the administrator closed it. */
+export function extensionAllowance(gate: ExtensionGate) {
+  return gate.enabled ? gate.limit : 0;
 }
 
 /** What a user's settings page needs to know about one kind of extension. */
 export type ExtensionAllowanceView = {
   /** False when the administrator closed user additions altogether. */
   enabled: boolean;
-  /** False when this member's tier is not among the allowed ones. */
-  tierAllowed: boolean;
   limit: number;
   used: number;
-  /** The tiers that may add at least one, to tell a member which plan would. */
-  tiers: MembershipType[];
 };

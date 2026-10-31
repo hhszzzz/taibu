@@ -1,5 +1,5 @@
 /**
- * 用户扩展策略：是否允许用户添加自己的连接器（MCP）与技能、哪些会员可以、每档能加几个。
+ * 用户扩展策略：是否允许用户添加自己的连接器（MCP）与技能、每人能加几个。
  *
  * 'use client' 标记说明：
  * - 草稿、保存状态与未保存提醒
@@ -9,47 +9,41 @@
 import { useEffect, useState } from 'react';
 import { SettingsRow, SettingsSection, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { Button } from '@/components/ui/Button';
-import { FilterChip } from '@/components/ui/FilterChip';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { fetchAgentExtensionsPolicy, saveAgentExtensionsPolicy } from '@/lib/agent/mcp/client';
-import {
-  EXTENSION_LIMIT_MAX, MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS, type AgentExtensionsPolicy, type ExtensionGate,
-} from '@/lib/agent/mcp/config';
-import type { MembershipType } from '@/lib/user/membership';
+import { EXTENSION_LIMIT_MAX, type AgentExtensionsPolicy } from '@/lib/agent/mcp/config';
 import { Input } from '@/components/ui/Input';
 
 type Kind = keyof AgentExtensionsPolicy;
-type GateDraft = Omit<ExtensionGate, 'limits'> & { limits: Record<MembershipType, string> };
+type GateDraft = { enabled: boolean; limit: string };
 type Draft = Record<Kind, GateDraft>;
 
 const KINDS: Array<{ kind: Kind; title: string; description: string }> = [
   {
     kind: 'connectors', title: '个人连接器',
-    description: '用户在「设置 → 扩展 → 连接器」接入自己的 MCP 服务，只对自己生效，在开启联网的任务中使用。关闭或降档后，已添加的保留但不再使用。',
+    description: '用户在「设置 → 扩展 → 连接器」接入自己的 MCP 服务，只对自己生效，在开启联网的任务中使用。关闭或调低上限后，已添加的保留但超出部分不再使用。',
   },
   {
     kind: 'skills', title: '个人技能',
-    description: '用户在「设置 → 扩展 → 技能」添加自己的技能，只对自己生效。关闭或降档后，已添加的保留但不再使用。',
+    description: '用户在「设置 → 扩展 → 技能」添加自己的技能，只对自己生效。关闭或调低上限后，已添加的保留但超出部分不再使用。',
   },
 ];
 
 const draftOf = (policy: AgentExtensionsPolicy): Draft => ({
-  connectors: { ...policy.connectors, limits: { free: String(policy.connectors.limits.free), plus: String(policy.connectors.limits.plus), pro: String(policy.connectors.limits.pro) } },
-  skills: { ...policy.skills, limits: { free: String(policy.skills.limits.free), plus: String(policy.skills.limits.plus), pro: String(policy.skills.limits.pro) } },
+  connectors: { enabled: policy.connectors.enabled, limit: String(policy.connectors.limit) },
+  skills: { enabled: policy.skills.enabled, limit: String(policy.skills.limit) },
 });
 
 function policyOf(draft: Draft): AgentExtensionsPolicy {
-  const gate = (kind: Kind, title: string): ExtensionGate => {
-    const limits = {} as Record<MembershipType, number>;
-    for (const tier of MEMBERSHIP_TIERS) {
-      const value = Number(draft[kind].limits[tier].trim());
-      if (!draft[kind].limits[tier].trim() || !Number.isInteger(value) || value < 0 || value > EXTENSION_LIMIT_MAX[kind])
-        throw new Error(`${title}的 ${MEMBERSHIP_TIER_LABELS[tier]} 上限须为 0–${EXTENSION_LIMIT_MAX[kind]} 的整数`);
-      limits[tier] = value;
+  const gate = (kind: Kind, title: string) => {
+    const raw = draft[kind].limit.trim();
+    const limit = Number(raw);
+    if (!raw || !Number.isInteger(limit) || limit < 0 || limit > EXTENSION_LIMIT_MAX[kind]) {
+      throw new Error(`${title}的上限须为 0–${EXTENSION_LIMIT_MAX[kind]} 的整数`);
     }
-    return { enabled: draft[kind].enabled, tiers: MEMBERSHIP_TIERS.filter(tier => draft[kind].tiers.includes(tier)), limits };
+    return { enabled: draft[kind].enabled, limit };
   };
   return { connectors: gate('connectors', '个人连接器'), skills: gate('skills', '个人技能') };
 }
@@ -113,30 +107,9 @@ export function AgentExtensionsPolicyPanel() {
         return (
           <SettingsSection key={kind} title={title} description={description}>
             <SettingsRow label="允许用户添加" control={<SettingsSwitch label={`允许用户添加${title}`} checked={gate.enabled} disabled={saving} onToggle={() => change(kind, { enabled: !gate.enabled })} />} />
-            <SettingsRow label="可用会员" description="未选中的会员看不到添加入口。" control={(
-              <div className="settings-chips" role="group" aria-label={`${title}的可用会员`}>
-                {MEMBERSHIP_TIERS.map(tier => {
-                  const on = gate.tiers.includes(tier);
-                  return (
-                    <FilterChip key={tier} className="settings-chip" pressed={on} disabled={saving || !gate.enabled}
-                      onClick={() => change(kind, { tiers: on ? gate.tiers.filter(item => item !== tier) : [...gate.tiers, tier] })}>
-                      {MEMBERSHIP_TIER_LABELS[tier]}
-                    </FilterChip>
-                  );
-                })}
-              </div>
-            )} />
-            <SettingsRow label="数量上限" description={`每档最多 ${EXTENSION_LIMIT_MAX[kind]} 个；0 表示这一档不能添加。`} control={(
-              <div className="flex gap-2">
-                {MEMBERSHIP_TIERS.map(tier => (
-                  <label key={tier} className="settings-field">
-                    <span>{MEMBERSHIP_TIER_LABELS[tier]}</span>
-                    <Input className="w-16"  inputMode="numeric" aria-label={`${title}的 ${MEMBERSHIP_TIER_LABELS[tier]} 上限`}
-                      disabled={saving || !gate.enabled} value={gate.limits[tier]}
-                      onChange={event => change(kind, { limits: { ...gate.limits, [tier]: event.target.value } })} />
-                  </label>
-                ))}
-              </div>
+            <SettingsRow label="数量上限" description={`每人最多 ${EXTENSION_LIMIT_MAX[kind]} 个；0 表示不能添加。`} control={(
+              <Input className="w-20" inputMode="numeric" aria-label={`${title}的数量上限`} disabled={saving || !gate.enabled} value={gate.limit}
+                onChange={event => change(kind, { limit: event.target.value })} />
             )} />
           </SettingsSection>
         );

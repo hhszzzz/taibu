@@ -11,8 +11,8 @@ export const queryKeys = {
   conversationList: (userId?: string | null) => ['chat', 'conversations', userId ?? 'visitor'] as const,
   chatBootstrap: (userId?: string | null) => ['chat', 'bootstrap', userId ?? 'visitor'] as const,
   chatBootstrapPrefix: () => ['chat', 'bootstrap'] as const,
-  models: (userId?: string | null, options?: { vision?: boolean; membershipType?: string | null }) => ['models', userId ?? 'visitor', options?.membershipType ?? 'free', options?.vision === true ? 'vision' : 'chat'] as const,
+  models: (userId?: string | null, options?: { vision?: boolean }) => ['models', userId ?? 'visitor', options?.vision === true ? 'vision' : 'chat'] as const,
   modelsPrefix: () => ['models'] as const,
   agentArchive: (runId: string, callId: string) => ['agent', 'archive', runId, callId] as const,
-  agentProfiles: (userId?: string | null, membershipType?: string | null) => ['agent', 'profiles', userId ?? 'visitor', membershipType ?? 'free'] as const,
+  agentProfiles: (userId?: string | null) => ['agent', 'profiles', userId ?? 'visitor'] as const,
 } as const;

@@ -4,9 +4,8 @@ import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { isUniqueViolation } from '@/lib/db/errors';
 import { json, lockTransactionKey } from '@/lib/db/sql-helpers';
 import { createSharedCache } from '@/lib/cache/shared.server';
-import type { MembershipType } from '@/lib/user/membership';
 import {
-  MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE, isMembershipTier,
+  MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE,
   type McpExposure, type McpServerSnapshot, type McpServerView, type McpToolPolicy,
 } from './config';
 import { McpInputError, type McpServerFields } from './input.server';
@@ -27,7 +26,6 @@ export interface McpServerRow {
   search_tool: string | null;
   fetch_tool: string | null;
   route_priority: number;
-  required_tier: MembershipType;
   is_enabled: boolean;
   timeout_ms: number;
   max_result_chars: number;
@@ -130,7 +128,6 @@ export async function insertMcpServer(
         search_tool: owner === null ? fields.searchTool ?? null : null,
         fetch_tool: owner === null ? fields.fetchTool ?? null : null,
         route_priority: fields.routePriority ?? 100,
-        required_tier: owner === null ? fields.requiredTier ?? 'plus' : 'free',
         is_enabled: fields.enabled ?? true,
         timeout_ms: fields.timeoutMs ?? MCP_TIMEOUT_RANGE.default,
         max_result_chars: fields.maxResultChars ?? MCP_RESULT_CHARS_RANGE.default,
@@ -169,7 +166,6 @@ export async function updateMcpServer(
         ...(owner === null && fields.searchTool !== undefined ? { search_tool: fields.searchTool } : {}),
         ...(owner === null && fields.fetchTool !== undefined ? { fetch_tool: fields.fetchTool } : {}),
         ...(fields.routePriority !== undefined ? { route_priority: fields.routePriority } : {}),
-        ...(owner === null && fields.requiredTier !== undefined ? { required_tier: fields.requiredTier } : {}),
         ...(fields.enabled !== undefined ? { is_enabled: fields.enabled } : {}),
         ...(fields.timeoutMs !== undefined ? { timeout_ms: fields.timeoutMs } : {}),
         ...(fields.maxResultChars !== undefined ? { max_result_chars: fields.maxResultChars } : {}),
@@ -230,7 +226,6 @@ export function toMcpServerView(row: McpServerRow): McpServerView {
     searchTool: row.search_tool,
     fetchTool: row.fetch_tool,
     routePriority: row.route_priority,
-    requiredTier: isMembershipTier(row.required_tier) ? row.required_tier : 'pro',
     enabled: row.is_enabled,
     timeoutMs: row.timeout_ms,
     maxResultChars: row.max_result_chars,

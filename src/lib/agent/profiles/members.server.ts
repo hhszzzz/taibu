@@ -2,9 +2,7 @@ import 'server-only';
 import type { ToolRegistration } from '@earendil-works/pi-durable';
 import type { ModelThinkingLevel } from '@earendil-works/pi-ai';
 import type { AIModelConfig } from '@/types';
-import type { MembershipType } from '@/lib/user/membership';
 import { ANALYSIS_METHODS } from '../methods.server';
-import { meetsTier } from '../mcp/config';
 import { skillBlock, skillText } from '../skills/catalog.server';
 import type { SkillEntry } from '../skills/builtin.server';
 import { AGENT_SKILL_TOOLS, AGENT_WEB_TOOLS, getAgentToolScope, isAgentCoreTool } from '../tool-catalog';
@@ -20,9 +18,9 @@ import { profileCatalog } from './store.server';
  * the parent's tools minus a deny list, or a list of their own, never the tools only the main agent may use.
  */
 
-/** Roles this member may dispatch: switched on, within their tier. */
-export async function availableProfiles(membership: MembershipType): Promise<AgentProfileView[]> {
-  return (await profileCatalog()).filter(profile => profile.enabled && meetsTier(membership, profile.requiredTier));
+/** Roles a task may dispatch: the ones switched on. */
+export async function availableProfiles(): Promise<AgentProfileView[]> {
+  return (await profileCatalog()).filter(profile => profile.enabled);
 }
 
 /** 「盲派八字」: a method's title, by id. */

@@ -2,6 +2,7 @@ import 'server-only';
 
 import { cleanupAgentAttachments } from '@/lib/agent/attachments.server';
 import { cleanupGeneratedImages } from '@/lib/ai/image-generation.server';
+import { expireDueBilling } from '@/lib/billing/account.server';
 import { processAgentSchedules } from '@/lib/agent/schedules/runner.server';
 import { pruneExpiredNotifications } from '@/lib/notification-server';
 import { processScheduledReminders, scheduleAllUsersReminders } from '@/lib/reminders';
@@ -52,6 +53,8 @@ export async function runMaintenanceJob(name: string): Promise<MaintenanceRunSum
       return runSteps([{ name: 'agent-retention', run: runAgentRetention }]);
     case 'identity-cleanup':
       return runSteps([{ name: 'identity-cleanup', run: runIdentityCleanup }]);
+    case 'billing-maintenance':
+      return runSteps([{ name: 'billing-expire-due', run: () => expireDueBilling() }]);
     default:
       throw new Error(`Unknown maintenance job: ${name}`);
   }

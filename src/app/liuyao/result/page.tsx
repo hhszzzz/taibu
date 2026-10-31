@@ -35,7 +35,7 @@ import {
     resolveTraditionalYongShenPositions,
 } from '@/lib/divination/liuyao-result-state';
 import { saveDivinationAction } from '@/lib/divination/save-client';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
@@ -83,7 +83,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const [saving, setSaving] = useState(false);
     const yongShenPickerRef = useRef<HTMLElement>(null);
     const { showToast } = useToast();
-    const { user, userId, sessionLoading } = useSessionMembership();
+    const { user, userId, sessionLoading } = useSessionBalance();
 
     const yongShenTargetState = useMemo(() => (
         resolveResultYongShenState(result?.yongShenTargets, pendingYongShenTargets)

@@ -1,30 +1,24 @@
 import 'server-only';
 
-import { observeRefund, type RequestObservation } from '@/lib/server/analysis';
+import type { RequestObservation } from '@/lib/server/analysis';
 
 import type { NextRequest } from 'next/server';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
-import { isModelAllowedForMembership, isReasoningAllowedForMembership } from '@/lib/ai/ai-access';
-import { getAuthContext, jsonError, readRequestBytes, requireUserContext, type AuthContextResult } from '@/lib/api-utils';
+import { isModelOffered, UNPRICED_MODEL_MESSAGE } from '@/lib/ai/ai-access';
+import { getAuthContext, jsonError, readRequestBytes, requireUserContext } from '@/lib/api-utils';
+import { balanceUnavailableResponse, insufficientBalanceResponse } from '@/lib/api/balance-guard';
+import { getSpendableMicros } from '@/lib/billing/account.server';
+import { isFreeTextModel } from '@/lib/billing/pricing';
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import { prepareDirectChat, prepareManagedChat } from '@/lib/server/chat/use-case';
 import type {
   ChatActor,
   ChatPreparationInput,
   ChatPreparationFailure,
-  ChatPreparationResult,
-  ChatAccount,
   ManagedChatOperations,
   ResolvedChatPreparation,
 } from '@/lib/server/chat/contracts';
-import {
-  attemptCreditUse,
-  getUserAuthInfo,
-  refundCreditsOrLog,
-  UserStateResolutionError,
-} from '@/lib/user/credits';
-import type { MembershipType } from '@/lib/user/membership';
 import { normalizeIdentityUserProfile } from '@/lib/user/settings';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 import { normalizeVisualizationSettings } from '@/lib/visualization/settings';
@@ -34,26 +28,21 @@ import { isChatAttachment } from '@/lib/ai/document-formats';
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 const MANAGED_CHAT_RATE_LIMIT_KEY = '/api/chat';
 const BROWSER_DIRECT_CHAT_RATE_LIMIT_KEY = '/api/chat/direct/prepare';
-const MEMBERSHIP_TYPES: MembershipType[] = ['free', 'plus', 'pro'];
-
-type ChatAuthUser = NonNullable<AuthContextResult['user']>;
 
 export interface ChatRequestBody extends ChatPreparationInput {
-  skipCreditCheck?: boolean;
+  skipBilling?: boolean;
   internalSecret?: string;
   /** The conversation on screen; only its hash reaches the model, as the prompt cache key. */
   conversationId?: string;
 }
 
-/** Legacy adapter DTO; credentials never enter the transport-independent use case. */
+/** Adapter DTO; credentials never enter the transport-independent use case. */
 export interface ResolvedChatRequest {
   body: ChatRequestBody;
   userId: string | null;
-  canSkipCredit: boolean;
+  metered: boolean;
   requestedModelId: string;
-  membershipType: MembershipType;
   reasoningEnabled: boolean;
-  creditDeducted: boolean;
 }
 
 export type PreparedChatRequest =
@@ -122,79 +111,40 @@ function preparationErrorResponse(error: ChatPreparationFailure): Response {
   switch (error.kind) {
     case 'invalid-model':
       return jsonError('无效的模型', 400);
-    case 'membership-denied':
-      return jsonError('当前会员等级无法使用该模型', 403);
-    case 'web-search-denied':
-      return jsonError(error.message, 403, { code: 'MEMBERSHIP_REQUIRED' });
-    case 'insufficient-credits':
-      return jsonError('积分不足，请先通过签到、激活码或会员权益获取积分', 402, {
-        code: 'INSUFFICIENT_CREDITS',
-        needRecharge: true,
-      });
-    case 'deduction-failed':
-      return jsonError('积分扣减失败，请重试', 500, { code: 'CREDIT_DEDUCTION_FAILED' });
+    case 'model-unpriced':
+      return jsonError(UNPRICED_MODEL_MESSAGE, 403, { code: 'MODEL_UNPRICED' });
+    case 'insufficient-balance':
+      return insufficientBalanceResponse();
+    case 'balance-unavailable':
+      return balanceUnavailableResponse();
     case 'rate-limited':
       return jsonError('请求过于频繁，请稍后再试', 429);
     case 'rate-limit-failed':
       return jsonError('请求限流检查失败，请稍后重试', 500, { code: 'RATE_LIMIT_FAILED' });
-    case 'rate-limit-refund-failed':
-      return jsonError('请求未执行，积分退还失败，请联系客服', 500, {
-        code: 'CREDIT_REFUND_FAILED',
-        refundFailed: true,
-      });
-    case 'account-unavailable':
-      return jsonError(error.message, 500, { code: error.code });
   }
-}
-
-function bindAccountLoader(
-  userId: string | null,
-  authUser: ChatAuthUser | null,
-  authScoped: import('@/lib/db/context.server').ScopedDb,
-): () => Promise<ChatPreparationResult<ChatAccount>> {
-  return async () => {
-    if (!userId) {
-      return { ok: true, value: { effectiveMembership: 'free', hasCredits: false } };
-    }
-    try {
-      const account = await getUserAuthInfo(userId, {
-        db: authScoped,
-        user: authUser ?? undefined,
-      });
-      return { ok: true, value: { effectiveMembership: account.effectiveMembership, hasCredits: account.hasCredits } };
-    } catch (error) {
-      if (error instanceof UserStateResolutionError) {
-        return { ok: false, error: { kind: 'account-unavailable', message: error.message, code: error.code } };
-      }
-      throw error;
-    }
-  };
 }
 
 async function bindManagedChat(request: NextRequest, body: ChatRequestBody, observation?: RequestObservation): Promise<{
   actor: ChatActor;
   operations: ManagedChatOperations;
 } | Response> {
-  const canSkipCredit = !!(INTERNAL_SECRET && body.skipCreditCheck && body.internalSecret === INTERNAL_SECRET);
-  let authUser: ChatAuthUser | null;
+  const trusted = !!(INTERNAL_SECRET && body.skipBilling && body.internalSecret === INTERNAL_SECRET);
   let authScoped: import('@/lib/db/context.server').ScopedDb;
   let actor: ChatActor;
 
-  if (canSkipCredit) {
+  if (trusted) {
     const auth = await getAuthContext(request);
     if (auth.authError) return jsonError(auth.authError.message, auth.authError.status);
-    authUser = auth.user;
     authScoped = auth.db;
-    actor = { userId: auth.user?.id || null, creditPolicy: 'trusted-bypass' };
+    actor = { userId: auth.user?.id || null, billing: 'trusted-bypass' };
   } else {
     const auth = await requireUserContext(request);
     if ('error' in auth) {
-    observation?.fail('admission');
-    return jsonError(auth.error.message, auth.error.status);
-  }
-    authUser = auth.user;
+      observation?.fail('admission');
+      return jsonError(auth.error.message, auth.error.status);
+    }
     authScoped = auth.db;
-    actor = { userId: auth.user.id, creditPolicy: 'charge' };
+    actor = { userId: auth.user.id, billing: 'metered' };
   }
 
   const userId = actor.userId;
@@ -203,26 +153,15 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     resolveModel: async (modelId) => {
       const model = modelId ? await getModelConfigAsync(modelId) : await getDefaultModelConfigAsync('chat');
       if (!model) return null;
-      return {
-        id: model.id,
-        allowedMemberships: MEMBERSHIP_TYPES.filter((membership) => isModelAllowedForMembership(model, membership)),
-        reasoningMemberships: MEMBERSHIP_TYPES.filter((membership) => isReasoningAllowedForMembership(model, membership)),
-      };
+      return { id: model.id, offered: isModelOffered(model), pricing: model.pricing, supportsReasoning: model.supportsReasoning };
     },
-    loadAccount: bindAccountLoader(userId, authUser, authScoped),
-    deductCredit: async () => {
-      if (!userId) throw new Error('Chat credit deduction requires an authenticated user');
-      const result = await attemptCreditUse(userId, { db: authScoped, user: authUser ?? undefined });
-      if (result.ok) observation?.update({ billing: 'charged' });
-      return result;
+    admit: async (model) => {
+      if (!userId) throw new Error('Chat admission requires an authenticated user');
+      return isFreeTextModel(model.pricing) || await getSpendableMicros(userId, authScoped) > 0;
     },
     checkRateLimit: async () => {
       if (!userId) throw new Error('Public chat rate admission requires an authenticated user');
       return (await checkRateLimit(userId, MANAGED_CHAT_RATE_LIMIT_KEY, AI_RATE_LIMIT_CONFIG)).allowed;
-    },
-    refundRateLimitFailure: async () => {
-      if (!userId) return false;
-      return observeRefund(() => refundCreditsOrLog(userId, 1, 'chat rate-limit admission'), observation);
     },
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
@@ -232,9 +171,6 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
         observation?.fail('prompt');
         throw error;
       }
-    },
-    refundPromptFailure: async () => {
-      if (userId) await observeRefund(() => refundCreditsOrLog(userId, 1, 'chat prompt-context'), observation);
     },
   };
   return { actor, operations };
@@ -257,7 +193,6 @@ export async function prepareBrowserDirectChatRequest(
       BROWSER_DIRECT_CHAT_RATE_LIMIT_KEY,
       AI_RATE_LIMIT_CONFIG,
     )).allowed,
-    loadAccount: () => bindAccountLoader(auth.user.id, auth.user, auth.db)(),
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {

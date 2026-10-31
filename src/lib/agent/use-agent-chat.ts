@@ -15,7 +15,6 @@ import { isAgentRunTerminal, type AgentRunView } from "./types";
 import { clearAgentTail, clearAgentTails, pushAgentTail } from "./use-agent-tail";
 import { useNextTaskConfiguration } from '@/lib/chat/use-next-task-configuration';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
-import type { MembershipType } from '@/lib/user/membership';
 
 type AgentCapabilities = {
   enabled: boolean;
@@ -23,8 +22,6 @@ type AgentCapabilities = {
   webAvailable: boolean;
   /** Plain chat can search the web; reported here because every chat already polls this status. */
   plainWebAvailable: boolean;
-  /** The lowest membership a search service serves, null when none is set up: what the toggle names when it is off. */
-  webTier: MembershipType | null;
   customAvailable: boolean;
 };
 const NO_CAPABILITIES: AgentCapabilities = {
@@ -32,7 +29,6 @@ const NO_CAPABILITIES: AgentCapabilities = {
   ready: false,
   webAvailable: false,
   plainWebAvailable: false,
-  webTier: null,
   customAvailable: false,
 };
 type AgentCommandRequest = Parameters<typeof postAgentCommand>[1];
@@ -261,6 +257,7 @@ export function useAgentChat(
             apiUrl: options.provider.apiUrl,
             apiKey: options.provider.apiKey,
             modelId: options.provider.modelId,
+            ...(options.provider.imageModelId ? { imageModelId: options.provider.imageModelId } : {}),
           }
         : undefined,
       webEnabled,

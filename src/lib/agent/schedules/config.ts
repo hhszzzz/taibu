@@ -9,7 +9,6 @@
  */
 import type { AIReasoningEffort } from '@/types';
 import { parseAgentCollaborators, type AgentCollaborator } from '@/lib/chat/model-settings';
-import type { MembershipType } from '@/lib/user/membership';
 
 export const AGENT_SCHEDULE_TEMPLATES = ['custom', 'daily_briefing'] as const;
 export type AgentScheduleTemplate = (typeof AGENT_SCHEDULE_TEMPLATES)[number];
@@ -83,17 +82,16 @@ export type AgentScheduleInput = {
   options: AgentScheduleOptions;
 };
 
-export type AgentScheduleLimits = Record<MembershipType, number>;
+/** How many schedules each user may keep; lowering it pauses everyone's newest beyond it. */
+export type AgentScheduleLimits = { limit: number };
 
 export const AGENT_SCHEDULE_LIMITS_KEY = 'agent_schedule_limits';
-export const DEFAULT_AGENT_SCHEDULE_LIMITS: AgentScheduleLimits = { free: 1, plus: 5, pro: 20 };
+export const DEFAULT_AGENT_SCHEDULE_LIMITS: AgentScheduleLimits = { limit: 20 };
 export const AGENT_SCHEDULE_LIMIT_MAX = 100;
 export const AGENT_SCHEDULE_NAME_MAX = 80;
 export const AGENT_SCHEDULE_PROMPT_MAX = 4000;
 export const AGENT_SCHEDULE_INTERVAL_HOURS_MAX = 24;
 export const AGENT_SCHEDULE_KNOWLEDGE_BASES_MAX = 20;
-export const AGENT_SCHEDULE_MEMBERSHIP_TIERS: readonly MembershipType[] = ['free', 'plus', 'pro'];
-export const AGENT_SCHEDULE_MEMBERSHIP_LABELS: Record<MembershipType, string> = { free: '免费', plus: 'Plus', pro: 'Pro' };
 export const AGENT_SCHEDULE_WEEKDAY_LABELS = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'] as const;
 
 const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/u;
@@ -190,20 +188,15 @@ function parseAgentReasoningEffort(value: string): AIReasoningEffort | null {
 
 const INTEGER_LIMIT = /^\d{1,3}$/u;
 
-export function normalizeAgentScheduleLimits(value: unknown): AgentScheduleLimits {
-  const limits = { ...DEFAULT_AGENT_SCHEDULE_LIMITS };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return limits;
-  const input = value as Record<string, unknown>;
-  for (const tier of AGENT_SCHEDULE_MEMBERSHIP_TIERS) {
-    const raw = input[tier];
-    const parsed = typeof raw === 'number' ? raw : typeof raw === 'string' && INTEGER_LIMIT.test(raw) ? Number(raw) : NaN;
-    if (Number.isInteger(parsed) && parsed >= 0 && parsed <= AGENT_SCHEDULE_LIMIT_MAX) limits[tier] = parsed;
-  }
-  return limits;
+/** Null when the value is not a limit in range; the SQL reads the same field (agent_schedule_limit). */
+export function parseAgentScheduleLimit(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && INTEGER_LIMIT.test(value) ? Number(value) : NaN;
+  return Number.isInteger(parsed) && parsed >= 0 && parsed <= AGENT_SCHEDULE_LIMIT_MAX ? parsed : null;
 }
 
-export function agentScheduleLimitFor(limits: AgentScheduleLimits, tier: MembershipType): number {
-  return limits[tier] ?? 0;
+export function normalizeAgentScheduleLimits(value: unknown): AgentScheduleLimits {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>).limit : undefined;
+  return { limit: parseAgentScheduleLimit(raw) ?? DEFAULT_AGENT_SCHEDULE_LIMITS.limit };
 }
 
 export function parseAgentScheduleInput(value: unknown): AgentScheduleInput {
@@ -275,7 +268,7 @@ export const AGENT_SCHEDULE_RUN_STATUS_LABELS: Record<AgentScheduleRunStatus, st
 };
 
 export const AGENT_SCHEDULE_SKIP_REASON_LABELS: Record<string, string> = {
-  insufficient_credits: '积分不足',
+  insufficient_balance: '余额不足',
   model_unavailable: '模型不可用',
   feature_disabled: '功能已关闭',
   conversation_missing: '绑定的对话已删除',

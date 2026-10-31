@@ -14,9 +14,8 @@ export const CUSTOM_PROVIDER_CHANGED_EVENT = 'taibu:custom-provider:changed';
 const LEGACY_CUSTOM_PROVIDER_STORAGE_KEY = 'mingai:custom-provider';
 const LEGACY_LAST_CUSTOM_PROVIDER_STORAGE_KEY = 'mingai:last-custom-provider';
 
-function readStoredCustomProvider(key: string): CustomProviderConfig | null {
-    if (typeof window === 'undefined') return null;
-    const stored = sessionStorage.getItem(key);
+/** 解析存储的原始 JSON；不完整或损坏时返回 null。 */
+export function parseStoredCustomProvider(stored: string | null): CustomProviderConfig | null {
     if (!stored) return null;
     try {
         const parsed = JSON.parse(stored) as CustomProviderConfig;
@@ -29,6 +28,11 @@ function readStoredCustomProvider(key: string): CustomProviderConfig | null {
     }
 }
 
+function readStoredCustomProvider(key: string): CustomProviderConfig | null {
+    if (typeof window === 'undefined') return null;
+    return parseStoredCustomProvider(sessionStorage.getItem(key));
+}
+
 function writeStoredCustomProvider(key: string, config: CustomProviderConfig): void {
     sessionStorage.setItem(key, JSON.stringify({
         providerKey: config.providerKey,
@@ -37,6 +41,7 @@ function writeStoredCustomProvider(key: string, config: CustomProviderConfig): v
         apiKey: config.apiKey.trim(),
         modelId: config.modelId.trim(),
         modelName: config.modelName?.trim() || undefined,
+        imageModelId: config.imageModelId?.trim() || undefined,
     }));
 }
 

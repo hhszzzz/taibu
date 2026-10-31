@@ -33,7 +33,7 @@ const FACE_COPY: PhotoReadingCopy = {
     submitLabel: '开始分析面相',
     missingPhoto: '请先上传面部照片',
     notice: '面相分析仅供娱乐参考，不构成医疗、就业或其他专业建议，也不做疾病诊断。我们不保存你上传的照片，分析完成后图片将被删除。请勿上传他人照片。',
-    billing: '面相分析需要 Plus 会员或以上，每次消耗 1 积分。',
+    billing: '按所选视觉模型的实际用量从余额扣费；使用自己的 API 不计费。',
 };
 
 const FACE_CONSENT = { title: '重要提醒', body: FACE_DISCLAIMER };

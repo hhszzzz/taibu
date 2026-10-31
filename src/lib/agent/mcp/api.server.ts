@@ -6,7 +6,6 @@ import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, setAgentExtensio
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { getUserCreditInfo } from '@/lib/user/credits';
 import { isValidUUID } from '@/lib/validation';
 import { extensionAllowance, parseAgentExtensionsPolicy, type ExtensionAllowanceView } from './config';
 import { testMcpServer } from './endpoint.server';
@@ -61,16 +60,10 @@ async function changed(owner: Owner) {
   if (owner.owner === null) await invalidatePlatformMcpServers();
 }
 
-/** The user's allowance: whether the administrator allows connectors at all, for their tier, and how many. */
+/** The user's allowance: whether the administrator allows connectors at all, and how many. */
 async function connectorAllowance(owner: Owner): Promise<ExtensionAllowanceView> {
-  const [policy, account, used] = await Promise.all([
-    getAgentExtensionsPolicy(), getUserCreditInfo(owner.userId, {}), countMcpServers(owner.db, owner.userId),
-  ]);
-  const gate = policy.connectors;
-  return {
-    enabled: gate.enabled, tierAllowed: gate.tiers.includes(account.membership),
-    limit: extensionAllowance(gate, account.membership), used, tiers: gate.tiers.filter(tier => gate.limits[tier] > 0),
-  };
+  const [policy, used] = await Promise.all([getAgentExtensionsPolicy(), countMcpServers(owner.db, owner.userId)]);
+  return { enabled: policy.connectors.enabled, limit: extensionAllowance(policy.connectors), used };
 }
 
 async function list(owner: Owner) {
@@ -90,8 +83,7 @@ async function create(owner: Owner, request: NextRequest) {
     let limit: number | undefined;
     if (owner.owner !== null) {
       const allowance = await connectorAllowance(owner);
-      if (!allowance.enabled) return jsonError('管理员已关闭个人连接器', 403);
-      if (!allowance.tierAllowed || allowance.limit === 0) return jsonError('当前会员不能添加连接器', 403);
+      if (!allowance.enabled || allowance.limit === 0) return jsonError('管理员已关闭个人连接器', 403);
       limit = allowance.limit;
     }
     const row = await insertMcpServer(owner.db, owner.owner, fields, { limit });
@@ -139,7 +131,7 @@ async function test(owner: Owner, request: NextRequest, id: string) {
     if (!row) return jsonError('外部服务不存在', 404);
     if (owner.owner !== null) {
       const allowance = await connectorAllowance(owner);
-      if (allowance.limit === 0) return jsonError(allowance.enabled ? '当前会员不能使用连接器' : '管理员已关闭个人连接器', 403);
+      if (allowance.limit === 0) return jsonError('管理员已关闭个人连接器', 403);
       if (!(await checkRateLimit(owner.userId, TEST_RATE_LIMIT.endpoint, TEST_RATE_LIMIT)).allowed)
         return jsonError('测试过于频繁，请稍后再试', 429);
     }

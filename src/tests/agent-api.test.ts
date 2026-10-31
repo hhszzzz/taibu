@@ -26,7 +26,7 @@ const model: AIModelConfig = {
   modelId: "fixture",
   apiUrl: "https://model.example/v1",
   supportsReasoning: true,
-  requiredTier: "free",
+  pricing: { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null },
 };
 function setup(t: TestContext, messages: unknown[] = []) {
   const owner = randomUUID(),
@@ -60,8 +60,8 @@ function setup(t: TestContext, messages: unknown[] = []) {
     require("../lib/server/ai-config") as typeof import("../lib/server/ai-config");
   const context =
     require("../lib/server/chat/prompt-context") as typeof import("../lib/server/chat/prompt-context");
-  const credits =
-    require("../lib/user/credits") as typeof import("../lib/user/credits");
+  const billing =
+    require("../lib/billing/account.server") as typeof import("../lib/billing/account.server");
   const rate =
     require("../lib/rate-limit") as typeof import("../lib/rate-limit");
   t.mock.method(api, "requireUserContext", async () =>
@@ -82,11 +82,7 @@ function setup(t: TestContext, messages: unknown[] = []) {
   t.mock.method(aiGuard, "getGlobalAIFeatureGuardResponse", async () => null);
   t.mock.method(configs, "getModelConfigAsync", async () => model);
   t.mock.method(configs, "getDefaultModelConfigAsync", async () => model);
-  t.mock.method(credits, "getUserAuthInfo", async () => ({
-    credits: 10,
-    hasCredits: true,
-    effectiveMembership: "plus",
-  }));
+  const balance = t.mock.method(billing, "getSpendableMicros", async () => 10_000_000);
   t.mock.method(rate, "checkRateLimit", async () => ({ allowed: true, remaining: 9, resetAt: new Date(Date.now() + 60000) }));
   t.mock.method(
     context,
@@ -136,10 +132,10 @@ function setup(t: TestContext, messages: unknown[] = []) {
       method: "POST",
       body: JSON.stringify(value),
     });
-  return { owner, conversation, writes, body, request, scoped, api, credits, rate, features };
+  return { owner, conversation, writes, body, request, scoped, api, balance, rate, features };
 }
 
-test('Agent admission freezes reasoning and independently authorized collaborator settings in the single charged run', async t => {
+test('Agent admission freezes reasoning and independently authorized collaborator settings in the single metered run', async t => {
   const fixture = setup(t);
   const configs = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
   t.mock.method(configs, 'getModelConfigAsync', async (id: string) => ({ ...model, id }));
@@ -149,7 +145,26 @@ test('Agent admission freezes reasoning and independently authorized collaborato
   assert.equal(fixture.writes.length, 1);
   const input = fixture.writes[0].args.p_input as AgentRunRow['input'];
   assert.equal(input.reasoningEffort, 'xhigh'); assert.deepEqual(input.collaborators, collaborators);
-  assert.equal(fixture.writes[0].args.p_charge, true);
+  assert.equal(fixture.writes[0].args.p_billing, 'metered');
+});
+
+test('a paid platform model needs a positive balance to start; a free one and BYOK do not', async t => {
+  const fixture = setup(t);
+  const configs = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
+  fixture.balance.mock.mockImplementation(async () => 0);
+  const refused = await agentEndpoint(() => createAgentTask(fixture.request()));
+  assert.equal(refused.status, 402);
+  assert.equal((await refused.json()).code, 'INSUFFICIENT_BALANCE');
+  assert.equal(fixture.writes.length, 0);
+
+  t.mock.method(configs, 'getModelConfigAsync', async () => ({ ...model, pricing: { input: 0, output: 0, cacheRead: null, cacheWrite: null, image: null } }));
+  assert.equal((await agentEndpoint(() => createAgentTask(fixture.request()))).status, 201, 'a free model is metered at $0 without a balance');
+  assert.equal(fixture.writes[0].args.p_billing, 'metered');
+
+  t.mock.method(configs, 'getModelConfigAsync', async () => ({ ...model, pricing: undefined }));
+  const unpriced = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID() })));
+  assert.equal(unpriced.status, 403);
+  assert.equal((await unpriced.json()).code, 'MODEL_UNPRICED');
 });
 
 test('the task keeps the browser\'s time zone for dating the messages sent into it, and ignores one that is not a zone', async t => {
@@ -174,8 +189,8 @@ test('invalid reasoning/team input and inaccessible collaborator models fail bef
     assert.equal(response.status, 400);
   }
   const configs = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
-  t.mock.method(configs, 'getModelConfigAsync', async (id: string) => ({ ...model, id, requiredTier: id === 'restricted' ? 'pro' : 'free' }));
-  const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, collaborators: [member, { ...member, id: 'second', model: 'restricted' }] })));
+  t.mock.method(configs, 'getModelConfigAsync', async (id: string) => ({ ...model, id, pricing: id === 'unpriced' ? undefined : model.pricing }));
+  const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, collaborators: [member, { ...member, id: 'second', model: 'unpriced' }] })));
   assert.equal(response.status, 403); assert.equal(fixture.writes.length, 0);
 });
 
@@ -199,9 +214,8 @@ const earlierTurn = [
   { id: 'answered', role: 'assistant', content: '日主庚金。', createdAt: '2026-10-20T00:01:00Z' },
 ];
 
-test('/compact creates a free, tool-less task in its own rate-limit bucket, even without credits', async t => {
+test('/compact creates a metered, tool-less task in its own rate-limit bucket', async t => {
   const fixture = setup(t, earlierTurn);
-  t.mock.method(fixture.credits, 'getUserAuthInfo', async () => ({ credits: 0, hasCredits: false, effectiveMembership: 'plus' }));
   const buckets: string[] = [];
   t.mock.method(fixture.rate, 'checkRateLimit', async (_owner: string, endpoint: string) => {
     buckets.push(endpoint);
@@ -214,7 +228,7 @@ test('/compact creates a free, tool-less task in its own rate-limit bucket, even
   assert.equal(response.status, 201);
   assert.deepEqual(buckets, ['/api/agent/compact']);
   const write = fixture.writes[0];
-  assert.equal(write.args.p_charge, false);
+  assert.equal(write.args.p_billing, 'metered', 'the summary request pays for its tokens like any other');
   const input = write.args.p_input as AgentRunRow['input'];
   assert.deepEqual(input.compact, { instructions: '保留八字结论' });
   assert.deepEqual([input.webEnabled, input.codeMode, input.planMode, input.collaborators], [false, false, false, []]);
@@ -250,7 +264,7 @@ function useSkills(t: TestContext) {
   const store = require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   t.mock.method(store, 'platformSkills', async () => [{
-    id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 2, required_tier: 'free' as const, is_enabled: true,
+    id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 2, is_enabled: true,
     disable_model_invocation: true, sort_order: 0, created_at: '2026-10-27T00:00:00Z', updated_at: '2026-10-27T00:00:00Z', bytes: 80, files: [],
   }]);
   t.mock.method(store, 'userSkills', async () => []);
@@ -305,7 +319,6 @@ test('/skill: naming a skill the member cannot use fails before creation, and so
     },
   } as unknown as AgentRunRow;
   t.mock.method(AgentStore.prototype, 'getRun', async () => run);
-  t.mock.method(fixture.credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   const submitted: string[] = [];
   t.mock.method(AgentStore.prototype, 'rpc', async (_name: string, args: Record<string, unknown>) => {
     submitted.push((args.p_message as { content: string }).content);
@@ -358,43 +371,29 @@ test("Agent feature admission fails closed when fresh configuration cannot be re
   assert.equal(fixture.writes.length, 0);
 });
 
-test('network capability follows the search services and connectors the member reaches, and fails closed when it cannot tell', async t => {
+test('network capability follows the search services and connectors set up, and fails closed when it cannot tell', async t => {
   setup(t);
   const session = require('../lib/agent/mcp/session.server') as typeof import('../lib/agent/mcp/session.server');
   const route = require('../lib/agent/mcp/web-route.server') as typeof import('../lib/agent/mcp/web-route.server');
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-  let membership: 'free' | 'plus' | 'pro' = 'plus';
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership, credits: 10, expiresAt: null }));
   let servers: unknown = [{ id: 'server' }];
-  const available = t.mock.method(session, 'availableMcpServers', async () => {
+  t.mock.method(session, 'availableMcpServers', async () => {
     if (servers instanceof Error) throw servers;
     return servers as Awaited<ReturnType<typeof session.availableMcpServers>>;
   });
-  // The lowest tier a search service serves; null when none is set up.
-  let serviceTier: 'free' | 'plus' | 'pro' | null = null;
-  const rank = { free: 0, plus: 1, pro: 2 } as const;
-  const searchChecks = t.mock.method(route, 'webRouteAvailable', async (_kind: string, tier: 'free' | 'plus' | 'pro') =>
-    serviceTier !== null && rank[tier] >= rank[serviceTier]);
-  t.mock.method(route, 'webRouteLowestTier', async () => serviceTier);
+  let searchReady = false;
+  t.mock.method(route, 'webRouteAvailable', async () => searchReady);
   const capabilities = async () => {
-    const value = (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { webAvailable: boolean; plainWebAvailable: boolean; webTier: string | null };
-    return [value.webAvailable, value.plainWebAvailable, value.webTier];
+    const value = (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { webAvailable: boolean; plainWebAvailable: boolean };
+    return [value.webAvailable, value.plainWebAvailable];
   };
-  assert.deepEqual(await capabilities(), [true, false, null], 'a connector puts the Agent online; plain chat needs a search service');
-  assert.equal(available.mock.calls[0].arguments[1], 'plus', 'the member\'s own tier decides');
+  assert.deepEqual(await capabilities(), [true, false], 'a connector puts the Agent online; plain chat needs a search service');
   servers = [];
-  assert.deepEqual(await capabilities(), [false, false, null]);
+  assert.deepEqual(await capabilities(), [false, false]);
   servers = new Error('database unavailable');
-  assert.deepEqual(await capabilities(), [false, false, null]);
+  assert.deepEqual(await capabilities(), [false, false]);
   servers = [];
-  serviceTier = 'free';
-  assert.deepEqual(await capabilities(), [true, true, 'plus'], 'nobody below Plus searches');
-  membership = 'free';
-  assert.deepEqual(await capabilities(), [true, true, 'plus'], 'a free account is told that Plus searches');
-  assert.equal(searchChecks.mock.calls.at(-1)?.arguments[1], 'plus');
-  serviceTier = 'pro';
-  membership = 'plus';
-  assert.deepEqual(await capabilities(), [false, false, 'pro'], 'a service only Pro reaches asks for Pro');
+  searchReady = true;
+  assert.deepEqual(await capabilities(), [true, true], 'a search service serves every member');
 });
 
 test('image capability is enforced before charging and when adding input to an existing task', async t => {
@@ -415,7 +414,7 @@ test('image capability is enforced before charging and when adding input to an e
   assert.equal(addition.status,400);assert.match((await addition.json()).error,/不支持图片/);assert.equal(fixture.writes.length,before);
 });
 
-test("Agent create uses server history and an atomic charge RPC; supplied assistant/metadata is discarded", async (t) => {
+test("Agent create uses server history and one metered create RPC; supplied assistant/metadata is discarded", async (t) => {
   const fixture = setup(t);
   const response = await agentEndpoint(() =>
     createAgentTask(
@@ -434,7 +433,7 @@ test("Agent create uses server history and an atomic charge RPC; supplied assist
   assert.equal(fixture.writes.length, 1);
   const write = fixture.writes[0];
   assert.equal(write.name, "agent_create_run");
-  assert.equal(write.args.p_charge, true);
+  assert.equal(write.args.p_billing, "metered");
   const input = write.args.p_input as AgentRunRow["input"];
   assert.equal(input.userMessage.role, "user");
   assert.equal(input.userMessage.metadata, undefined);
@@ -457,11 +456,7 @@ test("Agent BYOK is encrypted, exempt and omitted from every public result and e
       delete process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
     else process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY = previous;
   });
-  t.mock.method(fixture.credits, "getUserAuthInfo", async () => ({
-    credits: 0,
-    hasCredits: false,
-    effectiveMembership: "free",
-  }));
+  fixture.balance.mock.mockImplementation(async () => 0);
   const key = "fixture-BYOK-secret";
   const response = await agentEndpoint(() =>
     createAgentTask(
@@ -471,19 +466,21 @@ test("Agent BYOK is encrypted, exempt and omitted from every public result and e
           apiUrl: "https://model.example/v1",
           apiKey: key,
           modelId: "fixture",
+          imageModelId: " gpt-image-1 ",
         },
       }),
     ),
   );
   assert.equal(response.status, 201);
   const write = fixture.writes[0];
-  assert.equal(write.args.p_charge, false);
+  assert.equal(write.args.p_billing, "exempt");
   assert.ok(write.args.p_credential);
   assert.ok(!JSON.stringify(write.args).includes(key));
   assert.ok(!(await response.text()).includes(key));
-  assert.equal(
-    (write.args.p_input as AgentRunRow["input"]).customProvider?.apiUrl,
-    "https://model.example/v1",
+  assert.deepEqual(
+    (write.args.p_input as AgentRunRow["input"]).customProvider,
+    { apiUrl: "https://model.example/v1", modelId: "fixture", imageModelId: "gpt-image-1" },
+    "the image model goes with the task so its image tool uses the member's own model",
   );
 });
 
@@ -506,6 +503,8 @@ test("Agent malformed inputs, private custom URLs, authentication and cross-user
         modelId: "x",
       },
     },
+    { ...fixture.body, customProvider: { apiUrl: "https://model.example/v1", apiKey: "key", modelId: "x", imageModelId: 3 } },
+    { ...fixture.body, customProvider: { apiUrl: "https://model.example/v1", apiKey: "key", modelId: "x", imageModelId: "m".repeat(129) } },
   ]) {
     const response = await agentEndpoint(() =>
       createAgentTask(fixture.request(body)),
@@ -563,11 +562,11 @@ test('public task views include consumed input IDs while execution reads only pe
       },
     } as never),
   }));
-  const run = { id: 'run', status: 'completed', input: { model:'fixture',reasoning:false,webEnabled:false }, public_message: { id: 'agent:run', role: 'assistant', content: '', createdAt: '' }, billing: 'refunded' } as AgentRunRow;
+  const run = { id: 'run', status: 'completed', input: { model:'fixture',reasoning:false,webEnabled:false }, public_message: { id: 'agent:run', role: 'assistant', content: '', createdAt: '' }, billing: 'exempt' } as AgentRunRow;
   assert.deepEqual((await store.commands(run)).map(command => command.message.id), ['pending']);
   const view = await store.view(run);
   assert.deepEqual(view.commandMessageIds, ['pending', 'consumed']);
-  assert.equal(view.billing, 'refunded', 'the workspace reports the settled credit state, not the initial charge');
+  assert.equal(view.billing, 'exempt', 'the workspace reports whether the task is metered');
 });
 
 test('Agent commands persist a server-owned task association and discard supplied metadata', async (t) => {

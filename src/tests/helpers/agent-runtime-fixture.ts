@@ -22,7 +22,6 @@ export const config: AIModelConfig = {
   modelId: "fixture",
   apiUrl: "https://model.example/v1",
   supportsReasoning: false,
-  requiredTier: "free",
   sources: [{ sourceKey: "fixture", sourceName: "fixture", apiUrl: "https://model.example/v1", ...sealedGateway("gateway-fixture", "fixture-gateway-key") }],
 };
 export const row = (): AgentRunRow => {
@@ -63,7 +62,7 @@ export const row = (): AgentRunRow => {
         createdAt: new Date().toISOString(),
       },
     },
-    billing: "charged",
+    billing: "exempt",
     worker_id: "test-worker",
     fence: 1,
     cancel_requested: false,

@@ -1,7 +1,7 @@
 /**
  * 面相分析 API 路由
  *
- * 提供面相图片分析、历史记录等功能
+ * 提供面相图片分析、历史记录等功能；自定义模型由浏览器带图直连，本站只备提示词与保存结果，不经手照片。
  */
 import { NextRequest } from 'next/server';
 import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
@@ -13,27 +13,56 @@ import {
     FACE_DISCLAIMER
 } from '@/lib/divination/face';
 import { jsonError, jsonOk } from '@/lib/api-utils';
-import { createInterpretHandler, type InterpretInput } from '@/lib/api/divination-pipeline';
+import { createDirectInterpretHandlers, createInterpretHandler, type InterpretInput } from '@/lib/api/divination-pipeline';
 import { SOURCE_CHART_TYPE_MAP } from '@/lib/visualization/chart-types';
 
 const SUPPORTED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
-interface FaceInterpretInput extends InterpretInput {
-    imageBase64: string;
-    imageMimeType: string;
+interface FaceReadingInput extends InterpretInput {
     analysisType: string;
     question?: string;
 }
 
-const handleAnalyze = createInterpretHandler<FaceInterpretInput>({
+interface FaceInterpretInput extends FaceReadingInput {
+    imageBase64: string;
+    imageMimeType: string;
+}
+
+const parseReading = (b: Record<string, unknown>): FaceReadingInput => ({
+    analysisType: (b.analysisType as string) || 'full',
+    question: b.question as string | undefined,
+});
+
+/** 平台分析与浏览器直连共用的提示词与保存方式。 */
+const reading = {
     sourceType: 'face',
     tag: 'face',
     allowedChartTypes: [...SOURCE_CHART_TYPE_MAP.face_reading],
+    buildPrompts: (input: FaceReadingInput) => ({
+        systemPrompt: buildFaceSystemPrompt(input.analysisType),
+        userPrompt: buildFaceUserPrompt(input.analysisType, input.question),
+    }),
+    buildSourceData: (input: FaceReadingInput, modelId: string, reasoningEnabled: boolean) => ({
+        analysis_type: input.analysisType,
+        question: input.question || null,
+        model_id: modelId,
+        reasoning: reasoningEnabled,
+    }),
+    generateTitle: (input: FaceReadingInput) => generateFaceTitle(input.analysisType),
+    buildHistoryBinding: (input: FaceReadingInput) => ({
+        type: 'face' as const,
+        payload: {
+            analysis_type: input.analysisType,
+        },
+    }),
+};
+
+const handleAnalyze = createInterpretHandler<FaceInterpretInput>({
+    ...reading,
     defaultModelId: DEFAULT_VISION_MODEL_ID,
     isVision: true,
     modelAccessOptions: {
         requireVision: true,
-        membershipDeniedMessage: '面相分析需要 Plus 会员或以上',
     },
     parseInput: (body) => {
         const b = body as Record<string, unknown>;
@@ -45,34 +74,17 @@ const handleAnalyze = createInterpretHandler<FaceInterpretInput>({
         if (!raw || !SUPPORTED_IMAGE_MIME_TYPES.has(raw)) {
             return { error: '图片格式不支持', status: 400 };
         }
-        return {
-            imageBase64,
-            imageMimeType: raw,
-            analysisType: (b.analysisType as string) || 'full',
-            question: b.question as string | undefined,
-        };
+        return { ...parseReading(b), imageBase64, imageMimeType: raw };
     },
-    buildPrompts: (input) => ({
-        systemPrompt: buildFaceSystemPrompt(input.analysisType),
-        userPrompt: buildFaceUserPrompt(input.analysisType, input.question),
-    }),
     buildVisionOptions: (input) => ({
         imageBase64: input.imageBase64,
         imageMimeType: input.imageMimeType,
     }),
-    buildSourceData: (input, modelId, reasoningEnabled) => ({
-        analysis_type: input.analysisType,
-        question: input.question || null,
-        model_id: modelId,
-        reasoning: reasoningEnabled,
-    }),
-    generateTitle: (input) => generateFaceTitle(input.analysisType),
-    buildHistoryBinding: (input) => ({
-        type: 'face',
-        payload: {
-            analysis_type: input.analysisType,
-        },
-    }),
+});
+
+const direct = createDirectInterpretHandlers<FaceReadingInput>({
+    ...reading,
+    parseInput: (body) => parseReading(body as Record<string, unknown>),
 });
 
 export async function POST(request: NextRequest): Promise<Response> {
@@ -87,6 +99,10 @@ export async function POST(request: NextRequest): Promise<Response> {
                 return jsonOk({ success: true, data: { disclaimer: FACE_DISCLAIMER } });
             case 'analyze':
                 return handleAnalyze(request, body);
+            case 'direct-prepare':
+                return direct.handleDirectPrepare(request, body);
+            case 'direct-persist':
+                return direct.handleDirectPersist(request, body);
             default:
                 return jsonError('未知的操作类型', 400, { success: false });
         }

@@ -149,7 +149,7 @@ export function ScheduleEditor({
   const [error, setError] = useState('');
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const editing = Boolean(schedule);
-  const models = (modelsQuery.data ?? []).filter(model => model.allowed !== false);
+  const models = modelsQuery.data ?? [];
   const patch = (value: Partial<Draft>) => setDraft(current => ({ ...current, ...value }));
 
   const chooseTemplate = (next: AgentScheduleTemplate) => {
@@ -325,6 +325,7 @@ export function ScheduleEditor({
                   options={charts.map(chart => ({ value: chart.id, label: chart.name }))} />
               </label>
             </div>
+            <p className="sched-hint">定时任务始终使用平台模型，按实际用量从余额扣费，不使用自己的 API；余额不足时跳过当次运行。</p>
             <div className="sched-toggles">
               <div className="sched-toggle-row">
                 <div><span>推理</span><small>先思考再执行，适合需要分析的晨报与复盘</small></div>

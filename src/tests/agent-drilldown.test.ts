@@ -14,7 +14,6 @@ const birth = { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, bi
 
 beforeEach(t => {
   assert.ok('mock' in t);
-  t.mock.method(require('../lib/user/credits'), 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(require('../lib/app-settings'), 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' }));
 });
 

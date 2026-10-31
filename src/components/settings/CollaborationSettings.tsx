@@ -15,7 +15,6 @@ import { DEFAULT_AGENT_PROFILE } from '@/lib/agent/profiles/config';
 import { fetchProfileOptions } from '@/lib/agent/profiles/client';
 import { queryKeys } from '@/lib/query/keys';
 import type { AgentProfileOption } from '@/lib/agent/profiles/config';
-import type { MembershipType } from '@/lib/user/membership';
 import { BetaBadge } from '@/components/ui/BetaBadge';
 import { Input } from '@/components/ui/Input';
 import { Textarea } from '@/components/ui/Textarea';
@@ -29,14 +28,14 @@ const MAX_MEMBERS = 4;
 /**
  * 多模型协作成员模板（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
  * 模板保存在本机（按用户隔离）：每个对话默认不协作，在模型菜单勾选某个模型时才套用它在这里的名称、角色、努力程度与分工。
- * 角色由管理员提供，默认体系专家；角色指定了模型时，会员可用就由它代替这里的模型。
+ * 角色由管理员提供，默认体系专家；角色指定了模型时由它代替这里的模型。
  */
-export function CollaborationSettings({ userId, membershipType }: { userId: string; membershipType?: MembershipType }) {
+export function CollaborationSettings({ userId }: { userId: string }) {
     const preset = useCollaborationPreset(userId);
-    const query = useAvailableModels(userId, { enabled: true, membershipType });
-    const models = useMemo(() => (query.data ?? []).filter(model => model.allowed !== false), [query.data]);
+    const query = useAvailableModels(userId, { enabled: true });
+    const models = useMemo(() => query.data ?? [], [query.data]);
     const roles = useQuery({
-        queryKey: queryKeys.agentProfiles(userId, membershipType),
+        queryKey: queryKeys.agentProfiles(userId),
         queryFn: ({ signal }) => fetchProfileOptions(signal),
         staleTime: 5 * 60_000,
     });
@@ -49,7 +48,7 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
             name: index === 0 ? '专项分析' : index === 1 ? '独立复核' : `协作 ${index + 1}`,
             model: model?.id ?? '',
             focus: index === 1 ? '独立核对依据、分歧和不确定性' : '',
-            reasoning: !!model?.isReasoningDefault && model.reasoningAllowed !== false,
+            reasoning: !!model?.isReasoningDefault,
             reasoningEffort: null,
         };
     };
@@ -70,7 +69,7 @@ export function CollaborationSettings({ userId, membershipType }: { userId: stri
         </div>
         <div className="settings-form-body">
           <div className="settings-inline-row settings-inline-row-top">
-            <p className="settings-help">每个对话默认不协作；在输入框的模型菜单里勾选模型后才会启用，这里的预设会在勾选时自动套用。主模型不占成员名额，汇总只计一次费用。</p>
+            <p className="settings-help">每个对话默认不协作；在输入框的模型菜单里勾选模型后才会启用，这里的预设会在勾选时自动套用。主模型不占成员名额；每位成员的模型调用按各自用量计费。</p>
             <Button variant="secondary" size="lg" disabled={preset.members.length >= MAX_MEMBERS}
                 onClick={() => setEditor({ index: null, member: member(preset.members.length) })}>
                 <Plus size={14} aria-hidden="true" />添加成员
@@ -180,7 +179,7 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
                             setDraft({
                                 ...draft,
                                 model: value,
-                                reasoning: !!next && next.isReasoningDefault === true && next.reasoningAllowed !== false,
+                                reasoning: !!next && next.isReasoningDefault === true,
                                 reasoningEffort: null,
                             });
                         }}
@@ -210,7 +209,7 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
                     onChange={event => setDraft({ ...draft, focus: event.target.value })} />
             </label>
             {role && (role.description || roleModel) ? <p className="mcp-hint">
-                {[role.description, roleModel ? `这个角色指定使用 ${roleModel.name}，会员可用时代替上面的模型。` : null].filter(Boolean).join(' ')}
+                {[role.description, roleModel ? `这个角色指定使用 ${roleModel.name}，可用时代替上面的模型。` : null].filter(Boolean).join(' ')}
             </p> : null}
         </div>
         <div className="collab-dialog-foot">

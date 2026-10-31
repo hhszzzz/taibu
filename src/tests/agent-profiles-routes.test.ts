@@ -15,13 +15,12 @@ function modules() {
     mcpStore: require('../lib/agent/mcp/store.server') as typeof import('../lib/agent/mcp/store.server'),
     skillStore: require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server'),
     settings: require('../lib/app-settings') as typeof import('../lib/app-settings'),
-    credits: require('../lib/user/credits') as typeof import('../lib/user/credits'),
   };
 }
 
 const archivist = (overrides: Partial<AgentProfileView> = {}): AgentProfileView => ({
   name: 'archivist', builtin: false, displayName: '档案员', description: '整理资料', instructions: '', tools: { inherit: false, allow: ['web'], deny: [] },
-  skills: [], model: null, reasoningEffort: null, modes: ['parallel', 'background'], requiredTier: 'free', enabled: true, sortOrder: 0,
+  skills: [], model: null, reasoningEffort: null, modes: ['parallel', 'background'], enabled: true, sortOrder: 0,
   updatedAt: '2026-10-27T00:00:00.000Z', ...overrides,
 });
 
@@ -158,12 +157,11 @@ test('custom role edits and deletions report missing roles and refuse malformed 
 });
 
 test('a member reads the roles they may give a collaboration member', async (t) => {
-  const { apiUtils, store, settings, credits } = modules();
+  const { apiUtils, store, settings } = modules();
   t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1'));
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(store, 'profileCatalog', async () => [
     ...BUILTIN_AGENT_PROFILES.map(profile => profile.name === 'verifier' ? { ...profile, enabled: false } : profile),
-    archivist({ model: 'model-b' }), archivist({ name: 'pro-only', requiredTier: 'pro' }), archivist({ name: 'solo', modes: ['background'] }),
+    archivist({ model: 'model-b' }), archivist({ name: 'retired', enabled: false }), archivist({ name: 'solo', modes: ['background'] }),
   ]);
   let agent = 'disabled';
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: agent }) as never);

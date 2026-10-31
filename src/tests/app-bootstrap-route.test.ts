@@ -82,46 +82,49 @@ function mockAuthContext(user: unknown, db = createMockScopedDb()) {
 function installRoute(t: import('node:test').TestContext, authContext: () => Promise<ReturnType<typeof mockAuthContext>>) {
   const apiUtilsModule = require('../lib/api-utils') as any;
   const appSettingsModule = require('../lib/app-settings') as any;
+  const billingModule = require('../lib/billing/account.server') as any;
   const routePath = require.resolve('../app/api/app/bootstrap/route');
 
   const originalGetAuthContext = apiUtilsModule.getAuthContext;
   const originalJsonOk = apiUtilsModule.jsonOk;
   const originalReadFeatureTogglesState = appSettingsModule.readFeatureTogglesState;
+  const originalGetBillingSummary = billingModule.getBillingSummary;
 
   apiUtilsModule.getAuthContext = authContext;
   apiUtilsModule.jsonOk = (payload: unknown, status = 200) => Response.json(payload, { status });
+  billingModule.getBillingSummary = async () => ({ walletMicros: 0, subscriptionMicros: 0, spendableMicros: 0 });
 
   t.after(() => {
     apiUtilsModule.getAuthContext = originalGetAuthContext;
     apiUtilsModule.jsonOk = originalJsonOk;
     appSettingsModule.readFeatureTogglesState = originalReadFeatureTogglesState;
+    billingModule.getBillingSummary = originalGetBillingSummary;
     delete require.cache[routePath];
   });
   delete require.cache[routePath];
   return {
     appSettingsModule,
+    billingModule,
     routeModule: require('../app/api/app/bootstrap/route') as typeof import('../app/api/app/bootstrap/route'),
   };
 }
 
-test('app bootstrap route should return viewer summary, membership, toggles and unread count', async (t) => {
+test('app bootstrap route should return viewer summary, billing, toggles and unread count', async (t) => {
   const scoped = viewerScoped({
     profile: {
       id: 'user-1',
       nickname: '正式昵称',
       avatar_url: 'https://example.com/formal-avatar.png',
       is_admin: true,
-      membership: 'pro',
-      membership_expires_at: '2099-01-01T00:00:00.000Z',
-      ai_chat_count: 88,
     },
     unread: 4,
   });
-  const { appSettingsModule, routeModule } = installRoute(t, async () => mockAuthContext(
+  const { appSettingsModule, billingModule, routeModule } = installRoute(t, async () => mockAuthContext(
     { id: 'user-1', user_metadata: { nickname: '回退昵称', avatar_url: 'https://example.com/avatar.png' } },
     scoped.db,
   ));
   appSettingsModule.readFeatureTogglesState = async () => ({ loaded: true, toggles: { chat: false, tarot: true } });
+  billingModule.getBillingSummary = async () => ({ walletMicros: 100, subscriptionMicros: 500, spendableMicros: 600 });
 
   const response = await routeModule.GET(new NextRequest('http://localhost/api/app/bootstrap'));
   const payload = await response.json();
@@ -132,14 +135,14 @@ test('app bootstrap route should return viewer summary, membership, toggles and 
   assert.equal(payload.data.viewerSummary.nickname, '正式昵称');
   assert.equal(payload.data.viewerSummary.isAdmin, true);
   assert.equal(payload.data.viewerErrorMessage, null);
-  assert.equal(payload.data.membership.type, 'pro');
-  assert.equal(payload.data.membership.aiChatCount, 88);
+  assert.deepEqual(payload.data.billing, { walletMicros: 100, subscriptionMicros: 500, spendableMicros: 600 });
   assert.equal(payload.data.featureToggles.chat, false);
   assert.equal(payload.data.featureTogglesLoaded, true);
   assert.equal(payload.data.featureTogglesErrorMessage, null);
   assert.equal(payload.data.unreadCount, 4);
   assert.equal(payload.data.unreadCountLoaded, true);
   assert.equal(scoped.reads(), 1);
+  assert.equal('membership' in payload.data, false);
 });
 
 test('app bootstrap route should return public state for anonymous users', async (t) => {
@@ -153,7 +156,7 @@ test('app bootstrap route should return public state for anonymous users', async
   assert.equal(payload.data.viewerLoaded, true);
   assert.equal(payload.data.viewerSummary, null);
   assert.equal(payload.data.viewerErrorMessage, null);
-  assert.equal(payload.data.membership, null);
+  assert.equal(payload.data.billing, null);
   assert.equal(payload.data.featureToggles.chat, false);
   assert.equal(payload.data.featureTogglesLoaded, true);
   assert.equal(payload.data.featureTogglesErrorMessage, null);
@@ -191,7 +194,7 @@ test('app bootstrap route should mark viewer state as unloaded when profile look
   assert.equal(payload.data.viewerLoaded, false);
   assert.equal(payload.data.viewerSummary, null);
   assert.equal(payload.data.viewerErrorMessage, '加载账户状态失败');
-  assert.equal(payload.data.membership, null);
+  assert.equal(payload.data.billing, null);
   assert.equal(payload.data.unreadCount, 2);
   assert.equal(payload.data.unreadCountLoaded, true);
 });
@@ -211,7 +214,7 @@ test('app bootstrap route should keep viewer state unloaded when user-row recove
   assert.equal(payload.data.viewerLoaded, false);
   assert.equal(payload.data.viewerSummary, null);
   assert.equal(payload.data.viewerErrorMessage, '加载账户状态失败');
-  assert.equal(payload.data.membership, null);
+  assert.equal(payload.data.billing, null);
   assert.equal(payload.data.unreadCountLoaded, true);
 });
 
@@ -223,9 +226,6 @@ test('app bootstrap route should recover a missing user row before returning vie
       nickname: '补建昵称',
       avatar_url: null,
       is_admin: false,
-      membership: 'free',
-      membership_expires_at: null,
-      ai_chat_count: 1,
     }],
     unread: 0,
     onInsert: (seed) => { seededNickname = seed.nickname; },
@@ -248,32 +248,28 @@ test('app bootstrap route should recover a missing user row before returning vie
   assert.equal(payload.data.viewerErrorMessage, null);
 });
 
-test('app bootstrap route should downgrade expired viewer membership to free consistently', async (t) => {
+test('app bootstrap keeps the viewer but reports a partial response when the balance cannot be read', async (t) => {
   const scoped = viewerScoped({
     profile: {
       id: 'user-1',
-      nickname: '过期用户',
+      nickname: '用户',
       avatar_url: null,
       is_admin: false,
-      membership: 'pro',
-      membership_expires_at: '2020-01-01T00:00:00.000Z',
-      ai_chat_count: 7,
     },
     unread: 0,
   });
-  const { appSettingsModule, routeModule } = installRoute(t, async () => mockAuthContext(
+  const { appSettingsModule, billingModule, routeModule } = installRoute(t, async () => mockAuthContext(
     { id: 'user-1', user_metadata: {} },
     scoped.db,
   ));
   appSettingsModule.readFeatureTogglesState = async () => ({ loaded: true, toggles: {} });
+  billingModule.getBillingSummary = async () => { throw new Error('billing unavailable'); };
 
   const response = await routeModule.GET(new NextRequest('http://localhost/api/app/bootstrap'));
   const payload = await response.json();
 
-  assert.equal(response.status, 200);
-  assert.equal(payload.data.membership.type, 'free');
-  assert.equal(payload.data.membership.isActive, false);
-  assert.equal(payload.data.viewerSummary.membershipType, 'free');
-  assert.equal(payload.data.viewerSummary.aiChatCount, 7);
-  assert.equal(payload.data.viewerSummary.membershipExpiresAt, null);
+  assert.equal(response.status, 207);
+  assert.equal(payload.data.viewerLoaded, true);
+  assert.equal(payload.data.viewerSummary.nickname, '用户');
+  assert.equal(payload.data.billing, null);
 });

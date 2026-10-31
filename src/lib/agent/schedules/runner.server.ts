@@ -1,10 +1,11 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
-import { getAgentScheduleLimits, readFeatureModuleStateFresh } from '@/lib/app-settings';
+import { readFeatureModuleStateFresh } from '@/lib/app-settings';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
-import { isModelAllowedForMembership } from '@/lib/ai/ai-access';
-import { getUserCreditInfo } from '@/lib/user/credits';
+import { isModelOffered } from '@/lib/ai/ai-access';
+import { getSpendableMicros } from '@/lib/billing/account.server';
+import { isFreeTextModel } from '@/lib/billing/pricing';
 import type { Mention } from '@/types';
 import { AgentApiError, submitAgentTask, type AgentSubmitBody } from '../submit.server';
 import { expandAgentSchedulePrompt } from './config';
@@ -16,7 +17,7 @@ import {
 export type AgentScheduleProcessSummary = { claimed: number; submitted: number; skipped: number; failed: number };
 type ScheduleView = ReturnType<typeof toAgentScheduleView>;
 type RunView = ReturnType<typeof toAgentScheduleRunView>;
-type SkipReason = 'insufficient_credits' | 'model_unavailable' | 'feature_disabled' | 'conversation_missing' | 'conversation_busy';
+type SkipReason = 'insufficient_balance' | 'model_unavailable' | 'feature_disabled' | 'conversation_missing' | 'conversation_busy';
 
 function logFailure(code: string, details: Record<string, unknown> = {}) {
   console.error('[agent-schedules]', { code, ...details });
@@ -58,28 +59,28 @@ async function skipReason(db: ScopedDb, schedule: ScheduleView): Promise<{ reaso
     return { reason: 'feature_disabled', message: '功能已关闭，本次运行已跳过。' };
   if (chat.status === 'unavailable' || agent.status === 'unavailable' || schedules.status === 'unavailable')
     throw new AgentScheduleError('功能状态暂时无法确认', 503, 'FEATURE_STATE_UNAVAILABLE');
-  const account = await getUserCreditInfo(schedule.userId, { db });
-  if (account.credits <= 0) return { reason: 'insufficient_credits', message: '积分不足，本次运行已跳过。' };
   const config = schedule.options.model
     ? await getModelConfigAsync(schedule.options.model)
     : await getDefaultModelConfigAsync('chat');
-  if (!config || !isModelAllowedForMembership(config, account.membership))
-    return { reason: 'model_unavailable', message: '模型不可用或当前会员无权限，本次运行已跳过。' };
+  if (!config || !isModelOffered(config))
+    return { reason: 'model_unavailable', message: '模型不可用或尚未定价，本次运行已跳过。' };
+  if (!isFreeTextModel(config.pricing) && await getSpendableMicros(schedule.userId, db) <= 0)
+    return { reason: 'insufficient_balance', message: '余额不足，本次运行已跳过。' };
   return null;
 }
 
 function failureOutcome(error: unknown): { kind: 'skipped'; reason: SkipReason } | { kind: 'failed'; message: string } {
   if (error instanceof AgentApiError) {
-    if (error.code === 'INSUFFICIENT_CREDITS') return { kind: 'skipped', reason: 'insufficient_credits' };
-    if (error.code === 'MEMBERSHIP_REQUIRED' || error.code === 'PROFILE_UNAVAILABLE') return { kind: 'skipped', reason: 'model_unavailable' };
+    if (error.code === 'INSUFFICIENT_BALANCE') return { kind: 'skipped', reason: 'insufficient_balance' };
+    if (error.code === 'MODEL_UNPRICED' || error.code === 'PROFILE_UNAVAILABLE') return { kind: 'skipped', reason: 'model_unavailable' };
     if (error.code === 'FEATURE_DISABLED') return { kind: 'skipped', reason: 'feature_disabled' };
     if (error.code === 'CONVERSATION_NOT_FOUND') return { kind: 'skipped', reason: 'conversation_missing' };
     if (error.code === 'CONVERSATION_BUSY') return { kind: 'skipped', reason: 'conversation_busy' };
     return { kind: 'failed', message: error.message };
   }
   const message = error instanceof Error ? error.message : '';
-  if (message.includes('INSUFFICIENT_CREDITS')) return { kind: 'skipped', reason: 'insufficient_credits' };
-  if (message.includes('MEMBERSHIP_REQUIRED') || message.includes('模型不存在')) return { kind: 'skipped', reason: 'model_unavailable' };
+  if (message.includes('INSUFFICIENT_BALANCE')) return { kind: 'skipped', reason: 'insufficient_balance' };
+  if (message.includes('MODEL_UNPRICED') || message.includes('模型不存在')) return { kind: 'skipped', reason: 'model_unavailable' };
   if (message.includes('FEATURE_DISABLED')) return { kind: 'skipped', reason: 'feature_disabled' };
   if (message.includes('AGENT_CONVERSATION_NOT_FOUND') || message.includes('CONVERSATION_NOT_FOUND')) return { kind: 'skipped', reason: 'conversation_missing' };
   if (message.includes('AGENT_CONVERSATION_BUSY') || message.includes('CONVERSATION_BUSY')) return { kind: 'skipped', reason: 'conversation_busy' };
@@ -155,13 +156,12 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
 }
 
 /**
- * One scheduler tick: pause anything over the current tier limit, then claim due
+ * One scheduler tick: pause anything over the per-member limit, then claim due
  * occurrences and submit them. A failure in one schedule is contained to that run.
  */
 export async function processAgentSchedules(options: { limit?: number; db?: ScopedDb } = {}): Promise<AgentScheduleProcessSummary> {
   const db = options.db ?? systemDb();
-  const limits = await getAgentScheduleLimits();
-  await db.rpc('enforce_agent_schedule_limits', { p_limits: limits });
+  await db.rpc('enforce_agent_schedule_limits', {});
   const claimed = await db.rpc('claim_agent_schedules', { p_limit: options.limit ?? 20 }) as unknown as AgentScheduleRunRow[];
   const summary: AgentScheduleProcessSummary = { claimed: claimed.length, submitted: 0, skipped: 0, failed: 0 };
   for (const raw of claimed) {
@@ -182,7 +182,7 @@ export async function processAgentSchedules(options: { limit?: number; db?: Scop
 
 /**
  * 立即运行：a manual occurrence regardless of the schedule being paused. It still
- * checks credits, the model and the feature state, and refuses to stack on a run
+ * checks the balance, the model and the feature state, and refuses to stack on a run
  * that has not settled.
  */
 export async function runAgentScheduleNow(userId: string, scheduleId: string, db: ScopedDb = systemDb()): Promise<RunView> {

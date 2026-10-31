@@ -1,12 +1,11 @@
 import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import { isModelAllowedForMembership, isReasoningAllowedForMembership } from '@/lib/ai/ai-access';
+import { isModelOffered, UNPRICED_MODEL_MESSAGE } from '@/lib/ai/ai-access';
 import { isFeatureModuleEnabled } from '@/lib/app-settings';
 import { buildPreviewPromptContext, type PreviewRequestBody } from '@/lib/chat/preview-context';
 import { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
-import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 
 export async function POST(request: NextRequest) {
@@ -36,22 +35,17 @@ export async function POST(request: NextRequest) {
             return jsonError('无效的模型', 400);
         }
 
-        const membershipType = await getEffectiveMembershipType(auth.user.id, { db: auth.db });
-        const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
-        if (!isModelAllowedForMembership(modelConfig, membershipType)) {
-            return jsonError('当前会员等级无法使用该模型', 403);
+        if (!isModelOffered(modelConfig)) {
+            return jsonError(UNPRICED_MODEL_MESSAGE, 403, { code: 'MODEL_UNPRICED' });
         }
 
-        const reasoningEnabled = isReasoningAllowedForMembership(modelConfig, membershipType)
-            ? body.reasoning === true
-            : false;
-        const canUsePromptKnowledgeBase = knowledgeBaseFeatureEnabled && membershipType !== 'free';
+        const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
+        const reasoningEnabled = modelConfig.supportsReasoning ? body.reasoning === true : false;
         const previewContext = await buildPreviewPromptContext({
             auth,
             body,
             requestedModelId: modelConfig.id,
             reasoningEnabled,
-            membershipType,
             knowledgeBaseFeatureEnabled,
             sharedPromptContextBuilder: buildChatPromptContext,
         });
@@ -64,15 +58,10 @@ export async function POST(request: NextRequest) {
             historyTokens: previewContext.historyTokens,
             contextTotal: previewContext.contextTotal,
             remainingContext: previewContext.remainingContext,
-            promptKnowledgeBases: canUsePromptKnowledgeBase
-                ? previewContext.promptKnowledgeBases
-                : [],
+            promptKnowledgeBases: previewContext.promptKnowledgeBases,
             preview: previewContext.preview,
         });
     } catch (error) {
-        if (error instanceof MembershipResolutionError) {
-            return jsonError(error.message, 500);
-        }
         const message = error instanceof Error ? error.message : 'unknown error';
         return jsonError('生成预览失败', 500, { message });
     }

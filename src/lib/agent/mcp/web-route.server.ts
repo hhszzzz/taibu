@@ -1,8 +1,6 @@
 import 'server-only';
 import { toLlmContent, type CallToolResult, type Tool } from '@earendil-works/pi-mcp';
 import { systemDb } from '@/lib/db/context.server';
-import type { MembershipType } from '@/lib/user/membership';
-import { MEMBERSHIP_TIERS, meetsTier } from './config';
 import { describeMcpError, resolveMcpServer, type ResolvedMcpServer } from './endpoint.server';
 import { mcpPool, type McpPool } from './pool.server';
 import { platformMcpServers, recordMcpServerCheck, type McpServerRow } from './store.server';
@@ -18,7 +16,7 @@ import { WEB_SEARCH_QUERY_MAX, httpUrl, parseWebPage, parseWebSearchResults, typ
 
 export type WebRouteKind = 'search' | 'fetch';
 
-/** No server serves this member, or every one is resting after repeated failures. */
+/** No server is set up, or every one is resting after repeated failures. */
 export class WebRouteUnavailableError extends Error {}
 
 /** A failure worded here: a missing tool or an error result. `rest` is false when the page is at fault, not the server. */
@@ -128,29 +126,19 @@ export class WebRouter {
     void report(serverId, error).catch(() => undefined);
   }
 
-  /** Enabled platform servers with a tool for `kind` that the member's tier reaches, in the order they are tried. */
-  async routes(kind: WebRouteKind, membership: MembershipType): Promise<McpServerRow[]> {
+  /** Enabled platform servers with a tool for `kind`, in the order they are tried. */
+  async routes(kind: WebRouteKind): Promise<McpServerRow[]> {
     return (await this.servers())
-      .filter((row) => row.is_enabled && routeTool(row, kind) && meetsTier(membership, row.required_tier))
+      .filter((row) => row.is_enabled && routeTool(row, kind))
       .sort((left, right) => left.route_priority - right.route_priority || left.sort_order - right.sort_order || left.name.localeCompare(right.name));
   }
 
-  /** Whether a server serves this member; false when the servers cannot be read. */
-  async available(kind: WebRouteKind, membership: MembershipType): Promise<boolean> {
+  /** Whether any server is set up; false when the servers cannot be read. */
+  async available(kind: WebRouteKind): Promise<boolean> {
     try {
-      return (await this.routes(kind, membership)).length > 0;
+      return (await this.routes(kind)).length > 0;
     } catch {
       return false;
-    }
-  }
-
-  /** The lowest tier any server serves, or null when none is set up (or the servers cannot be read). */
-  async lowestTier(kind: WebRouteKind): Promise<MembershipType | null> {
-    try {
-      const rows = (await this.servers()).filter((row) => row.is_enabled && routeTool(row, kind));
-      return MEMBERSHIP_TIERS.find((tier) => rows.some((row) => meetsTier(tier, row.required_tier))) ?? null;
-    } catch {
-      return null;
     }
   }
 
@@ -185,10 +173,10 @@ export class WebRouter {
    * answered but none had anything; throws the last failure when none answered.
    */
   private async route<T>(
-    kind: WebRouteKind, membership: MembershipType, signal: AbortSignal | undefined,
+    kind: WebRouteKind, signal: AbortSignal | undefined,
     args: (tool: Tool) => Record<string, unknown>, read: (output: WebToolOutput) => T | null,
   ): Promise<T | null> {
-    const routes = await this.routes(kind, membership);
+    const routes = await this.routes(kind);
     if (!routes.length) throw new WebRouteUnavailableError(`当前没有可用的${KIND_LABELS[kind]}服务`);
     const now = this.now();
     const ready = routes.filter((row) => (this.breakers.get(this.breaker(kind, row))?.restUntil ?? 0) <= now);
@@ -236,11 +224,11 @@ export class WebRouter {
   }
 
   /** Up to `limit` results from the first server that finds any; empty when every server answered without one. */
-  async search(query: string, options: { membership: MembershipType; signal?: AbortSignal; limit?: number }): Promise<WebSearchResult[]> {
+  async search(query: string, options: { signal?: AbortSignal; limit?: number } = {}): Promise<WebSearchResult[]> {
     const text = Array.from(query.replace(/\s+/gu, ' ').trim()).slice(0, WEB_SEARCH_QUERY_MAX).join('');
     if (!text) throw new Error('搜索词不能为空');
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? WEB_SEARCH_LIMIT.default), 1), WEB_SEARCH_LIMIT.max);
-    const results = await this.route('search', options.membership, options.signal,
+    const results = await this.route('search', options.signal,
       (tool) => searchArguments(tool, text, limit),
       (output) => {
         const found = parseWebSearchResults(output);
@@ -252,14 +240,14 @@ export class WebRouter {
   }
 
   /** The text of one public page, cut to `maxChars`; throws when no server could read it. */
-  async fetch(url: string, options: { membership: MembershipType; signal?: AbortSignal; maxChars?: number }): Promise<WebPage> {
+  async fetch(url: string, options: { signal?: AbortSignal; maxChars?: number } = {}): Promise<WebPage> {
     const address = httpUrl(url);
     if (!address) throw new Error('只能读取 http(s) 网页地址');
     const parsed = new URL(address);
     if (parsed.username || parsed.password) throw new Error('网页地址不能包含账号或密码');
     parsed.hash = '';
     const chars = Math.min(Math.max(Math.trunc(options.maxChars ?? WEB_FETCH_CHARS.default), 1_000), WEB_FETCH_CHARS.max);
-    const page = await this.route('fetch', options.membership, options.signal,
+    const page = await this.route('fetch', options.signal,
       (tool) => fetchArguments(tool, parsed.href, chars),
       (output) => parseWebPage(output, parsed.href));
     if (!page) throw new Error('没有读到这个网页的正文');
@@ -270,18 +258,14 @@ export class WebRouter {
 /** The process's router, shared by the Agent's tools and plain chat. */
 export const webRouter = new WebRouter();
 
-export function webRouteAvailable(kind: WebRouteKind, membership: MembershipType) {
-  return webRouter.available(kind, membership);
+export function webRouteAvailable(kind: WebRouteKind) {
+  return webRouter.available(kind);
 }
 
-export function webRouteLowestTier(kind: WebRouteKind) {
-  return webRouter.lowestTier(kind);
-}
-
-export function searchWeb(query: string, options: { membership: MembershipType; signal?: AbortSignal; limit?: number }) {
+export function searchWeb(query: string, options?: { signal?: AbortSignal; limit?: number }) {
   return webRouter.search(query, options);
 }
 
-export function fetchWebPage(url: string, options: { membership: MembershipType; signal?: AbortSignal; maxChars?: number }) {
+export function fetchWebPage(url: string, options?: { signal?: AbortSignal; maxChars?: number }) {
   return webRouter.fetch(url, options);
 }

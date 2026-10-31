@@ -1,5 +1,4 @@
 import { NextRequest } from 'next/server';
-import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { ingestFileAsService, backfillVectorsAsService } from '@/lib/knowledge-base/ingest';
 import { requireUserContext, jsonError, jsonOk, readMultipartForm } from '@/lib/api-utils';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
@@ -12,19 +11,6 @@ export async function POST(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     const { user, db } = auth;
-
-    let membership;
-    try {
-        membership = await getEffectiveMembershipType(user.id, { db });
-    } catch (error) {
-        if (error instanceof MembershipResolutionError) {
-            return jsonError(error.message, 500);
-        }
-        throw error;
-    }
-    if (membership === 'free') {
-        return jsonError('当前会员等级无法使用知识库', 403);
-    }
 
     // Bound the stream: a chunked request has no Content-Length to check.
     const parsed = await readMultipartForm(request, KNOWLEDGE_FILE_MAX_BYTES);
@@ -67,12 +53,10 @@ export async function POST(request: NextRequest) {
         { persistence: createKnowledgeBasePersistence(db) },
     );
 
-    if (membership === 'pro') {
-        try {
-            await backfillVectorsAsService(kbId, user.id, db, 100);
-        } catch (error) {
-            void error;
-        }
+    try {
+        await backfillVectorsAsService(kbId, user.id, db, 100);
+    } catch (error) {
+        void error;
     }
 
     return jsonOk({ success: true, ...ingestResult });

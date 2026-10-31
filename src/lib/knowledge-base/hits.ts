@@ -4,12 +4,10 @@ import type { ScopedDb } from '@/lib/db/context.server';
 import { searchKnowledge } from '@/lib/knowledge-base/search';
 import { stripMentionTokens } from '@/lib/mentions';
 import type { KnowledgeHit, RankedResult, SearchCandidate } from '@/lib/knowledge-base/types';
-import type { MembershipType } from '@/lib/user/membership';
 
 export interface BuildKnowledgeHitsOptions {
     query: string;
     userId: string;
-    membershipType: MembershipType;
     db: ScopedDb;
     promptKbIds: string[];
     knownNames?: { userId: string; names: ReadonlyMap<string, string> };
@@ -25,13 +23,10 @@ export interface BuildKnowledgeHitsOptions {
 export async function buildKnowledgeHits({
     query,
     userId,
-    membershipType,
     db,
     promptKbIds,
     knownNames,
 }: BuildKnowledgeHitsOptions): Promise<KnowledgeHit[]> {
-    if (membershipType === 'free') return [];
-
     const cleanedQuery = stripMentionTokens(query);
     if (!cleanedQuery || promptKbIds.length === 0) return [];
 
@@ -41,7 +36,6 @@ export async function buildKnowledgeHits({
         db,
         userId,
         kbIds: promptKbIds,
-        membershipType,
     });
 
     const candidates = results as Array<SearchCandidate | RankedResult>;

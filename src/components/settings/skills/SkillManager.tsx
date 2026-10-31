@@ -15,7 +15,6 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useListMotion } from '@/lib/motion/list';
-import { MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import { formatSkillBytes, type SkillInput, type SkillScope, type SkillView } from '@/lib/agent/skills/config';
 import { skillClient, type SkillListing } from '@/lib/agent/skills/client';
 import { SkillEditor, type SkillEditorSeed } from './SkillEditor';
@@ -145,7 +144,6 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
                 <div className="settings-list-item-text">
                   <strong className="mcp-server-title">
                     <span className="skill-name">{skill.name}</span>
-                    {scope === 'platform' ? <span className="mcp-badge">{MEMBERSHIP_TIER_LABELS[skill.requiredTier]}+</span> : null}
                     {skill.manualOnly ? <span className="mcp-badge" title="disable-model-invocation：模型不会自行加载">仅 /skill: 调用</span> : null}
                     {skill.shadowed ? <span className="mcp-badge mcp-badge-muted" title="平台有同名技能，任务中使用平台的那个">被平台同名技能覆盖</span> : null}
                     {skill.enabled ? null : <span className="mcp-badge mcp-badge-muted">已停用</span>}
@@ -174,7 +172,7 @@ export function SkillManager({ scope, userId, notice, canAdd = true, empty, onCh
           <p>{empty.detail}</p>
         </div>
       )}
-      <SkillEditor scope={scope} seed={editor} onClose={() => setEditor(null)} onSubmit={submit} />
+      <SkillEditor seed={editor} onClose={() => setEditor(null)} onSubmit={submit} />
       <ConfirmDialog
         isOpen={pendingDelete !== null}
         onClose={() => { if (!deleting) setPendingDelete(null); }}

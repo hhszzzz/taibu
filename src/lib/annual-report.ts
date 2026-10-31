@@ -59,27 +59,14 @@ export async function generateAnnualReport(
             hourDist[hour] = (hourDist[hour] || 0) + 1;
         }
 
-        // 3. 获取签到统计
-        const checkins = await db.tx((trx) => trx
-            .selectFrom('daily_checkins')
-            .select('reward_credits')
-            .where('user_id', '=', userId)
-            .where('checkin_date', '>=', `${year}-01-01`)
-            .where('checkin_date', '<=', `${year}-12-31`)
-            .execute());
-
-        const checkinList = checkins as Array<{ reward_credits: number }>;
-        const totalCheckinDays = checkinList.length;
-        const totalCreditsEarned = checkinList.reduce((sum, c) => sum + c.reward_credits, 0);
-
-        // 4. 计算活跃月份
+        // 3. 计算活跃月份
         const activeMonths = Object.keys(monthlyUsage).length;
 
-        // 5. 找出峰值小时
+        // 4. 找出峰值小时
         const peakHour = Object.entries(hourDist)
             .sort((a, b) => b[1] - a[1])[0]?.[0] || '12';
 
-        // 6. 获取首次和最后使用日期
+        // 5. 获取首次和最后使用日期
         const sortedConvs = [...convList].sort(
             (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
         );
@@ -109,10 +96,6 @@ export async function generateAnnualReport(
                     count,
                 })),
                 peakHour: parseInt(peakHour),
-            },
-            checkin: {
-                totalDays: totalCheckinDays,
-                totalCreditsEarned,
             },
         };
 

@@ -1,8 +1,8 @@
 import { NextRequest } from 'next/server';
-import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
 import { normalizeKnowledgeBaseInput } from '@/lib/knowledge-base/ingest';
+import { KNOWLEDGE_BASE_LIMIT } from '@/lib/knowledge-base/types';
 
 export async function GET(request: NextRequest) {
     const featureError = await ensureFeatureRouteEnabled('knowledge-base');
@@ -42,20 +42,6 @@ export async function POST(request: NextRequest) {
         return jsonError(normalized.error, 400);
     }
 
-    let membership;
-    try {
-        membership = await getEffectiveMembershipType(user.id, { db: scoped });
-    } catch (error) {
-        if (error instanceof MembershipResolutionError) {
-            return jsonError(error.message, 500);
-        }
-        throw error;
-    }
-    if (membership === 'free') {
-        return jsonError('当前会员等级无法创建知识库', 403);
-    }
-
-    const limit = membership === 'plus' ? 3 : 10;
     let data: unknown;
     try {
         data = await scoped.rpc('create_knowledge_base_with_limit', {
@@ -63,7 +49,7 @@ export async function POST(request: NextRequest) {
             p_name: normalized.data.name as string,
             p_description: normalized.data.description ?? null,
             p_weight: normalized.data.weight ?? 'normal',
-            p_limit: limit,
+            p_limit: KNOWLEDGE_BASE_LIMIT,
         });
     } catch (error) {
         console.error('[knowledge-base] Failed to create knowledge base transactionally:', error);

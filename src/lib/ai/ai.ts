@@ -22,6 +22,7 @@ import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai
 import { applySourceToModel, getOrderedModelSources } from './source-runtime';
 import { formatUserTime } from './prompt-time';
 import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
+import type { TokenUsage } from '@/lib/billing/pricing';
 // ===== 流式转换辅助函数 =====
 
 const SSE_ENCODER = new TextEncoder();
@@ -196,6 +197,16 @@ export interface AICallOptions {
     conversationId?: string;
     /** The member this call belongs to; the key covers it, so one member never shares another's partition. */
     cacheScope?: string;
+    /** Receives what the call used, for billing; absent when nobody pays for the call. */
+    onUsage?: (report: AIUsageReport) => void | Promise<void>;
+}
+
+/** One platform call's usage, priced by the model that served it; `estimated` when the provider reported none. */
+export type AIUsageReport = { model: AIModelConfig; usage: TokenUsage; estimated: boolean };
+
+function usageSink(options: AICallOptions | undefined, model: AIModelConfig) {
+    const onUsage = options?.onUsage;
+    return onUsage ? { onUsage: (usage: TokenUsage, estimated: boolean) => onUsage({ model, usage, estimated }) } : {};
 }
 
 export interface AICallResult {
@@ -282,6 +293,7 @@ export async function callAI(
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
             conversationId: options?.conversationId, cacheScope: options?.cacheScope,
+            ...usageSink(options, runtimeConfig),
         });
         return result.text;
     });
@@ -314,6 +326,7 @@ export async function callAIStream(
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
             conversationId: options?.conversationId, cacheScope: options?.cacheScope,
+            ...usageSink(options, runtimeConfig),
         });
         return fullStreamToSSE(result.fullStream);
     });
@@ -344,6 +357,7 @@ export async function callAIUIMessageResult(
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
             conversationId: options?.conversationId, cacheScope: options?.cacheScope,
+            ...usageSink(options, runtimeConfig),
         });
         return result;
     });
@@ -375,6 +389,7 @@ export async function callAIVision(
             temperature: options?.temperature,
             maxTokens: options?.maxTokens,
             conversationId: options?.conversationId, cacheScope: options?.cacheScope,
+            ...usageSink(options, runtimeConfig),
         });
         return result.text;
     });

@@ -34,11 +34,24 @@
 
 数据库直接维护当前 SQL：`schema.sql` 描述表与约束，`functions.sql` 描述函数与视图，`triggers.sql`、`access.sql`、`indexes.sql` 和 `seed.sql` 分别描述触发器、权限、索引与系统主体/数据不变量。没有编号迁移、校验账本或历史 SQL 重放。`db:init` 把声明对象与 PostgreSQL 反解文本比较，只应用差异，并删除文件不再声明的函数、视图、策略、触发器与索引；表与列的结构调整仍由维护者执行明确的 SQL，不能靠重跑建表文件完成。
 
-安全函数显式固定 `search_path` 与执行权限。积分、会员和账本写入由数据库事务共同约束；通知的用户写权限仅允许确认已读。
+安全函数显式固定 `search_path` 与执行权限。余额、订阅、账单流水、兑换码与订单只经 `SECURITY DEFINER` 函数在同一事务中写入，用户只能读自己的行；通知的用户写权限仅允许确认已读。
+
+## 计费
+
+平台模型按实际用量以美元计费，参照 new-api 的订阅与钱包。功能对所有人开放，上限统一；没有会员等级。
+
+- 金额以微美元整数保存（1 美元 = 1,000,000）。模型单价为美元每百万 token（输入、缓存读、缓存写、输出；缓存价留空按输入价）或每张图；单价留空即未定价，平台不提供该模型（`MODEL_UNPRICED`），全为 0 是免费模型。计价函数在 `src/lib/billing/pricing.ts`，单次费用向上取整。
+- 账户：`billing_accounts` 是钱包，`user_subscriptions` 是按周期发放、可重置的订阅额度（快照套餐的额度与重置周期，到期前惰性重置）。扣费先按到期顺序扣订阅，再扣钱包；`billing_ledger` 每次一条流水，记来源、模型、四类 token、资金来源与幂等键。
+- 准入与结算：对话、照片解读、润色调用前要求可用额度大于 0（402 `INSUFFICIENT_BALANCE`），结束后按上游用量入账，拿不到用量时按提示词与已产出文字估算并标 `estimated`；入账允许把钱包扣成小额负数。Agent 每次模型请求前后各做一次，见 [Agent 手册](Agent.md)。生图价格已知，预扣全额且不许欠费，没出的图退回。免费模型照样记 $0 流水。
+- 自定义模型（BYOK）：Key 只存浏览器。对话、照片解读（`direct-prepare` 只返回提示词，照片由浏览器直接发给服务商，`direct-persist` 保存结果）、润色与生图都由浏览器直连，生成的图片经 `/api/images/upload` 交给本站保存；Agent 任务加密暂存密钥、结束即删。BYOK 不计费也不记流水，定时任务不支持 BYOK。
+- 充值：兑换码（余额码或套餐码）、管理员加减余额与赠送订阅、用余额买套餐始终可用。易支付（支付宝/微信）在 `EPAY_API_URL`、`EPAY_PID`、`EPAY_KEY` 齐全时开启：下单生成待支付订单与签名表单，异步通知验签、核对金额后由 `payment_order_complete` 幂等入账。`billing-maintenance` 每 10 分钟处理到期订阅与超时订单。
+- 查看：用户在「订阅与余额」看余额、订阅、套餐与按来源/模型/类型/时间筛选的账单；管理员在「计费」管理套餐、兑换码、用户账户、订单与设置，并在「用量日志」查看全站调用与按模型汇总。浏览器直连的 BYOK 调用不经服务器，不在日志里。
+
+代码在 `src/lib/billing/`（数据库查询辅助在 `src/lib/db/billing-queries.ts`），路由在 `src/app/api/billing/` 与 `src/app/api/admin/billing/`，余额准入的统一响应在 `src/lib/api/balance-guard.ts`。
 
 ## AI 与 Agent
 
-各占术结果页不再在页内生成解读，统一由 AI 对话处理；仍保留的一次性解读（面相/手相照片解读）复用 `src/lib/api/divination-pipeline.ts`：资源归属、会员与模型权限、积分、限流、模型调用、原子持久化及失败补偿按现有用例执行。来源在 `src/lib/source-contracts.ts` 注册，保存复用 `createAIAnalysisConversation`。
+各占术结果页不再在页内生成解读，统一由 AI 对话处理；仍保留的一次性解读（面相/手相照片解读）复用 `src/lib/api/divination-pipeline.ts`：资源归属、模型定价准入、余额准入、限流、模型调用与按用量入账、原子持久化按现有用例执行。来源在 `src/lib/source-contracts.ts` 注册，保存复用 `createAIAnalysisConversation`。
 
 Agent 由后台 worker 执行 Pi Durable checkpoint。任务、租约与 fence、命令、工具产物和结算状态保存在 PostgreSQL；恢复执行必须持有有效租约，幂等收据避免重复落库。运行状态、用户主动保存和 BYOK 边界见 [Agent 手册](Agent.md)。
 

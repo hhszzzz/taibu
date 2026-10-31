@@ -19,7 +19,6 @@ function modules() {
     store: require('../lib/agent/mcp/store.server') as typeof import('../lib/agent/mcp/store.server'),
     endpoint: require('../lib/agent/mcp/endpoint.server') as typeof import('../lib/agent/mcp/endpoint.server'),
     settings: require('../lib/app-settings') as typeof import('../lib/app-settings'),
-    credits: require('../lib/user/credits') as typeof import('../lib/user/credits'),
     rateLimit: require('../lib/rate-limit') as typeof import('../lib/rate-limit'),
   };
 }
@@ -40,12 +39,11 @@ function asAdmin(t: TestContext) {
   return { invalidated: t.mock.method(store, 'invalidatePlatformMcpServers', async () => undefined) };
 }
 
-function asMember(t: TestContext, options: { membership?: 'free' | 'plus' | 'pro'; policy?: AgentExtensionsPolicy; used?: number } = {}) {
+function asMember(t: TestContext, options: { policy?: AgentExtensionsPolicy; used?: number } = {}) {
   mockAIFeatureState(t);
-  const { apiUtils, settings, credits, store } = modules();
+  const { apiUtils, settings, store } = modules();
   t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1'));
   t.mock.method(settings, 'getAgentExtensionsPolicy', async () => options.policy ?? DEFAULT_AGENT_EXTENSIONS_POLICY);
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: options.membership ?? 'plus', credits: 10, expiresAt: null }));
   t.mock.method(store, 'countMcpServers', async () => options.used ?? 0);
 }
 
@@ -134,31 +132,25 @@ test('the extension policy is saved only in its strict form', async (t) => {
   assert.deepEqual((await (await route.GET(request('/api/admin/agent-extensions-policy'))).json()).policy, DEFAULT_AGENT_EXTENSIONS_POLICY);
   const invalid = await route.PUT(request('/api/admin/agent-extensions-policy', { method: 'PUT', body: { policy: { connectors: { enabled: true } } } }));
   assert.equal(invalid.status, 400);
-  const policy = { ...DEFAULT_AGENT_EXTENSIONS_POLICY, connectors: { enabled: false, tiers: ['pro'], limits: { free: 0, plus: 0, pro: 5 } } };
+  const policy = { ...DEFAULT_AGENT_EXTENSIONS_POLICY, connectors: { enabled: false, limit: 5 } };
   const ok = await route.PUT(request('/api/admin/agent-extensions-policy', { method: 'PUT', body: { policy } }));
   assert.equal(ok.status, 200);
   assert.deepEqual(saved.mock.calls[0].arguments[0], policy);
 });
 
-test('a member adds connectors only while the policy allows their tier and count', async (t) => {
+test('a member adds connectors only while the policy allows them and their count', async (t) => {
   useKey(t);
   const { store } = modules();
   const insert = t.mock.method(store, 'insertMcpServer', async (_db: unknown, owner: string | null, fields: Record<string, unknown>, options: { limit?: number }) => {
     assert.equal(owner, 'user-1');
-    assert.equal(options.limit, 3);
+    assert.equal(options.limit, DEFAULT_AGENT_EXTENSIONS_POLICY.connectors.limit);
     return mcpServerRow({ id: SERVER_ID, owner_id: owner, name: fields.name as string, exposure: 'direct' });
   });
   const body = { name: 'notes', displayName: '笔记', url: 'https://mcp.notes.example/mcp', exposure: 'direct' };
   const { GET, POST } = await import('../app/api/user/connectors/route');
 
-  await t.test('free members are refused by tier', async (t) => {
-    asMember(t, { membership: 'free' });
-    const response = await POST(request('/api/user/connectors', { method: 'POST', body }));
-    assert.equal(response.status, 403);
-    assert.match((await response.json()).error, /当前会员/);
-  });
   await t.test('a closed policy refuses everyone', async (t) => {
-    asMember(t, { membership: 'pro', policy: { ...DEFAULT_AGENT_EXTENSIONS_POLICY, connectors: { ...DEFAULT_AGENT_EXTENSIONS_POLICY.connectors, enabled: false } } });
+    asMember(t, { policy: { ...DEFAULT_AGENT_EXTENSIONS_POLICY, connectors: { ...DEFAULT_AGENT_EXTENSIONS_POLICY.connectors, enabled: false } } });
     const response = await POST(request('/api/user/connectors', { method: 'POST', body }));
     assert.equal(response.status, 403);
     assert.match((await response.json()).error, /管理员已关闭/);
@@ -173,12 +165,12 @@ test('a member adds connectors only while the policy allows their tier and count
     t.mock.method(store, 'listMcpServerRows', async () => [mcpServerRow({ id: SERVER_ID, owner_id: 'user-1' })]);
     assert.equal((await POST(request('/api/user/connectors', { method: 'POST', body }))).status, 201);
     const listed = await (await GET(request('/api/user/connectors'))).json();
-    assert.deepEqual(listed.allowance, { enabled: true, tierAllowed: true, limit: 3, used: 1, tiers: ['plus', 'pro'] });
+    assert.deepEqual(listed.allowance, { enabled: true, limit: DEFAULT_AGENT_EXTENSIONS_POLICY.connectors.limit, used: 1 });
     assert.equal(listed.servers[0].scope, 'user');
   });
   await t.test('a full allowance is reported as a conflict', async (t) => {
     asMember(t);
-    t.mock.method(store, 'insertMcpServer', async () => { throw new store.McpLimitError('最多添加 3 个连接器'); });
+    t.mock.method(store, 'insertMcpServer', async () => { throw new store.McpLimitError('最多添加 10 个连接器'); });
     const response = await POST(request('/api/user/connectors', { method: 'POST', body }));
     assert.equal(response.status, 409);
   });

@@ -1,8 +1,9 @@
-import type { MembershipType } from '@/lib/user/membership';
 import type { DataSourceType } from '@/lib/data-sources/types';
 
 /** Shared by HTTP and internal retrieval callers before embedding or SQL. */
 export const KNOWLEDGE_QUERY_MAX_LENGTH = 4_000;
+/** Knowledge bases one user may keep. */
+export const KNOWLEDGE_BASE_LIMIT = 10;
 
 export interface KnowledgeSourceChunk {
     content: string;
@@ -96,7 +97,6 @@ export interface SearchOptions {
     useVector?: boolean;
     db?: KnowledgeSearchDatabase;
     userId?: string;
-    membershipType?: MembershipType;
     searchConfig?: Partial<{
         ftsConfig: SearchConfig;
         enableTrigram: boolean;

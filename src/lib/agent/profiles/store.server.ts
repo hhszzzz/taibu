@@ -3,7 +3,6 @@ import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { isUniqueViolation } from '@/lib/db/errors';
 import { arrayValue, json } from '@/lib/db/sql-helpers';
 import { createSharedCache } from '@/lib/cache/shared.server';
-import { isMembershipTier } from '../mcp/config';
 import {
   AGENT_BUILTIN_PROFILES_KEY, AGENT_PROFILE_EFFORTS, AGENT_PROFILE_MODES, BUILTIN_AGENT_PROFILES, DEFAULT_AGENT_PROFILE,
   type AgentProfileEffort, type AgentProfileMode, type AgentProfileTools, type AgentProfileView,
@@ -24,7 +23,7 @@ function toolsOf(value: unknown): AgentProfileTools {
 
 type ProfileRow = {
   name: string; display_name: string; description: string; instructions: string; tools: unknown; skills: unknown;
-  model: string | null; reasoning_effort: string | null; modes: unknown; required_tier: string; is_enabled: boolean;
+  model: string | null; reasoning_effort: string | null; modes: unknown; is_enabled: boolean;
   sort_order: number; updated_at: string;
 };
 
@@ -34,7 +33,6 @@ function toView(row: ProfileRow): AgentProfileView {
     tools: toolsOf(row.tools), skills: strings(row.skills), model: row.model,
     reasoningEffort: AGENT_PROFILE_EFFORTS.includes(row.reasoning_effort as AgentProfileEffort) ? row.reasoning_effort as AgentProfileEffort : null,
     modes: AGENT_PROFILE_MODES.filter(mode => strings(row.modes).includes(mode)),
-    requiredTier: isMembershipTier(row.required_tier) ? row.required_tier : 'pro',
     enabled: row.is_enabled, sortOrder: row.sort_order, updatedAt: row.updated_at,
   };
 }
@@ -44,7 +42,7 @@ type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
 
 const COLUMNS = [
   'name', 'display_name', 'description', 'instructions', 'tools', 'skills', 'model', 'reasoning_effort', 'modes',
-  'required_tier', 'is_enabled', 'sort_order', 'updated_at',
+  'is_enabled', 'sort_order', 'updated_at',
 ] as const;
 
 function rowsOf(trx: Trx) {
@@ -95,7 +93,6 @@ function columnsOf(fields: Partial<ProfileFields>) {
     ...(fields.model !== undefined ? { model: fields.model } : {}),
     ...(fields.reasoningEffort !== undefined ? { reasoning_effort: fields.reasoningEffort } : {}),
     ...(fields.modes !== undefined ? { modes: arrayValue<AgentProfileMode>(fields.modes) as never } : {}),
-    ...(fields.requiredTier !== undefined ? { required_tier: fields.requiredTier } : {}),
     ...(fields.enabled !== undefined ? { is_enabled: fields.enabled } : {}),
     ...(fields.sortOrder !== undefined ? { sort_order: fields.sortOrder } : {}),
   };

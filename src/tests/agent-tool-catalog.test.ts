@@ -25,10 +25,8 @@ import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixt
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
   t.mock.method(sdk, 'isModelAvailable', () => true);
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());
@@ -52,7 +50,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     run.input.memoryEnabled = true;
     // A skill the model may load, with a file to read, registers both skill tools.
     const skill: SkillRow = {
-      id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘案例', version: 1, required_tier: 'free', is_enabled: true,
+      id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘案例', version: 1, is_enabled: true,
       disable_model_invocation: false, sort_order: 0, created_at: '', updated_at: '', bytes: 40, files: [{ path: 'notes.md', bytes: 5 }],
     };
     const entry: SkillEntry = { ...skill, source: 'platform' };
@@ -66,7 +64,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     const names = [...tools.map((tool) => tool.name), ...[...parallel.tools ?? [], ...background.tools ?? []].map((tool) => tool.name)];
     assert.ok(names.includes('web_search') && names.includes('remember_user_fact') && names.includes('parallel_analysis') && names.includes(AGENT_BACKGROUND_TOOL));
     assert.ok(names.includes('web_fetch'), 'a page service offers the page read');
-    assert.deepEqual(routes.mock.calls.map(call => call.arguments).sort(), [['fetch', 'plus'], ['search', 'plus']], 'offered for the member\'s own tier');
+    assert.deepEqual(routes.mock.calls.map(call => call.arguments).sort(), [['fetch'], ['search']], 'a paid member route is offered');
     // The user's own material: notes, earlier conversations and the archive the model writes or proposes.
     for (const name of [...AGENT_DATA_DEFERRED_TOOLS, 'record_user_event', 'propose_archive_entry']) assert.ok(names.includes(name), name);
     for (const name of names) assert.notEqual(getAgentToolFamily(name), 'other', `${name} needs a family in tool-catalog.ts`);

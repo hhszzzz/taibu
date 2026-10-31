@@ -39,7 +39,7 @@ const { NAV_REGISTRY, getFeatureModules, getNavItemById, getSidebarToolItems } =
 
 const ENABLED_FLAGS = {
   sharesEnabled: true, skillsEnabled: true, connectorsEnabled: true,
-  upgradeEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
+  billingEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
   mcpServiceEnabled: true, agentEnabled: true, personalizationEnabled: true, helpEnabled: true, isAdmin: false,
 };
 
@@ -48,19 +48,19 @@ const ENABLED_FLAGS = {
 // Unit tests below retain fast route/registry contracts and unique UI/security guards.
 
 
-test('settings center keeps only the merged membership tab and rejects removed legacy credits hash', () => {
+test('settings center exposes the billing tab and rejects removed legacy credits hash', () => {
   const tabs = getSettingsCenterTabs(ENABLED_FLAGS);
 
-  assert.equal(tabs.some((tab) => tab.id === 'upgrade' && tab.disabled === false), true);
-  assert.equal(getNavItemById('settings-upgrade')?.href, getSettingsCenterRouteTarget('upgrade'));
+  assert.equal(tabs.some((tab) => tab.id === 'billing' && tab.disabled === false), true);
+  assert.equal(getNavItemById('settings-billing')?.href, getSettingsCenterRouteTarget('billing'));
   assert.equal(parseSettingsCenterHash('#settings/credits'), null);
   assert.equal(
-    getSettingsCenterRouteTarget('upgrade', { search: '?claim=ok' }),
-    '/settings/upgrade?claim=ok',
+    getSettingsCenterRouteTarget('billing', { search: '?payment=paid' }),
+    '/settings/billing?payment=paid',
   );
   assert.equal(
-    getSettingsCenterRouteTargetForPath('/daliuren', 'upgrade', { search: '?foo=bar' }),
-    '/settings/upgrade?foo=bar',
+    getSettingsCenterRouteTargetForPath('/daliuren', 'billing', { search: '?foo=bar' }),
+    '/settings/billing?foo=bar',
   );
   assert.equal(
     getSettingsCenterRouteTargetForPath('/', 'general'),
@@ -94,18 +94,18 @@ test('settings page addresses and legacy hashes resolve to the same categories',
   for (const tab of ['general', 'personalization', 'byok', 'charts', 'admin-features'] as const) {
     assert.equal(parseSettingsCenterPath('/settings/' + tab)?.tab, parseSettingsCenterHash('#settings/' + tab));
   }
-  assert.equal(parseSettingsCenterPath('/settings/admin-keys')?.tab, 'admin-keys');
+  assert.equal(parseSettingsCenterPath('/settings/admin-billing')?.tab, 'admin-billing');
   assert.equal(isAdminSubtabOwner('admin-features'), false);
   assert.equal(parseSettingsCenterPath('/settings/unknown'), null);
   assert.equal(parseSettingsCenterPath('/bazi'), null);
   assert.equal(getSettingsCenterRouteTarget('admin-ai-services', { subpath: 'gateways' }), '/settings/admin-ai-services/gateways');
 });
 
-test('disabled membership is unavailable in both tab projection and explanation', () => {
-  const flags = { ...ENABLED_FLAGS, upgradeEnabled: false };
-  assert.equal(getSettingsCenterTabs(flags).find(tab => tab.id === 'upgrade')?.disabled, true);
-  assert.deepEqual(getSettingsCenterDisabledState('upgrade', flags), {
-    title: '暂未开放', description: '当前订阅不可用。',
+test('disabled billing is unavailable in both tab projection and explanation', () => {
+  const flags = { ...ENABLED_FLAGS, billingEnabled: false };
+  assert.equal(getSettingsCenterTabs(flags).find(tab => tab.id === 'billing')?.disabled, true);
+  assert.deepEqual(getSettingsCenterDisabledState('billing', flags), {
+    title: '暂未开放', description: '当前订阅与余额不可用。',
   });
 });
 
@@ -116,7 +116,7 @@ test('checkin is removed from default user-facing tool orders', () => {
   assert.equal(defaultToolOrder.includes('checkin'), false);
   assert.equal(defaultMobileDrawerOrder.includes('checkin'), false);
   assert.equal(defaultMobileDrawerOrder.includes('user/credits'), false);
-  assert.equal(defaultMobileDrawerOrder.includes('settings-upgrade'), true);
+  assert.equal(defaultMobileDrawerOrder.includes('settings-billing'), true);
   assert.deepEqual(getSidebarToolItems().map(item => item.id), [...DEFAULT_TOOL_ORDER]);
 });
 
@@ -146,20 +146,20 @@ test('personalization registry and rendered link resolve the canonical settings 
   assert.match(html, /href="\/settings\/personalization"/u);
 });
 
-test('settings panels retain route boundaries, Linux.do claims and private account affordances', () => {
+test('settings panels retain route boundaries, payment results and private account affordances', () => {
   const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterHost.tsx'), 'utf8');
-  const upgradePanelSource = readFileSync(resolve(process.cwd(), 'src/components/settings/panels/UpgradePanel.tsx'), 'utf8');
+  const billingPanelSource = readFileSync(resolve(process.cwd(), 'src/components/settings/panels/BillingPanel.tsx'), 'utf8');
   const userMenuSource = readFileSync(resolve(process.cwd(), 'src/components/layout/UserMenu.tsx'), 'utf8');
 
   assert.doesNotMatch(hostSource, /import\(['"]@\/app\//u);
   assert.equal(hostSource.includes('SETTINGS_CENTER_GROUP_LABELS[entry.group]'), false);
-  assert.equal(upgradePanelSource.includes('const [hasLinuxDoLogin, setHasLinuxDoLogin] = useState(false)'), true);
-  assert.equal(upgradePanelSource.includes('setHasLinuxDoLogin(Boolean(bundle.linuxdo?.sub))'), true);
-  assert.equal(upgradePanelSource.includes('{hasLinuxDoLogin ? ('), true);
-  assert.equal(upgradePanelSource.includes("showToast('success', 'Linux.do 月度会员已领取')"), false);
-  assert.equal(upgradePanelSource.includes("showToast('success', `恭喜领取 ${planName ?? '会员'} 会员`)"), true);
-  assert.equal(upgradePanelSource.includes('const linuxDoClaimDisabled = hasLinuxDoLogin'), true);
-  assert.equal(upgradePanelSource.includes("returnTo: getSettingsCenterRouteTargetForPath(pathname, 'upgrade'"), true);
+  assert.equal(billingPanelSource.includes('const paymentResult = searchParams.get(\'payment\')'), true);
+  assert.equal(billingPanelSource.includes('url.searchParams.delete(\'payment\')'), true);
+  assert.equal(billingPanelSource.includes('showToast(result.tone, result.message)'), true);
+  assert.equal(billingPanelSource.includes('redeemCode(code)'), true);
+  assert.equal(billingPanelSource.includes('buyPlan(buying.id)'), true);
+  assert.equal(billingPanelSource.includes('submitCheckout(await startCheckout(input))'), true);
+  assert.equal(billingPanelSource.includes('formatUsd(result.amountMicros)'), true);
   assert.equal(userMenuSource.includes("`${membershipLabels[membership?.type || 'free']} Plan`"), false);
   // 账户菜单不再显示邮箱：不引 getUserEmailDisplay，也不渲染 user.email。
   assert.equal(userMenuSource.includes('getUserEmailDisplay'), false);

@@ -14,6 +14,8 @@ import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
+import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
+import { isFreeTokenPricing } from '@/lib/billing/format';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useChatBootstrap } from '@/lib/chat/use-chat-bootstrap';
 import { useChatState } from '@/lib/chat/use-chat-state';
@@ -21,7 +23,6 @@ import { useChatMessaging } from '@/lib/chat/use-chat-messaging';
 import { ChatLayout } from '@/components/chat/ChatLayout';
 import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
-import { CreditsModal } from '@/components/ui/CreditsModal';
 import { StatePanel, STATE_SECONDARY_ACTION_CLASS } from '@/components/ui/StatePanel';
 
 export default function ChatPage() {
@@ -42,8 +43,7 @@ export default function ChatPage() {
     } = useChatBootstrap({ user, sessionLoading, knowledgeBaseEnabled });
     const userId = user?.id ?? null;
     const viewerStateErrorMessage = appBootstrap.viewerStateError?.message ?? null;
-    const membership = appBootstrap.viewerStateLoaded ? appBootstrap.data.membership : null;
-    const credits = membership?.aiChatCount ?? null;
+    const balance = appBootstrap.viewerStateLoaded ? appBootstrap.data.billing : null;
     const bootstrapLoading = promptKnowledgeBasesLoading || appBootstrap.isLoading;
     const bootstrapErrorMessage = bootstrapError
         || viewerStateErrorMessage
@@ -62,11 +62,14 @@ export default function ChatPage() {
 
     const messaging = useChatMessaging({
         state, userId, user,
-        refreshViewerState: appBootstrap.refresh, markViewerCreditsExhausted: appBootstrap.markCreditsExhausted,
+        refreshViewerState: appBootstrap.refresh, markViewerBalanceExhausted: appBootstrap.markBalanceExhausted,
         showToast, router, searchParams,
     });
 
-    const isCreditLocked = typeof credits === 'number' && credits <= 0 && !state.customProviderActive && !messaging.agent.active;
+    const models = useAvailableModels(userId, { enabled: !!userId });
+    // A free model and your own API need no balance; the server still decides on each request.
+    const freeModel = isFreeTokenPricing(models.data?.find(model => model.id === state.selectedModel)?.pricing);
+    const balanceLocked = !!balance && balance.spendableMicros <= 0 && !freeModel && !state.customProviderActive && !messaging.agent.active;
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     if (bootstrapLocked) {
@@ -113,7 +116,7 @@ export default function ChatPage() {
                 displayName={userId ? appBootstrap.data.viewerSummary?.nickname : null}
                 inputValue={state.inputValue}
                 onInputChange={state.setInputValue}
-                disabled={isCreditLocked || bootstrapLocked}
+                disabled={bootstrapLocked}
                 chatMode={state.chatMode}
                 onChatModeChange={state.setChatMode}
                 selectedModel={state.selectedModel}
@@ -126,8 +129,8 @@ export default function ChatPage() {
                 onCollaboratorsChange={state.setCollaborators}
                 customProviderActive={state.customProviderActive}
                 customProviderLabel={state.customProviderLabel}
+                customImageModelId={state.customProviderConfig?.imageModelId}
                 userId={userId}
-                membershipType={membership?.type ?? 'free'}
                 attachmentState={state.attachmentState}
                 onAttachmentChange={state.setAttachmentState}
                 mentions={state.mentions}
@@ -136,7 +139,7 @@ export default function ChatPage() {
                 dreamContext={state.dreamContext}
                 dreamContextLoading={state.dreamContextLoading}
                 knowledgeBaseEnabled={knowledgeBaseEnabled}
-                isCreditLocked={isCreditLocked}
+                balanceLocked={balanceLocked}
             >
                 {state.kbTargetMessage && state.activeConversationId && isFeatureEnabled('knowledge-base') && (
                     <AddToKnowledgeBaseModal
@@ -150,10 +153,6 @@ export default function ChatPage() {
                 )}
             </ChatLayout>
 
-            <CreditsModal
-                isOpen={state.showCreditsModal}
-                onClose={() => state.setShowCreditsModal(false)}
-            />
             <AuthModal
                 isOpen={showAuthModal}
                 onClose={() => setShowAuthModal(false)}

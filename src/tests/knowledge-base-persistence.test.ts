@@ -197,7 +197,7 @@ test('hit names reuse only matching request owner, query missing IDs, and retain
             },
         } as never),
     });
-    const options = { query: 'question', userId: 'owner', membershipType: 'pro' as const, promptKbIds: ['a', 'b'], db: scoped };
+    const options = { query: 'question', userId: 'owner', promptKbIds: ['a', 'b'], db: scoped };
     const standalone = await buildKnowledgeHits(options);
     assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'owner', names: new Map([['a', 'a'], ['b', 'b']]) } }), standalone);
     assert.deepEqual(await buildKnowledgeHits({ ...options, knownNames: { userId: 'owner', names: new Map([['a', 'a']]) } }), standalone);
@@ -209,5 +209,5 @@ test('hit names reuse only matching request owner, query missing IDs, and retain
 test('missing resolved identity fails closed even with no hits', async () => {
     const search = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
     await assert.rejects(search.searchCandidates('query', { userId: 'caller-1' }), search.KnowledgeSearchContextError);
-    await assert.rejects(search.searchKnowledge('query', { userId: 'caller-1', membershipType: 'plus' }), search.KnowledgeSearchContextError);
+    await assert.rejects(search.searchKnowledge('query', { userId: 'caller-1' }), search.KnowledgeSearchContextError);
 });

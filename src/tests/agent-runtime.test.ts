@@ -29,17 +29,10 @@ import { config, row, MemoryStore, scripted, isSummaryTranscript } from "./helpe
 import { __dispatchAgentSignalForTests as dispatchAgentSignal } from "../lib/db/listen.server";
 beforeEach((t) => {
   assert.ok("mock" in t);
-  const credits =
-    require("../lib/user/credits") as typeof import("../lib/user/credits");
   const settings =
     require("../lib/app-settings") as typeof import("../lib/app-settings");
   const sdk =
     require("../lib/ai/providers/ai-sdk-provider") as typeof import("../lib/ai/providers/ai-sdk-provider");
-  t.mock.method(credits, "getUserCreditInfo", async () => ({
-    membership: "plus",
-    credits: 10,
-    expiresAt: null,
-  }));
   t.mock.method(settings, "readFeatureModuleStateFresh", async () => ({ status: "enabled" as const }));
   t.mock.method(sdk, "isModelAvailable", () => true);
 });
@@ -550,7 +543,7 @@ test("cached web and question results restore their public parts once before con
   assert.equal(searches.mock.callCount(), 0, "cache replay does not search again");
 });
 
-test("cached reads still check current feature and membership permissions", async (t) => {
+test("cached reads still check current feature permissions", async (t) => {
   const store = new MemoryStore(),
     run = row();
   const tools = await createAgentTools(store, run, run.checkpoint);
@@ -568,24 +561,17 @@ test("cached reads still check current feature and membership permissions", asyn
     features,
     "readFeatureModuleStateFresh",
     async (feature: Parameters<typeof features.readFeatureModuleStateFresh>[0]) =>
-      ({ status: feature === "ai-personalization" ? "disabled" as const : "enabled" as const }),
+      ({ status: feature === "ai-personalization" || feature === "knowledge-base" ? "disabled" as const : "enabled" as const }),
   );
   await assert.rejects(
     tools.find((t) => t.name === "read_user_profile")!.execute("profile", {}),
     /个性化功能已关闭/,
   );
-  const credits =
-    require("../lib/user/credits") as typeof import("../lib/user/credits");
-  t.mock.method(credits, "getUserCreditInfo", async () => ({
-    membership: "free",
-    credits: 10,
-    expiresAt: null,
-  }));
   await assert.rejects(
     tools
       .find((t) => t.name === "search_knowledge")!
       .execute("kb", { query: "查询" }),
-    /当前会员/,
+    /知识库功能已关闭/,
   );
 });
 

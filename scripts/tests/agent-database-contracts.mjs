@@ -15,9 +15,6 @@ export async function agentDatabaseContracts(
   await sql(
     `INSERT INTO identity.users(id) VALUES (${quote(owner)}),(${quote(other)});`,
   );
-  await asOwner(
-    `UPDATE public.users SET membership='plus',ai_chat_count=50 WHERE id IN (${quote(owner)},${quote(other)});`,
-  );
   const admin = (statement) => asActor(adminId, statement);
   const parsed = async (statement) => {
     const value = await admin(statement);
@@ -57,7 +54,7 @@ export async function agentDatabaseContracts(
   const create = async (conversationId, options = {}) => {
     const id = options.id ?? randomUUID();
     return parsed(
-      `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(options.input ?? input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${options.charge !== false}));`,
+      `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(options.input ?? input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${quote(options.billing ?? "metered")}));`,
     );
   };
   const claim = async (worker = "worker-a") => {
@@ -79,12 +76,8 @@ export async function agentDatabaseContracts(
     parsed(
       `SELECT to_jsonb(r) FROM public.agent_runs r WHERE id=${quote(id)};`,
     );
-  const balance = async () =>
-    Number(
-      await asOwner(
-        `SELECT ai_chat_count FROM public.users WHERE id=${quote(owner)};`,
-      ),
-    );
+  const runCount = () =>
+    asOwner(`SELECT count(*) FROM public.agent_runs WHERE user_id=${quote(owner)};`);
   const command = (
     run,
     request = randomUUID(),
@@ -111,7 +104,7 @@ export async function agentDatabaseContracts(
     await save([question, answer, tail("original-tail")]);
     const edit = async content => {
       const id = randomUUID();
-      const queued = await create(conversationId, { id, charge: false, input: { ...input(id), replaceFromMessageId: question.id, userMessage: { ...question, content } } });
+      const queued = await create(conversationId, { id, billing: "exempt", input: { ...input(id), replaceFromMessageId: question.id, userMessage: { ...question, content } } });
       const run = await claim();
       assert.equal(run.id, queued.id);
       await finish(run, "completed", { ...assistant(run.id), content: `answer:${content}`, metadata: { kbHitCount: 3 } });
@@ -146,7 +139,7 @@ export async function agentDatabaseContracts(
     const question = { id: "legacy-user", role: "user", content: "old", versions: null, currentVersionIndex: 9999999999, createdAt: "2026-01-01" };
     const following = { id: "following-user", role: "user", content: "tail", createdAt: "2026-01-01" };
     await asActor(owner, `SELECT public.replace_conversation_messages(${quote(conversationId)},${json([question, following])});`);
-    const queued = await create(conversationId, { id, charge: false, input: { ...input(id), replaceFromMessageId: question.id, userMessage: { ...question, content: "new" } } });
+    const queued = await create(conversationId, { id, billing: "exempt", input: { ...input(id), replaceFromMessageId: question.id, userMessage: { ...question, content: "new" } } });
     assert.equal(queued.input.userMessage.versions[0].aiContent, "");
     assert.deepEqual(queued.input.userMessage.versions[0].subsequentMessages, [following]);
     await finish(await claim(), "failed");
@@ -154,7 +147,7 @@ export async function agentDatabaseContracts(
 
   await t.test("active conversation deletion is blocked through owner/admin DELETE and graph RPC until cancellation settles once", async () => {
     for (const status of ["queued", "running", "awaiting_input", "cancelling"]) {
-      const conversationId = await createConversation(), before = await balance();
+      const conversationId = await createConversation();
       const queued = await create(conversationId);
       let run;
       if (status !== "queued") {
@@ -166,18 +159,15 @@ export async function agentDatabaseContracts(
       await assert.rejects(asActor(owner, direct), /AGENT_CONVERSATION_BUSY/, status);
       await assert.rejects(admin(direct), /AGENT_CONVERSATION_BUSY/, status);
       await assert.rejects(asActor(owner, `SELECT public.delete_conversation_graph(${quote(conversationId)});`), /AGENT_CONVERSATION_BUSY/, status);
-      assert.equal((await get(queued.id)).billing, "charged");
-      assert.equal(await balance(), before - 1);
+      assert.equal((await get(queued.id)).billing, "metered");
       assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(queued.id)};`), "1");
       await asActor(owner, `SELECT public.agent_cancel_run(${quote(queued.id)});`);
       if (status === "queued" || status === "awaiting_input") run = await claim();
       const settled = await finish(run, "cancelled");
-      assert.equal(settled.billing, "refunded");
-      assert.equal(await balance(), before);
+      assert.equal(settled.billing, "metered", "finishing never changes how the run is billed");
       await assert.rejects(finish(run, "cancelled"), /AGENT_LEASE_LOST/);
       assert.equal(await asActor(owner, `SELECT public.delete_conversation_graph(${quote(conversationId)});`), "t");
       assert.equal(await get(queued.id), null);
-      assert.equal(await balance(), before, "cascade only occurs after the durable refund");
     }
   });
 
@@ -259,7 +249,6 @@ export async function agentDatabaseContracts(
   });
 
   await t.test("Pi Durable admitted input stays awaiting a human reply instead of spinning queued leases", async () => {
-    const before = await balance();
     const cp = { ...checkpoint, version: 2, question: "补充信息？", durable: { engine: "pi-durable/1.4.0", seeded: true } };
     await create(await createConversation(), { checkpoint: cp });
     const run = await claim("durable-worker");
@@ -275,17 +264,16 @@ export async function agentDatabaseContracts(
     assert.equal(resumed.fence, run.fence + 1);
     await admin(`SELECT public.agent_durable_commit(${lease(resumed)},2,${json([submission(first, 2, "placed"), submission(second, 3, "placed")])},${json(cp)});`);
     await finish(resumed, "failed");
-    assert.equal(await balance(), before, "one original debit and refund survive every pause");
   });
 
-  await t.test('only the current engine may heartbeat, create or claim; unsupported creation never debits', async () => {
-    const before = await balance();
+  await t.test('only the current engine may heartbeat, create or claim; unsupported creation records nothing', async () => {
+    const before = await runCount();
     for (const engine of ['pi-durable/1.0.4', 'pi-durable/1.1.0', 'pi-durable/1.3.0', 'pi-agent-core/1.0.2', 'pi-durable/9.9.9']) {
       await assert.rejects(admin(`SELECT public.agent_worker_heartbeat('unsupported',${quote(engine)});`), /AGENT_ENGINE_UNSUPPORTED/);
       await assert.rejects(create(await createConversation(), { checkpoint: { ...checkpoint, durable: { engine } } }), /AGENT_ENGINE_UNSUPPORTED/);
     }
     await assert.rejects(create(await createConversation(), { checkpoint: { ...checkpoint, version: 1 } }), /AGENT_ENGINE_UNSUPPORTED/);
-    assert.equal(await balance(), before);
+    assert.equal(await runCount(), before);
     const next = await create(await createConversation());
     assert.equal(await parsed("SELECT to_jsonb(public.agent_claim_run('unsupported'));"), null);
     const current = await claim('v14-worker');
@@ -294,7 +282,7 @@ export async function agentDatabaseContracts(
   });
 
   await t.test('engine retirement fences every old active state, settles once and preserves completed history and artifacts', async () => {
-    const before = await balance(), active = [];
+    const active = [];
     for (const status of ['queued', 'running', 'awaiting_input', 'cancelling']) {
       const queued = await create(await createConversation()), run = await claim(`retire-${status}`);
       const artifact = await saveTool(run);
@@ -303,10 +291,10 @@ export async function agentDatabaseContracts(
       await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.3.0' } })},status=${quote(status)},cancel_requested=${status === 'cancelling'},public_message=${json(output)} WHERE id=${quote(queued.id)};`);
       active.push({ run, artifact });
     }
-    const historical = await create(await createConversation(), { charge: false });
+    const historical = await create(await createConversation(), { billing: "exempt" });
     await finish(await claim(), 'completed', { ...assistant(historical.id), content: '历史答复保留' });
     await asOwner(`UPDATE public.agent_runs SET checkpoint=${json({ ...checkpoint, durable: { engine: 'pi-durable/1.1.0' } })} WHERE id=${quote(historical.id)};`);
-    const current = await create(await createConversation(), { charge: false });
+    const current = await create(await createConversation(), { billing: "exempt" });
     // seed.sql settles retired-engine runs as the system principal it seeds;
     // the principal is removed again so later contracts keep their own admins.
     const seed = await readFile(new URL('../../database/seed.sql', import.meta.url), 'utf8');
@@ -324,28 +312,26 @@ export async function agentDatabaseContracts(
       assert.equal(messages.at(-1).agent.status, ended.status);
       await assert.rejects(finish(run, 'failed'), /AGENT_LEASE_LOST/);
     }
-    assert.equal(await balance(), before - 1, 'only the old partial answer stays charged');
     assert.equal((await get(historical.id)).public_message.content, '历史答复保留');
     assert.equal((await get(current.id)).status, 'queued');
     await asOwner(seed);
-    assert.equal(await balance(), before - 1);
     for (const { run } of active) assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_events WHERE run_id=${quote(run.id)} AND type IN ('failed','cancelled');`), '1');
     // seed.sql keeps the system principal it created; later contracts use their own administrators.
     await finish(await claim(), 'failed');
   });
 
   await t.test(
-    "Agent creation/debit/dedup is atomic; active conversation and browser overwrite are fenced",
+    "Agent creation/dedup is atomic; active conversation and browser overwrite are fenced",
     async () => {
       const conversationId = await createConversation(),
         id = randomUUID();
-      const before = await balance();
       const [a, b] = await Promise.all([
         create(conversationId, { id, request: id }),
         create(conversationId, { id: randomUUID(), request: id }),
       ]);
       assert.equal(a.id, b.id);
-      assert.equal(await balance(), before - 1);
+      assert.equal(await asOwner(`SELECT count(*) FROM public.agent_runs WHERE request_id=${quote(id)};`), "1");
+      await assert.rejects(create(await createConversation(), { billing: "charged" }), /23514/);
       await assert.rejects(
         create(conversationId, { request: id, hash: "different" }),
         /AGENT_REQUEST_MISMATCH/,
@@ -396,10 +382,8 @@ export async function agentDatabaseContracts(
       );
       const claimed = await claim();
       const ended = await finish(claimed, "failed");
-      assert.equal(ended.billing, "refunded");
-      assert.equal(await balance(), before);
+      assert.equal(ended.billing, "metered");
       await assert.rejects(finish(claimed, "failed"), /AGENT_LEASE_LOST/);
-      assert.equal(await balance(), before);
       assert.equal(
         await asOwner(
           `SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(a.id)};`,
@@ -445,14 +429,13 @@ export async function agentDatabaseContracts(
       );
       const stopped = await finish(second, "completed");
       assert.equal(stopped.status, "cancelled");
-      assert.equal(stopped.billing, "refunded");
+      assert.equal(stopped.billing, "metered");
     },
   );
 
   await t.test(
-    "Agent input pause/reply retain one debit; completion saves neither charts nor analysis records",
+    "Agent input pause/reply keep one run; completion saves neither charts nor analysis records",
     async () => {
-      const before = await balance();
       const queued = await create(await createConversation());
       let run = await claim();
       assert.equal(run.id, queued.id);
@@ -461,7 +444,6 @@ export async function agentDatabaseContracts(
         question: "出生信息？",
       });
       assert.equal(waiting.status, "awaiting_input");
-      assert.equal(await balance(), before - 1);
       assert.equal(
         await asOwner(
           `SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(run.id)};`,
@@ -488,7 +470,6 @@ export async function agentDatabaseContracts(
         { ...assistant(run.id), content: "可见分析" },
       );
       assert.equal(result.record_id, null);
-      assert.equal(await balance(), before - 1);
       const durable = JSON.parse(
         await asOwner(
           `SELECT json_build_object('records',(SELECT count(*) FROM public.ming_records WHERE user_id=${quote(owner)}),'charts',(SELECT count(*) FROM public.bazi_charts WHERE user_id=${quote(owner)}),'credentials',(SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(run.id)}),'message',(SELECT messages FROM public.conversations WHERE id=${quote(run.conversation_id)}),'cursor',(SELECT max(sequence) FROM public.agent_run_events WHERE run_id=${quote(run.id)}));`,
@@ -517,9 +498,8 @@ export async function agentDatabaseContracts(
   );
 
   await t.test(
-    "Agent accepted late commands are resumed before final save; visible stops keep debit and BYOK is exempt",
+    "Agent accepted late commands are resumed before final save; the billing mode chosen at creation stays",
     async () => {
-      const before = await balance();
       await create(await createConversation());
       let run = await claim();
       const cmd = JSON.parse(
@@ -548,13 +528,11 @@ export async function agentDatabaseContracts(
         ...assistant(run.id),
         content: "第一部分",
       });
-      assert.equal(ended.billing, "charged");
-      assert.equal(await balance(), before - 1);
-      await create(await createConversation(), { charge: false });
+      assert.equal(ended.billing, "metered");
+      await create(await createConversation(), { billing: "exempt" });
       run = await claim();
       ended = await finish(run, "failed");
       assert.equal(ended.billing, "exempt");
-      assert.equal(await balance(), before - 1);
     },
   );
 
@@ -592,7 +570,7 @@ export async function agentDatabaseContracts(
   );
 
   await t.test(
-    "Agent knowledge searches bind leased owner and current membership, then restore admin claims",
+    "Agent knowledge searches bind the leased owner, then restore admin claims",
     async () => {
       const kb = randomUUID(),
         otherKb = randomUUID();
@@ -617,13 +595,6 @@ export async function agentDatabaseContracts(
           ),
         ),
         [],
-      );
-      await asOwner(
-        `UPDATE public.users SET membership='free' WHERE id=${quote(owner)};`,
-      );
-      await assert.rejects(admin(`SELECT ${search};`), /MEMBERSHIP_REQUIRED/);
-      await asOwner(
-        `UPDATE public.users SET membership='plus' WHERE id=${quote(owner)};`,
       );
       await finish(run, "failed");
     },

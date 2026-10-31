@@ -11,7 +11,7 @@
  *   return run(page, '/tmp/taibu-browser/fixture.js');
  *
  * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel/CollaborationSettings,
- * ShareConversationMenu, AIModelPanel, AnnouncementManagementPanel, KeyManagementPanel, AgentTaskPanel, AgentProfilesPanel, ConversationListProvider, ChartPickerModal,
+ * ShareConversationMenu, AIModelPanel, AnnouncementManagementPanel, BillingCodesPanel, AgentTaskPanel, AgentProfilesPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, useComposerCommands, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
  * Fixture-only boundaries: auth I/O/profile/feature flags, unrelated lazy panels,
@@ -41,7 +41,7 @@ import { usePathname } from 'next/navigation';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
-import { KeyManagementPanel } from '@/components/admin/KeyManagementPanel';
+import { BillingCodesPanel } from '@/components/admin/billing/BillingCodesPanel';
 import { AgentTaskPanel } from '@/components/admin/AgentTaskPanel';
 import { AgentProfilesPanel } from '@/components/admin/AgentProfilesPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
@@ -396,7 +396,7 @@ function QuoteProbe() {
     <div ref={containerRef}><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} onQuoteMessage={add} /></div>
     <QuoteSelection containerRef={containerRef} messages={messages} onQuote={add} />
     <ChatComposer draftKey="quote-fixture" inputValue={value} onInputChange={setValue} onSend={send} isLoading={false}
-      userId="alice" membershipType="plus" disabled={false} quotes={quotes}
+      userId="alice" disabled={false} quotes={quotes}
       onRemoveQuote={index => setQuotes(current => current.filter((_, position) => position !== index))} />
   </section>;
 }
@@ -456,12 +456,12 @@ function AgentChatProbe() {
   const searchParams = useMemo(() => new URLSearchParams(), []);
   const state = useChatState({ userId: user?.id ?? null, sessionLoading: false, bootstrapLoading: false, router, searchParams });
   const messaging = useChatMessaging({ state, userId: user?.id ?? null, user,
-    refreshViewerState: async () => {}, markViewerCreditsExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
+    refreshViewerState: async () => {}, markViewerBalanceExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
   const [planMode, setPlanMode] = useState(false);
   const [codeMode, setCodeMode] = useState(false);
   window.fixture.agentChat = { state, messaging, planMode, codeMode };
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
-    <ComposerStatusBar agentMode disabled={false} userId={user?.id} membershipType="plus"
+    <ComposerStatusBar agentMode disabled={false} userId={user?.id}
       selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
       planMode={planMode} onPlanModeChange={setPlanMode} codeMode={codeMode} onCodeModeChange={setCodeMode}
@@ -471,7 +471,7 @@ function AgentChatProbe() {
 }
 function ComposerProbe() {
   const { user } = useSessionSafe();
-  const state = useComposerState({ userId: user?.id, isLoading: true, membershipType: 'pro',
+  const state = useComposerState({ userId: user?.id, isLoading: true,
     enabledDataSourceTypes: sourceTypes, mentions: empty, contextMessages: empty, promptKnowledgeBases: empty });
   window.fixture.composer = state;
   return <section data-testid="composer">
@@ -490,8 +490,8 @@ function ImageComposerProbe() {
   return <section data-testid="image-composer">
     <button type="button" onClick={() => setAvailable(true)}>Enable image model</button>
     <ChatComposer draftKey="image-fixture" inputValue={value} onInputChange={setValue} onSend={() => {}} isLoading={false}
-      userId="alice" membershipType="plus" disabled={false}
-      imageGeneration={available ? { sizes: ['1024x1024', '1536x1024'], creditCost: 2, maxCount: 4, onGenerate: options => setGenerated(options) } : undefined} />
+      userId="alice" disabled={false}
+      imageGeneration={available ? { sizes: ['1024x1024', '1536x1024'], priceMicros: 40_000, maxCount: 4, onGenerate: options => setGenerated(options) } : undefined} />
     {generated && <output data-testid="image-generated">{JSON.stringify(generated)}</output>}
     <GeneratedImageGallery images={[IMAGE_FIXTURE]} />
   </section>;
@@ -688,7 +688,7 @@ function Shell() {
       <button onClick={() => navigate('/other')}>Fixture Other route</button>
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
-      <button onClick={() => navigate('/keys')}>Fixture Keys route</button>
+      <button onClick={() => navigate('/billing-codes')}>Fixture Billing codes route</button>
       <button onClick={() => navigate('/agent-tasks')}>Fixture Agent tasks route</button>
       <button onClick={() => navigate('/agent-profiles')}>Fixture Agent roles route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
@@ -714,7 +714,7 @@ function Shell() {
     <output data-testid="stream">{stream ? stream.status + ':' + stream.content : 'idle'}</output>
     {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
-    {route === '/keys' && <section data-testid="activation-keys"><KeyManagementPanel /></section>}
+    {route === '/billing-codes' && <section data-testid="billing-codes"><BillingCodesPanel /></section>}
     {route === '/agent-tasks' && <section data-testid="agent-tasks"><AgentTaskPanel /></section>}
     {route === '/agent-profiles' && <section data-testid="agent-profiles"><AgentProfilesPanel /></section>}
     {composerMounted && <ComposerProbe />}
@@ -895,7 +895,8 @@ export async function build(outputDirectory) {
 function initialModel() {
   return {
     id: 'model-1', modelKey: 'fixture-model', displayName: 'Fixture Model', vendor: 'deepseek',
-    usageType: 'chat', isEnabled: true, sortOrder: 0, requiredTier: 'free',
+    usageType: 'chat', isEnabled: true, sortOrder: 0,
+    pricing: { input: 0.27, output: 1.1, cacheRead: null, cacheWrite: null, image: null },
     supportsVision: false, isReasoningDefault: false,
     thinkingLevels: ['low', 'high', 'max'], defaultReasoningEffort: 'high',
     contextWindow: 1000000, defaultMaxTokens: 32768,
@@ -946,7 +947,7 @@ export async function run(existingPage, bundlePath) {
         ] });
         // 定时任务：列表、新建、编辑、暂停/恢复、立即运行与运行历史，与真实接口同一形状。
         const scheduleList = agentIO.schedules ??= [];
-        const allowance = () => ({ tier: 'plus', limit: 5, used: scheduleList.length });
+        const allowance = () => ({ limit: 5, used: scheduleList.length });
         if (url.pathname === '/api/agent/schedules' && method === 'GET') return Response.json({ data: { schedules: scheduleList, allowance: allowance() }, error: null });
         if (url.pathname === '/api/agent/schedules' && method === 'POST') {
           const schedule = { id: 'schedule-' + (scheduleList.length + 1), userId: 'alice', name: body.name, template: body.template,
@@ -1087,16 +1088,19 @@ export async function run(existingPage, bundlePath) {
   ];
   let announcements = [];
   let failAnnouncementWrite = false;
-  const activationKey = (id, code, extra) => ({ id, key_code: code, key_type: 'membership', membership_type: 'plus', credits_amount: null,
-    is_used: false, used_by: null, used_at: null, created_at: '2026-01-02T00:00:00Z', ...extra });
-  let activationKeys = [
-    activationKey('key-unused', 'sk-fixtureunused001'),
-    activationKey('key-used', 'sk-fixtureused00002', { key_type: 'credits', membership_type: null, credits_amount: 50, is_used: true, used_by: 'alice', used_at: '2026-01-05T00:00:00Z' }),
+  // Redemption codes and plans as /api/admin/billing/{codes,plans} return them.
+  const billingPlan = { id: '7c0f4a7e-1b2c-4d3e-8f90-0a1b2c3d4e5f', title: '轻享月卡', subtitle: '', features: [], priceUsd: 5, durationUnit: 'month', durationValue: 1,
+    allowanceMicros: 6_000_000, resetPeriod: 'never', purchasable: true, enabled: true, maxPerUser: null, sortOrder: 0 };
+  const billingCode = (id, code, extra) => ({ id, code, kind: 'balance', amountMicros: 10_000_000, planId: null, planTitle: null, status: 'unused',
+    usedBy: null, usedAt: null, expiresAt: null, batchNote: null, createdAt: '2026-01-02T00:00:00Z', ...extra });
+  let billingCodes = [
+    billingCode('code-unused', 'tb-fixture-unused'),
+    billingCode('code-used', 'tb-fixture-used', { kind: 'subscription', amountMicros: null, planId: billingPlan.id, planTitle: billingPlan.title, status: 'used', usedBy: 'alice', usedAt: '2026-01-05T00:00:00Z' }),
   ];
-  let failKeyCreate = false;
+  let failCodeCreate = false;
   // The admin Agent task routes answer raw payloads: { runs } and { run, tree }.
   const agentTaskRun = { id: '7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f', conversationId: '0c9b8a7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d',
-    userEmail: 'alice@example.com', status: 'running', billing: 'charged', title: '看事业', model: 'fixture-analysis',
+    userEmail: 'alice@example.com', status: 'running', billing: 'metered', title: '看事业', model: 'fixture-analysis',
     modes: { codeMode: false, planMode: false, compact: false, web: false, collaborators: 1 }, workerId: 'worker-fixture', fence: 2,
     leaseUntil: '2026-10-21T00:01:00.000Z', cancelRequested: false, createdAt: '2026-10-21T00:00:00.000Z', updatedAt: '2026-10-21T00:00:30.000Z' };
   const agentTaskStart = Date.parse('2026-10-21T00:00:00.000Z');
@@ -1157,7 +1161,7 @@ export async function run(existingPage, bundlePath) {
   let fixtureShare = null;
   // Agent roles as /api/admin/agent-profiles lists them: the three built-in ones, then what the administrator adds.
   const builtinProfile = (name, displayName, sortOrder, allow) => ({ name, builtin: true, displayName, description: `${displayName}的说明`, instructions: '',
-    tools: { inherit: false, allow, deny: [] }, skills: [], model: null, reasoningEffort: null, modes: ['parallel', 'background'], requiredTier: 'free',
+    tools: { inherit: false, allow, deny: [] }, skills: [], model: null, reasoningEffort: null, modes: ['parallel', 'background'],
     enabled: true, sortOrder, updatedAt: null });
   const adminProfiles = [builtinProfile('specialist', '体系专家', -30, ['system']), builtinProfile('researcher', '研究员', -20, ['web', 'knowledge', 'skills']),
     builtinProfile('verifier', '复核员', -10, ['core', 'data'])];
@@ -1193,13 +1197,13 @@ export async function run(existingPage, bundlePath) {
     };
     const denied = () => route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ data: null, error: { message: 'Controlled fixture failure' } }) });
     if (url.pathname === '/api/app/bootstrap' && method === 'GET') return ok({ viewerLoaded: true,
-      viewerSummary: { userId: await page.evaluate(() => window.fixtureAuth.cookieUser), isAdmin: false, nickname: 'fixture', membership: 'plus', aiChatCount: 20 },
-      membership: { type: 'plus', isActive: true }, featureToggles: {}, featureTogglesLoaded: true, unreadCount: 0, unreadCountLoaded: true });
+      viewerSummary: { userId: await page.evaluate(() => window.fixtureAuth.cookieUser), isAdmin: false, nickname: 'fixture' },
+      billing: { walletMicros: 5_000_000, subscriptionMicros: 0, spendableMicros: 5_000_000 }, featureToggles: {}, featureTogglesLoaded: true, unreadCount: 0, unreadCountLoaded: true });
     if (url.pathname === '/api/models' && method === 'GET') return ok({ models: [
-      { id: 'fixture-analysis', name: '分析模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium', allowed: true, reasoningAllowed: true },
-      { id: 'fixture-review', name: '复核模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high', allowed: true, reasoningAllowed: true },
-      { id: 'fixture-denied', name: '受限模型', vendor: 'other', supportsReasoning: true, allowed: false, blockedReason: '会员限制', reasoningAllowed: false },
-      { id: 'fixture-toggle', name: '仅支持推理开关', vendor: 'other', supportsReasoning: true, allowed: true, reasoningAllowed: true },
+      { id: 'fixture-analysis', name: '分析模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium' },
+      { id: 'fixture-review', name: '复核模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high' },
+      { id: 'fixture-priced', name: '计价模型', vendor: 'other', supportsReasoning: false, pricing: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: null } },
+      { id: 'fixture-toggle', name: '仅支持推理开关', vendor: 'other', supportsReasoning: true },
     ] });
     if (url.pathname === '/api/user/profile' && method === 'GET') return ok({ profile: { id: await page.evaluate(() => window.fixtureAuth.cookieUser), is_admin: false } });
     if (url.pathname === '/api/annual-report' && method === 'GET') {
@@ -1207,8 +1211,7 @@ export async function run(existingPage, bundlePath) {
       const year = Number(url.searchParams.get('year'));
       return ok({ success: true, data: { report: { userId, year, generatedAt: '2026-10-23T00:00:00Z',
         usage: { totalAnalyses: (userId === 'alice' ? 11111 : 22222) + year, totalChats: 1, activeMonths: 1, firstUseDate: null, lastUseDate: null },
-        featureUsage: { bazi: 1 }, activity: { monthlyUsage: [{ month: 1, count: 1 }], weekdayDistribution: [], peakHour: 10 },
-        checkin: { totalDays: 1, totalCreditsEarned: 1 } } } }, true);
+        featureUsage: { bazi: 1 }, activity: { monthlyUsage: [{ month: 1, count: 1 }], weekdayDistribution: [], peakHour: 10 } } } }, true);
     }
     if (url.pathname.startsWith('/api/community/posts') && method === 'GET') {
       const userId = await page.evaluate(() => window.fixtureAuth.cookieUser);
@@ -1257,13 +1260,13 @@ export async function run(existingPage, bundlePath) {
       const owned = connectorsByUser[user];
       const [, , , , id, action] = url.pathname.split('/');
       const open = user === 'alice';
-      if (!id && method === 'GET') return ok({ servers: owned, allowance: { enabled: open, tierAllowed: open, limit: open ? 3 : 0, used: owned.length, tiers: open ? ['plus', 'pro'] : [] } }, true);
+      if (!id && method === 'GET') return ok({ servers: owned, allowance: { enabled: open, limit: open ? 3 : 0, used: owned.length } }, true);
       if (!id && method === 'POST') {
         // As the API answers: secrets come back by name only.
         const server = { id: 'connector-' + (owned.length + 1), scope: 'user', name: body.name, displayName: body.displayName, description: body.description ?? '',
           url: body.url, headers: body.headers ?? {}, secretHeaders: Object.keys(body.secretHeaders ?? {}), secretQuery: Object.keys(body.secretQuery ?? {}),
           exposure: body.exposure ?? 'deferred', toolPolicy: {}, searchTool: null, fetchTool: null, routePriority: 100,
-          requiredTier: 'free', enabled: body.enabled ?? true, timeoutMs: body.timeoutMs ?? 30000, maxResultChars: body.maxResultChars ?? 20000,
+          enabled: body.enabled ?? true, timeoutMs: body.timeoutMs ?? 30000, maxResultChars: body.maxResultChars ?? 20000,
           sortOrder: body.sortOrder ?? 0, snapshot: null, lastCheckedAt: null, lastError: null, updatedAt: '2026-10-26T00:00:00Z' };
         owned.push(server);
         return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ server }) });
@@ -1291,14 +1294,14 @@ export async function run(existingPage, bundlePath) {
       const open = user === 'alice';
       // The list leaves SKILL.md out; the detail carries it.
       const view = skill => Object.fromEntries(Object.entries(skill).filter(([key]) => key !== 'content'));
-      if (!id && method === 'GET') return ok({ skills: owned.map(view), allowance: { enabled: open, tierAllowed: open, limit: open ? 3 : 0, used: owned.length, tiers: open ? ['free', 'plus', 'pro'] : [] } }, true);
+      if (!id && method === 'GET') return ok({ skills: owned.map(view), allowance: { enabled: open, limit: open ? 3 : 0, used: owned.length } }, true);
       if (!id && method === 'POST') {
         // The server reads name and description from the frontmatter and refuses a SKILL.md without one.
         const front = /^---\n([\s\S]*?)\n---\n/u.exec(body.content ?? '')?.[1];
         const name = /^name: (\S+)$/mu.exec(front ?? '')?.[1];
         if (!name) return route.fulfill({ status: 400, json: { error: 'SKILL.md 开头需要用 --- 包住的 frontmatter，写明 name 与 description' } });
         const skill = { id: 'skill-' + (owned.length + 1), scope: 'user', name, description: /^description: (.+)$/mu.exec(front)?.[1] ?? '', version: 1,
-          requiredTier: 'free', enabled: body.enabled ?? true, manualOnly: false, sortOrder: body.sortOrder ?? 0, bytes: body.content.length,
+          enabled: body.enabled ?? true, manualOnly: false, sortOrder: body.sortOrder ?? 0, bytes: body.content.length,
           files: (body.files ?? []).map(file => ({ path: file.path, bytes: file.content.length })), shadowed: false, updatedAt: '2026-10-27T00:00:00Z', content: body.content };
         owned.push(skill);
         return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ skill: view(skill) }) });
@@ -1421,19 +1424,22 @@ export async function run(existingPage, bundlePath) {
       announcements = [announcement];
       return ok({ announcement });
     }
-    // The real route answers with raw payloads: GET { success, data }, POST/DELETE { success, ... }.
-    if (url.pathname === '/api/activation-keys') {
-      if (method === 'GET') return ok({ success: true, data: activationKeys }, true);
-      if (method === 'DELETE') {
-        activationKeys = activationKeys.filter(key => key.id !== url.searchParams.get('id'));
-        return ok({ success: true }, true);
-      }
-      if (failKeyCreate) { failKeyCreate = false; return ok({ success: false, error: 'Fixture key limit' }, true); }
-      const created = Array.from({ length: body.count }, (_, index) => activationKey('key-new-' + index, 'sk-fixturecreated0' + index, {
-        key_type: body.keyType, membership_type: body.membershipType ?? null, credits_amount: body.creditsAmount ?? null, created_at: '2026-01-06T00:00:00Z',
+    // The billing routes answer raw payloads: { plans }, { codes }; errors are { error }.
+    if (url.pathname === '/api/admin/billing/plans' && method === 'GET') return ok({ plans: [billingPlan] }, true);
+    if (url.pathname === '/api/admin/billing/codes') {
+      const status = url.searchParams.get('status');
+      if (method === 'GET') return ok({ codes: billingCodes.filter(code => !status || code.status === status) }, true);
+      if (failCodeCreate) { failCodeCreate = false; return route.fulfill({ status: 400, json: { error: 'Fixture code limit' } }); }
+      const created = Array.from({ length: body.count }, (_, index) => billingCode('code-new-' + index, 'tb-fixture-created-' + index, {
+        amountMicros: Math.round(body.amountUsd * 1_000_000), batchNote: body.batchNote || null, createdAt: '2026-01-06T00:00:00Z',
       }));
-      activationKeys = [...created, ...activationKeys];
-      return ok({ success: true, keys: created.map(key => key.key_code) }, true);
+      billingCodes = [...created, ...billingCodes];
+      return route.fulfill({ status: 201, json: { codes: created.map(code => code.code) } });
+    }
+    if (url.pathname.startsWith('/api/admin/billing/codes/') && method === 'DELETE') {
+      const id = url.pathname.split('/').pop();
+      billingCodes = billingCodes.map(code => code.id === id ? { ...code, status: 'disabled' } : code);
+      return ok({ disabled: true }, true);
     }
     if (url.pathname.startsWith('/api/admin/agent-profiles')) {
       const [, , , , name] = url.pathname.split('/');
@@ -1835,35 +1841,36 @@ export async function run(existingPage, bundlePath) {
         check('Announcement DELETE invalidates once', JSON.stringify(await page.evaluate(() => window.fixture.invalidations)) === JSON.stringify([{ queryKey: ['announcements'] }]));
       }
     }
-    await page.getByRole('button', { name: 'Fixture Keys route', exact: true }).click();
-    const keyPanel = page.getByTestId('activation-keys');
-    const keyReads = () => requests.filter(item => item.pathname === '/api/activation-keys' && item.method === 'GET').length;
-    await keyPanel.getByText('sk-fixtureunused001', { exact: true }).waitFor();
-    check('Activation key list renders keys from the { success, data } payload', await keyPanel.getByText('sk-fixtureused00002', { exact: true }).isVisible());
-    const readsBeforeFilter = keyReads();
-    await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).click();
-    check('Activation key filters narrow the loaded list without refetching', await keyPanel.getByText('sk-fixtureunused001', { exact: true }).count() === 0
-      && await keyPanel.getByRole('button', { name: '已使用 1', exact: true }).getAttribute('aria-pressed') === 'true' && keyReads() === readsBeforeFilter);
-    await keyPanel.getByRole('button', { name: '批量创建', exact: true }).click();
-    await chooseSelect(keyPanel, '类型', '积分发放');
-    await keyPanel.getByLabel('每个积分数量').fill('30');
-    await keyPanel.getByLabel('生成数量').fill('1.5');
-    check('Activation key form blocks fractional counts', await keyPanel.getByRole('button', { name: '生成', exact: true }).isDisabled());
-    await keyPanel.getByLabel('生成数量').fill('2');
-    failKeyCreate = true;
-    await keyPanel.getByRole('button', { name: '生成', exact: true }).click();
-    await page.getByText('Fixture key limit', { exact: true }).last().waitFor();
-    check('Activation key creation surfaces the server reason and keeps the form', await keyPanel.getByLabel('生成数量').inputValue() === '2');
-    await keyPanel.getByRole('button', { name: '生成', exact: true }).click();
-    await keyPanel.getByText('sk-fixturecreated01', { exact: true }).waitFor();
-    check('Activation key creation posts the batch, shows all keys and reloads', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'POST'
-      && item.body.count === 2 && item.body.keyType === 'credits' && item.body.creditsAmount === 30) && await keyPanel.getByText('已生成 2 个激活码', { exact: true }).isVisible()
-      && await keyPanel.getByRole('button', { name: '全部 4', exact: true }).getAttribute('aria-pressed') === 'true');
-    await keyPanel.getByRole('button', { name: '删除激活码 sk-fixtureused00002', exact: true }).click();
-    await page.getByRole('alertdialog').getByRole('button', { name: '确认删除', exact: true }).click();
-    await until(() => !document.querySelector('[data-testid="activation-keys"] table')?.textContent.includes('sk-fixtureused00002'));
-    check('Activation key deletion confirms first and removes only that key', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'DELETE' && item.search === '?id=key-used')
-      && await keyPanel.getByText('sk-fixtureunused001', { exact: true }).isVisible());
+    await page.getByRole('button', { name: 'Fixture Billing codes route', exact: true }).click();
+    const codePanel = page.getByTestId('billing-codes');
+    const codeTable = codePanel.getByRole('table', { name: '兑换码', exact: true });
+    await codeTable.getByText('tb-fixture-unused', { exact: true }).waitFor();
+    check('Redemption codes list balance and plan codes with their status', await codeTable.getByText('余额 $10.00', { exact: true }).isVisible()
+      && await codeTable.getByText('套餐「轻享月卡」', { exact: true }).isVisible() && await codeTable.getByText('已使用', { exact: true }).isVisible());
+    await codePanel.getByRole('button', { name: '已使用', exact: true }).click();
+    await until(() => !document.querySelector('[data-testid="billing-codes"] table')?.textContent.includes('tb-fixture-unused'));
+    check('The status filter asks the server for that status', requests.some(item => item.pathname === '/api/admin/billing/codes' && item.method === 'GET' && item.search === '?status=used'));
+    await codePanel.getByRole('button', { name: '全部', exact: true }).click();
+    await codeTable.getByText('tb-fixture-unused', { exact: true }).waitFor();
+    await codePanel.getByLabel('金额（美元）').fill('2.5');
+    await codePanel.getByLabel('数量').fill('1.5');
+    check('The code form blocks fractional counts', await codePanel.getByRole('button', { name: '生成', exact: true }).isDisabled());
+    await codePanel.getByLabel('数量').fill('2');
+    failCodeCreate = true;
+    await codePanel.getByRole('button', { name: '生成', exact: true }).click();
+    await page.getByText('Fixture code limit', { exact: true }).last().waitFor();
+    check('Code creation surfaces the server reason and keeps the form', await codePanel.getByLabel('数量').inputValue() === '2');
+    await codePanel.getByRole('button', { name: '生成', exact: true }).click();
+    await codePanel.getByLabel('刚生成的兑换码').waitFor();
+    check('Code creation posts the batch in USD, shows the new codes and reloads', requests.some(item => item.pathname === '/api/admin/billing/codes' && item.method === 'POST'
+      && item.body.kind === 'balance' && item.body.count === 2 && item.body.amountUsd === 2.5)
+      && await codePanel.getByLabel('刚生成的兑换码').inputValue() === 'tb-fixture-created-0\ntb-fixture-created-1'
+      && await codeTable.getByText('tb-fixture-created-1', { exact: true }).isVisible());
+    await codePanel.getByRole('button', { name: '作废兑换码 tb-fixture-unused', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: '作废', exact: true }).click();
+    await until(() => !document.querySelector('[data-testid="billing-codes"] button[aria-label="作废兑换码 tb-fixture-unused"]'));
+    check('Voiding a code confirms first and only that code turns void', requests.some(item => item.pathname === '/api/admin/billing/codes/code-unused' && item.method === 'DELETE')
+      && await codeTable.getByText('已作废', { exact: true }).isVisible() && await codePanel.getByRole('button', { name: '作废兑换码 tb-fixture-created-0', exact: true }).isVisible());
     await page.getByRole('button', { name: 'Fixture Agent tasks route', exact: true }).click();
     const taskPanel = page.getByTestId('agent-tasks');
     const taskListReads = () => requests.filter(item => item.pathname === '/api/admin/agent-runs');
@@ -2173,8 +2180,8 @@ export async function run(existingPage, bundlePath) {
     check('生图 button appears with the model and starts unpressed', await imageButton.getAttribute('aria-pressed') === 'false');
     await imageButton.click();
     const imageOptions = page.getByRole('group', { name: '生图设置' });
-    check('生图 mode shows size, count and the credit cost', await imageOptions.isVisible()
-      && (await imageOptions.innerText()).includes('每张 2 积分 · 共 2 积分'));
+    check('生图 mode shows size, count and the price', await imageOptions.isVisible()
+      && (await imageOptions.innerText()).includes('每张 $0.04 · 共 $0.04'));
     await page.getByLabel('描述要生成的图片').fill('水墨山居，晨雾缭绕');
     await page.getByLabel('描述要生成的图片').press('Enter');
     await page.getByTestId('image-generated').waitFor();
@@ -2605,11 +2612,10 @@ export async function run(existingPage, bundlePath) {
     await settingsTrigger.click();
     const modelSettings = page.getByRole('menu', { name: '模型与分析设置', exact: true });
     await modelSettings.waitFor();
-    check('Model settings retain disabled membership choices', await modelSettings.getByRole('menuitemradio', { name: /受限模型/ }).isDisabled());
+    check('A priced model shows its input and output prices beside its name', (await modelSettings.getByRole('menuitemradio', { name: /计价模型/ }).innerText()).includes('$3 / $15'));
     await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).focus();
     await page.keyboard.press('End');
-    check('Model keyboard navigation skips disabled models', await modelSettings.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).evaluate(item => item === document.activeElement)
-      && await modelSettings.getByRole('menuitemradio', { name: /受限模型/ }).evaluate(button => button !== document.activeElement));
+    check('Model keyboard navigation reaches the last row', await modelSettings.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).evaluate(item => item === document.activeElement));
     await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
     await settingsTrigger.click();
     await modelSettings.waitFor();
@@ -3870,7 +3876,7 @@ export async function run(existingPage, bundlePath) {
     check('A new member starts as the specialist', (await memberRole.textContent())?.trim() === '体系专家');
     const presetMember = () => page.evaluate(() => JSON.parse(localStorage.getItem('taibu:collaboration-preset:alice') ?? '{}').members?.[0]);
     await chooseSelect(memberDialog, '角色', '档案员');
-    await memberDialog.getByText('整理用户资料。 这个角色指定使用 复核模型，会员可用时代替上面的模型。', { exact: true }).waitFor();
+    await memberDialog.getByText('整理用户资料。 这个角色指定使用 复核模型，可用时代替上面的模型。', { exact: true }).waitFor();
     await memberDialog.getByRole('button', { name: '保存' }).click();
     await memberDialog.waitFor({ state: 'hidden' });
     check('A chosen role is kept in the preset', (await presetMember())?.profile === 'archivist');

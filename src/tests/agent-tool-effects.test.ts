@@ -8,9 +8,7 @@ import { createMockScopedDb } from './helpers/db-mock';
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
 });
 

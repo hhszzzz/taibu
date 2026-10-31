@@ -16,6 +16,7 @@ function mockUserContext(user: unknown, db = createMockScopedDb()) {
 
 type ProfileScopedOptions = {
   selectUsers: () => Promise<Row> | Row;
+  onSelectUsers?: (columns: unknown) => void;
   updateUsers?: (payload: Record<string, unknown>) => Promise<Row> | Row;
   selectSettings?: () => Promise<Row> | Row;
   onInsert?: (seed: Record<string, unknown>) => void;
@@ -26,7 +27,7 @@ function profileScoped(options: ProfileScopedOptions) {
     tx: async (work) => work({
       selectFrom(table: string) {
         const query = {
-          select() { return query; },
+          select(columns?: unknown) { if (table === 'users') options.onSelectUsers?.(columns); return query; },
           where() { return query; },
           async executeTakeFirst() {
             if (table === 'users') return options.selectUsers();
@@ -145,16 +146,15 @@ test('user profile route should update profile fields and return the normalized 
   assert.deepEqual(payload.settings?.promptKbIds, ['kb-1']);
 });
 
-test('user profile route should downgrade expired membership to free in profile responses', async (t) => {
+test('user profile route reads only identity columns and never legacy membership or usage fields', async (t) => {
+  const selected: unknown[] = [];
   const scoped = profileScoped({
+    onSelectUsers: (columns) => { selected.push(columns); },
     selectUsers: () => ({
       id: 'user-1',
       nickname: '过期会员',
       avatar_url: null,
       is_admin: false,
-      membership: 'pro',
-      membership_expires_at: '2020-01-01T00:00:00.000Z',
-      ai_chat_count: 7,
     }),
     selectSettings: () => null,
   });
@@ -164,9 +164,10 @@ test('user profile route should downgrade expired membership to free in profile 
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.equal(payload.profile?.membership, 'free');
-  assert.equal(payload.profile?.membership_expires_at, null);
-  assert.equal(payload.profile?.ai_chat_count, 7);
+  assert.deepEqual(selected[0], ['id', 'nickname', 'avatar_url', 'is_admin']);
+  assert.equal(payload.profile?.is_admin, false);
+  assert.equal('membership' in (payload.profile ?? {}), false);
+  assert.equal('ai_chat_count' in (payload.profile ?? {}), false);
 });
 
 test('user profile route should recover a missing user row before returning profile data', async (t) => {

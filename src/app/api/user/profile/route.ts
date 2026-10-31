@@ -1,7 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
-import { buildMembershipInfo, type MembershipType } from '@/lib/user/membership';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
 import { getUserSettingsSnapshot } from '@/lib/user/settings';
 
@@ -14,7 +13,7 @@ type UserProfilePatchBody = {
     avatar_url?: unknown;
 };
 
-const PROFILE_COLUMNS = ['id', 'nickname', 'avatar_url', 'is_admin', 'membership', 'membership_expires_at', 'ai_chat_count'] as const;
+const PROFILE_COLUMNS = ['id', 'nickname', 'avatar_url', 'is_admin'] as const;
 
 async function loadProfileRow(db: ScopedDb, userId: string): Promise<Record<string, unknown> | null> {
     const row = await db.tx((trx) => trx
@@ -54,28 +53,7 @@ async function loadProfileWithRecovery(
 }
 
 function normalizeProfileRow(row: Record<string, unknown> | null) {
-    if (!row) {
-        return null;
-    }
-
-    const membershipType: MembershipType | null = row.membership === 'free'
-        || row.membership === 'plus'
-        || row.membership === 'pro'
-        ? row.membership
-        : null;
-
-    const membership = buildMembershipInfo({
-        membership: membershipType,
-        membership_expires_at: typeof row.membership_expires_at === 'string' ? row.membership_expires_at : null,
-        ai_chat_count: typeof row.ai_chat_count === 'number' ? row.ai_chat_count : null,
-    });
-
-    return {
-        ...row,
-        membership: membership.type,
-        membership_expires_at: membership.expiresAt ? membership.expiresAt.toISOString() : null,
-        ai_chat_count: membership.aiChatCount,
-    };
+    return row ? { ...row, is_admin: row.is_admin === true } : null;
 }
 
 async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {

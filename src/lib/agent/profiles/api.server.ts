@@ -5,7 +5,6 @@ import { readFeatureModuleStateFresh } from '@/lib/app-settings';
 import { systemDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
-import { getUserCreditInfo } from '@/lib/user/credits';
 import { platformMcpServers } from '../mcp/store.server';
 import { platformSkills } from '../skills/store.server';
 import { AGENT_PROFILE_NAME_PATTERN, BUILTIN_AGENT_PROFILE_NAMES, DEFAULT_AGENT_PROFILE, type AgentProfileOption, type AgentProfileView } from './config';
@@ -104,14 +103,13 @@ export async function deleteAdminProfile(request: NextRequest, name: string) {
   }
 }
 
-/** The roles this member may give a collaboration member: none while the Agent is off. */
+/** The roles a user may give a collaboration member: none while the Agent is off. */
 export async function listProfileOptions(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
   try {
     if ((await readFeatureModuleStateFresh('agent')).status !== 'enabled') return jsonOk({ profiles: [] });
-    const { membership } = await getUserCreditInfo(auth.user.id, {});
-    const profiles: AgentProfileOption[] = (await availableProfiles(membership)).filter(profile => profile.modes.includes('parallel'))
+    const profiles: AgentProfileOption[] = (await availableProfiles()).filter(profile => profile.modes.includes('parallel'))
       .map(({ name, displayName, description, model, modes }) => ({ name, displayName, description, model, modes }));
     return jsonOk({ profiles });
   } catch (error) {

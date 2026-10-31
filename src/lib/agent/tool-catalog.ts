@@ -58,7 +58,7 @@ export const AGENT_TOOL_SCOPE_DEFINITIONS = [
   { id: 'knowledge', label: '知识库检索', description: '检索管理员或用户配置的知识库。' },
   { id: 'memory', label: '长期记忆', description: '读取、写入长期记忆及检索历史对话。' },
   { id: 'web', label: '联网与 MCP', description: '联网搜索以及外部 MCP 工具。' },
-  { id: 'image', label: '生图', description: '按文字描述生成图片，每张扣除相应积分。' },
+  { id: 'image', label: '生图', description: '按文字描述生成图片，每张按单价从余额扣费。' },
   { id: 'skills', label: '技能', description: '加载管理员与用户添加的技能及其附属文件，包括输入框的 /skill: 调用。' },
   { id: 'archive', label: '档案写入', description: '记录用户事件或生成档案保存卡片。' },
   { id: 'collaboration', label: 'Agent 协作', description: '并行分析和后台子分析。' },

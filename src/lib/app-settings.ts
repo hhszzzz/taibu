@@ -26,8 +26,8 @@ export const FEATURE_MODULE_IDS = [
   'daliuren', 'meihua', 'xiaoliuren',
   'face', 'palm', 'mbti', 'chat', 'daily', 'monthly',
   'records', 'community', 'knowledge-base', 'mcp-service',
-  'checkin', 'charts', 'ai-personalization',
-  'notifications', 'upgrade', 'help', 'agent',
+  'charts', 'ai-personalization',
+  'notifications', 'billing', 'help', 'agent',
   // Agent 的细粒度能力：各自可关，关掉后接口与入口一起失效。
   'skills', 'connectors', 'schedules', 'memory',
   'shares', 'annual-report',
@@ -310,7 +310,7 @@ export async function setAgentExtensionsPolicy(policy: AgentExtensionsPolicy): P
 
 // ─── 定时任务额度 ───
 
-/** How many schedules each membership tier may keep; the scheduler also pauses the excess after a downgrade. */
+/** How many schedules each user may keep; the scheduler pauses the excess after the limit is lowered. */
 const agentScheduleLimitsCache = createSharedCache<AgentScheduleLimits>({
   name: 'agent-schedule-limits',
   ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,

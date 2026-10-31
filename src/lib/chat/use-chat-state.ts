@@ -113,10 +113,6 @@ export interface ChatStateReturn {
     setStreamingConversationIds: React.Dispatch<React.SetStateAction<Set<string>>>;
     isLoading: boolean;
 
-    // Credits modal
-    showCreditsModal: boolean;
-    setShowCreditsModal: React.Dispatch<React.SetStateAction<boolean>>;
-
     // Actions
   refreshConversationList: (targetUserId?: string | null, options?: { targetCount?: number }) => Promise<void>;
   triggerConversationListLoad: (targetCount?: number) => void;
@@ -171,7 +167,6 @@ export function useChatState({
     const bumpConversationEpoch = useCallback(() => { conversationEpochRef.current += 1; }, []);
     const [conversationLoading, setConversationLoading] = useState(false);
     const [conversationError, setConversationError] = useState<string | null>(null);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
 
     // Messages state
     const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -526,7 +521,6 @@ export function useChatState({
         dreamContextLoading, setDreamContextLoading,
         streamingConversationIds, setStreamingConversationIds,
         isLoading,
-        showCreditsModal, setShowCreditsModal,
         refreshConversationList,
         triggerConversationListLoad,
         handleSelectConversation,

@@ -17,12 +17,11 @@ function modules() {
     context: require('../lib/db/context.server') as typeof import('../lib/db/context.server'),
     store: require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server'),
     settings: require('../lib/app-settings') as typeof import('../lib/app-settings'),
-    credits: require('../lib/user/credits') as typeof import('../lib/user/credits'),
   };
 }
 
 const skillRow = (overrides: Partial<SkillRow> = {}): SkillRow => ({
-  id: SKILL_ID, owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 1, required_tier: 'free',
+  id: SKILL_ID, owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 1,
   is_enabled: true, disable_model_invocation: false, sort_order: 0, created_at: '2026-10-27T00:00:00.000Z',
   updated_at: '2026-10-27T00:00:00.000Z', bytes: 80, files: [], ...overrides,
 });
@@ -34,12 +33,11 @@ function asAdmin(t: TestContext) {
   return { invalidated: t.mock.method(store, 'invalidatePlatformSkills', async () => undefined) };
 }
 
-function asMember(t: TestContext, options: { membership?: 'free' | 'plus' | 'pro'; policy?: AgentExtensionsPolicy; used?: number; platform?: SkillRow[] } = {}) {
+function asMember(t: TestContext, options: { policy?: AgentExtensionsPolicy; used?: number; platform?: SkillRow[] } = {}) {
   mockAIFeatureState(t);
-  const { apiUtils, settings, credits, store } = modules();
+  const { apiUtils, settings, store } = modules();
   t.mock.method(apiUtils, 'requireUserContext', async () => createMockAuthContext('user-1'));
   t.mock.method(settings, 'getAgentExtensionsPolicy', async () => options.policy ?? DEFAULT_AGENT_EXTENSIONS_POLICY);
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: options.membership ?? 'free', credits: 10, expiresAt: null }));
   t.mock.method(store, 'countSkills', async () => options.used ?? 0);
   t.mock.method(store, 'platformSkills', async () => options.platform ?? []);
   return { invalidated: t.mock.method(store, 'invalidatePlatformSkills', async () => undefined) };
@@ -66,22 +64,23 @@ test('administrator skill routes refuse other users before reading anything', as
   assert.equal(listed.mock.callCount() + inserted.mock.callCount(), 0);
 });
 
-test('an administrator adds a platform skill with its tier and files, and tasks see it through the shared cache', async (t) => {
+test('an administrator adds a platform skill with its files, and tasks see it through the shared cache', async (t) => {
   const { invalidated } = asAdmin(t);
   const { store } = modules();
   const insert = t.mock.method(store, 'insertSkill', async (_db: unknown, owner: string | null, fields: Partial<SkillFields>) => {
     assert.equal(owner, null, 'administrators write platform rows');
-    assert.deepEqual([fields.document?.name, fields.document?.manualOnly, fields.requiredTier], ['case-review', false, 'pro']);
+    assert.deepEqual([fields.document?.name, fields.document?.manualOnly], ['case-review', false]);
     assert.deepEqual(fields.files, [{ path: 'refs/terms.md', content: '术语表' }]);
-    return skillRow({ required_tier: 'pro', files: [{ path: 'refs/terms.md', bytes: 9 }] });
+    return skillRow({ files: [{ path: 'refs/terms.md', bytes: 9 }] });
   });
   const { POST } = await import('../app/api/admin/agent-skills/route');
   const response = await POST(request('/api/admin/agent-skills', { method: 'POST', body: {
-    content: CONTENT, requiredTier: 'pro', files: [{ path: 'refs/terms.md', content: '术语表' }],
+    content: CONTENT, files: [{ path: 'refs/terms.md', content: '术语表' }],
   } }));
   assert.equal(response.status, 201);
   const { skill } = await response.json();
-  assert.deepEqual([skill.scope, skill.requiredTier, skill.files, skill.shadowed], ['platform', 'pro', [{ path: 'refs/terms.md', bytes: 9 }], false]);
+  assert.deepEqual([skill.scope, skill.files, skill.shadowed], ['platform', [{ path: 'refs/terms.md', bytes: 9 }], false]);
+  assert.equal('requiredTier' in skill, false);
   assert.equal(invalidated.mock.callCount(), 1);
 
   const bad = await POST(request('/api/admin/agent-skills', { method: 'POST', body: { content: '# 没有 frontmatter' } }));
@@ -108,35 +107,34 @@ test('administrator edits, reads and deletions report missing skills and refuse 
   assert.equal((await read.json()).skill.content, CONTENT);
 });
 
-test('a member adds skills only while the policy allows their tier and count', async (t) => {
+test('a member adds skills only while the policy allows them and their count', async (t) => {
   const { store } = modules();
   const insert = t.mock.method(store, 'insertSkill', async (_db: unknown, owner: string | null, fields: Partial<SkillFields>, options: { limit?: number }) => {
     assert.equal(owner, 'user-1');
-    assert.equal(options.limit, 3, 'the free tier\'s default allowance');
-    assert.equal(fields.requiredTier, undefined, 'a user\'s skill keeps the free tier');
+    assert.equal(options.limit, DEFAULT_AGENT_EXTENSIONS_POLICY.skills.limit, 'the default allowance');
+    assert.equal(fields.document?.name, 'case-review');
     return skillRow({ owner_id: owner });
   });
-  const body = { content: CONTENT, requiredTier: 'pro' };
+  const body = { content: CONTENT };
   const { GET, POST } = await import('../app/api/user/skills/route');
 
   await t.test('a closed policy refuses everyone', async (t) => {
-    asMember(t, { membership: 'pro', policy: { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { ...DEFAULT_AGENT_EXTENSIONS_POLICY.skills, enabled: false } } });
+    asMember(t, { policy: { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { ...DEFAULT_AGENT_EXTENSIONS_POLICY.skills, enabled: false } } });
     const response = await POST(request('/api/user/skills', { method: 'POST', body }));
     assert.equal(response.status, 403);
     assert.match((await response.json()).error, /管理员已关闭/);
   });
-  await t.test('a tier the policy leaves out is refused', async (t) => {
-    asMember(t, { policy: { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { enabled: true, tiers: ['plus', 'pro'], limits: { free: 3, plus: 10, pro: 30 } } } });
+  await t.test('a zero limit refuses like a closed policy', async (t) => {
+    asMember(t, { policy: { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { enabled: true, limit: 0 } } });
     const response = await POST(request('/api/user/skills', { method: 'POST', body }));
     assert.equal(response.status, 403);
-    assert.match((await response.json()).error, /当前会员/);
   });
   await t.test('an allowed member saves within their limit and sees their allowance', async (t) => {
     asMember(t, { used: 1, platform: [skillRow({ id: 'platform-1', name: 'shared-name' })] });
     t.mock.method(store, 'listSkillRows', async () => [skillRow({ owner_id: 'user-1' }), skillRow({ id: 'own-2', owner_id: 'user-1', name: 'shared-name' })]);
     assert.equal((await POST(request('/api/user/skills', { method: 'POST', body }))).status, 201);
     const listed = await (await GET(request('/api/user/skills'))).json();
-    assert.deepEqual(listed.allowance, { enabled: true, tierAllowed: true, limit: 3, used: 1, tiers: ['free', 'plus', 'pro'] });
+    assert.deepEqual(listed.allowance, { enabled: true, limit: DEFAULT_AGENT_EXTENSIONS_POLICY.skills.limit, used: 1 });
     assert.deepEqual(listed.skills.map((skill: { scope: string; shadowed: boolean }) => [skill.scope, skill.shadowed]), [['user', false], ['user', true]],
       'a user\'s skill named like a platform skill is marked as kept out of tasks');
   });

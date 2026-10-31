@@ -3,8 +3,6 @@
 -- changed, drops undeclared ones, and revokes every privilege on the managed
 -- schemas that is not granted here.
 
-CREATE POLICY "Admins full access" ON public.activation_keys USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
-
 CREATE POLICY "Users can delete own bazi case events" ON public.bazi_case_events FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
 
 CREATE POLICY "Users can delete own bazi case profiles" ON public.bazi_case_profiles FOR DELETE TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
@@ -66,8 +64,6 @@ CREATE POLICY "Users can view own meihua divinations" ON public.meihua_divinatio
 CREATE POLICY "Users can view own qimen charts" ON public.qimen_charts FOR SELECT TO authenticated USING ((( SELECT auth.uid() AS uid) = user_id));
 
 CREATE POLICY "Users can view own xiaoliuren divinations" ON public.xiaoliuren_divinations FOR SELECT USING ((( SELECT auth.uid() AS uid) = user_id));
-
-ALTER TABLE public.activation_keys ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY agent_artifacts_read ON public.agent_run_artifacts FOR SELECT TO authenticated USING ((EXISTS ( SELECT 1
    FROM public.agent_runs r
@@ -301,27 +297,13 @@ CREATE POLICY conversations_select_access ON public.conversations FOR SELECT TO 
 
 CREATE POLICY conversations_update_access ON public.conversations FOR UPDATE TO authenticated USING ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id))) WITH CHECK ((( SELECT public.is_admin_user() AS is_admin_user) OR (( SELECT auth.uid() AS uid) = user_id)));
 
-ALTER TABLE public.credit_transactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.billing_accounts ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY credit_transactions_authenticated_insert_guard ON public.credit_transactions AS RESTRICTIVE FOR INSERT TO authenticated WITH CHECK ((public.is_admin_user() IS TRUE));
+CREATE POLICY billing_accounts_read ON public.billing_accounts FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin_user()));
 
-CREATE POLICY credit_transactions_delete_access ON public.credit_transactions FOR DELETE USING (public.is_admin_user());
+ALTER TABLE public.billing_ledger ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY credit_transactions_insert_access ON public.credit_transactions FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
-
-CREATE POLICY credit_transactions_select_access ON public.credit_transactions FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
-
-CREATE POLICY credit_transactions_update_access ON public.credit_transactions FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
-
-ALTER TABLE public.daily_checkins ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY daily_checkins_delete_access ON public.daily_checkins FOR DELETE USING (public.is_admin_user());
-
-CREATE POLICY daily_checkins_insert_access ON public.daily_checkins FOR INSERT WITH CHECK ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
-
-CREATE POLICY daily_checkins_select_access ON public.daily_checkins FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
-
-CREATE POLICY daily_checkins_update_access ON public.daily_checkins FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+CREATE POLICY billing_ledger_read ON public.billing_ledger FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin_user()));
 
 ALTER TABLE public.daliuren_divinations ENABLE ROW LEVEL SECURITY;
 
@@ -445,9 +427,17 @@ CREATE POLICY palm_readings_select_access ON public.palm_readings FOR SELECT USI
 
 CREATE POLICY palm_readings_update_access ON public.palm_readings FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
+ALTER TABLE public.payment_orders ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY payment_orders_read ON public.payment_orders FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin_user()));
+
 ALTER TABLE public.prompt_enhancement_usage ENABLE ROW LEVEL SECURITY;
 
 ALTER TABLE public.qimen_charts ENABLE ROW LEVEL SECURITY;
+
+ALTER TABLE public.redemption_codes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY redemption_codes_admin_all ON public.redemption_codes TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
 
 ALTER TABLE public.reminder_subscriptions ENABLE ROW LEVEL SECURITY;
 
@@ -468,6 +458,12 @@ CREATE POLICY scheduled_reminders_insert_access ON public.scheduled_reminders FO
 CREATE POLICY scheduled_reminders_select_access ON public.scheduled_reminders FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
 CREATE POLICY scheduled_reminders_update_access ON public.scheduled_reminders FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+ALTER TABLE public.subscription_plans ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY subscription_plans_admin_all ON public.subscription_plans TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+CREATE POLICY subscription_plans_read ON public.subscription_plans FOR SELECT TO authenticated USING (enabled);
 
 ALTER TABLE public.tarot_readings ENABLE ROW LEVEL SECURITY;
 
@@ -494,6 +490,10 @@ CREATE POLICY user_oauth_providers_insert_access ON public.user_oauth_providers 
 CREATE POLICY user_oauth_providers_select_access ON public.user_oauth_providers FOR SELECT USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
 
 CREATE POLICY user_oauth_providers_update_access ON public.user_oauth_providers FOR UPDATE USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+ALTER TABLE public.user_subscriptions ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_subscriptions_read ON public.user_subscriptions FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin_user()));
 
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 
@@ -544,7 +544,7 @@ GRANT ALL ON FUNCTION auth.uid() TO anon;
 GRANT ALL ON FUNCTION auth.uid() TO authenticated;
 GRANT ALL ON FUNCTION auth.uid() TO taibu_app;
 
-GRANT ALL ON FUNCTION public.activate_key_as_service(p_user_id uuid, p_key_code text) TO authenticated;
+GRANT ALL ON FUNCTION public.admin_find_users_by_email(p_query text, p_limit integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.admin_get_auth_user_emails(p_user_ids uuid[]) TO authenticated;
 
@@ -568,7 +568,7 @@ GRANT ALL ON FUNCTION public.agent_claim_command(p_run_id uuid, p_worker_id text
 
 GRANT ALL ON FUNCTION public.agent_claim_run(p_worker_id text) TO authenticated;
 
-GRANT ALL ON FUNCTION public.agent_create_run(p_id uuid, p_user_id uuid, p_conversation_id uuid, p_request_id text, p_request_hash text, p_input jsonb, p_checkpoint jsonb, p_message jsonb, p_credential jsonb, p_charge boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.agent_create_run(p_id uuid, p_user_id uuid, p_conversation_id uuid, p_request_id text, p_request_hash text, p_input jsonb, p_checkpoint jsonb, p_message jsonb, p_credential jsonb, p_billing text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.agent_durable_commit(p_run_id uuid, p_worker_id text, p_fence bigint, p_sequence bigint, p_writes jsonb, p_checkpoint jsonb) TO authenticated;
 
@@ -600,6 +600,26 @@ GRANT ALL ON FUNCTION public.batch_update_vectors(p_updates jsonb, p_expected_di
 
 GRANT ALL ON FUNCTION public.batch_update_vectors_as_service(p_updates jsonb, p_user_id uuid, p_expected_dim integer, p_force_overwrite boolean) TO authenticated;
 
+GRANT ALL ON FUNCTION public.billing_adjust_wallet(p_user_id uuid, p_amount bigint, p_description text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_buy_plan_with_balance(p_user_id uuid, p_plan_id uuid) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_cancel_subscription(p_subscription_id uuid, p_note text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_charge(p_user_id uuid, p_amount bigint, p_allow_debt boolean, p_source text, p_model_key text, p_usage jsonb, p_reference_type text, p_reference_id text, p_idempotency_key text, p_description text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_expire_due(p_limit integer) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_grant_subscription(p_user_id uuid, p_plan_id uuid, p_note text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_redeem(p_user_id uuid, p_code text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_refund(p_charge_key text, p_amount bigint, p_idempotency_key text, p_description text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_spendable(p_user_id uuid) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_summary(p_user_id uuid) TO authenticated;
+
 GRANT ALL ON FUNCTION public.check_vector_index_exists(p_dim integer) TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_attachments TO authenticated;
@@ -607,8 +627,6 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.agent_attachments TO authentic
 GRANT SELECT,INSERT,DELETE ON TABLE public.generated_images TO authenticated;
 
 GRANT ALL ON FUNCTION public.claim_agent_attachment_cleanup(p_limit integer) TO authenticated;
-
-GRANT ALL ON FUNCTION public.claim_linuxdo_membership_as_service(p_user_id uuid, p_plan_id text, p_trust_level integer, p_provider_user_id text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.claim_notification_popup(p_id uuid) TO authenticated;
 
@@ -630,8 +648,6 @@ GRANT ALL ON FUNCTION public.increment_community_post_view_count(post_id uuid) T
 
 GRANT ALL ON FUNCTION public.increment_community_post_view_count(post_id uuid) TO anon;
 
-GRANT ALL ON FUNCTION public.decrement_ai_chat_count(user_id uuid) TO authenticated;
-
 GRANT ALL ON FUNCTION public.delete_agent_retention(p_event_days integer, p_commit_days integer, p_worker_hours integer, p_limit integer, p_metric_days integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.delete_conversation_graph(p_conversation_id text) TO authenticated;
@@ -646,11 +662,7 @@ GRANT ALL ON FUNCTION public.get_conversation_share(p_token text) TO authenticat
 GRANT ALL ON FUNCTION public.get_shared_generated_image(p_token text, p_image uuid) TO anon;
 GRANT ALL ON FUNCTION public.get_shared_generated_image(p_token text, p_image uuid) TO authenticated;
 
-GRANT ALL ON FUNCTION public.decrement_ai_chat_count_by(user_id uuid, amount integer) TO authenticated;
-
 GRANT ALL ON FUNCTION public.import_ming_records_and_notes(p_records jsonb, p_notes jsonb) TO authenticated;
-
-GRANT ALL ON FUNCTION public.increment_ai_chat_count(user_id uuid, amount integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.is_admin_user() TO anon;
 GRANT ALL ON FUNCTION public.is_admin_user() TO authenticated;
@@ -659,7 +671,9 @@ GRANT ALL ON FUNCTION public.kb_replace_source_entries(p_kb_id uuid, p_source_ty
 
 GRANT ALL ON FUNCTION public.kb_unarchive_source_as_service(p_user_id uuid, p_kb_id uuid, p_source_type text, p_source_id text) TO authenticated;
 
-GRANT ALL ON FUNCTION public.perform_daily_checkin_as_service(p_user_id uuid) TO authenticated;
+GRANT ALL ON FUNCTION public.payment_order_complete(p_trade_no text, p_provider text, p_paid_amount numeric, p_provider_trade_no text, p_payload jsonb) TO authenticated;
+
+GRANT ALL ON FUNCTION public.payment_order_create(p_user_id uuid, p_trade_no text, p_kind text, p_plan_id uuid, p_credit_micros bigint, p_pay_amount numeric, p_pay_currency text, p_pay_method text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.process_scheduled_reminder_delivery_as_service(p_reminder_id uuid, p_stale_before timestamp with time zone, p_notification_title text, p_notification_content text, p_notification_link text) TO authenticated;
 
@@ -699,8 +713,6 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE identity.users TO taibu_auth;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE identity.verifications TO taibu_auth;
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.activation_keys TO authenticated;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.activation_keys TO anon;
 
 GRANT SELECT ON TABLE public.agent_attachment_refs TO authenticated;
 
@@ -740,7 +752,7 @@ GRANT ALL ON FUNCTION public.create_agent_schedule(p_name text, p_template text,
 
 GRANT ALL ON FUNCTION public.create_agent_schedule_run(p_schedule_id uuid, p_user_id uuid) TO authenticated;
 
-GRANT ALL ON FUNCTION public.enforce_agent_schedule_limits(p_limits jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.enforce_agent_schedule_limits() TO authenticated;
 
 GRANT ALL ON FUNCTION public.settle_agent_schedule_run(p_run_id uuid, p_status text, p_agent_run_id uuid, p_error text, p_skip_reason text) TO authenticated;
 
@@ -778,6 +790,8 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.bazi_case_profiles TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.bazi_charts TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.bazi_charts TO anon;
 
+GRANT SELECT ON TABLE public.billing_accounts TO authenticated;
+GRANT SELECT ON TABLE public.billing_ledger TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.community_comments TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.community_comments TO authenticated;
 
@@ -799,11 +813,7 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.conversations TO anon;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.conversations_with_archive_status TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.conversations_with_archive_status TO anon;
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.credit_transactions TO authenticated;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.credit_transactions TO anon;
 
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.daily_checkins TO authenticated;
-GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.daily_checkins TO anon;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.daliuren_divinations TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.daliuren_divinations TO anon;
@@ -844,23 +854,27 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.notifications TO anon;
 GRANT UPDATE(is_read) ON TABLE public.notifications TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.palm_readings TO authenticated;
+GRANT SELECT ON TABLE public.payment_orders TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.palm_readings TO anon;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.qimen_charts TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.qimen_charts TO anon;
 
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.redemption_codes TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.reminder_subscriptions TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.reminder_subscriptions TO anon;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.scheduled_reminders TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.scheduled_reminders TO anon;
 
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.subscription_plans TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tarot_readings TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tarot_readings TO anon;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_oauth_providers TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_oauth_providers TO anon;
 
+GRANT SELECT ON TABLE public.user_subscriptions TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_settings TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_settings TO anon;
 

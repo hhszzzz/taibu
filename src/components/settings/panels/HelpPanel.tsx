@@ -18,12 +18,12 @@ interface FAQItem {
 
 const FAQ_LIST: FAQItem[] = [
   {
-    question: 'AI 服务是否免费？',
-    answer: 'AI 服务目前基于公益站提供，用户可以免费使用，但会存在次数限制或模型不可访问等情况。如果公益站关闭，AI 服务可能会受到影响，我们会尽力寻找替代方案。',
+    question: 'AI 服务怎么收费？',
+    answer: '平台模型按实际用量计费：输入、输出的 token 数乘以模型单价，以美元结算，单价写在模型菜单里；生图按张计费。订阅额度先扣，用完再扣余额。标为「免费」的模型不扣费。使用自己的 API Key 时由你的服务商计费，本站不扣费。',
   },
   {
-    question: 'AI 对话次数有多少？',
-    answer: '每次 AI 对话或解读消耗 1 积分，请求失败会退回。积分上限随会员等级为 10 / 20 / 50，可在「订阅」里每日签到（免费用户随机 1–3 积分，Plus 翻倍，Pro 三倍）或用激活码补充。使用自定义模型（自己的 API Key）不消耗积分。',
+    question: '余额用完了怎么办？',
+    answer: '在「设置 › 订阅与余额」里兑换兑换码、购买订阅，开启在线支付时也可以直接充值。费用在每次调用结束后结算，最后一次调用可能让余额略低于零，下次充值时抵扣。也可以改用免费模型，或在模型菜单里使用自己的 API。',
   },
   {
     question: 'AI 分析结果为什么有时不够准确？',
@@ -57,7 +57,7 @@ export default function HelpPanel() {
       <section aria-labelledby="help-faq-heading" className="settings-section">
         <div className="settings-section-heading">
           <h3 id="help-faq-heading" className="settings-section-title">常见问题</h3>
-          <p className="settings-section-description">关于 AI 服务、积分与命盘的常见疑问。</p>
+          <p className="settings-section-description">关于 AI 服务、计费与命盘的常见疑问。</p>
         </div>
         <div className="settings-section-body">
           <div className="overflow-hidden rounded-2xl border border-border bg-surface">

@@ -12,10 +12,7 @@ import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { isChatAttachment } from "@/lib/ai/document-formats";
 import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
-import { webSearchTier } from "@/lib/ai/web-search-access";
-import { webRouteAvailable, webRouteLowestTier } from "./mcp/web-route.server";
-import type { MembershipType } from "@/lib/user/membership";
-import { getUserCreditInfo } from "@/lib/user/credits";
+import { webRouteAvailable } from "./mcp/web-route.server";
 import { isValidUUID } from "@/lib/validation";
 import type { ChatMessage, CustomProviderRequest, Mention } from "@/types";
 import { normalizeMessageQuotes } from "@/lib/chat/quotes";
@@ -107,13 +104,15 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
     if (
       typeof custom.apiUrl !== "string" ||
       typeof custom.apiKey !== "string" ||
-      typeof custom.modelId !== "string"
+      typeof custom.modelId !== "string" ||
+      (custom.imageModelId !== undefined && typeof custom.imageModelId !== "string")
     )
       throw new AgentApiError("自定义模型配置无效");
     customProvider = {
       apiUrl: custom.apiUrl,
       apiKey: custom.apiKey,
       modelId: custom.modelId,
+      ...(typeof custom.imageModelId === "string" && custom.imageModelId.trim() ? { imageModelId: custom.imageModelId.trim() } : {}),
     };
   }
   const attachments =
@@ -173,7 +172,6 @@ export async function agentEndpoint(action: () => Promise<Response>) {
       return jsonError(error.message, error.status, { code: error.code });
     const message = error instanceof Error ? error.message : "";
     const known: Record<string, [string, number, string]> = {
-      INSUFFICIENT_CREDITS: ["积分不足", 402, "INSUFFICIENT_CREDITS"],
       AGENT_CONVERSATION_BUSY: [
         "当前对话有未结束任务",
         409,
@@ -209,26 +207,20 @@ export async function agentCapabilities(request: NextRequest) {
   const state = await readFeatureModuleStateFresh("agent");
   const store = new AgentStore(systemDb());
   let mcpAvailable = false, searchAvailable = false;
-  let webTier: MembershipType | null = null;
   try {
-    const { membership } = await getUserCreditInfo(auth.user.id, {});
-    [mcpAvailable, searchAvailable, webTier] = await Promise.all([
-      availableMcpServers(auth.user.id, membership, { codeMode: true }).then((rows) => rows.length > 0),
-      // Free accounts never search; whether Plus would is what tells them which plan does.
-      webRouteAvailable("search", membership === "free" ? "plus" : membership),
-      webRouteLowestTier("search").then(webSearchTier),
+    [mcpAvailable, searchAvailable] = await Promise.all([
+      availableMcpServers(auth.user.id, { codeMode: true }).then((rows) => rows.length > 0),
+      webRouteAvailable("search"),
     ]);
   } catch {
     // A configuration that cannot be read does not advertise network access.
     mcpAvailable = searchAvailable = false;
-    webTier = null;
   }
   return jsonOk({
     enabled: state.status === "enabled",
     ready: state.status === "enabled" && (await store.workerReady()),
     webAvailable: searchAvailable || mcpAvailable,
     plainWebAvailable: searchAvailable,
-    webTier,
     customAvailable: !!process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY,
   });
 }
@@ -248,7 +240,7 @@ export async function createAgentTask(request: NextRequest) {
     if ((Array.isArray(body.message.attachments.ids) && body.message.attachments.ids.length) || body.message.attachments.fileName || body.mentions.length || body.attachment !== undefined || body.message.quotes.length)
       throw new AgentApiError("压缩上下文时不能附带资料或引用");
   }
-  const run = await submitAgentTask({ db: auth.db, userId: auth.user.id, user: auth.user }, body, "http");
+  const run = await submitAgentTask({ db: auth.db, userId: auth.user.id }, body, "http");
   return jsonOk(await new AgentStore(systemDb()).view(run), 201);
 }
 
@@ -324,7 +316,7 @@ export async function controlAgentTask(
   // A skill named in a message sent into the task must be usable now; the worker expands it when it delivers the message.
   if (body.mode !== 'reply' && parseSkillCommand(body.content)) {
     try {
-      await skillCommandBlock(auth.user.id, (await getUserCreditInfo(auth.user.id, {})).membership, body.content);
+      await skillCommandBlock(auth.user.id, body.content);
     } catch (error) {
       if (error instanceof SkillUnavailableError) throw new AgentApiError(error.message, 400, "SKILL_UNAVAILABLE");
       throw error;

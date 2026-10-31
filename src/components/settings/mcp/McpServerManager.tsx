@@ -17,7 +17,7 @@ import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useListMotion } from '@/lib/motion/list';
 import { mcpServerClient, type McpServerListing, type McpServerScope } from '@/lib/agent/mcp/client';
 import {
-  MCP_EXPOSURE_LABELS, MCP_SERVER_TEMPLATES, MEMBERSHIP_TIER_LABELS,
+  MCP_EXPOSURE_LABELS, MCP_SERVER_TEMPLATES,
   type McpServerInput, type McpServerView, type McpToolPolicy,
 } from '@/lib/agent/mcp/config';
 import { McpServerEditor, type McpEditorSeed } from './McpServerEditor';
@@ -210,7 +210,6 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
                     <strong className="mcp-server-title">
                       {server.displayName}
                       <span className="mcp-badge">{MCP_EXPOSURE_LABELS[server.exposure]}</span>
-                      {scope === 'platform' ? <span className="mcp-badge">{MEMBERSHIP_TIER_LABELS[server.requiredTier]}+</span> : null}
                       {server.searchTool || server.fetchTool
                         ? <span className="mcp-badge mcp-badge-accent">联网：{[server.searchTool && '搜索', server.fetchTool && '读网页'].filter(Boolean).join('、')}</span>
                         : null}

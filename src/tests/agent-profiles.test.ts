@@ -65,12 +65,12 @@ test('a custom role is parsed in full when added and by what changed when edited
   const fields = parseProfileInput({
     name: 'archivist', displayName: ' 档案员 ', description: '整理资料', instructions: '先列来源',
     tools: { inherit: false, allow: ['web', 'web', ' knowledge '], deny: ['mcp:exa'] }, skills: ['case-review', 'case-review'],
-    model: ' gpt-x ', reasoningEffort: 'high', modes: ['background', 'parallel'], requiredTier: 'plus', enabled: false, sortOrder: 5,
+    model: ' gpt-x ', reasoningEffort: 'high', modes: ['background', 'parallel'], enabled: false, sortOrder: 5,
   }, false);
   assert.deepEqual(fields, {
     name: 'archivist', displayName: '档案员', description: '整理资料', instructions: '先列来源',
     tools: { inherit: false, allow: ['web', 'knowledge'], deny: ['mcp:exa'] }, skills: ['case-review'],
-    model: 'gpt-x', reasoningEffort: 'high', modes: ['parallel', 'background'], requiredTier: 'plus', enabled: false, sortOrder: 5,
+    model: 'gpt-x', reasoningEffort: 'high', modes: ['parallel', 'background'], enabled: false, sortOrder: 5,
   });
   assert.deepEqual(parseProfileInput({ model: null, enabled: true }, true), { model: null, enabled: true });
 
@@ -89,7 +89,6 @@ test('a custom role is parsed in full when added and by what changed when edited
   refused({ modes: ['solo'] }, true, /用途/);
   refused({ reasoningEffort: 'extreme' }, true, /推理档位/);
   refused({ sortOrder: 1.5 }, true, /整数/);
-  refused({ requiredTier: 'vip' }, true, /会员等级/);
   refused([], true, /请求格式/);
 
   assert.deepEqual(parseBuiltinProfileInput({ enabled: false }), { enabled: false });
@@ -134,7 +133,7 @@ test('a member is set up with the tools, instructions and model its role gives i
   const store = require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server');
   const read = t.mock.method(store, 'readSkillContent', async (id: string) => id === 'skill-big' ? `---\nname: big\ndescription: 大\n---\n${'长'.repeat(30_000)}` : `---\nname: x\ndescription: x\n---\n按清单复盘。`);
   const skill = (overrides: Partial<SkillEntry>): SkillEntry => ({
-    id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘', version: 1, required_tier: 'free', is_enabled: true,
+    id: 'skill-1', owner_id: null, name: 'case-review', description: '复盘', version: 1, is_enabled: true,
     disable_model_invocation: false, sort_order: 0, created_at: '2026-10-27T00:00:00.000Z', updated_at: '2026-10-27T00:00:00.000Z',
     bytes: 40, files: [{ path: 'refs/terms.md', bytes: 9 }], source: 'platform', ...overrides,
   });

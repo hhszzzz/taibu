@@ -115,7 +115,7 @@ export function MentionItemList({
     const emptyMessage = loadError
         ? loadError
         : activeLevel === 'item' && state.selectedCategory === 'knowledge'
-            ? (knowledgeBaseLocked ? '仅限 Plus 以上会员使用' : '你还没有知识库')
+            ? (knowledgeBaseLocked ? '知识库已关闭' : '你还没有知识库')
             : activeLevel === 'item' && state.selectedCategory === 'data'
                 ? '该分类暂无数据'
                 : '没有匹配项';

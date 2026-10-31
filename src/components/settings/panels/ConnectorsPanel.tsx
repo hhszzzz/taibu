@@ -12,25 +12,16 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { McpServerManager } from '@/components/settings/mcp/McpServerManager';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { Button } from '@/components/ui/Button';
-import { MEMBERSHIP_TIER_LABELS, type ExtensionAllowanceView } from '@/lib/agent/mcp/config';
+import type { ExtensionAllowanceView } from '@/lib/agent/mcp/config';
 import type { McpServerListing } from '@/lib/agent/mcp/client';
-import { openSettingsCenter } from '@/lib/settings-center';
 
 function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) {
   if (!allowance) return null;
   if (!allowance.enabled) {
     return <p className="mcp-notice"><strong>管理员已关闭个人连接器。</strong>已添加的连接器会保留，但暂不会在任务中使用。</p>;
   }
-  if (!allowance.tierAllowed || allowance.limit === 0) {
-    const tiers = allowance.tiers.map(tier => MEMBERSHIP_TIER_LABELS[tier]);
-    return (
-      <p className="mcp-notice">
-        <strong>{tiers.length ? `个人连接器向 ${tiers.join(' / ')} 会员开放。` : '个人连接器暂未开放。'}</strong>
-        已添加的连接器会保留，但暂不会在任务中使用。
-        {tiers.length ? <> <Button unstyled type="button" className="underline underline-offset-2" onClick={() => openSettingsCenter('upgrade')}>查看订阅</Button></> : null}
-      </p>
-    );
+  if (allowance.limit === 0) {
+    return <p className="mcp-notice"><strong>个人连接器暂未开放。</strong>已添加的连接器会保留，但暂不会在任务中使用。</p>;
   }
   if (allowance.limit > 0 && allowance.used >= allowance.limit) {
     return <p className="mcp-notice">已启用 {allowance.used} / {allowance.limit} 个连接器；新增会自动停用最早添加的一个。</p>;
@@ -38,7 +29,7 @@ function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) 
   return null;
 }
 
-const canAdd = ({ allowance }: McpServerListing) => !!allowance && allowance.enabled && allowance.tierAllowed && allowance.limit > 0;
+const canAdd = ({ allowance }: McpServerListing) => !!allowance && allowance.enabled && allowance.limit > 0;
 
 export default function ConnectorsPanel() {
   const { user, loading } = useSessionSafe();

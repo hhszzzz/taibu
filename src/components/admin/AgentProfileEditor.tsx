@@ -16,7 +16,6 @@ import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import { MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import {
   AGENT_PROFILE_LIMITS, AGENT_PROFILE_MODES, AGENT_PROFILE_MODE_LABELS, AGENT_PROFILE_NAME_PATTERN, AGENT_PROFILE_TOOL_FAMILIES,
   BUILTIN_AGENT_PROFILE_NAMES, MCP_PROFILE_TOKEN, type AgentProfileEffort, type AgentProfileInput, type AgentProfileMode, type AgentProfileView,
@@ -25,7 +24,6 @@ import type { AgentProfileCatalog } from '@/lib/agent/profiles/client';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { estimateTokens } from '@/lib/agent/token-estimate';
 import { AI_REASONING_EFFORTS } from '@/types';
-import type { MembershipType } from '@/lib/user/membership';
 import { Field as FieldBase } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';
 import { Checkbox } from '@/components/ui/Checkbox';
@@ -39,7 +37,7 @@ type Draft = {
   name: string; displayName: string; description: string; instructions: string;
   inherit: boolean; grants: Record<string, Grant>; extraAllow: string; extraDeny: string;
   skills: string[]; model: string; reasoningEffort: '' | AgentProfileEffort; modes: AgentProfileMode[];
-  requiredTier: MembershipType; enabled: boolean; sortOrder: string;
+  enabled: boolean; sortOrder: string;
 };
 
 /** The tokens the editor lists one per row: the families, then each platform service. */
@@ -62,7 +60,7 @@ function draftOf(seed: ProfileEditorSeed, listed: ReadonlySet<string>): Draft {
     name: profile?.name ?? '', displayName: profile?.displayName ?? '', description: profile?.description ?? '', instructions: profile?.instructions ?? '',
     inherit: profile?.tools.inherit ?? false, grants, extraAllow: extra.allow.join(' '), extraDeny: extra.deny.join(' '),
     skills: profile?.skills ?? [], model: profile?.model ?? '', reasoningEffort: profile?.reasoningEffort ?? '',
-    modes: profile?.modes ?? [...AGENT_PROFILE_MODES], requiredTier: profile?.requiredTier ?? 'free', enabled: profile?.enabled ?? true,
+    modes: profile?.modes ?? [...AGENT_PROFILE_MODES], enabled: profile?.enabled ?? true,
     sortOrder: String(profile?.sortOrder ?? 0),
   };
 }
@@ -82,7 +80,7 @@ function payloadOf(draft: Draft, creating: boolean): AgentProfileInput {
     displayName: draft.displayName.trim(), description: draft.description.trim(), instructions: draft.instructions.trim(),
     tools: { inherit: draft.inherit, allow: [...listed('allow'), ...words(draft.extraAllow)], deny: [...listed('deny'), ...words(draft.extraDeny)] },
     skills: draft.skills, model: draft.model || null, reasoningEffort: draft.model && draft.reasoningEffort ? draft.reasoningEffort : null,
-    modes: draft.modes, requiredTier: draft.requiredTier, enabled: draft.enabled, sortOrder,
+    modes: draft.modes, enabled: draft.enabled, sortOrder,
   };
 }
 
@@ -214,10 +212,10 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
                   })}
                 </div>
               ) : <p className="mcp-hint">还没有平台技能。</p>}
-              <p className="mcp-hint">最多 {AGENT_PROFILE_LIMITS.skills} 个平台技能，正文随成员指令一起提供；用户当前会员不能用的技能不会载入。</p>
+              <p className="mcp-hint">最多 {AGENT_PROFILE_LIMITS.skills} 个平台技能，正文随成员指令一起提供；已停用的技能不会载入。</p>
             </fieldset>
             <div className="mcp-fields">
-              <Field label="模型" hint="不指定时，成员用协作设置里选的模型或主模型。指定的模型当前会员不能用时同样退回。">
+              <Field label="模型" hint="不指定时，成员用协作设置里选的模型或主模型。指定的模型停用或未定价时同样退回。">
                 {props => (
                   <Select ariaLabel="模型" id={props.id} aria-describedby={props['aria-describedby']} value={draft.model}
                     onChange={model => set({ model, reasoningEffort: '' })}
@@ -239,13 +237,6 @@ export function AgentProfileEditor({ seed, catalog, onClose, onSubmit }: {
                       ...AI_REASONING_EFFORTS.filter(effort => effort === draft.reasoningEffort || model?.thinkingLevels.includes(effort))
                         .map(effort => ({ value: effort, label: REASONING_EFFORT_LABELS[effort] })),
                     ]} />
-                )}
-              </Field>
-              <Field label="会员等级" hint="达到这一等级的用户才能派出这个角色。">
-                {props => (
-                  <Select<MembershipType> ariaLabel="会员等级" id={props.id} aria-describedby={props['aria-describedby']}
-                    value={draft.requiredTier} onChange={requiredTier => set({ requiredTier })}
-                    options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))} />
                 )}
               </Field>
               <Field label="排序" hint="小的在前。">

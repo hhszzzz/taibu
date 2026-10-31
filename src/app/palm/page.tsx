@@ -39,7 +39,7 @@ const PALM_COPY: PhotoReadingCopy = {
     submitLabel: '开始分析手相',
     missingPhoto: '请先上传手相图片',
     notice: '手相分析仅供娱乐参考，不构成医疗、就业或其他专业建议，也不做疾病诊断。我们不保存你上传的照片。',
-    billing: '手相分析需要 Plus 会员或以上，每次消耗 1 积分。',
+    billing: '按所选视觉模型的实际用量从余额扣费；使用自己的 API 不计费。',
 };
 
 const HAND_OPTIONS: ReadonlyArray<{ value: HandType; label: string; hint: string }> = [

@@ -106,9 +106,7 @@ test('a member step keeps what it said before the call, the arguments and the re
 });
 
 test('the collaboration names its topics and shows each finished member with its stances', { timeout: 20000 }, async t => {
-    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
     const features = require('../lib/app-settings') as typeof import('../lib/app-settings');
-    t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
     t.mock.method(features, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
     const run = row(), store = new MemoryStore();
     run.input.collaborators = [

@@ -318,14 +318,24 @@ export interface AIModelSourceConfig {
     isEnabled?: boolean;
 }
 
+/** USD prices: per million tokens for text, per image for image models. Null leaves that part unpriced. */
+export interface AIModelPricing {
+    input: number | null;
+    output: number | null;
+    /** Null charges cached input at the input price. */
+    cacheRead: number | null;
+    cacheWrite: number | null;
+    image: number | null;
+}
+
 /** AI 模型配置 */
 export interface AIModelConfig {
     id: string;                  // 唯一 ID: deepseek-v3, deepseek-pro, etc
     name: string;                // 显示名称
     vendor: AIVendor;            // 供应商
     usageType?: AIUsageType;     // 模型用途
-    /** 生图模型每张图扣除的积分；其它用途不使用。 */
-    creditCost?: number;
+    /** 美元单价；未定价的模型平台不提供。 */
+    pricing?: AIModelPricing;
     modelId: string;             // API 模型 ID
     apiUrl: string;              // API 端点
     gatewayId?: string;          // 当前来源的网关行 ID
@@ -343,8 +353,6 @@ export interface AIModelConfig {
     defaultMaxTokens?: number;
     defaultReasoningEffort?: AIReasoningEffort;
     customParameters?: Record<string, unknown> | null;
-    // 访问控制（从数据库获取）
-    requiredTier?: 'free' | 'plus' | 'pro';  // 访问所需等级
     // 来源信息（用于统计）
     sourceKey?: string;  // 当前活跃来源 key
     sources?: AIModelSourceConfig[]; // 非空来源清单为权威配置，可含禁用项；空清单兼容旧顶层配置
@@ -355,6 +363,8 @@ export interface CustomProviderRequest {
     apiUrl: string;
     apiKey: string;
     modelId: string;
+    /** 生图用的模型；留空时生图走本站模型并按张计费。 */
+    imageModelId?: string;
 }
 
 /** 自定义Provider (BYOK) 客户端配置 */

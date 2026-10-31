@@ -21,7 +21,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
@@ -62,7 +62,7 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const [saving, setSaving] = useState(false);
     const hasAutoSavedRef = useRef(false);
 
-    const { userId, sessionLoading } = useSessionMembership();
+    const { userId, sessionLoading } = useSessionBalance();
     const canonicalResult = useMemo(
         () => (result ? buildDaliurenCanonicalJSON(result) : null),
         [result],

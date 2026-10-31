@@ -18,14 +18,12 @@ import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
 import { Dialog } from '@/components/ui/Dialog';
 import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
 import type { AgentMessageData } from '@/lib/agent/types';
-import type { MembershipType } from '@/lib/user/membership';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 
 export interface ComposerStatusBarProps extends ModelSettingsProps {
     agentMode: boolean;
     disabled: boolean;
     userId?: string | null;
-    membershipType: MembershipType;
     selectedModel: string;
     onModelChange?: (modelId: string) => void;
     reasoningEnabled: boolean;
@@ -74,7 +72,7 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
                     codeMode={agentMode ? props.codeMode : undefined} onCodeModeChange={agentMode ? props.onCodeModeChange : undefined}
                     planMode={agentMode ? props.planMode : undefined} onPlanModeChange={agentMode ? props.onPlanModeChange : undefined}
                     onCustomProvider={() => setProviderOpen(true)}
-                    userId={userId} membershipType={props.membershipType} disabled={disabled} toolbarStyle />
+                    userId={userId} disabled={disabled} toolbarStyle />
             )}
             {/* 上下文环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
             <AgentContextMeter data={props.contextData} onOpen={props.onOpenContextResource} />

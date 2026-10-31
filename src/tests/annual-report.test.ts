@@ -5,7 +5,7 @@ import { createMockScopedDb } from './helpers/db-mock';
 
 function createAnnualReportDb(state: {
     conversations?: Array<Record<string, unknown>>;
-    checkins?: Array<Record<string, unknown>>;
+    tables?: string[];
     cachedReport?: Record<string, unknown> | null;
     cachedRow?: Record<string, unknown> | null;
     count?: number;
@@ -13,6 +13,7 @@ function createAnnualReportDb(state: {
     return createMockScopedDb({
         tx: async (work) => work({
             selectFrom(table: string) {
+                state.tables?.push(table);
                 let isCount = false;
                 const query = {
                     select(selection: unknown) {
@@ -36,7 +37,6 @@ function createAnnualReportDb(state: {
                     },
                     async execute() {
                         if (table === 'conversations') return state.conversations ?? [];
-                        if (table === 'daily_checkins') return state.checkins ?? [];
                         return [];
                     },
                 };
@@ -65,14 +65,14 @@ test('annual report generation uses the scoped system database for queries', asy
     const contextModule = require('../lib/db/context.server') as any;
     const state: {
         conversations?: Array<Record<string, unknown>>;
-        checkins?: Array<Record<string, unknown>>;
+        tables: string[];
         cachedReport?: Record<string, unknown> | null;
     } = {
         conversations: [
             { id: 'conv-1', source_type: 'bazi', created_at: '2024-01-10T00:00:00Z' },
             { id: 'conv-2', source_type: 'chat', created_at: '2024-01-11T00:00:00Z' },
         ],
-        checkins: [{ reward_credits: 1 }],
+        tables: [],
         cachedReport: null,
     };
     t.mock.method(contextModule, 'systemDb', () => createAnnualReportDb(state));
@@ -84,8 +84,9 @@ test('annual report generation uses the scoped system database for queries', asy
 
     assert.ok(report);
     assert.equal(report?.usage.totalAnalyses, 2);
-    assert.equal('longestStreak' in (report?.checkin ?? {}), false);
+    assert.equal('checkin' in (report ?? {}), false, 'check-in was removed with credits');
     assert.equal('progress' in (report ?? {}), false);
+    assert.equal(state.tables.includes('daily_checkins'), false);
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.qimen, '奇门遁甲');
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.daliuren, '大六壬');
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.dream, '解梦分析');

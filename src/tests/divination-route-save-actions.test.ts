@@ -33,14 +33,14 @@ function mockUserContext(
 ) {
     const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
     const rateLimit = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
-    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+    const billing = require('../lib/billing/account.server') as typeof import('../lib/billing/account.server');
+    const balanceGuard = require('../lib/api/balance-guard') as typeof import('../lib/api/balance-guard');
     const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
     const unexpected = t.mock.fn(() => assert.fail('save actions must not run AI admission or inference'));
     t.mock.method(globalThis, 'fetch', unexpected);
     t.mock.method(rateLimit, 'checkRateLimit', unexpected);
-    t.mock.method(credits, 'getUserAuthInfo', unexpected);
-    t.mock.method(credits, 'attemptCreditUse', unexpected);
-    t.mock.method(credits, 'refundCreditsOrLog', unexpected);
+    t.mock.method(billing, 'usageBiller', unexpected);
+    t.mock.method(balanceGuard, 'getBalanceGuardResponse', unexpected);
     t.mock.method(ai, 'callAIWithReasoning', unexpected);
     t.mock.method(ai, 'callAIUIMessageResult', unexpected);
     t.mock.method(ai, 'callAIVision', unexpected);

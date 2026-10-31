@@ -4,15 +4,16 @@ import type { ScopedDb } from "@/lib/db/context.server";
 import { systemDb } from "@/lib/db/context.server";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getDefaultModelConfigAsync, getModelConfigAsync } from "@/lib/server/ai-config";
-import { isModelAllowedForMembership, isReasoningAllowedForMembership } from "@/lib/ai/ai-access";
+import { isModelOffered, UNPRICED_MODEL_MESSAGE } from "@/lib/ai/ai-access";
 import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
-import { getUserAuthInfo } from "@/lib/user/credits";
+import { getSpendableMicros, INSUFFICIENT_BALANCE_MESSAGE } from "@/lib/billing/account.server";
+import { isFreeTextModel } from "@/lib/billing/pricing";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
-import type { ChatMessage, CustomProviderRequest, Mention, ChatAttachment } from "@/types";
+import type { AIModelConfig, ChatMessage, CustomProviderRequest, Mention, ChatAttachment } from "@/types";
 import type { AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from "@/lib/chat/model-settings";
 import type { MessageQuote } from "@/lib/chat/quotes";
-import { validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
+import { CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH, validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
 import { AgentStore, type AgentRunRow } from "./store.server";
 import { encryptAgentCredential } from "./credentials.server";
 import { validateAgentProviderUrl } from "./safe-fetch.server";
@@ -27,7 +28,7 @@ import { availableProfiles } from "./profiles/members.server";
 import { validateAttachmentIds } from "./attachments.server";
 import type { AgentCheckpoint } from "./types";
 
-/** `/compact` is free, so it has its own, stricter bucket instead of the shared chat admission. */
+/** `/compact` has its own, stricter bucket instead of the shared chat admission. */
 export const AGENT_COMPACT_RATE_LIMIT = { maxRequests: 10, windowMs: 3_600_000 } as const;
 
 /** An admission failure with an HTTP-shaped status and a stable code. */
@@ -87,13 +88,12 @@ export type AgentSubmitBody = {
 export type AgentSubmitContext = {
   db: ScopedDb;
   userId: string;
-  user?: { id: string; email?: string | null; emailVerified?: boolean; name?: string | null; image?: string | null } | null;
 };
 
 /**
  * The one admission path for an Agent turn. HTTP calls it with the member's
  * scope; the schedule runner calls it with the system scope and the schedule
- * owner's id, so both charge, validate and queue identically. `origin` is kept
+ * owner's id, so both admit, validate and queue identically. `origin` is kept
  * on the run for the record; `runId` lets the scheduler name the run before it
  * submits, so a completion that arrives early can still settle its schedule run.
  */
@@ -111,12 +111,16 @@ export async function submitAgentTask(
   const compact = origin === "http" ? parseAgentCompactCommand(body.message.content) : null;
   const store = new AgentStore(systemDb());
   const custom: CustomProviderRequest | undefined = body.customProvider
-    ? { apiUrl: body.customProvider.apiUrl, apiKey: body.customProvider.apiKey, modelId: body.customProvider.modelId }
+    ? {
+      apiUrl: body.customProvider.apiUrl, apiKey: body.customProvider.apiKey, modelId: body.customProvider.modelId,
+      ...(body.customProvider.imageModelId ? { imageModelId: body.customProvider.imageModelId } : {}),
+    }
     : undefined;
   if (
     custom &&
     (!["apiUrl", "apiKey", "modelId"].every((key) => typeof custom[key as keyof CustomProviderRequest] === "string") ||
-      Object.keys(validateCustomProviderInput(custom)).length)
+      Object.keys(validateCustomProviderInput(custom)).length ||
+      (custom.imageModelId !== undefined && (typeof custom.imageModelId !== "string" || custom.imageModelId.length > CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH)))
   )
     throw new AgentApiError("自定义模型配置无效");
   if (custom) {
@@ -176,7 +180,6 @@ export async function submitAgentTask(
     history = history.slice(0, index);
   }
   if (compact && !history.length) throw new AgentApiError("当前对话还没有可压缩的内容");
-  const account = await getUserAuthInfo(ctx.userId, { db: ctx.db, user: ctx.user ?? undefined });
   const config = custom
     ? undefined
     : body.model
@@ -188,26 +191,29 @@ export async function submitAgentTask(
   });
   if (attachments.some((item) => item.kind === "image") && (custom || !config?.supportsVision))
     throw new AgentApiError("图片资料需要平台视觉模型的 Agent 模式", 400);
-  if (config && !isModelAllowedForMembership(config, account.effectiveMembership))
-    throw new AgentApiError("当前会员不能使用该模型", 403, "MEMBERSHIP_REQUIRED");
-  // Compaction is free and has its own rate limit, so it needs no credits; it uses no collaborators either.
-  if (!custom && !compact && !account.hasCredits)
-    throw new AgentApiError("积分不足", 402, "INSUFFICIENT_CREDITS");
+  if (config && !isModelOffered(config))
+    throw new AgentApiError(UNPRICED_MODEL_MESSAGE, 403, "MODEL_UNPRICED");
+  // A compaction uses no collaborators: it only summarizes the context.
   const collaborators = compact ? [] : body.collaborators;
   if (custom && collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
-  // A member's role must be one this member may give it now: the specialist always is.
+  // A member's role must be one that is enabled now: the specialist always is.
   const roles = collaborators.some((member) => (member.profile ?? DEFAULT_AGENT_PROFILE) !== DEFAULT_AGENT_PROFILE)
-    ? await availableProfiles(account.effectiveMembership) : [];
+    ? await availableProfiles() : [];
+  const memberModels: AIModelConfig[] = [];
   for (const member of collaborators) {
     const selected = await getModelConfigAsync(member.model);
     if (!selected) throw new AgentApiError(`协作模型不存在：${member.name}`);
-    if (!isModelAllowedForMembership(selected, account.effectiveMembership) ||
-      (member.reasoning && !isReasoningAllowedForMembership(selected, account.effectiveMembership)))
-      throw new AgentApiError(`当前会员不能使用 ${member.name} 的模型或推理配置`, 403, 'MEMBERSHIP_REQUIRED');
+    if (!isModelOffered(selected))
+      throw new AgentApiError(`${member.name} 的模型尚未定价，暂不可用`, 403, 'MODEL_UNPRICED');
     const role = member.profile ?? DEFAULT_AGENT_PROFILE;
     if (role !== DEFAULT_AGENT_PROFILE && !roles.some((item) => item.name === role && item.modes.includes('parallel')))
-      throw new AgentApiError(`${member.name} 的角色已停用或当前会员不可用，请在「设置 → 个性化 → 多模型协作」里改选`, 400, 'PROFILE_UNAVAILABLE');
+      throw new AgentApiError(`${member.name} 的角色已停用，请在「设置 → 个性化 → 多模型协作」里改选`, 400, 'PROFILE_UNAVAILABLE');
+    memberModels.push(selected);
   }
+  // Platform models need a positive balance to start; each request then pays for what it used.
+  if (config && [config, ...memberModels].some((model) => !isFreeTextModel(model.pricing)) &&
+    await getSpendableMicros(ctx.userId, ctx.db) <= 0)
+    throw new AgentApiError(INSUFFICIENT_BALANCE_MESSAGE, 402, "INSUFFICIENT_BALANCE");
   if (origin === "http") {
     const limit = compact
       ? await checkRateLimit(ctx.userId, "/api/agent/compact", AGENT_COMPACT_RATE_LIMIT)
@@ -219,17 +225,14 @@ export async function submitAgentTask(
   let skillTurn: Awaited<ReturnType<typeof skillCommandBlock>> = null;
   if (!compact && parseSkillCommand(body.message.content)) {
     try {
-      skillTurn = await skillCommandBlock(ctx.userId, account.effectiveMembership, body.message.content);
+      skillTurn = await skillCommandBlock(ctx.userId, body.message.content);
     } catch (error) {
       if (error instanceof SkillUnavailableError) throw new AgentApiError(error.message, 400, "SKILL_UNAVAILABLE");
       throw error;
     }
   }
   const modelId = config?.id ?? custom!.modelId;
-  const reasoning =
-    !!config &&
-    isReasoningAllowedForMembership(config, account.effectiveMembership) &&
-    body.reasoning === true;
+  const reasoning = !!config?.supportsReasoning && body.reasoning === true;
   const runId = options.runId ?? randomUUID();
   const credential = custom ? encryptAgentCredential(custom.apiKey, ctx.userId, runId) : null;
   const userMessage: ChatMessage = {
@@ -260,11 +263,9 @@ export async function submitAgentTask(
         timezone: body.timezone,
       },
       userId: ctx.userId,
+      metered: !custom,
       requestedModelId: modelId,
-      membershipType: account.effectiveMembership,
       reasoningEnabled: reasoning,
-      creditDeducted: false,
-      canSkipCredit: !!custom,
     },
     { deferKnowledgeSearch: true },
   );
@@ -278,7 +279,7 @@ export async function submitAgentTask(
   const preparedTurn = prepared.sanitizedMessages.at(-1) ?? userMessage;
   const turn = skillTurn ? { ...preparedTurn, content: joinSkillTurn(skillTurn.block, preparedTurn.content) } : preparedTurn;
   // A rebuilt context expands the earlier `/skill:` turns again, as they were expanded when sent.
-  const earlier = replay ? [] : await expandSkillMessages(prepared.sanitizedMessages.slice(0, -1), ctx.userId, account.effectiveMembership)
+  const earlier = replay ? [] : await expandSkillMessages(prepared.sanitizedMessages.slice(0, -1), ctx.userId)
     .catch(() => prepared.sanitizedMessages.slice(0, -1));
   const checkpoint: AgentCheckpoint = {
     version: 2,
@@ -320,7 +321,7 @@ export async function submitAgentTask(
     title: body.message.content.slice(0, 60),
     replaceFromMessageId: body.replaceFromMessageId ?? null,
     origin,
-    ...(custom ? { customProvider: { apiUrl: custom.apiUrl, modelId: custom.modelId } } : {}),
+    ...(custom ? { customProvider: { apiUrl: custom.apiUrl, modelId: custom.modelId, ...(custom.imageModelId ? { imageModelId: custom.imageModelId } : {}) } } : {}),
   };
   const run = await store.rpc<AgentRunRow>("agent_create_run", {
     p_id: runId,
@@ -332,7 +333,7 @@ export async function submitAgentTask(
     p_checkpoint: checkpoint,
     p_message: assistant,
     p_credential: credential,
-    p_charge: !custom && !compact,
+    p_billing: custom ? "exempt" : "metered",
   });
   return run;
 }

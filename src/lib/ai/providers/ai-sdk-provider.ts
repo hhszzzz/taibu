@@ -15,6 +15,7 @@ import { resolveSourceApiKey } from '@/lib/ai/gateway-secrets.server';
 import { resolveThinkingLevel, thinkingRequestFields, THINKING_REQUEST_FIELDS } from '@/lib/ai/thinking';
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
 import { modelPromptCacheKey } from '@/lib/ai/prompt-cache.server';
+import { estimateUsage, hasTokens, tokenUsageOf, type TokenUsage } from '@/lib/billing/pricing';
 import packageJson from '../../../../package.json';
 
 // AI 请求只需要最小消息结构，避免强制依赖存储/展示字段。
@@ -32,6 +33,8 @@ export interface AIProviderOptions {
     conversationId?: string;
     /** The member the request belongs to. It is part of the key, so cache partitions never mix members. */
     cacheScope?: string;
+    /** Receives what the call used, once; counted locally when the provider reported nothing. */
+    onUsage?: (usage: TokenUsage, estimated: boolean) => void | Promise<void>;
 }
 
 /**
@@ -173,6 +176,19 @@ export function buildProviderOptions(
     return { openai: providerOptions };
 }
 
+function promptText(systemPrompt: string, messages: CoreMessage[]): string {
+    return [systemPrompt, ...messages.map(message => typeof message.content === 'string' ? message.content
+        : (message.content as Array<{ text?: unknown }>).map(part => typeof part.text === 'string' ? part.text : '').join(''))].join('\n');
+}
+
+/** The provider's count, or a local estimate of the prompt and the reply; null when nothing came back. */
+function meteredUsage(config: AIModelConfig, systemPrompt: string, messages: CoreMessage[], usage: import('ai').LanguageModelUsage | undefined, output: string) {
+    const counted = tokenUsageOf(usage);
+    if (hasTokens(counted)) return { usage: counted, estimated: false };
+    if (!output) return null;
+    return { usage: estimateUsage(config.modelId || config.id, promptText(systemPrompt, messages), output), estimated: true };
+}
+
 /**
  * 非流式调用
  */
@@ -194,6 +210,8 @@ export async function callWithAISDK(
         providerOptions: buildProviderOptions(config, options),
     });
 
+    const metered = options?.onUsage && meteredUsage(config, systemPrompt, messages, result.usage, result.text + (result.reasoningText ?? ''));
+    if (metered) await options!.onUsage!(metered.usage, metered.estimated);
     return {
         text: result.text,
         reasoning: result.reasoningText ?? undefined,
@@ -208,6 +226,8 @@ export async function callWithAISDK(
  * - result.toDataStream() 获取 DataStream（用于 chat route 的 toDataStreamResponse）
  * - result.textStream 获取纯文本流
  * - result.fullStream 获取完整事件流
+ *
+ * 计量的流总会读到结束（consumeStream），客户端断开时用量照样落账；中断或出错时按已产出的文字估算。
  */
 export function streamWithAISDK(
     model: LanguageModel,
@@ -216,6 +236,15 @@ export function streamWithAISDK(
     config: AIModelConfig,
     options?: AIProviderOptions,
 ) {
+    let output = '';
+    let settled = false;
+    const settle = async (usage: import('ai').LanguageModelUsage | undefined, final: boolean) => {
+        if (settled || !options?.onUsage) return;
+        const metered = meteredUsage(config, systemPrompt, messages, usage, output);
+        if (!metered && !final) return;
+        settled = true;
+        if (metered) await options.onUsage(metered.usage, metered.estimated);
+    };
     const result = streamText({
         model,
         system: systemPrompt,
@@ -224,7 +253,16 @@ export function streamWithAISDK(
         temperature: options?.temperature ?? 0.7,
         maxOutputTokens: options?.maxTokens ?? config.defaultMaxTokens ?? undefined,
         providerOptions: buildProviderOptions(config, options),
+        ...(options?.onUsage ? {
+            onChunk: ({ chunk }: { chunk: { type: string; text?: string } }) => {
+                if ((chunk.type === 'text-delta' || chunk.type === 'reasoning-delta') && chunk.text) output += chunk.text;
+            },
+            onFinish: ({ totalUsage }: { totalUsage: import('ai').LanguageModelUsage }) => settle(totalUsage, true),
+            onAbort: () => settle(undefined, true),
+            onError: () => settle(undefined, false),
+        } : {}),
     });
+    if (options?.onUsage) void result.consumeStream();
 
     return result;
 }

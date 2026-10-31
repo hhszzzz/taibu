@@ -24,14 +24,13 @@ const CASE_REVIEW = document('name: case-review\ndescription: 复盘一个命理
 
 const skill = (overrides: Partial<SkillRow> = {}): SkillEntry => ({
   id: `id-${overrides.name ?? 'case-review'}`, owner_id: null, name: 'case-review', description: '复盘一个命理案例', version: 1,
-  required_tier: 'free', is_enabled: true, disable_model_invocation: false, sort_order: 0,
+  is_enabled: true, disable_model_invocation: false, sort_order: 0,
   created_at: '2026-10-27T00:00:00.000Z', updated_at: '2026-10-27T00:00:00.000Z', bytes: 64, files: [], source: 'platform', ...overrides,
 });
 
 const modules = () => ({
   store: require('../lib/agent/skills/store.server') as typeof import('../lib/agent/skills/store.server'),
   settings: require('../lib/app-settings') as typeof import('../lib/app-settings'),
-  credits: require('../lib/user/credits') as typeof import('../lib/user/credits'),
   sdk: require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider'),
 });
 
@@ -58,8 +57,7 @@ const invalid = (pattern: RegExp) => (error: unknown) => error instanceof SkillI
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const { credits, sdk } = modules();
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
+  const { sdk } = modules();
   t.mock.method(sdk, 'isModelAvailable', () => true);
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());
 });
@@ -109,12 +107,10 @@ test('a skill\'s files stay inside the skill, as text, within the limits', () =>
     [{ ...base, sortOrder: 20_000 }, /排序/],
     [{ ...base, enabled: 'yes' }, /启用状态/],
   ];
-  for (const [value, pattern] of rejected) assert.throws(() => parseSkillInput(value, 'user', false), invalid(pattern), JSON.stringify(value).slice(0, 80));
-  assert.throws(() => parseSkillInput({ ...base, requiredTier: 'gold' }, 'platform', false), invalid(/会员等级/));
-  assert.equal(parseSkillInput({ ...base, requiredTier: 'pro' }, 'platform', false).requiredTier, 'pro');
-  assert.equal(parseSkillInput({ ...base, requiredTier: 'pro' }, 'user', false).requiredTier, undefined, 'a user\'s skill keeps the free tier');
+  for (const [value, pattern] of rejected) assert.throws(() => parseSkillInput(value, false), invalid(pattern), JSON.stringify(value).slice(0, 80));
+  assert.equal('requiredTier' in parseSkillInput({ ...base, requiredTier: 'pro' }, false), false, 'no tier is read any more');
   // An edit sends only what changed; a listed file without content keeps the stored one.
-  assert.deepEqual(parseSkillInput({ enabled: false, files: [{ path: 'refs/a.md' }] }, 'user', true), { enabled: false, files: [{ path: 'refs/a.md' }] });
+  assert.deepEqual(parseSkillInput({ enabled: false, files: [{ path: 'refs/a.md' }] }, true), { enabled: false, files: [{ path: 'refs/a.md' }] });
   assert.deepEqual([formatSkillBytes(900), formatSkillBytes(1536), formatSkillBytes(20 * 1024), formatSkillBytes(3 * 1024 * 1024)], ['900 B', '1.5 KB', '20 KB', '3.0 MB']);
 });
 
@@ -126,45 +122,43 @@ test('/skill:名称 is a command only at the start of a message', () => {
   for (const text of [' /skill:case-review', '请用 /skill:case-review', '/compact', '/skills']) assert.equal(parseSkillCommand(text), null, text);
 });
 
-test('a member gets the platform skills their tier reaches and as many of their own as the policy allows', async (t) => {
+test('a member gets the enabled platform skills and as many of their own as the policy allows', async (t) => {
   const platform = [
-    skill({ name: 'case-review' }), skill({ name: 'deep-dive', required_tier: 'pro' }), skill({ name: 'retired', is_enabled: false }),
+    skill({ name: 'case-review' }), skill({ name: 'deep-dive' }), skill({ name: 'retired', is_enabled: false }),
   ];
   const own = [
     skill({ name: 'mine-1', owner_id: 'u' }), skill({ name: 'retired', owner_id: 'u' }), skill({ name: 'mine-2', owner_id: 'u', is_enabled: false }),
     skill({ name: 'mine-3', owner_id: 'u' }), skill({ name: 'mine-4', owner_id: 'u' }),
   ];
   // 方法是内置技能，始终可用；这里只看数据库里的技能。
-  const names = async (membership: 'free' | 'plus' | 'pro') => (await availableSkills('u', membership)).filter((row) => row.source !== 'builtin').map((row) => row.name);
-  const limited: AgentExtensionsPolicy = { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { enabled: true, tiers: ['free', 'pro'], limits: { free: 2, plus: 0, pro: 30 } } };
-
+  const names = async () => (await availableSkills('u')).filter((row) => row.source !== 'builtin').map((row) => row.name);
+  const limited: AgentExtensionsPolicy = { ...DEFAULT_AGENT_EXTENSIONS_POLICY, skills: { enabled: true, limit: 2 } };
   await t.test('within the policy', async (t) => {
     useSkills(t, { platform, own, policy: limited });
-    assert.deepEqual(await names('free'), ['case-review', 'mine-1', 'mine-3'],
-      'a disabled skill, one above the tier and a user\'s skill named like a platform one stay out; the first two of the rest count');
-    assert.deepEqual(await names('pro'), ['case-review', 'deep-dive', 'mine-1', 'mine-3', 'mine-4']);
-    assert.deepEqual(await names('plus'), ['case-review'], 'a tier the policy leaves out has only the platform\'s');
+    assert.deepEqual(await names(), ['case-review', 'deep-dive', 'mine-1', 'mine-3'],
+      'a disabled skill and a user\'s skill named like a platform one stay out; the first two of the rest count');
   });
   await t.test('closed by the administrator', async (t) => {
     const { own: read } = useSkills(t, { platform, own, policy: { ...limited, skills: { ...limited.skills, enabled: false } } });
-    assert.deepEqual(await names('pro'), ['case-review', 'deep-dive']);
+    assert.deepEqual(await names(), ['case-review', 'deep-dive']);
     assert.equal(read.mock.callCount(), 0, 'the user\'s skills are not even read');
   });
   await t.test('a policy that cannot be read', async (t) => {
     useSkills(t, { platform, own, policy: new Error('settings unavailable') });
-    assert.deepEqual(await names('pro'), ['case-review', 'deep-dive']);
+    assert.deepEqual(await names(), ['case-review', 'deep-dive']);
   });
   await t.test('the slash menu', async (t) => {
     useSkills(t, { platform, own, policy: limited });
-    assert.deepEqual(await skillCommands('u', 'free'), [
+    assert.deepEqual(await skillCommands('u'), [
       { name: 'case-review', description: '复盘一个命理案例', scope: 'platform' },
+      { name: 'deep-dive', description: '复盘一个命理案例', scope: 'platform' },
       { name: 'mine-1', description: '复盘一个命理案例', scope: 'user' },
       { name: 'mine-3', description: '复盘一个命理案例', scope: 'user' },
     ]);
   });
   await t.test('the slash menu with the scope off', async (t) => {
     useSkills(t, { platform, own, scope: false });
-    assert.deepEqual(await skillCommands('u', 'pro'), []);
+    assert.deepEqual(await skillCommands('u'), []);
   });
 });
 
@@ -192,10 +186,10 @@ test('/skill: expands any skill the member may use, including one only a user ma
   const manual = skill({ name: 'manual-only', disable_model_invocation: true });
   const MANUAL = document('name: manual-only\ndescription: 只由用户调用', '按用户要求逐条核对。');
   const { contents } = useSkills(t, { platform: [skill(), manual], contents: { [skill().id]: CASE_REVIEW, [manual.id]: MANUAL } });
-  assert.equal(await skillCommandBlock('u', 'free', '看看这张盘'), null);
-  assert.deepEqual(await skillCommandBlock('u', 'free', '/skill:manual-only 看看这张盘'), { name: 'manual-only', args: '看看这张盘', block: skillBlock(manual, MANUAL) });
-  await assert.rejects(skillCommandBlock('u', 'free', '/skill: 看看'), unavailable(/请在 \/skill: 后写技能名称/));
-  await assert.rejects(skillCommandBlock('u', 'free', '/skill:missing 看看'), unavailable(/没有可用的技能「missing」/));
+  assert.equal(await skillCommandBlock('u', '看看这张盘'), null);
+  assert.deepEqual(await skillCommandBlock('u', '/skill:manual-only 看看这张盘'), { name: 'manual-only', args: '看看这张盘', block: skillBlock(manual, MANUAL) });
+  await assert.rejects(skillCommandBlock('u', '/skill: 看看'), unavailable(/请在 \/skill: 后写技能名称/));
+  await assert.rejects(skillCommandBlock('u', '/skill:missing 看看'), unavailable(/没有可用的技能「missing」/));
 
   contents.mock.resetCalls();
   const messages = [
@@ -205,27 +199,27 @@ test('/skill: expands any skill the member may use, including one only a user ma
     { role: 'user', content: '/skill:gone 还在吗' },
     { role: 'user', content: '普通消息' },
   ];
-  const expanded = await expandSkillMessages(messages, 'u', 'free');
+  const expanded = await expandSkillMessages(messages, 'u');
   const block = skillBlock(skill(), CASE_REVIEW);
   assert.deepEqual(expanded.map((message) => message.content), [
     joinSkillTurn(block, '第一次'), messages[1].content, block, '/skill:gone 还在吗', '普通消息',
   ], 'a skill that is gone leaves the message as written');
   assert.equal(contents.mock.callCount(), 1, 'each skill is read once');
   contents.mock.resetCalls();
-  assert.deepEqual(await expandSkillMessages(messages.slice(4), 'u', 'free'), messages.slice(4));
+  assert.deepEqual(await expandSkillMessages(messages.slice(4), 'u'), messages.slice(4));
   assert.equal(contents.mock.callCount(), 0, 'a history without commands reads nothing');
 });
 
 test('/skill: stops when the administrator turns the skills scope off', async (t) => {
   useSkills(t, { platform: [skill()], contents: { [skill().id]: CASE_REVIEW }, scope: false });
-  await assert.rejects(skillCommandBlock('u', 'free', '/skill:case-review'), unavailable(/已被管理员关闭/));
-  assert.deepEqual(await expandSkillMessages([{ role: 'user', content: '/skill:case-review' }], 'u', 'free'), [{ role: 'user', content: '/skill:case-review' }]);
-  await assert.rejects(loadSkill('u', 'free', 'case-review'), unavailable(/已被管理员关闭/));
+  await assert.rejects(skillCommandBlock('u', '/skill:case-review'), unavailable(/已被管理员关闭/));
+  assert.deepEqual(await expandSkillMessages([{ role: 'user', content: '/skill:case-review' }], 'u'), [{ role: 'user', content: '/skill:case-review' }]);
+  await assert.rejects(loadSkill('u', 'case-review'), unavailable(/已被管理员关闭/));
   // 方法是产品本身：技能开关关掉后，内置方法仍可加载，数据库里的技能不再出现。
-  const session = await openAgentSkills('u', 'free');
+  const session = await openAgentSkills('u');
   assert.ok(session.skills.every((row) => row.source === 'builtin') && session.skills.length > 0);
   assert.doesNotMatch(session.sectionText([AGENT_SKILL_TOOLS.load]), /case-review/u);
-  const bazi = await loadSkill('u', 'free', 'bazi');
+  const bazi = await loadSkill('u', 'bazi');
   assert.equal(bazi.details.scope, 'builtin');
   assert.ok(bazi.details.method?.instructions?.includes('子平八字'));
 });
@@ -240,29 +234,29 @@ test('load_skill returns the block and refuses a skill only the user may start; 
     contents: { [reviewed.id]: CASE_REVIEW, 'id-mine': document('name: mine\ndescription: 我的做法') },
     files: { [`${reviewed.id}/refs/terms.md`]: '术语表', [`${reviewed.id}/long.md`]: long, [`${reviewed.id}/emoji.md`]: emoji },
   });
-  const loaded = await loadSkill('u', 'free', 'case-review');
+  const loaded = await loadSkill('u', 'case-review');
   assert.equal(loaded.text, skillBlock(reviewed, CASE_REVIEW));
   assert.deepEqual(loaded.details, { name: 'case-review', version: 3, scope: 'platform', files: reviewed.files });
-  assert.equal((await loadSkill('u', 'free', 'mine')).details.scope, 'user');
-  await assert.rejects(loadSkill('u', 'free', 'manual-only'), unavailable(/只能由用户在输入框用 \/skill:manual-only 调用/));
-  await assert.rejects(loadSkill('u', 'free', 'missing'), unavailable(/没有可用的技能「missing」/));
+  assert.equal((await loadSkill('u', 'mine')).details.scope, 'user');
+  await assert.rejects(loadSkill('u', 'manual-only'), unavailable(/只能由用户在输入框用 \/skill:manual-only 调用/));
+  await assert.rejects(loadSkill('u', 'missing'), unavailable(/没有可用的技能「missing」/));
 
-  const terms = await readSkillFilePage('u', 'free', 'case-review', 'refs/terms.md');
+  const terms = await readSkillFilePage('u', 'case-review', 'refs/terms.md');
   assert.equal(terms.text, '技能「case-review」的文件 refs/terms.md（第 1–3 字，共 3 字）\n\n术语表');
-  const first = await readSkillFilePage('u', 'free', 'case-review', 'long.md');
+  const first = await readSkillFilePage('u', 'case-review', 'long.md');
   assert.deepEqual(first.details, { name: 'case-review', path: 'long.md', offset: 0, total: SKILL_FILE_PAGE + 10, nextOffset: SKILL_FILE_PAGE });
   assert.match(first.text, /继续读取传 offset=8000）/u);
-  const second = await readSkillFilePage('u', 'free', 'case-review', 'long.md', SKILL_FILE_PAGE);
+  const second = await readSkillFilePage('u', 'case-review', 'long.md', SKILL_FILE_PAGE);
   assert.deepEqual([second.details.nextOffset, second.text.endsWith(`\n\n${'乙'.repeat(10)}`)], [null, true]);
-  const split = await readSkillFilePage('u', 'free', 'case-review', 'emoji.md');
+  const split = await readSkillFilePage('u', 'case-review', 'emoji.md');
   assert.equal(split.details.nextOffset, SKILL_FILE_PAGE - 1, 'a page does not cut a character in half');
-  await assert.rejects(readSkillFilePage('u', 'free', 'case-review', 'nope.md'), unavailable(/可读的文件：emoji\.md、long\.md、refs\/terms\.md/));
-  await assert.rejects(readSkillFilePage('u', 'free', 'mine', 'a.md'), unavailable(/没有附属文件/));
+  await assert.rejects(readSkillFilePage('u', 'case-review', 'nope.md'), unavailable(/可读的文件：emoji\.md、long\.md、refs\/terms\.md/));
+  await assert.rejects(readSkillFilePage('u', 'mine', 'a.md'), unavailable(/没有附属文件/));
 });
 
 test('the skills section renders only for an agent that can load a skill', async (t) => {
   useSkills(t, { platform: [skill()] });
-  const session = await openAgentSkills('u', 'free');
+  const session = await openAgentSkills('u');
   const render = (tools: string[]) => session.section.render({ agent: { tools: tools.map((name) => ({ name })) } } as never, undefined as never);
   assert.equal(session.section.key, 'taibu_skills');
   assert.equal(render(['bazi']), undefined, 'a member of a parallel analysis has no load_skill');
@@ -282,7 +276,7 @@ test('a task lists its skills in the system prompt, and a loaded skill reaches t
   const reviewed = skill({ version: 2, files: [{ path: 'refs/terms.md', bytes: 9 }] });
   useSkills(t, { platform: [reviewed], contents: { [reviewed.id]: CASE_REVIEW }, files: { [`${reviewed.id}/refs/terms.md`]: '术语表' } });
   const store = new MemoryStore(), run = row();
-  const skills = await openAgentSkills(run.user_id, 'plus');
+  const skills = await openAgentSkills(run.user_id);
   const offered: string[][] = [], prompts: string[] = [];
   await executeAgentRun(store, run, undefined, { config, skills, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'skill', name: AGENT_SKILL_TOOLS.load, arguments: { name: 'case-review' } }];
@@ -310,7 +304,7 @@ test('a task without stored skills still lists the methods its tools reach', asy
   useSkills(t);
   const store = new MemoryStore(), run = row();
   const offered: string[][] = [], prompts: string[] = [];
-  await executeAgentRun(store, run, undefined, { config, skills: await openAgentSkills(run.user_id, 'plus'), streamFn: scripted(() => [{ type: 'text', text: '完成。' }], messages => {
+  await executeAgentRun(store, run, undefined, { config, skills: await openAgentSkills(run.user_id), streamFn: scripted(() => [{ type: 'text', text: '完成。' }], messages => {
     offered.push(getCurrentTools(messages).map(tool => tool.name));
     prompts.push(JSON.stringify(messages.filter(message => message.role === 'system')));
   }) });
@@ -328,7 +322,7 @@ test('a /skill: message sent into a running task reaches the model expanded', as
   const store = new MemoryStore(), run = row();
   store.pending = [{ sequence: 3, mode: 'follow_up', message: { id: 'follow', role: 'user', content: '/skill:case-review 再看事业', createdAt: '2026-10-27T01:00:00.000Z' } }];
   const contexts: string[] = [];
-  await executeAgentRun(store, run, undefined, { config, skills: await openAgentSkills(run.user_id, 'plus'),
+  await executeAgentRun(store, run, undefined, { config, skills: await openAgentSkills(run.user_id),
     streamFn: scripted(() => [{ type: 'text', text: '好的。' }], messages => { contexts.push(JSON.stringify(messages)); }) });
   assert.equal(finished(store).args.p_status, 'completed');
   assert.equal(contexts.length, 2, 'the follow-up starts a second answer');

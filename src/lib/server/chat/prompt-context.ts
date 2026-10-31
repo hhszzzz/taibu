@@ -98,7 +98,7 @@ export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
   options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean },
 ): Promise<ChatPromptContextResult> {
-  const { body, userId, requestedModelId, reasoningEnabled, membershipType } = resolvedRequest;
+  const { body, userId, requestedModelId, reasoningEnabled } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
 
   let dreamContext: { baziChartName?: string; dailyFortune?: string } | undefined;
@@ -113,8 +113,8 @@ export async function buildChatPromptContext(
   const rawUserContent = lastUserMessage?.content || '';
   const userQuestionForSearch = extractUserQuestion(rawUserContent);
   // Runs while the rest of the context loads; mention tokens never leave for the search provider.
-  const webSearch = options?.webSearch ? searchChatWeb(stripMentionTokens(userQuestionForSearch), membershipType) : undefined;
-  const canUsePromptKnowledgeBase = knowledgeBaseFeatureEnabled && membershipType !== 'free';
+  const webSearch = options?.webSearch ? searchChatWeb(stripMentionTokens(userQuestionForSearch)) : undefined;
+  const canUsePromptKnowledgeBase = knowledgeBaseFeatureEnabled;
   const mergedMentions = mergeMentions(rawUserContent, body.mentions);
   const effectiveMentions = canUsePromptKnowledgeBase
     ? mergedMentions
@@ -166,7 +166,6 @@ export async function buildChatPromptContext(
     ? await buildKnowledgeHits({
         query: userQuestionForSearch,
         userId,
-        membershipType,
         promptKbIds: effectiveUserSettings.promptKbIds,
         db: systemDb(),
         knownNames: { userId, names: new Map(promptKnowledgeBases.map(kb => [kb.id, kb.name])) },
@@ -207,7 +206,7 @@ export async function buildChatPromptContext(
 
   const metadata = {
     sources: promptBuild.sources,
-    kbSearchEnabled: knowledgeBaseFeatureEnabled && membershipType !== 'free' && effectiveUserSettings.promptKbIds.length > 0,
+    kbSearchEnabled: canUsePromptKnowledgeBase && effectiveUserSettings.promptKbIds.length > 0,
     kbHitCount: knowledgeHits.length,
     promptDiagnostics: {
       modelId: requestedModelId,

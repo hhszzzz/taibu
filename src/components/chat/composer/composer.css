@@ -190,10 +190,10 @@
 .chat-saved-charts :where(button, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---- Notices shown above the input ---- */
-.chat-credit-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 14px; background: var(--accent-light); font-size: calc(13 / 16 * 1rem); color: var(--accent-hover); }
-.chat-credit-strip > span { font-weight: 500; }
-.chat-credit-strip > a { display: inline-flex; align-items: center; gap: 6px; height: 30px; margin-left: auto; padding: 0 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: calc(12.5 / 16 * 1rem); text-decoration: none; }
-.chat-credit-strip > a:hover { background: var(--accent-hover); color: var(--on-accent); }
+.chat-balance-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 14px; background: var(--accent-light); font-size: calc(13 / 16 * 1rem); color: var(--accent-hover); }
+.chat-balance-strip > span { font-weight: 500; }
+.chat-balance-strip > a { display: inline-flex; align-items: center; gap: 6px; height: 30px; margin-left: auto; padding: 0 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: calc(12.5 / 16 * 1rem); text-decoration: none; }
+.chat-balance-strip > a:hover { background: var(--accent-hover); color: var(--on-accent); }
 
 /* ---- @ 提及弹层（claude 同款形态：r12 面板 + 13px 分组标签 + 32px 选项行） ---- */
 .chat-mention-popover { overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--chat-raised); box-shadow: var(--shadow-panel-popover); }
@@ -272,7 +272,7 @@
 }
 .chat-model-menu .chat-model-options > [aria-checked="true"] { background: var(--fill-ghost-hover); color: var(--foreground); }
 .chat-model-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.chat-model-option-tier { flex-shrink: 0; font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); }
+.chat-model-option-price { flex-shrink: 0; margin-left: 12px; font-size: calc(12 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
 /* claude 模型菜单：单行项（名称 + clay 勾），二级菜单行（努力程度）右侧当前值 + chevron。 */
 .chat-model-menu-row { justify-content: space-between; }
 .chat-model-menu-row .beta-badge { margin-left: 6px; }
@@ -296,7 +296,6 @@
 .chat-model-menu .chat-model-action > svg { color: var(--foreground-secondary); }
 .chat-model-menu .chat-model-action[aria-checked="true"] > svg { color: var(--accent); }
 .chat-model-effort-note { padding: 2px 10px 6px; line-height: 1.6; }
-.chat-model-options > [role^="menuitem"][data-disabled] .chat-model-option-tier { color: inherit; }
 .chat-model-separator { height: 1px; margin: 4px 6px; background: var(--border); }
 .chat-model-label { padding: 4px 10px 2px; font-size: calc(12 / 16 * 1rem); font-weight: 600; color: var(--foreground-secondary); }
 .chat-model-segments { display: grid; gap: 3px; margin: 0 4px; padding: 2px; border-radius: 8px; background: var(--background-secondary); font-size: calc(12 / 16 * 1rem); text-align: center; }

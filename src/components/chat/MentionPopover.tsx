@@ -143,7 +143,7 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
                 title: '选择类别',
                 items: [
                     { key: 'data', label: '@数据', hint: dataSourceErrors.length ? `部分来源失败（${dataSourceErrors.length}）` : '命盘/记录/运势', icon: FOLDER_ICON },
-                    { key: 'knowledge', label: knowledgeBaseLocked ? '@知识库 (Plus+)' : '@知识库', hint: knowledgeBaseLocked ? '仅限 Plus 以上会员使用' : '你的知识库', icon: KB_ICON, disabled: knowledgeBaseLocked },
+                    { key: 'knowledge', label: '@知识库', hint: knowledgeBaseLocked ? '知识库已关闭' : '你的知识库', icon: KB_ICON, disabled: knowledgeBaseLocked },
                 ],
             };
         }
@@ -208,7 +208,7 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
         return {
             title: '@知识库',
             items: knowledgeBaseLocked
-                ? [{ key: 'kb-locked', label: '知识库 (Plus+)', hint: '仅限 Plus 以上会员使用', icon: KB_ICON, disabled: true }]
+                ? [{ key: 'kb-locked', label: '知识库', hint: '知识库已关闭', icon: KB_ICON, disabled: true }]
                 : filteredKnowledgeBases.map((kb) => ({ key: kb.id, label: kb.name, hint: kb.description || '知识库', icon: CHEVRON_ICON, raw: kb })),
         };
     }, [activeLevel, dataSourceErrors.length, effectiveState.selectedCategory, effectiveState.selectedSubcategory, effectiveState.selectedType, enabledDataSourceTypes, filteredDataSources, filteredKnowledgeBases, hepanTypeCounts, knowledgeBaseLocked, typeCounts, visibleSubcategories]);

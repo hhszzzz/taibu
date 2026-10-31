@@ -25,10 +25,11 @@ function baziScript(call: Parameters<typeof scripted>[0]) {
 }
 
 test('the offline runner executes a case through the real runtime and hard-checks Core', async (t) => {
-  // Isolation: an evaluation must not read the member's credits or the platform switches.
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+  // Isolation: an evaluation must not read a balance, charge anyone or read the platform switches.
+  const billing = require('../lib/billing/account.server') as typeof import('../lib/billing/account.server');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-  const creditRead = t.mock.method(credits, 'getUserCreditInfo', async () => { throw new Error('evaluation must not read credits'); });
+  const balanceRead = t.mock.method(billing, 'getSpendableMicros', async () => { throw new Error('evaluation must not read a balance'); });
+  const charge = t.mock.method(billing, 'chargeUsage', async () => { throw new Error('evaluation must not charge'); });
   const featureRead = t.mock.method(settings, 'readFeatureModuleStateFresh', async () => { throw new Error('evaluation must not read feature switches'); });
 
   const outcome = await runAgentEvalCase({
@@ -51,7 +52,8 @@ test('the offline runner executes a case through the real runtime and hard-check
   assert.match(outcome.answer, /壬水日主/);
   assert.ok(outcome.core.length >= 1, 'Core text is kept for the quality judge');
   assert.ok(outcome.tokens.input > 0);
-  assert.equal(creditRead.mock.callCount(), 0);
+  assert.equal(balanceRead.mock.callCount(), 0);
+  assert.equal(charge.mock.callCount(), 0);
   assert.equal(featureRead.mock.callCount(), 0);
 });
 

@@ -1,9 +1,14 @@
 import type { CustomProviderRequest } from '@/types';
 import { buildCustomProviderChatCompletionsUrl } from '@/lib/ai/custom-provider-url';
 
+export type BrowserDirectContentPart =
+    | { type: 'text'; text: string }
+    | { type: 'image_url'; image_url: { url: string } };
+
 export interface BrowserDirectMessage {
     role: 'system' | 'user' | 'assistant';
-    content: string;
+    /** 纯文本，或 OpenAI 兼容的图文分段（图片为 data URL）。 */
+    content: string | BrowserDirectContentPart[];
 }
 
 export interface BrowserDirectResult {

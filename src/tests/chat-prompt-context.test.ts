@@ -101,11 +101,9 @@ test('buildChatPromptContext should load visualization_settings from user_settin
       stream: false,
     },
     userId: 'user-1',
-    canSkipCredit: false,
+    metered: true,
     requestedModelId: 'deepseek-chat',
-    membershipType: 'free',
     reasoningEnabled: false,
-    creditDeducted: false,
   });
 
   assert.equal(budgetCalls, 1);
@@ -117,7 +115,7 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   });
 });
 
-test('buildChatPromptContext passes resolved membershipType to knowledge search', async (t) => {
+test('buildChatPromptContext searches the prompt knowledge bases as the caller, whoever they are', async (t) => {
   const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
   const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const searchModule = require('../lib/knowledge-base/search') as typeof import('../lib/knowledge-base/search');
@@ -126,7 +124,7 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
   const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
   const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
   const originalSearchKnowledge = searchModule.searchKnowledge;
-  let capturedMembershipType: unknown = null;
+  let captured: { userId?: string; kbIds?: string[] } | null = null;
 
   stubSettings(t, {
     expression_style: 'direct',
@@ -148,7 +146,7 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
   })) as typeof promptBuilderModule.buildPromptWithSources;
   appSettingsModule.isFeatureModuleEnabled = (async () => true) as typeof appSettingsModule.isFeatureModuleEnabled;
   searchModule.searchKnowledge = (async (_query, options) => {
-    capturedMembershipType = options?.membershipType;
+    captured = { userId: options?.userId, kbIds: options?.kbIds };
     return [];
   }) as typeof searchModule.searchKnowledge;
 
@@ -175,14 +173,12 @@ test('buildChatPromptContext passes resolved membershipType to knowledge search'
       stream: false,
     },
     userId: 'user-1',
-    canSkipCredit: false,
+    metered: true,
     requestedModelId: 'deepseek-chat',
-    membershipType: 'pro',
     reasoningEnabled: false,
-    creditDeducted: false,
   });
 
-  assert.equal(capturedMembershipType, 'pro');
+  assert.deepEqual(captured, { userId: 'user-1', kbIds: ['kb-1'] });
 });
 
 test('the document and search results keep their layout; mention tokens are stripped only from what the user typed', async (t) => {
@@ -198,10 +194,9 @@ test('the document and search results keep their layout; mention tokens are stri
   });
   t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
   t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
-  const queries: string[] = [], memberships: string[] = [];
-  t.mock.method(webSearchModule, 'searchChatWeb', async (query: string, membership: string) => {
+  const queries: string[] = [];
+  t.mock.method(webSearchModule, 'searchChatWeb', async (query: string) => {
     queries.push(query);
-    memberships.push(membership);
     return { status: 'ok' as const, query, results: [{ title: '流年', url: 'https://example.com', content: '第一段\n\n第二段' }] };
   });
 
@@ -213,11 +208,9 @@ test('the document and search results keep their layout; mention tokens are stri
       stream: false,
     },
     userId: 'user-1',
-    canSkipCredit: false,
+    metered: true,
     requestedModelId: 'deepseek-chat',
-    membershipType: 'pro',
     reasoningEnabled: false,
-    creditDeducted: false,
   }, { webSearch: true });
 
   const content = result.sanitizedMessages[0].content;
@@ -226,7 +219,6 @@ test('the document and search results keep their layout; mention tokens are stri
   assert.ok(content.includes('第一段\n\n第二段'));
   assert.ok(content.endsWith('【用户的问题如下】\n看看 这个'), content.slice(-40));
   assert.deepEqual(queries, ['看看 这个'], 'mention tokens never reach the search provider');
-  assert.deepEqual(memberships, ['pro'], 'the search is routed for the member\'s tier');
   assert.deepEqual(result.metadata.webSearch, { status: 'ok', sources: [{ title: '流年', url: 'https://example.com' }] });
 });
 
@@ -247,7 +239,7 @@ test('the last user message is dated in the zone the browser sent; earlier messa
       stream: false,
       timezone,
     },
-    userId: 'user-1', canSkipCredit: false, requestedModelId: 'deepseek-chat', membershipType: 'free', reasoningEnabled: false, creditDeducted: false,
+    userId: 'user-1', metered: true, requestedModelId: 'deepseek-chat', reasoningEnabled: false,
   });
   const result = await request('America/New_York');
   assert.equal(result.sanitizedMessages[0].content, '昨天问过的事');
@@ -285,7 +277,7 @@ test('quotes reach the prompt builder and move into the last message instead of 
       ],
       stream: false,
     },
-    userId: 'user-1', canSkipCredit: false, requestedModelId: 'deepseek-chat', membershipType: 'free', reasoningEnabled: false, creditDeducted: false,
+    userId: 'user-1', metered: true, requestedModelId: 'deepseek-chat', reasoningEnabled: false,
   });
   assert.deepEqual(capturedQuotes, quotes);
   assert.equal(result.sanitizedMessages[1].content, '【引用块】\n\n解释一下');

@@ -23,7 +23,7 @@ import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useK
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { readSessionJSON, scopeResultSession, updateSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
@@ -102,7 +102,7 @@ export default function QimenResultPage() {
     const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const hasSavedRef = useRef<string | null>(null);
-    const { user, userId, sessionLoading } = useSessionMembership();
+    const { user, userId, sessionLoading } = useSessionBalance();
     const captureIdentity = useIdentityGuard(userId);
     const result = storedResult?.recordOwnerId === userId ? storedResult : null;
     const [prevQimenUserId, setPrevQimenUserId] = useState(userId);

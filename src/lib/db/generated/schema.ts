@@ -3,21 +3,6 @@ import type { ColumnType, Generated, GeneratedAlways } from 'kysely';
 
 export type Json = string | number | boolean | null | Json[] | { [key: string]: Json };
 
-export interface ActivationKeys {
-  id: Generated<string>;
-  key_code: ColumnType<string, string, string>;
-  key_type: ColumnType<string, string, string>;
-  membership_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  credits_amount: ColumnType<number | null, number | null | undefined, number | null | undefined>;
-  is_used: Generated<boolean | null>;
-  used_by: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  used_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  created_by: ColumnType<string, string, string>;
-  created_at: Generated<string | null>;
-  source: Generated<string>;
-  metadata: Generated<Json>;
-}
-
 export interface AgentAttachmentRefs {
   attachment_id: ColumnType<string, string, string>;
   conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
@@ -118,7 +103,6 @@ export interface AgentMcpServers {
   search_tool: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   fetch_tool: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   route_priority: Generated<number>;
-  required_tier: Generated<string>;
   is_enabled: Generated<boolean>;
   timeout_ms: Generated<number>;
   max_result_chars: Generated<number>;
@@ -140,7 +124,6 @@ export interface AgentProfiles {
   model: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   reasoning_effort: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   modes: Generated<unknown>;
-  required_tier: Generated<string>;
   is_enabled: Generated<boolean>;
   sort_order: Generated<number>;
   created_at: Generated<string>;
@@ -279,7 +262,6 @@ export interface AgentSkills {
   description: ColumnType<string, string, string>;
   content: ColumnType<string, string, string>;
   version: Generated<number>;
-  required_tier: Generated<string>;
   is_enabled: Generated<boolean>;
   disable_model_invocation: Generated<boolean>;
   sort_order: Generated<number>;
@@ -323,18 +305,21 @@ export interface AiModels {
   vendor: ColumnType<string, string, string>;
   is_enabled: Generated<boolean | null>;
   sort_order: Generated<number | null>;
-  required_tier: Generated<string>;
   is_reasoning_default: Generated<boolean | null>;
   supports_vision: Generated<boolean | null>;
   default_max_tokens: Generated<number | null>;
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
   usage_type: Generated<string>;
-  credit_cost: Generated<number>;
   default_reasoning_effort: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   custom_parameters: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
   context_window: ColumnType<number | null, number | null | undefined, number | null | undefined>;
   thinking_levels: Generated<unknown>;
+  input_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  output_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  cache_read_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  cache_write_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  image_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
 }
 
 export interface Announcements {
@@ -409,6 +394,30 @@ export interface BaziCharts {
   longitude: ColumnType<number | null, number | null | undefined, number | null | undefined>;
   timezone: Generated<string>;
   disambiguation: Generated<string>;
+}
+
+export interface BillingAccounts {
+  user_id: ColumnType<string, string, string>;
+  balance_micros: Generated<number>;
+  updated_at: Generated<string>;
+}
+
+export interface BillingLedger {
+  id: Generated<string>;
+  user_id: ColumnType<string, string, string>;
+  kind: ColumnType<string, string, string>;
+  amount_micros: ColumnType<number, number, number>;
+  wallet_micros: Generated<number>;
+  subscription_parts: Generated<Json>;
+  wallet_after_micros: ColumnType<number, number, number>;
+  source: Generated<string>;
+  model_key: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  usage: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  reference_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  reference_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  idempotency_key: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  description: Generated<string>;
+  created_at: Generated<string>;
 }
 
 export interface CommunityComments {
@@ -516,28 +525,6 @@ export interface ConversationsWithArchiveStatus {
   archived_kb_ids: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
   has_agent_run: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
   is_scheduled: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
-}
-
-export interface CreditTransactions {
-  id: Generated<string>;
-  user_id: ColumnType<string, string, string>;
-  amount: ColumnType<number, number, number>;
-  type: ColumnType<string, string, string>;
-  source: ColumnType<string, string, string>;
-  description: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  created_at: Generated<string | null>;
-  balance_after: ColumnType<number | null, number | null | undefined, number | null | undefined>;
-  reference_type: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  reference_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  metadata: Generated<Json>;
-}
-
-export interface DailyCheckins {
-  id: Generated<string>;
-  user_id: ColumnType<string, string, string>;
-  checkin_date: ColumnType<string, string, string>;
-  reward_credits: Generated<number | null>;
-  created_at: Generated<string | null>;
 }
 
 export interface DaliurenDivinations {
@@ -719,6 +706,25 @@ export interface PalmReadings {
   conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
+export interface PaymentOrders {
+  id: Generated<string>;
+  trade_no: ColumnType<string, string, string>;
+  user_id: ColumnType<string, string, string>;
+  kind: ColumnType<string, string, string>;
+  plan_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  credit_micros: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  pay_amount: ColumnType<number, number, number>;
+  pay_currency: Generated<string>;
+  provider: Generated<string>;
+  pay_method: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  status: Generated<string>;
+  provider_trade_no: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  provider_payload: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  paid_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface PromptEnhancementUsage {
   user_id: ColumnType<string, string, string>;
   local_date: ColumnType<string, string, string>;
@@ -745,6 +751,21 @@ export interface QimenCharts {
   zhi_fu_ji_gong: Generated<string>;
 }
 
+export interface RedemptionCodes {
+  id: Generated<string>;
+  code: ColumnType<string, string, string>;
+  kind: ColumnType<string, string, string>;
+  amount_micros: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  plan_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  status: Generated<string>;
+  used_by: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  used_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  expires_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  batch_note: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_by: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+}
+
 export interface ReminderSubscriptions {
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
@@ -765,6 +786,24 @@ export interface ScheduledReminders {
   sent: Generated<boolean | null>;
   sent_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string | null>;
+}
+
+export interface SubscriptionPlans {
+  id: Generated<string>;
+  title: ColumnType<string, string, string>;
+  subtitle: Generated<string>;
+  features: Generated<unknown>;
+  price_usd: Generated<number>;
+  duration_unit: Generated<string>;
+  duration_value: Generated<number>;
+  allowance_micros: ColumnType<number, number, number>;
+  reset_period: Generated<string>;
+  purchasable: Generated<boolean>;
+  enabled: Generated<boolean>;
+  max_per_user: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  sort_order: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
 }
 
 export interface TarotReadings {
@@ -823,13 +862,29 @@ export interface UserSettings {
   chart_prompt_detail_level: Generated<string>;
 }
 
+export interface UserSubscriptions {
+  id: Generated<string>;
+  user_id: ColumnType<string, string, string>;
+  plan_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  title: ColumnType<string, string, string>;
+  allowance_micros: ColumnType<number, number, number>;
+  reset_period: ColumnType<string, string, string>;
+  used_micros: Generated<number>;
+  starts_at: Generated<string>;
+  ends_at: ColumnType<string, string, string>;
+  next_reset_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  status: Generated<string>;
+  source: ColumnType<string, string, string>;
+  order_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  note: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface Users {
   id: ColumnType<string, string, string>;
   nickname: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   avatar_url: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  membership: Generated<string | null>;
-  membership_expires_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  ai_chat_count: Generated<number | null>;
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
   is_admin: Generated<boolean | null>;
@@ -868,7 +923,6 @@ export interface ZiweiCharts {
 }
 
 export interface DB {
-  "activation_keys": ActivationKeys;
   "agent_attachment_refs": AgentAttachmentRefs;
   "agent_attachments": AgentAttachments;
   "agent_durable_commits": AgentDurableCommits;
@@ -898,6 +952,8 @@ export interface DB {
   "bazi_case_events": BaziCaseEvents;
   "bazi_case_profiles": BaziCaseProfiles;
   "bazi_charts": BaziCharts;
+  "billing_accounts": BillingAccounts;
+  "billing_ledger": BillingLedger;
   "community_comments": CommunityComments;
   "community_posts": CommunityPosts;
   "community_reports": CommunityReports;
@@ -906,8 +962,6 @@ export interface DB {
   "conversation_shares": ConversationShares;
   "conversations": Conversations;
   "conversations_with_archive_status": ConversationsWithArchiveStatus;
-  "credit_transactions": CreditTransactions;
-  "daily_checkins": DailyCheckins;
   "daliuren_divinations": DaliurenDivinations;
   "face_readings": FaceReadings;
   "generated_images": GeneratedImages;
@@ -922,14 +976,18 @@ export interface DB {
   "ming_records_with_archive_status": MingRecordsWithArchiveStatus;
   "notifications": Notifications;
   "palm_readings": PalmReadings;
+  "payment_orders": PaymentOrders;
   "prompt_enhancement_usage": PromptEnhancementUsage;
   "qimen_charts": QimenCharts;
+  "redemption_codes": RedemptionCodes;
   "reminder_subscriptions": ReminderSubscriptions;
   "scheduled_reminders": ScheduledReminders;
+  "subscription_plans": SubscriptionPlans;
   "tarot_readings": TarotReadings;
   "user_agent_memory": UserAgentMemory;
   "user_oauth_providers": UserOauthProviders;
   "user_settings": UserSettings;
+  "user_subscriptions": UserSubscriptions;
   "users": Users;
   "xiaoliuren_divinations": XiaoliurenDivinations;
   "ziwei_charts": ZiweiCharts;

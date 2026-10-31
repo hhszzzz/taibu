@@ -22,7 +22,7 @@ export async function agentSkillsDatabaseContracts(t, { sql, asActor, asOwner, a
   const files = actor => asActor(actor, "SELECT coalesce(string_agg(s.name || '/' || f.path, ',' ORDER BY s.owner_id NULLS FIRST, f.path), '') FROM public.agent_skill_files f JOIN public.agent_skills s ON s.id = f.skill_id;");
 
   await t.test('platform skills are administrators\' and a user\'s skill, files included, is only its owner\'s', async () => {
-    const platform = await add(adminId, null, 'case-review', { required_tier: 'pro' });
+    const platform = await add(adminId, null, 'case-review');
     await assert.rejects(add(owner, null, 'forged'), /42501/, 'a member cannot add a platform skill');
     await assert.rejects(add(owner, other, 'planted'), /42501/, 'nor a skill in another account');
     await assert.rejects(add(adminId, owner, 'planted'), /42501/, 'nor can an administrator');
@@ -68,7 +68,7 @@ export async function agentSkillsDatabaseContracts(t, { sql, asActor, asOwner, a
   await t.test('the skill tables reject shapes the application never writes', async () => {
     for (const extra of [
       { description: '   ' }, { description: { sql: "repeat('述', 1025)" } }, { content: { sql: "repeat('x', 131073)" } },
-      { required_tier: 'gold' }, { required_tier: 'pro' }, { version: '0' },
+      { version: '0' },
     ]) await assert.rejects(add(owner, owner, 'shape', extra), /23514/, JSON.stringify(extra));
     for (const name of ['Bad-Name', 'a--b', '-a', 'a-', 'a_b', 'a'.repeat(65)]) await assert.rejects(add(owner, owner, name), /23514/, name);
     const skill = await add(owner, owner, 'notes');

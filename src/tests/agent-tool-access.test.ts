@@ -3,35 +3,26 @@ import assert from 'node:assert/strict';
 import { assertAgentToolAccess } from '../lib/agent/tools.server';
 import { MemoryStore, row } from './helpers/agent-runtime-fixture';
 
-test('ordinary Agent tools do not require an account query', async t => {
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+test('knowledge and web tools serve every member; networking still follows the task', async t => {
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-  const account = t.mock.method(credits, 'getUserCreditInfo', async () => { throw new Error('account unavailable'); });
-  t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
-  for (const name of ['bazi', 'qimen', 'tarot', 'ask_user', 'list_user_data']) {
+  let knowledge: 'enabled' | 'disabled' = 'enabled';
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async (featureId: string) => ({
+    status: featureId === 'knowledge-base' ? knowledge : 'enabled' as const,
+  }));
+  for (const name of ['bazi', 'qimen', 'tarot', 'ask_user', 'list_user_data', 'search_knowledge']) {
     await assertAgentToolAccess(new MemoryStore(), row(), name, {});
   }
-  assert.equal(account.mock.callCount(), 0);
-  await assert.rejects(assertAgentToolAccess(new MemoryStore(), row(), 'search_knowledge', {}), /account unavailable/);
-});
+  knowledge = 'disabled';
+  await assert.rejects(assertAgentToolAccess(new MemoryStore(), row(), 'search_knowledge', {}), /知识库功能已关闭/);
 
-test('membership tools still reject free accounts and disabled task networking', async t => {
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-  const account = t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'free' as const, credits: 0, expiresAt: null }));
-  t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
   const run = row();
   run.input.webEnabled = true;
-  for (const name of ['search_knowledge', 'web_search']) {
-    await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, name, {}), /当前会员|当前任务/);
-  }
-  assert.equal(account.mock.callCount(), 2);
-  // An MCP tool's server sets the tier, checked when the tool runs; the task must still have networking on.
+  await assertAgentToolAccess(new MemoryStore(), run, 'web_search', {});
+  // An MCP tool's server is checked when the tool runs; the task must still have networking on.
   await assertAgentToolAccess(new MemoryStore(), run, 'mcp__web__search', {});
   run.input.webEnabled = false;
   await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, 'web_search', {}), /当前任务/);
   await assert.rejects(assertAgentToolAccess(new MemoryStore(), run, 'mcp__web__search', {}), /没有开启联网/);
-  assert.equal(account.mock.callCount(), 2, 'disabled networking needs no membership query');
 });
 
 test('administrator Agent scope switches block tool execution before the provider is called', async t => {

@@ -89,7 +89,7 @@ test('chat bootstrap route rejects anonymous requests', async (t) => {
   assert.equal(payload.error, '请先登录');
 });
 
-test('chat bootstrap route hides prompt knowledge bases for free membership', async (t) => {
+test('chat bootstrap route does not gate prompt knowledge bases on a membership row', async (t) => {
   mockAIFeatureState(t);
   const apiUtilsModule = require('../lib/api-utils') as typeof import('../lib/api-utils');
   type RequireUserContextResult = Awaited<ReturnType<typeof apiUtilsModule.requireUserContext>>;
@@ -98,7 +98,7 @@ test('chat bootstrap route hides prompt knowledge bases for free membership', as
   apiUtilsModule.requireUserContext = async () => ({
     user: { id: 'user-1' },
     db: scopedWithRows({
-      user: { id: 'user-1', membership: 'free', membership_expires_at: null, ai_chat_count: 1 },
+      user: { id: 'user-1', ai_chat_count: 1 },
       settings: { prompt_kb_ids: ['kb-2', 'kb-1'] },
       knowledgeBases: [
         { id: 'kb-1', name: '知识库一', description: 'one' },
@@ -116,8 +116,8 @@ test('chat bootstrap route hides prompt knowledge bases for free membership', as
   const payload = await response.json();
 
   assert.equal(response.status, 200);
-  assert.deepEqual(payload.data.promptKnowledgeBases, []);
-  assert.deepEqual(payload.data.promptKnowledgeBaseIds, []);
+  assert.deepEqual(payload.data.promptKnowledgeBases.map((kb: { id: string }) => kb.id), ['kb-2', 'kb-1']);
+  assert.deepEqual(payload.data.promptKnowledgeBaseIds, ['kb-2', 'kb-1']);
 });
 
 test('chat bootstrap route hides prompt knowledge bases when knowledge-base feature is disabled', async (t) => {

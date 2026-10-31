@@ -6,7 +6,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { BustIcon, FeedbackIcon, GaugeIcon, GithubIcon, LogoutIcon } from '@/lib/navigation/nav-icons';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
 import { signOut } from '@/lib/auth';
-import { buildMembershipInfo, pricingPlans } from '@/lib/user/membership';
+import { formatUsd } from '@/lib/billing/money';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import type { AuthUser } from '@/lib/auth';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
@@ -19,15 +19,9 @@ import type { SettingsCenterTab } from '@/lib/settings-center';
 interface SidebarUserCardProps {
     user: AuthUser;
     collapsed?: boolean;
-    /** `account`: the chat sidebar's footer row (membership and credits) or, collapsed, its round rail button. */
+    /** `account`: the chat sidebar's footer row (name and balance) or, collapsed, its round rail button. */
     appearance?: 'card' | 'account';
 }
-
-const membershipLabels: Record<string, string> = {
-  free: 'Free',
-  plus: 'Plus',
-  pro: 'Pro',
-};
 
 function Avatar({ src, alt, size = 32, round = false }: { src: string | null; alt: string; size?: number; round?: boolean }) {
   const [error, setError] = useState(false);
@@ -101,28 +95,20 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
   const [signingOut, setSigningOut] = useState(false);
   const isDesktopSidebar = useIsDesktopLayout();
   const { isFeatureEnabled } = useFeatureToggles();
-  const { profile, loading: profileLoading, resolved: profileResolved, error: profileError } = useCurrentUserProfile({ enabled: isDesktopSidebar });
+  const { profile, balance, loading: profileLoading, resolved: profileResolved, error: profileError } = useCurrentUserProfile({ enabled: isDesktopSidebar });
   const personalizationEnabled = isFeatureEnabled('chat') && isFeatureEnabled('ai-personalization');
   const chartsEnabled = isFeatureEnabled('charts');
   const helpEnabled = isFeatureEnabled('help');
+  const billingEnabled = isFeatureEnabled('billing');
 
-  const membership = profileResolved && !profileError ? buildMembershipInfo(profile ?? null) : null;
   const avatarUrl = profile?.avatar_url ?? null;
   const displayName = profile?.nickname || user.email?.split('@')[0] || '用户';
-  const membershipLabel = profileLoading || !profileResolved
+  // 账户行 = claude 的「名 · 计划」：这里换成可用额度。
+  const balanceLabel = profileLoading || !profileResolved
     ? '...'
-    : profileError
+    : profileError || !balance
       ? '加载失败'
-      : membershipLabels[membership?.type || 'free'];
-
-  // 「用量」二级菜单：与 composer 上下文环同源的积分读数（余额 / 套餐上限 / 已用占比）。
-  const planLabel = membership ? membershipLabels[membership.type] : '—';
-  const planLimit = pricingPlans.find(plan => plan.id === (membership?.type ?? 'free'))?.creditLimit ?? 10;
-  const creditBalance = membership?.aiChatCount;
-  const creditLimit = typeof creditBalance === 'number' ? Math.max(planLimit, creditBalance) : planLimit;
-  const usedPercent = typeof creditBalance === 'number' && creditLimit > 0
-    ? Math.min(100, Math.round(Math.max(0, creditLimit - creditBalance) / creditLimit * 100))
-    : 0;
+      : formatUsd(balance.spendableMicros);
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -161,7 +147,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
                   <span className="truncate font-medium text-foreground">{displayName}</span>
                   <span aria-hidden="true" className="text-foreground-tertiary">·</span>
-                  <span className="truncate text-foreground-secondary">{membershipLabel}</span>
+                  <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
                 </span>
                 <ChevronsUpDown size={12} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
               </>
@@ -179,7 +165,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
                   <span className="truncate font-medium text-foreground">{displayName}</span>
                   <span aria-hidden="true" className="text-foreground-tertiary">·</span>
-                  <span className="truncate text-foreground-secondary">{membershipLabel}</span>
+                  <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
                 </span>
                 <ChevronsUpDown size={13} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
               </>
@@ -198,28 +184,31 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                       <MenuSubTrigger className={`${MENU_ITEM_CLASS} justify-between`}>
                         <span className="flex items-center gap-2.5">
                           {createElement(GaugeIcon, { size: 18, className: MENU_ICON_CLASS })}
-                          <span>用量</span>
+                          <span>余额</span>
                         </span>
                       </MenuSubTrigger>
                       <MenuSubContent sideOffset={8} className="user-usage-menu">
                         <div className="px-1.5 py-1">
                           <div className="flex items-baseline justify-between gap-3 px-1.5 pt-1">
-                            <strong className="text-[13px] font-medium leading-[1.4] text-foreground">积分</strong>
-                            <span className="text-xs leading-[1.4] text-foreground-tertiary">{planLabel}</span>
+                            <strong className="text-[13px] font-medium leading-[1.4] text-foreground">可用额度</strong>
+                            <span className="text-[13px] font-medium tabular-nums leading-[1.4] text-foreground">{balance ? formatUsd(balance.spendableMicros) : '—'}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 px-1.5 pt-1.5 text-xs leading-[1.4]">
+                            <span className="text-foreground-secondary">余额</span>
+                            <span className={`tabular-nums ${balance && balance.walletMicros < 0 ? 'text-danger' : 'text-foreground-tertiary'}`}>{balance ? formatUsd(balance.walletMicros) : '—'}</span>
                           </div>
                           <div className="flex items-center justify-between gap-3 px-1.5 py-1.5 text-xs leading-[1.4]">
-                            <span className="text-foreground">剩余积分</span>
-                            <span className="tabular-nums text-foreground-tertiary">{typeof creditBalance === 'number' ? `${creditBalance} / ${creditLimit}` : '—'}</span>
+                            <span className="text-foreground-secondary">订阅剩余</span>
+                            <span className="tabular-nums text-foreground-tertiary">{balance ? formatUsd(balance.subscriptionMicros) : '—'}</span>
                           </div>
-                          <div className="mx-1.5 my-1 h-1 overflow-hidden rounded-full bg-fill-field" aria-hidden="true">
-                            <span className="block h-full rounded-full bg-accent" style={{ width: `${usedPercent}%` }} />
-                          </div>
-                          <p className="px-1.5 pb-1 pt-2 text-[11px] leading-[1.5] text-foreground-tertiary">每次平台模型对话消耗 1 积分；签到与升级可补充。</p>
-                          <div className="mx-1.5 my-1 h-px bg-border" />
-                          <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
-                            onClick={() => { setIsMenuOpen(false); openSettingsCenter('upgrade'); }}>
-                            <span>查看订阅与积分</span><ChevronRight size={14} aria-hidden="true" />
-                          </MenuItem>
+                          <p className="px-1.5 pb-1 pt-1 text-[11px] leading-[1.5] text-foreground-tertiary">平台模型按实际用量计费，先扣订阅额度再扣余额；使用自己的 API 不计费。</p>
+                          {billingEnabled ? <>
+                            <div className="mx-1.5 my-1 h-px bg-border" />
+                            <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
+                              onClick={() => { setIsMenuOpen(false); openSettingsCenter('billing'); }}>
+                              <span>订阅与余额</span><ChevronRight size={14} aria-hidden="true" />
+                            </MenuItem>
+                          </> : null}
                         </div>
                       </MenuSubContent>
                     </MenuSub>

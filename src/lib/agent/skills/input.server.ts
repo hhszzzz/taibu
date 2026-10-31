@@ -1,7 +1,5 @@
 import 'server-only';
 import { parse } from 'yaml';
-import { isMembershipTier } from '../mcp/config';
-import type { MembershipType } from '@/lib/user/membership';
 import {
   SKILL_CONTENT_MAX_BYTES, SKILL_DESCRIPTION_MAX, SKILL_DOCUMENT, SKILL_FILE_MAX_BYTES, SKILL_FILES_MAX, SKILL_NAME_MAX,
   SKILL_NAME_PATTERN, skillPathProblem,
@@ -69,7 +67,6 @@ export type SkillFields = {
   document: SkillDocument;
   /** The complete set of files: an entry without content keeps the stored file. */
   files: SkillFileChange[];
-  requiredTier: MembershipType;
   enabled: boolean;
   sortOrder: number;
 };
@@ -93,11 +90,8 @@ function files(value: unknown): SkillFileChange[] {
   });
 }
 
-/**
- * Checks a settings page's submission. A user's skill keeps the free tier (the extension policy decides who may use
- * them); `partial` is an edit, where an absent field keeps what is stored.
- */
-export function parseSkillInput(value: unknown, scope: 'platform' | 'user', partial: boolean): Partial<SkillFields> {
+/** Checks a settings page's submission; `partial` is an edit, where an absent field keeps what is stored. */
+export function parseSkillInput(value: unknown, partial: boolean): Partial<SkillFields> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return fail('技能格式无效');
   const raw = value as Record<string, unknown>;
   const result: Partial<SkillFields> = {};
@@ -106,10 +100,6 @@ export function parseSkillInput(value: unknown, scope: 'platform' | 'user', part
     result.document = parseSkillDocument(raw.content as string);
   }
   if (raw.files !== undefined) result.files = files(raw.files);
-  if (raw.requiredTier !== undefined && scope === 'platform') {
-    if (!isMembershipTier(raw.requiredTier)) fail('会员等级无效');
-    result.requiredTier = raw.requiredTier as MembershipType;
-  }
   if (raw.enabled !== undefined) {
     if (typeof raw.enabled !== 'boolean') fail('启用状态无效');
     result.enabled = raw.enabled as boolean;

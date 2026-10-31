@@ -280,7 +280,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           metadata: { metadata: { agentRunId: runId, agentCommandMode: 'reply', agentQuestionId: reply.questionId, agentAnswers: reply.answers } }, createdAt: question.at + 60_000 * (index + 1) });
       }
       runs.push({
-        id: runId, status: result.status, input, billing: result.status === 'cancelled' ? 'refunded' : 'charged',
+        id: runId, status: result.status, input, billing: 'metered',
         checkpoint: {
           version: 2, durable: { engine: ENGINE, seeded: true, started: true },
           messages: [{ role: 'user', content: agentInputContent(input.userMessage, input.timezone), timestamp: question.at }],

@@ -33,10 +33,6 @@ export interface AnnualReportData {
         weekdayDistribution: { day: number; count: number }[];
         peakHour: number;
     };
-    checkin: {
-        totalDays: number;
-        totalCreditsEarned: number;
-    };
     insights?: string[];
 }
 

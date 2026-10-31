@@ -6,17 +6,16 @@ const json = value => `${quote(JSON.stringify(value))}::jsonb`;
 export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwner, adminId }) {
   const owner = randomUUID(), other = randomUUID();
   await sql(`INSERT INTO identity.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
-  await asOwner(`UPDATE public.users SET ai_chat_count=20,membership='plus' WHERE id IN (${quote(owner)},${quote(other)});`);
   const admin = statement => asActor(adminId, statement);
   const parsed = async statement => { const value=await admin(statement); return value ? JSON.parse(value) : null; };
-  const balance = async () => Number(await asOwner(`SELECT ai_chat_count FROM public.users WHERE id=${quote(owner)};`));
+  const ledger = () => asOwner(`SELECT count(*) FROM public.billing_ledger WHERE user_id=${quote(owner)};`);
   const conversation = () => asActor(owner,`SELECT public.create_conversation_with_messages(${quote(owner)},'经验契约','general','chat','{}','[]');`);
   const message = (id, content='资料问题') => ({ id, role:'user', content, createdAt:new Date().toISOString() });
   const assistant = (id, content='') => ({ id:`agent:${id}`,role:'assistant',content,createdAt:new Date().toISOString(),agent:{version:1,runId:id,status:'queued',parts:[]} });
   const cp = {version:2,messages:[],parts:[],durable:{engine:'pi-durable/1.4.0',seeded:true}};
   async function run() {
     const id=randomUUID(), cid=await conversation();
-    await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({model:'fixture',reasoning:false,webEnabled:false,systemPrompt:'fixture',userMessage:message(`u:${id}`)})},${json(cp)},${json(assistant(id))},NULL,false);`);
+    await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({model:'fixture',reasoning:false,webEnabled:false,systemPrompt:'fixture',userMessage:message(`u:${id}`)})},${json(cp)},${json(assistant(id))},NULL,'exempt');`);
     await admin("SELECT public.agent_worker_heartbeat('experience-db','pi-durable/1.4.0');");
     const claimed=await parsed("SELECT to_jsonb(public.agent_claim_run('experience-db'));");
     assert.equal(claimed.id,id); return claimed;
@@ -70,10 +69,10 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
     assert.equal(await asActor(other,`SELECT public.search_conversation_messages(${quote(marker)},30);`),'[]');
     assert.equal(await asActor(owner,"SELECT public.search_conversation_messages('inactive-secret',30);"),'[]');
   });
-  await t.test('enhancement quota admits exactly five concurrent calls without charging credits',async()=>{
-    const before=await balance();
+  await t.test('enhancement quota admits exactly five concurrent calls and bills nothing itself',async()=>{
+    const before=await ledger();
     const calls=await Promise.all(Array.from({length:8},()=>asActor(owner,'SELECT public.claim_prompt_enhancement();')));
-    assert.equal(calls.filter(value=>value==='t').length,5); assert.equal(await balance(),before);
+    assert.equal(calls.filter(value=>value==='t').length,5); assert.equal(await ledger(),before);
   });
   await t.test('pending queue edits preserve command identity; claims lock edits and add history once',async()=>{
     const r=await run(), request=randomUUID(); const queued=await submit(r,request);

@@ -165,6 +165,7 @@ function envFile(entries) {
 const PASSTHROUGH = [
   'LINUXDO_CLIENT_ID', 'LINUXDO_CLIENT_SECRET',
   'AMAP_WEB_SERVICE_KEY',
+  'EPAY_API_URL', 'EPAY_PID', 'EPAY_KEY', 'EPAY_METHODS',
 ];
 
 /** Rewrites every env file from config.json. Safe to call before each compose run. */

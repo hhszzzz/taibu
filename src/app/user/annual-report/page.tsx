@@ -11,7 +11,6 @@ import {
     Calendar,
     BarChart3,
     Trophy,
-    Flame,
     RefreshCw,
     Star,
     TrendingUp
@@ -252,7 +251,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                                     <Calendar className="w-5 h-5 text-warning" />
                                     {selectedYear}年度总览
                                 </h2>
-                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
                                         <div className="text-3xl font-bold text-warning">{report.usage.totalAnalyses}</div>
                                         <div className="text-sm text-foreground-secondary">总分析次数</div>
@@ -260,10 +259,6 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
                                         <div className="text-3xl font-bold text-accent">{report.usage.activeMonths}</div>
                                         <div className="text-sm text-foreground-secondary">活跃月份</div>
-                                    </div>
-                                    <div className="text-center p-4 bg-background/50 rounded-xl">
-                                        <div className="text-3xl font-bold text-danger">{report.checkin.totalDays}</div>
-                                        <div className="text-sm text-foreground-secondary">签到天数</div>
                                     </div>
                                     <div className="text-center p-4 bg-background/50 rounded-xl">
                                         <div className="text-3xl font-bold text-hua-quan">{report.usage.totalChats}</div>
@@ -309,24 +304,6 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                                     功能使用分布
                                 </h3>
                                 {renderFeatureDistribution()}
-                            </div>
-
-                            {/* 签到成就 */}
-                            <div className="bg-background-secondary rounded-2xl border border-border p-6">
-                                <h3 className="font-bold mb-4 flex items-center gap-2">
-                                    <Flame className="w-5 h-5 text-accent" />
-                                    签到与积分
-                                </h3>
-                                <div className="grid grid-cols-2 gap-4 text-center">
-                                    <div>
-                                        <div className="text-2xl font-bold text-accent">{report.checkin.totalDays}</div>
-                                        <div className="text-sm text-foreground-secondary">累计签到</div>
-                                    </div>
-                                    <div>
-                                        <div className="text-2xl font-bold text-warning">{report.checkin.totalCreditsEarned}</div>
-                                        <div className="text-sm text-foreground-secondary">获得积分</div>
-                                    </div>
-                                </div>
                             </div>
 
                             {/* 生成时间 */}

@@ -60,10 +60,11 @@ const at = (ms) => q(new Date(ms).toISOString());
 const now = Date.now();
 const DAY = 86_400_000;
 
+// Wallets in USD; the newcomer starts at $0 to show the spent-balance state.
 const users = [
-  { id: ADMIN, email: 'admin@taibu.local', name: '管理员', nickname: '太卜管理员', membership: 'pro', credits: 9999, admin: true },
-  { id: DEMO, email: 'demo@taibu.local', name: '演示用户', nickname: '阿卜', membership: 'plus', credits: 300, admin: false },
-  { id: NEWBIE, email: 'newbie@taibu.local', name: '新用户', nickname: '初来乍到', membership: 'free', credits: 5, admin: false },
+  { id: ADMIN, email: 'admin@taibu.local', name: '管理员', nickname: '太卜管理员', walletUsd: 100, admin: true },
+  { id: DEMO, email: 'demo@taibu.local', name: '演示用户', nickname: '阿卜', walletUsd: 5, admin: false },
+  { id: NEWBIE, email: 'newbie@taibu.local', name: '新用户', nickname: '初来乍到', walletUsd: 0, admin: false },
 ];
 
 const plainConversations = [
@@ -113,16 +114,37 @@ const plainConversations = [
 
 const BAZI_CHART = 'dddddddd-0000-4000-8000-000000000001';
 const TEST_GATEWAY = '99999999-7000-4000-8000-000000000000';
-// Test models for the model menu: free/Plus/Pro tiers, thinking on and off, several thinking formats and level sets,
-// and vision. They attach to the newapi gateway; until an administrator saves a working address and key for it in the
-// settings center, the menu still shows them (and their levels) but sending reports the missing key.
+// Test models for the model menu: a free one and priced ones (USD per million tokens), thinking on and off, several
+// level sets, and vision. They attach to the newapi gateway; until an administrator saves a working address and key
+// for it in the settings center, the menu still shows them (and their levels) but sending reports the missing key.
 const TEST_MODELS = [
-  { id: '99999999-7000-4000-8000-000000000001', key: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', tier: 'free', levels: [], effort: null, context: 131072, vision: false, reasoningDefault: false, sort: 10 },
-  { id: '99999999-7000-4000-8000-000000000002', key: 'kimi-k2.5', name: 'Kimi K2.5', vendor: 'moonshot', tier: 'free', levels: ['low', 'medium', 'high'], effort: 'medium', context: 262144, vision: false, reasoningDefault: true, sort: 20 },
-  { id: '99999999-7000-4000-8000-000000000003', key: 'glm-4.7', name: 'GLM-4.7', vendor: 'glm', tier: 'free', levels: ['low', 'medium', 'high'], effort: 'medium', context: 204800, vision: false, reasoningDefault: false, sort: 30 },
-  { id: '99999999-7000-4000-8000-000000000004', key: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', vendor: 'anthropic', tier: 'plus', levels: ['low', 'medium', 'high'], effort: 'medium', context: 200000, vision: true, reasoningDefault: false, sort: 40 },
-  { id: '99999999-7000-4000-8000-000000000005', key: 'gemini-3', name: 'Gemini 3 Pro', vendor: 'google', tier: 'plus', levels: ['low', 'high'], effort: 'high', context: 1048576, vision: true, reasoningDefault: false, sort: 50 },
-  { id: '99999999-7000-4000-8000-000000000006', key: 'gpt-5.1', name: 'GPT-5.1', vendor: 'openai', tier: 'pro', levels: ['minimal', 'low', 'medium', 'high', 'xhigh'], effort: 'xhigh', context: 400000, vision: true, reasoningDefault: true, sort: 60 },
+  { id: '99999999-7000-4000-8000-000000000001', key: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', price: { input: 0, output: 0 }, levels: [], effort: null, context: 131072, vision: false, reasoningDefault: false, sort: 10 },
+  { id: '99999999-7000-4000-8000-000000000002', key: 'kimi-k2.5', name: 'Kimi K2.5', vendor: 'moonshot', price: { input: 0.6, output: 2.5, cacheRead: 0.15 }, levels: ['low', 'medium', 'high'], effort: 'medium', context: 262144, vision: false, reasoningDefault: true, sort: 20 },
+  { id: '99999999-7000-4000-8000-000000000003', key: 'glm-4.7', name: 'GLM-4.7', vendor: 'glm', price: { input: 0.6, output: 2.2, cacheRead: 0.11 }, levels: ['low', 'medium', 'high'], effort: 'medium', context: 204800, vision: false, reasoningDefault: false, sort: 30 },
+  { id: '99999999-7000-4000-8000-000000000004', key: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', vendor: 'anthropic', price: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: 3.75 }, levels: ['low', 'medium', 'high'], effort: 'medium', context: 200000, vision: true, reasoningDefault: false, sort: 40 },
+  { id: '99999999-7000-4000-8000-000000000005', key: 'gemini-3', name: 'Gemini 3 Pro', vendor: 'google', price: { input: 2, output: 12 }, levels: ['low', 'high'], effort: 'high', context: 1048576, vision: true, reasoningDefault: false, sort: 50 },
+  { id: '99999999-7000-4000-8000-000000000006', key: 'gpt-5.1', name: 'GPT-5.1', vendor: 'openai', price: { input: 1.25, output: 10, cacheRead: 0.125 }, levels: ['minimal', 'low', 'medium', 'high', 'xhigh'], effort: 'xhigh', context: 400000, vision: true, reasoningDefault: true, sort: 60 },
+];
+const modelByKey = new Map(TEST_MODELS.map(model => [model.key, model]));
+// Micro-dollars the way src/lib/billing/pricing.ts prices a call: whole 1/10000-dollar units, rounded up.
+const priceUnits = (price) => Math.round((price ?? 0) * 10_000);
+const costMicros = ({ price }, usage) => Math.ceil((
+  usage.input * priceUnits(price.input)
+  + (usage.cacheRead ?? 0) * priceUnits(price.cacheRead ?? price.input)
+  + (usage.cacheWrite ?? 0) * priceUnits(price.cacheWrite ?? price.input)
+  + usage.output * priceUnits(price.output)) / 10_000);
+// Plans for the billing center: two on sale and one that only a redemption code opens.
+const DEMO_PLANS = [
+  { id: '99999999-7100-4000-8000-000000000001', title: '轻享月卡', subtitle: '每月 $6 额度，用完为止', features: ['所有平台模型通用', '先于余额扣除'], priceUsd: 5, unit: 'month', value: 1, allowanceUsd: 6, reset: 'never', purchasable: true, sort: 10 },
+  { id: '99999999-7100-4000-8000-000000000002', title: '每日畅聊', subtitle: '每天 $1 额度，次日重置', features: ['每日重置', '适合高频对话'], priceUsd: 9.9, unit: 'month', value: 1, allowanceUsd: 1, reset: 'daily', purchasable: true, sort: 20 },
+  { id: '99999999-7100-4000-8000-000000000003', title: '体验周卡', subtitle: '兑换码专享', features: ['7 天有效'], priceUsd: 0, unit: 'day', value: 7, allowanceUsd: 2, reset: 'never', purchasable: false, sort: 30 },
+];
+// The demo member's ledger: a paid chat, an Agent task, a free model and an estimated (interrupted) reply.
+const DEMO_USAGE = [
+  { key: 'claude-sonnet-4-5', source: 'chat', usage: { input: 4200, cacheRead: 8000, cacheWrite: 0, output: 1350 }, hoursAgo: 30 },
+  { key: 'gpt-5.1', source: 'agent', usage: { input: 18000, cacheRead: 24000, cacheWrite: 0, output: 2600 }, hoursAgo: 26 },
+  { key: 'deepseek-v3.2', source: 'chat', usage: { input: 900, cacheRead: 0, cacheWrite: 0, output: 420 }, hoursAgo: 5 },
+  { key: 'kimi-k2.5', source: 'analysis', usage: { input: 1500, cacheRead: 0, cacheWrite: 0, output: 380, estimated: true }, hoursAgo: 2 },
 ];
 const agentDemo = await buildAgentDemo({ root, baziChartId: BAZI_CHART, plainConversations, now });
 // Private attachments are stored as the upload route stores them: `agent-attachments/<user>/<id>` in the file volume.
@@ -157,7 +179,10 @@ delete from public.community_comments where user_id = any(${idArray});
 delete from public.community_votes where user_id = any(${idArray});
 delete from public.community_reports where reporter_id = any(${idArray}) or reviewed_by = any(${idArray});
 delete from public.community_posts where user_id = any(${idArray});
-delete from public.activation_keys where used_by = any(${idArray}) or created_by = any(${idArray});
+-- Demo plans are replaced; codes and orders that point at them go first.
+delete from public.redemption_codes where plan_id = any(array[${DEMO_PLANS.map(plan => q(plan.id)).join(', ')}]::uuid[]);
+delete from public.payment_orders where plan_id = any(array[${DEMO_PLANS.map(plan => q(plan.id)).join(', ')}]::uuid[]);
+delete from public.subscription_plans where id = any(array[${DEMO_PLANS.map(plan => q(plan.id)).join(', ')}]::uuid[]);
 delete from public.announcements where content like '本地演示环境已就绪%' or content like '社区与命盘记录已放入示例数据%';
 -- Test models and their bindings. The gateway row stays, with the address and key an administrator saved for it
 -- and any other models bound to it.
@@ -190,8 +215,7 @@ for (const user of users) {
     values (${q(user.id)}, ${q(user.email)}, true, ${q(user.name)});`);
   statements.push(`insert into identity.accounts (user_id, account_id, provider_id, password)
     values (${q(user.id)}, ${q(user.id)}, 'credential', ${q(hash)});`);
-  statements.push(`update public.users set nickname = ${q(user.nickname)}, membership = ${q(user.membership)},
-    ai_chat_count = ${user.credits}, is_admin = ${user.admin} where id = ${q(user.id)};`);
+  statements.push(`update public.users set nickname = ${q(user.nickname)}, is_admin = ${user.admin} where id = ${q(user.id)};`);
   statements.push(`insert into public.user_settings (user_id, custom_instructions, language)
     values (${q(user.id)}, ${q('这是本地演示账号，可以随意修改设置。')}, 'zh')
     on conflict (user_id) do update set custom_instructions = excluded.custom_instructions;`);
@@ -203,12 +227,14 @@ statements.push(`insert into public.ai_gateways (id, gateway_key, display_name, 
   on conflict do nothing;`);
 for (const model of TEST_MODELS) {
   statements.push(`insert into public.ai_models
-    (id, model_key, display_name, vendor, is_enabled, sort_order, required_tier,
+    (id, model_key, display_name, vendor, is_enabled, sort_order,
      is_reasoning_default, supports_vision, default_max_tokens, usage_type,
-     default_reasoning_effort, thinking_levels, context_window)
-    values (${q(model.id)}, ${q(model.key)}, ${q(model.name)}, ${q(model.vendor)}, true, ${model.sort}, ${q(model.tier)},
+     default_reasoning_effort, thinking_levels, context_window,
+     input_price, output_price, cache_read_price, cache_write_price)
+    values (${q(model.id)}, ${q(model.key)}, ${q(model.name)}, ${q(model.vendor)}, true, ${model.sort},
       ${model.reasoningDefault}, ${model.vision}, null, 'chat',
-      ${q(model.effort)}, ${q(`{${model.levels.join(',')}}`)}::text[], ${model.context});`);
+      ${q(model.effort)}, ${q(`{${model.levels.join(',')}}`)}::text[], ${model.context},
+      ${model.price.input}, ${model.price.output}, ${model.price.cacheRead ?? 'null'}, ${model.price.cacheWrite ?? 'null'});`);
 }
 statements.push(`insert into public.ai_model_gateway_bindings (model_id, gateway_id, model_id_override, is_enabled, priority)
   select model.id, gateway.id, null, true, 0
@@ -319,14 +345,26 @@ statements.push(`insert into public.notifications (user_id, type, title, content
 statements.push(`insert into public.notifications (user_id, type, title, content, link)
   values (${q(DEMO)}, 'announcement', '演示数据已加载', ${q(`共 ${plainConversations.length - 1 + agentDemo.conversations.length} 个会话、3 条记录、2 篇笔记。`)}, '/records');`);
 
-statements.push(`insert into public.credit_transactions (user_id, amount, type, source, description, balance_after)
-  values (${q(DEMO)}, 300, 'earn', 'demo', '本地演示初始积分', 300);`);
-statements.push(`insert into public.credit_transactions (user_id, amount, type, source, description, balance_after)
-  values (${q(DEMO)}, -20, 'spend', 'chat', '示例消费', 280);`);
-statements.push(`insert into public.credit_transactions (user_id, amount, type, source, description, balance_after)
-  values (${q(DEMO)}, 20, 'refund', 'chat', '示例退回', 300);`);
-statements.push(`insert into public.daily_checkins (user_id, checkin_date, reward_credits)
-  values (${q(DEMO)}, current_date, 2) on conflict do nothing;`);
+for (const plan of DEMO_PLANS) {
+  statements.push(`insert into public.subscription_plans
+    (id, title, subtitle, features, price_usd, duration_unit, duration_value, allowance_micros, reset_period, purchasable, enabled, sort_order)
+    values (${q(plan.id)}, ${q(plan.title)}, ${q(plan.subtitle)}, ${q(`{${plan.features.join(',')}}`)}::text[], ${plan.priceUsd},
+      ${q(plan.unit)}, ${plan.value}, ${plan.allowanceUsd * 1_000_000}, ${q(plan.reset)}, ${plan.purchasable}, true, ${plan.sort});`);
+}
+// Wallets, a subscription and usage go through the billing functions, as the administrator, so the ledger reads as
+// the app writes it.
+statements.push(`select set_config('request.jwt.claims', ${q(JSON.stringify({ sub: ADMIN }))}, true);`);
+for (const user of users.filter(user => user.walletUsd > 0)) {
+  statements.push(`select public.billing_adjust_wallet(${q(user.id)}, ${user.walletUsd * 1_000_000}, '本地演示初始余额');`);
+}
+statements.push(`select public.billing_grant_subscription(${q(DEMO)}, ${q(DEMO_PLANS[1].id)}, '本地演示赠送');`);
+DEMO_USAGE.forEach((entry, index) => {
+  const key = `demo-seed:${DEMO}:${index}`;
+  statements.push(`select public.billing_charge(${q(DEMO)}, ${costMicros(modelByKey.get(entry.key), entry.usage)}, true, ${q(entry.source)},
+    ${q(entry.key)}, ${json(entry.usage)}, null, null, ${q(key)}, '');`);
+  statements.push(`update public.billing_ledger set created_at = ${at(now - entry.hoursAgo * 3_600_000)} where idempotency_key = ${q(key)};`);
+});
+statements.push(`select set_config('request.jwt.claims', '', true);`);
 
 if (attachmentRows.length) {
   const web = execFileSync('docker', ['ps', '-q', '--filter', `label=com.docker.compose.project=${project}`, '--filter', 'label=com.docker.compose.service=web'], { encoding: 'utf8' }).trim().split('\n')[0];

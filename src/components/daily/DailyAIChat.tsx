@@ -1,5 +1,5 @@
 /**
- * 「问问这一天」：针对选中日期的 AI 问答，复用现有聊天接口（消耗 1 次额度）。
+ * 「问问这一天」：针对选中日期的 AI 问答，复用现有聊天接口（平台模型按用量计费，自定义 API 不计费）。
  *
  * 桌面端为页面右栏卡片；移动端输入框固定在底部导航之上，有对话后才在页尾展开卡片。
  * 'use client'：需要管理实时输入、对话与请求状态。
@@ -13,7 +13,7 @@ import { Input } from '@/components/ui/Input';
 import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getCalendarAlmanac } from '@/lib/divination/calendar';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { buildDailyChatContext, requestDailyChat } from '@/lib/chat/daily-chat';
@@ -54,8 +54,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
     const isLoading = pendingKey === dateKey;
     // 移动端无对话时只保留底部输入框（建议问题与说明仅桌面端展示）
     const hasConversation = messages.length > 0 || isLoading || Boolean(error);
-    const { userId: sessionUserId, membershipInfo, refreshMembership } = useSessionMembership();
-    const remainingCredits = sessionUserId === userId ? (membershipInfo?.aiChatCount ?? null) : null;
+    const { refreshBalance } = useSessionBalance();
 
     const almanac = useMemo(() => getCalendarAlmanac(date), [date]);
     const personalFortuneData = personalFortune?.fortune ?? null;
@@ -86,21 +85,21 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
             const response = await requestDailyChat(contextMessage);
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({})) as { code?: string; error?: string };
-                fail(errorData.code === 'INSUFFICIENT_CREDITS' ? '积分不足，请先获取积分' : errorData.error || '请求失败');
+                fail(errorData.code === 'INSUFFICIENT_BALANCE' ? '余额不足，请先充值或兑换' : errorData.error || '请求失败');
                 return;
             }
             const data = await response.json() as { content: string };
             setSession((current) => (current.key === key
                 ? { key, messages: [...current.messages, { role: 'assistant', content: data.content }], error: null }
                 : current));
-            void refreshMembership();
+            void refreshBalance();
         } catch (err) {
             console.error('AI问答错误:', err);
             fail(err instanceof BrowserDirectProviderError ? err.message : '网络错误，请重试');
         } finally {
             setPendingKey((current) => (current === key ? null : current));
         }
-    }, [isLoading, userId, onRequireLogin, dateKey, session, date, almanac, personalFortuneData, refreshMembership]);
+    }, [isLoading, userId, onRequireLogin, dateKey, session, date, almanac, personalFortuneData, refreshBalance]);
 
     // 新消息或等待中：对话列表滚到底部，并把卡片带入视口（移动端卡片在页尾、底部被输入框遮挡）
     const messageCount = messages.length;
@@ -128,11 +127,6 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
                     <h2 id="daily-ai-chat-title" className="font-display text-lg">问问这一天</h2>
                 </div>
                 <div className="flex shrink-0 items-center gap-1.5">
-                    {remainingCredits !== null && (
-                        <span className="rounded-full bg-accent-light px-2 py-0.5 text-xs text-accent-strong" title="剩余次数">
-                            剩余 {remainingCredits}
-                        </span>
-                    )}
                     {messages.length > 0 && !isLoading && (
                         <IconButton
                             label="清空对话"

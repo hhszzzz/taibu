@@ -1,6 +1,5 @@
-import type { AIMessageMetadata, AIPersonality, ChatAttachment, ChatMessage } from '@/types';
+import type { AIMessageMetadata, AIModelPricing, AIPersonality, ChatAttachment, ChatMessage } from '@/types';
 import type { Mention } from '@/types/mentions';
-import type { MembershipType } from '@/lib/user/membership';
 import type { UserIdentityProfile } from '@/lib/user/settings';
 import type { VisualizationSettings } from '@/lib/visualization/settings';
 
@@ -26,26 +25,22 @@ export interface ChatPreparationInput {
   visualizationSettings?: VisualizationSettings;
 }
 
-/** Only an authenticated server adapter may grant trusted-bypass. */
+/** Only an authenticated server adapter may grant trusted-bypass; everyone else pays for what the call uses. */
 export type ChatActor =
-  | { userId: string; creditPolicy: 'charge' }
-  | { userId: string | null; creditPolicy: 'trusted-bypass' };
-
-export interface ChatAccount {
-  effectiveMembership: MembershipType;
-  hasCredits: boolean;
-}
+  | { userId: string; billing: 'metered' }
+  | { userId: string | null; billing: 'trusted-bypass' };
 
 export interface ChatModelAccess {
   id: string;
-  allowedMemberships: MembershipType[];
-  reasoningMemberships: MembershipType[];
+  /** Priced by an administrator, so the platform offers it. */
+  offered: boolean;
+  pricing?: AIModelPricing;
+  supportsReasoning: boolean;
 }
 
-export type ChatPreparationFailure =
-  | { kind: 'invalid-model' | 'membership-denied' | 'insufficient-credits' | 'deduction-failed' | 'rate-limited' | 'rate-limit-failed' | 'rate-limit-refund-failed' }
-  | { kind: 'web-search-denied'; message: string }
-  | { kind: 'account-unavailable'; message: string; code: string };
+export type ChatPreparationFailure = {
+  kind: 'invalid-model' | 'model-unpriced' | 'insufficient-balance' | 'balance-unavailable' | 'rate-limited' | 'rate-limit-failed';
+};
 
 export type ChatPreparationResult<T> =
   | { ok: true; value: T }
@@ -54,11 +49,10 @@ export type ChatPreparationResult<T> =
 export interface ResolvedChatPreparation {
   input: ChatPreparationInput;
   userId: string | null;
-  canSkipCredit: boolean;
+  /** The member pays for this call's usage once it is known. */
+  metered: boolean;
   requestedModelId: string;
-  membershipType: MembershipType;
   reasoningEnabled: boolean;
-  creditDeducted: boolean;
 }
 
 export interface ChatPromptContext {
@@ -84,27 +78,19 @@ export interface ChatPromptContext {
 
 export type PreparedChat = ResolvedChatPreparation & ChatPromptContext;
 
-export interface ChatAccountOperations {
-  loadAccount(): Promise<ChatPreparationResult<ChatAccount>>;
-}
-
-export interface ManagedChatResolutionOperations extends ChatAccountOperations {
+export interface ManagedChatResolutionOperations {
   defaultModelId: string;
   resolveModel(modelId: string): Promise<ChatModelAccess | null>;
-  deductCredit(): Promise<
-    | { ok: true }
-    | { ok: false; reason: 'insufficient_credits' | 'deduction_failed' }
-  >;
+  /** Whether the member has something to spend on this model; throws when the balance cannot be read. */
+  admit(model: ChatModelAccess): Promise<boolean>;
   checkRateLimit(): Promise<boolean>;
-  refundRateLimitFailure(): Promise<boolean>;
 }
 
 export interface ManagedChatOperations extends ManagedChatResolutionOperations {
   buildPrompt(resolved: ResolvedChatPreparation): Promise<ChatPromptContext>;
-  refundPromptFailure(): Promise<void>;
 }
 
-export interface DirectChatOperations extends ChatAccountOperations {
+export interface DirectChatOperations {
   defaultModelId: string;
   checkRateLimit(): Promise<boolean>;
   buildPrompt(resolved: ResolvedChatPreparation): Promise<ChatPromptContext>;

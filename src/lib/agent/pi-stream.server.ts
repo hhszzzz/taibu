@@ -13,8 +13,10 @@ import {
   type Usage,
 } from "@earendil-works/pi-ai";
 import { stream as streamCompletions } from "@earendil-works/pi-ai/api/openai-completions";
+import { estimateContextTokens, estimateMessageTokens } from "@earendil-works/pi-ai/utils/estimate";
 import type { PiStreamFn as StreamFn } from "./types";
 import type { AIModelConfig } from "@/types";
+import { hasTokens, type TokenUsage } from "@/lib/billing/pricing";
 import {
   gatewayFetch,
   isModelAvailable,
@@ -48,10 +50,13 @@ export const AGENT_UNKNOWN_MODEL_MESSAGE = "模型服务找不到这个模型，
 export const AGENT_TIMEOUT_MESSAGE = "模型超过 5 分钟没有完成这次回复，已中止";
 /** A saved gateway key that no longer opens: sealed under another master key, or altered. */
 export const AGENT_GATEWAY_KEY_MESSAGE = "网关密钥无法读取，请管理员在设置中心「AI 服务 → 网关管理」重新填写";
+/** The member's balance ran out before another request of a platform model. */
+export const AGENT_INSUFFICIENT_BALANCE_MESSAGE = "余额不足，任务已停止；充值、兑换或订阅后可以继续";
 /** Stream failures whose text the task shows as is, in place of the generic failure. */
 export const AGENT_PUBLIC_STREAM_ERRORS: ReadonlySet<string> = new Set([
   AGENT_UNSUPPORTED_TOOLS_MESSAGE, AGENT_OUTPUT_EXHAUSTED_MESSAGE, AGENT_SILENT_RESPONSE_MESSAGE,
   AGENT_REJECTED_KEY_MESSAGE, AGENT_UNKNOWN_MODEL_MESSAGE, AGENT_TIMEOUT_MESSAGE, AGENT_GATEWAY_KEY_MESSAGE,
+  AGENT_INSUFFICIENT_BALANCE_MESSAGE,
 ]);
 const AGENT_OVERFLOW_MESSAGE = "模型上下文超出限制（context_length_exceeded）";
 const AGENT_GENERIC_FAILURE_MESSAGE = "模型调用失败，请确认模型支持工具调用或切换普通对话";
@@ -161,6 +166,15 @@ function addUsage(total: Usage, next: Usage): Usage {
   };
 }
 
+/** What one request used as the provider counted it, or Pi's estimate of its prompt and of what came back. */
+function billedUsage(messages: readonly Message[], result: AssistantMessage): { usage: TokenUsage; estimated: boolean } | null {
+  const { input, output, cacheRead, cacheWrite, reasoning } = result.usage;
+  const counted = { input, output, cacheRead, cacheWrite, ...(reasoning ? { reasoning } : {}) };
+  if (hasTokens(counted)) return { usage: counted, estimated: false };
+  const reply = estimateMessageTokens(result);
+  return reply > 0 ? { usage: { input: estimateContextTokens(messages).tokens, output: reply, cacheRead: 0, cacheWrite: 0 }, estimated: true } : null;
+}
+
 const hasVisibleText = (message: AssistantMessage) => message.content.some(part => part.type === "text" && part.text.trim());
 const callsTools = (message: AssistantMessage) => message.content.some(part => part.type === "toolCall");
 
@@ -194,7 +208,7 @@ function failureKind(result: AssistantMessage) {
   if (result.rawStopReason === "error" || isRetryableAssistantError(failed)) return "transient";
   return "other";
 }
-type FailureKind = ReturnType<typeof failureKind> | typeof GATEWAY_KEY_FAILURE | "silent" | "exhausted";
+type FailureKind = ReturnType<typeof failureKind> | typeof GATEWAY_KEY_FAILURE | "silent" | "exhausted" | "balance";
 class StreamFailure extends Error {
   constructor(readonly kind: FailureKind, readonly transientBeforeOutput = false) { super(kind); }
 }
@@ -208,9 +222,18 @@ function publicFailure(error: unknown) {
     case "unknown_model": return AGENT_UNKNOWN_MODEL_MESSAGE;
     case "silent": return AGENT_SILENT_RESPONSE_MESSAGE;
     case "exhausted": return AGENT_OUTPUT_EXHAUSTED_MESSAGE;
+    case "balance": return AGENT_INSUFFICIENT_BALANCE_MESSAGE;
     case GATEWAY_KEY_FAILURE: return AGENT_GATEWAY_KEY_MESSAGE;
     default: return error.transientBeforeOutput ? AGENT_TRANSIENT_ERROR_MESSAGE : AGENT_GENERIC_FAILURE_MESSAGE;
   }
+}
+
+/** A platform model the member pays for. */
+export interface AgentModelBilling {
+  /** Before each request: false when the balance cannot start another one. */
+  admit: () => Promise<boolean>;
+  /** After each request, with what it used; never throws. */
+  charge: (usage: TokenUsage, estimated: boolean) => Promise<void>;
 }
 
 export interface AgentModelStreamSettings {
@@ -218,6 +241,8 @@ export interface AgentModelStreamSettings {
   reasoning?: boolean;
   /** The run's metrics: when the first content arrives, and each request's usage. */
   telemetry?: AgentStreamTelemetry;
+  /** Absent for the member's own provider. */
+  billing?: AgentModelBilling;
   /** The user's own provider key: requests go only to the configured URL, through the public-address guard. */
   apiKey?: string;
   /** Replaces attachment references with their images, for a vision model. */
@@ -271,15 +296,19 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
             if (++failures >= sources.length) throw new StreamFailure(GATEWAY_KEY_FAILURE);
             continue;
           }
+          if (settings.billing) {
+            // A balance that cannot be read is retried like an unavailable model service.
+            const admitted = await settings.billing.admit().catch(() => { throw new StreamFailure("transient", true); });
+            if (!admitted) throw new StreamFailure("balance");
+          }
+          const messages: Message[] = nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript;
           const inner = streamCompletions({
             ...piModel,
             api: "openai-completions",
             baseUrl: normalizeCustomProviderBaseUrl(source.apiUrl),
             compat: agentCompletionsCompat(source),
             thinkingLevelMap: thinkingLevelMap(config.thinkingLevels),
-          }, normalizeContext({
-            messages: nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript,
-          }), {
+          }, normalizeContext({ messages }), {
             apiKey,
             fetch: fetcher,
             signal: requestSignal,
@@ -312,6 +341,9 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
           // 每一轮的用量都计入运行指标：缓存读取单独记，重试与提醒后的再次请求各算一轮。
           settings.telemetry?.usage(result.usage);
           message.usage = addUsage(message.usage, result.usage);
+          // 每轮按上游报的用量计费；中断或出错没报用量时，按提示词与已产出内容估算。
+          const billed = settings.billing && billedUsage(messages, result);
+          if (billed) await settings.billing!.charge(billed.usage, billed.estimated);
           if (result.stopReason === "error" || result.stopReason === "aborted") {
             requestSignal.throwIfAborted();
             const kind = failureKind(result);

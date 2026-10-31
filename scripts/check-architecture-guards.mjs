@@ -130,6 +130,13 @@ mustNotExist('src/components/admin/McpKeyManagementPanel.tsx', 'authenticated MC
 mustNotExist('src/app/api/admin/mcp-keys/route.ts', 'authenticated MCP admin key route should stay removed for the public MCP service');
 mustNotExist('src/app/api/user/mcp-key/route.ts', 'authenticated MCP user key route should stay removed for the public MCP service');
 mustNotExist('src/lib/mcp-keys.ts', 'authenticated MCP key storage helper should stay removed for the public MCP service');
+// Credits, tiers, activation keys and check-ins gave way to USD billing (src/lib/billing).
+for (const removed of [
+  'src/lib/user/credits.ts', 'src/lib/user/membership.ts', 'src/lib/user/membership-server.ts',
+  'src/lib/user/activation-keys.ts', 'src/lib/user/checkin.ts', 'src/app/api/checkin/route.ts',
+  'src/app/api/activation-keys/route.ts', 'src/app/api/credits/use/route.ts', 'src/app/api/credits/transactions/route.ts',
+  'src/app/api/user/membership/route.ts', 'src/lib/ai/web-search-access.ts', 'src/components/admin/KeyManagementPanel.tsx',
+]) mustNotExist(removed, 'credits and membership tiers were replaced by USD billing');
 
 // B6 破坏性迁移：bearer-only 路由鉴权已删除，所有接口统一走 requireUserContext。
 mustNotMatchInTree(
@@ -186,7 +193,7 @@ for (const file of [
   'src/lib/chat/use-chat-messaging.ts',
   'src/lib/auth.ts',
   'src/components/admin/FeatureTogglePanel.tsx',
-  'src/components/admin/KeyManagementPanel.tsx',
+  'src/components/admin/billing/BillingCodesPanel.tsx',
   'src/components/admin/AIModelPanel.tsx',
   'src/components/admin/AnnouncementManagementPanel.tsx',
   'src/components/admin/AIGatewayPanel.tsx',
@@ -872,10 +879,7 @@ const SYSTEM_DB_ALLOWED = [
   'src/lib/reminders.ts',
   'src/lib/app-settings.ts',
   'src/lib/server/ai-config.ts',
-  'src/lib/user/checkin.ts',
-  'src/lib/user/credits.ts',
-  'src/lib/user/membership-server.ts',
-  'src/lib/user/activation-keys.ts',
+  'src/lib/billing/',
   'src/lib/notification-server.ts',
   'src/app/api/announcements/route.ts',
   'src/lib/chat/chat-context.ts',

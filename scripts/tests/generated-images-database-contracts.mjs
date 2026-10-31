@@ -56,16 +56,4 @@ export async function generatedImagesDatabaseContracts(t, { sql, asActor, asOwne
     await asOwner(`UPDATE public.conversation_shares SET revoked_at=now() WHERE token=${quote(token)};`);
     assert.equal(await read(shared.id), '');
   });
-
-  await t.test('per-image credits decrement only for administrators and never below zero', async () => {
-    await asOwner(`UPDATE public.users SET ai_chat_count=10 WHERE id=${quote(owner)};`);
-    await assert.rejects(asActor(owner, `SELECT public.decrement_ai_chat_count_by(${quote(owner)}, 3);`), /42501/);
-    assert.equal(await asActor(adminId, `SELECT public.decrement_ai_chat_count_by(${quote(owner)}, 3);`), '7');
-    assert.equal(await asActor(adminId, `SELECT public.decrement_ai_chat_count_by(${quote(owner)}, 8);`), '', 'a charge larger than the balance deducts nothing');
-    assert.equal(await asActor(adminId, `SELECT ai_chat_count FROM public.users WHERE id=${quote(owner)};`), '7');
-    const ledger = JSON.parse(await asActor(adminId, `SELECT json_agg(json_build_object('amount', amount, 'balance', balance_after))
-      FROM public.credit_transactions WHERE user_id=${quote(owner)};`));
-    assert.deepEqual(ledger, [{ amount: -3, balance: 7 }]);
-    await assert.rejects(asActor(adminId, `SELECT public.decrement_ai_chat_count_by(${quote(owner)}, 0);`), /22023/);
-  });
 }

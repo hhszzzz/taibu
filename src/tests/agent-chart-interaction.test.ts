@@ -21,7 +21,6 @@ const chartTool = async (name: 'bazi' | 'ziwei'): Promise<AgentToolPart> => {
 
 beforeEach(t => {
   assert.ok('mock' in t);
-  t.mock.method(require('../lib/user/credits'), 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(require('../lib/app-settings'), 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' }));
 });
 

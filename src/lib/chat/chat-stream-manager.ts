@@ -6,7 +6,7 @@ export type ChatStreamTaskStatus = 'running' | 'completed' | 'stopped' | 'failed
 
 export type ChatStreamTaskErrorCode =
     | 'CONVERSATION_BUSY'
-    | 'INSUFFICIENT_CREDITS'
+    | 'INSUFFICIENT_BALANCE'
     | 'AUTH_REQUIRED'
     | 'PERSIST_FAILED'
     | 'REQUEST_FAILED'
@@ -27,7 +27,6 @@ export interface ChatStreamTaskSnapshot {
 export type ChatStreamEventType =
     | 'task_started'
     | 'task_updated'
-    | 'task_billed'
     | 'task_completed'
     | 'task_stopped'
     | 'task_failed';
@@ -137,15 +136,10 @@ export function classifyApiError(
     status: number,
     data?: { code?: string; error?: string } | null
 ): ClassifiedApiError {
-    const isInsufficientCredits = status === 402
-        || data?.code === 'INSUFFICIENT_CREDITS'
-        || data?.error?.includes('积分不足')
-        || data?.error?.includes('充值')
-        || data?.error?.includes('获取积分');
-    if (isInsufficientCredits) {
+    if (status === 402 || data?.code === 'INSUFFICIENT_BALANCE') {
         return {
-            code: 'INSUFFICIENT_CREDITS',
-            message: data?.error || '积分不足，请先通过签到、激活码或会员权益获取积分',
+            code: 'INSUFFICIENT_BALANCE',
+            message: data?.error || '余额不足，请充值、兑换或订阅后再试',
         };
     }
 
@@ -438,9 +432,7 @@ export class ChatStreamManager {
             const errorData = parsed as { code?: string; error?: string; errorText?: string };
             const message = errorData.errorText || errorData.error || '请求失败';
             task.sseError = {
-                code: errorData.code === 'INSUFFICIENT_CREDITS' || message.includes('积分不足')
-                    ? 'INSUFFICIENT_CREDITS'
-                    : 'REQUEST_FAILED',
+                code: errorData.code === 'INSUFFICIENT_BALANCE' ? 'INSUFFICIENT_BALANCE' : 'REQUEST_FAILED',
                 message,
             };
             return 'break';
@@ -491,10 +483,7 @@ export class ChatStreamManager {
     private appendContentDelta(task: ChatStreamTaskInternal, delta: string): void {
         if (!delta) return;
         task.content += delta;
-        if (!task.hasVisibleToken) {
-            task.hasVisibleToken = true;
-            this.emit({ type: 'task_billed', task: this.buildSnapshot(task) });
-        }
+        task.hasVisibleToken = true;
         task.updatedAt = Date.now();
         this.emit({ type: 'task_updated', task: this.buildSnapshot(task) });
     }

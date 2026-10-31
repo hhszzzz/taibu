@@ -1,8 +1,7 @@
 import 'server-only';
 import type { PromptSection } from '@earendil-works/pi-durable';
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from '@/lib/app-settings';
-import type { MembershipType } from '@/lib/user/membership';
-import { extensionAllowance, meetsTier } from '../mcp/config';
+import { extensionAllowance } from '../mcp/config';
 import { AGENT_SKILL_TOOLS } from '../tool-catalog';
 import { parseSkillCommand, type SkillCommand } from './config';
 import { skillBody } from './input.server';
@@ -11,7 +10,7 @@ import { BUILTIN_SKILL_NAMES, builtinSkillContent, builtinSkills, findBuiltinSki
 import { platformSkills, readSkillContent, readSkillFile as readStoredFile, userSkills } from './store.server';
 
 /**
- * Which skills a member may use and how a task reads them. pi's coding agent finds skills on disk and lets the model
+ * Which skills a user may use and how a task reads them. pi's coding agent finds skills on disk and lets the model
  * open SKILL.md with its file tool; a task here has no disk, so the same files come from the database through
  * `load_skill` and `read_skill_file`, and `/skill:名称` expands as pi expands it. Method cards are built-in skills:
  * they ship with the release, are always available and share the same two tools.
@@ -33,18 +32,18 @@ export async function skillsScopeEnabled(): Promise<boolean> {
 }
 
 /**
- * Skills this member may use: the built-in methods, then enabled platform skills their tier reaches, then their
- * own, as many as the policy allows them (the first by the order they set). A user's skill named like a platform skill
+ * Skills this user may use: the built-in methods, then enabled platform skills, then their own, as many as the policy
+ * allows (the first by the order they set). A user's skill named like a platform skill
  * or a method, enabled or not, stays out, so a name always means the same skill. A policy that cannot be read
  * leaves the user's skills out.
  */
-export async function availableSkills(userId: string, membership: MembershipType): Promise<SkillEntry[]> {
+export async function availableSkills(userId: string): Promise<SkillEntry[]> {
   const all = await platformSkills();
-  const platform = all.filter((row) => row.is_enabled && meetsTier(membership, row.required_tier)).map(storedEntry);
+  const platform = all.filter((row) => row.is_enabled).map(storedEntry);
   const names = new Set([...all.map((row) => row.name), ...BUILTIN_SKILL_NAMES]);
   let own: SkillEntry[] = [];
   try {
-    const allowance = extensionAllowance((await getAgentExtensionsPolicy()).skills, membership);
+    const allowance = extensionAllowance((await getAgentExtensionsPolicy()).skills);
     if (allowance > 0) own = (await userSkills(userId)).filter((row) => row.is_enabled && !names.has(row.name)).slice(0, allowance).map(storedEntry);
   } catch {
     own = [];
@@ -56,9 +55,9 @@ export async function availableSkills(userId: string, membership: MembershipType
  * The composer's slash menu: every stored skill the member can call, including those only a user may start. Method
  * cards are left out — the composer would otherwise list fifteen cards beside the commands the user actually writes.
  */
-export async function skillCommands(userId: string, membership: MembershipType): Promise<SkillCommand[]> {
+export async function skillCommands(userId: string): Promise<SkillCommand[]> {
   if (!(await skillsScopeEnabled())) return [];
-  return (await availableSkills(userId, membership))
+  return (await availableSkills(userId))
     .filter((row) => row.source !== 'builtin')
     .map((row) => ({
       name: row.name, description: row.description, scope: row.source === 'platform' ? 'platform' : 'user',
@@ -105,9 +104,9 @@ export function skillBlock(skill: Pick<SkillEntry, 'name' | 'files'>, content: s
   return `<skill name="${skill.name}">\n${files}${skillBody(content)}\n</skill>`;
 }
 
-/** The member's skill of that name, read again for every use so a disabled or removed skill stops at once. */
-export async function findAvailableSkill(userId: string, membership: MembershipType, name: string): Promise<SkillEntry | undefined> {
-  return (await availableSkills(userId, membership)).find((row) => row.name === name);
+/** The user's skill of that name, read again for every use so a disabled or removed skill stops at once. */
+export async function findAvailableSkill(userId: string, name: string): Promise<SkillEntry | undefined> {
+  return (await availableSkills(userId)).find((row) => row.name === name);
 }
 
 /** A skill's text, from the release for a method and from the database for everything else. */
@@ -117,16 +116,16 @@ export async function skillText(entry: SkillEntry): Promise<string | undefined> 
 
 /** The `<skill>` block for `/skill:名称`, or null when the message is not a skill command. */
 export async function skillCommandBlock(
-  userId: string, membership: MembershipType, text: string,
+  userId: string, text: string,
 ): Promise<{ name: string; args: string; block: string } | null> {
   const command = parseSkillCommand(text);
   if (!command) return null;
   if (!command.name) throw new SkillUnavailableError('请在 /skill: 后写技能名称');
   const builtin = findBuiltinSkill(command.name);
   if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
-  const skill = builtin ?? await findAvailableSkill(userId, membership, command.name);
+  const skill = builtin ?? await findAvailableSkill(userId, command.name);
   const content = skill ? await skillText(skill) : undefined;
-  if (!skill || content === undefined) throw new SkillUnavailableError(`没有可用的技能「${command.name}」：可能已停用、已删除或当前会员不能使用`);
+  if (!skill || content === undefined) throw new SkillUnavailableError(`没有可用的技能「${command.name}」：可能已停用或已删除`);
   return { name: skill.name, args: command.args, block: skillBlock(skill, content) };
 }
 
@@ -140,10 +139,10 @@ export function joinSkillTurn(block: string, text: string): string {
  * that is gone leaves the message as the user wrote it: the model then reads the command itself.
  */
 export async function expandSkillMessages<T extends { role: string; content: string }>(
-  messages: readonly T[], userId: string, membership: MembershipType,
+  messages: readonly T[], userId: string,
 ): Promise<T[]> {
   if (!messages.some((message) => message.role === 'user' && parseSkillCommand(message.content))) return [...messages];
-  const skills = (await skillsScopeEnabled()) ? await availableSkills(userId, membership) : builtinSkills();
+  const skills = (await skillsScopeEnabled()) ? await availableSkills(userId) : builtinSkills();
   const contents = new Map<string, string | undefined>();
   const expanded: T[] = [];
   for (const message of messages) {
@@ -169,11 +168,11 @@ export type SkillLoad = {
 };
 
 /** `load_skill`: the skill's block. A skill only the user may start is refused, as pi leaves it out of the prompt. */
-export async function loadSkill(userId: string, membership: MembershipType, name: string): Promise<SkillLoad> {
+export async function loadSkill(userId: string, name: string): Promise<SkillLoad> {
   // 给一个 Core 工具名时取它所属体系的默认方法，模型不必记住体系与方法的对应。
   const builtin = findBuiltinSkill(name) ?? findBuiltinSkill(getToolSystem(name) ?? '');
   if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
-  const skill = builtin ?? await findAvailableSkill(userId, membership, name);
+  const skill = builtin ?? await findAvailableSkill(userId, name);
   if (!skill) throw new SkillUnavailableError(`没有可用的技能「${name}」：以系统提示所列的方法与 available_skills 为准`);
   if (skill.disable_model_invocation) throw new SkillUnavailableError(`技能「${name}」只能由用户在输入框用 /skill:${name} 调用`);
   const content = await skillText(skill);
@@ -192,13 +191,13 @@ export type SkillFileRead = {
   details: { name: string; path: string; offset: number; total: number; nextOffset: number | null };
 };
 
-/** `read_skill_file`: one page of a file beside SKILL.md, for any skill the member may use. */
+/** `read_skill_file`: one page of a file beside SKILL.md, for any skill the user may use. */
 export async function readSkillFilePage(
-  userId: string, membership: MembershipType, name: string, path: string, offset = 0,
+  userId: string, name: string, path: string, offset = 0,
 ): Promise<SkillFileRead> {
   const builtin = findBuiltinSkill(name);
   if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
-  const skill = builtin ?? await findAvailableSkill(userId, membership, name);
+  const skill = builtin ?? await findAvailableSkill(userId, name);
   if (!skill) throw new SkillUnavailableError(`没有可用的技能「${name}」`);
   const file = skill.files.find((entry) => entry.path === path);
   const content = file ? await readStoredFile(skill.id, path) : undefined;
@@ -231,8 +230,8 @@ export type AgentSkillsSession = {
  * The section renders only for an agent that has `load_skill`: a member or subagent only when its role grants skills.
  * 方法是产品本身，不随技能开关关闭；开关只管管理员与用户添加的技能。
  */
-export async function openAgentSkills(userId: string, membership: MembershipType): Promise<AgentSkillsSession> {
-  return sessionOf((await skillsScopeEnabled()) ? await availableSkills(userId, membership) : builtinSkills());
+export async function openAgentSkills(userId: string): Promise<AgentSkillsSession> {
+  return sessionOf((await skillsScopeEnabled()) ? await availableSkills(userId) : builtinSkills());
 }
 
 /** Only the methods: what a task keeps when the skills catalogue cannot be read at all. */

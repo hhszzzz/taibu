@@ -31,7 +31,7 @@ import { useHeaderMenu } from '@/components/layout/HeaderMenuContext';
 import { CaseNotesSection } from '@/components/bazi/result/CaseNotesSection';
 import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
 import { useChartMutation } from '@/lib/hooks/useUserCharts';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import { parseLongitude } from '@/lib/divination/place-resolution';
@@ -70,7 +70,7 @@ function BaziResultContent() {
     const [copyDetailLevel, setCopyDetailLevel] = useState<ChartTextDetailLevel>('default');
     const [showCopyModal, setShowCopyModal] = useState(false);
     const { showToast } = useToast();
-    const { userId, sessionLoading } = useSessionMembership();
+    const { userId, sessionLoading } = useSessionBalance();
     const { pending: saving, run: runSave } = useChartMutation(userId);
     const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
 

@@ -1,21 +1,19 @@
 import { requestBrowserJson } from '@/lib/browser-api';
-import { normalizeMembershipInfo, type MembershipInfo, type MembershipType } from '@/lib/user/membership';
+import { normalizeBillingBalance, type BillingBalance } from '@/lib/billing/config';
 
 export type AppBootstrapViewerSummary = {
   userId: string;
   nickname: string | null;
   avatarUrl: string | null;
   isAdmin: boolean;
-  membershipType: MembershipType | null;
-  membershipExpiresAt: string | null;
-  aiChatCount: number | null;
 };
 
 export type AppBootstrapData = {
   viewerLoaded: boolean;
   viewerSummary: AppBootstrapViewerSummary | null;
   viewerErrorMessage: string | null;
-  membership: MembershipInfo | null;
+  /** Null for a visitor, or when the balance could not be read. */
+  billing: BillingBalance | null;
   featureToggles: Record<string, boolean>;
   featureTogglesLoaded: boolean;
   featureTogglesErrorMessage: string | null;
@@ -33,7 +31,7 @@ export const EMPTY_APP_BOOTSTRAP: AppBootstrapData = {
   viewerLoaded: false,
   viewerSummary: null,
   viewerErrorMessage: null,
-  membership: null,
+  billing: null,
   featureToggles: {},
   featureTogglesLoaded: false,
   featureTogglesErrorMessage: null,
@@ -109,7 +107,7 @@ export async function loadAppBootstrap(): Promise<AppBootstrapData> {
     viewerErrorMessage: typeof result.data.viewerErrorMessage === 'string'
       ? result.data.viewerErrorMessage
       : null,
-    membership: normalizeMembershipInfo(result.data.membership ?? null),
+    billing: normalizeBillingBalance(result.data.billing),
     featureToggles: result.data.featureToggles ?? {},
     featureTogglesLoaded: result.data.featureTogglesLoaded === true,
     featureTogglesErrorMessage: typeof result.data.featureTogglesErrorMessage === 'string'

@@ -4,12 +4,11 @@
  * 共享准入与生成流水线：
  * 1. Auth (requireUserContext)
  * 2. Ordinary route precheck + owned-resource context validation
- * 3. Account loading and model membership admission
- * 4. Credit balance check and actual deduction
- * 5. Endpoint rate admission (refund a rejected managed debit once)
- * 6. Final prompt assembly
- * 7. AI call (stream / non-stream, text / vision)
- * 8. Persist conversation + refund on failure
+ * 3. Model admission, then a positive balance
+ * 4. Endpoint rate admission
+ * 5. Final prompt assembly
+ * 6. AI call (stream / non-stream, text / vision), billed for its usage when it ends
+ * 7. Persist conversation
  */
 
 import { type NextRequest } from 'next/server';
@@ -22,12 +21,7 @@ import {
 } from '@/lib/api-utils';
 import { userDb, type ScopedDb } from '@/lib/db/context.server';
 import { insertIntoDynamic } from '@/lib/db/sql-helpers';
-import {
-  attemptCreditUse,
-  getUserAuthInfo,
-  refundCreditsOrLog,
-  UserStateResolutionError,
-} from '@/lib/user/credits';
+import { usageBiller } from '@/lib/billing/account.server';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { resolveModelAccessAsync } from '@/lib/ai/ai-access';
 import { callAIWithReasoning, callAIUIMessageResult, callAIVision } from '@/lib/ai/ai';
@@ -39,13 +33,11 @@ import { extractAIErrorMessage } from '@/lib/ai/ai-error';
 import {
   createManagedAnalysisCompletion,
   createRequestObservation,
-  observeRefund,
   type RequestObservation,
   persistDirectAnalysis,
   prepareAnalysis,
   prepareAdmittedAnalysis,
   runManagedAnalysis,
-  type AnalysisAdmissionBilling,
   type CompleteManagedAnalysis,
   type ManagedAnalysisOutcome,
 } from '@/lib/server/analysis';
@@ -54,6 +46,7 @@ import type { ChartType } from '@/lib/visualization/chart-types';
 import { buildVisualizationPromptSection } from '@/lib/visualization/prompt';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
+import { getBalanceGuardResponse } from '@/lib/api/balance-guard';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 
 // ─── Types ───
@@ -208,9 +201,9 @@ export interface DivinationRouteConfig<
   tag: string;
   /** Parse & validate the request body. Return parsed input or an error. */
   parseInput: (body: unknown) => T | RouteError;
-  /** Resource/business precheck before account admission; never a rate limiter. */
+  /** Resource/business precheck before model and balance admission; never a rate limiter. */
   precheck?: (request: NextRequest, input: T, userId: string) => Promise<RouteError | null> | RouteError | null;
-  /** Overrides the default user/path 20/min limit after membership and any debit.
+  /** Overrides the default user/path 20/min limit after model and balance admission.
    * Not run for direct persist or ordinary save actions. */
   postAdmissionRateLimit?: (request: NextRequest, input: T, userId: string) => Promise<RouteError | null> | RouteError | null;
   /** Build system + user prompts from parsed input. */
@@ -232,7 +225,6 @@ export interface DivinationRouteConfig<
   /** resolveModelAccessAsync extra options (e.g. requireVision). */
   modelAccessOptions?: {
     requireVision?: boolean;
-    membershipDeniedMessage?: string;
   };
   /** 该路由允许 AI 输出的内置图表类型。传入后会追加统一的「可视化」提示段（内置图表 + 沙箱 HTML）。 */
   allowedChartTypes?: ChartType[] | ((input: T, context?: TContext) => ChartType[]);
@@ -288,11 +280,11 @@ async function prepareAdmittedInterpretAnalysis<T extends InterpretInput, TConte
   input: T,
   userId: string,
   context: TContext | undefined,
-  billing: AnalysisAdmissionBilling,
+  direct: boolean,
   observation?: RequestObservation,
 ) {
   const rejection: { value: RouteError | null } = { value: null };
-  const result = await prepareAdmittedAnalysis(billing, {
+  const result = await prepareAdmittedAnalysis({
     observation,
     checkRateLimit: async () => {
       if (config.postAdmissionRateLimit) {
@@ -307,19 +299,14 @@ async function prepareAdmittedInterpretAnalysis<T extends InterpretInput, TConte
   });
   if (result.ok) return result.value;
 
-  observation?.finish({ billing: result.billing });
-  if (result.billing === 'refund-failed') {
-    return jsonError('请求未执行，积分退还失败，请联系客服', 500, {
-      success: false, code: 'CREDIT_REFUND_FAILED', refundFailed: true,
-    });
-  }
+  observation?.finish();
   if (result.reason === 'limited') {
     return jsonError(rejection.value?.error ?? '请求过于频繁，请稍后再试', rejection.value?.status ?? 429, { success: false });
   }
   if (result.reason === 'rate-error') {
     return jsonError('请求限流检查失败，请稍后重试', 500, { success: false, code: 'RATE_LIMIT_FAILED' });
   }
-  return jsonError(billing.kind === 'not-applicable' ? '生成直连上下文失败，请稍后重试' : '生成分析上下文失败，请稍后重试', 500, {
+  return jsonError(direct ? '生成直连上下文失败，请稍后重试' : '生成分析上下文失败，请稍后重试', 500, {
     success: false, code: 'PROMPT_PREPARATION_FAILED',
   });
 }
@@ -517,17 +504,9 @@ export function createDirectInterpretHandlers<
       };
     }
 
-    // BYOK validates account membership without a platform model/balance gate.
-    try {
-      await getUserAuthInfo(authContext.userId, { db: scopedDbFor(authResult), user: authResult.user });
-    } catch (error) {
-      if (error instanceof UserStateResolutionError) {
-        return jsonError(error.message, 500, { success: false, code: error.code });
-      }
-      throw error;
-    }
+    // BYOK runs on the member's own model: no platform model or balance gate.
     const prepared = await prepareAdmittedInterpretAnalysis(
-      config, request, input, authContext.userId, promptContext, { kind: 'not-applicable' }, options.observation,
+      config, request, input, authContext.userId, promptContext, true, options.observation,
     );
     if (prepared instanceof Response) return prepared;
     const { prompts: { systemPrompt, userPrompt } } = prepared;
@@ -683,12 +662,11 @@ export function createDirectInterpretHandlers<
  * The returned handler:
  * 1. Authenticates via Bearer token
  * 2. Runs ordinary prechecks and validates owned-resource context
- * 3. Loads account membership and resolves model access
- * 4. Checks balance and deducts a credit
- * 5. Applies the endpoint rate policy with debit compensation on rejection
- * 6. Builds final prompts only after admission
- * 7. Calls AI (stream or non-stream; text or vision)
- * 8. Persists the conversation and refunds on failure
+ * 3. Resolves model access, then requires a positive balance
+ * 4. Applies the endpoint rate policy
+ * 5. Builds final prompts only after admission
+ * 6. Calls AI (stream or non-stream; text or vision), which bills its usage when it ends
+ * 7. Persists the conversation
  */
 export function createInterpretHandler<
   T extends InterpretInput,
@@ -764,66 +742,36 @@ export function createInterpretHandler<
       }
       const promptContext = promptContextResult as TContext | undefined;
 
-      // 2. Credits + membership
-      let authInfo;
-      try {
-        authInfo = await getUserAuthInfo(user.id, {
-          db: scopedDbFor(authResult),
-          user,
-        });
-      } catch (error) {
-        if (error instanceof UserStateResolutionError) {
-          observation.fail('admission');
-          return jsonError(error.message, 500, { success: false, code: error.code });
-        }
-        throw error;
-      }
-      // 3. Model membership admission precedes the balance decision.
+      // 2. Model admission precedes the balance decision.
       const modelId = (body.modelId as string | undefined);
       const reasoning = (body.reasoning as boolean | undefined);
       const stream = (body.stream as boolean | undefined);
-      const membershipType = authInfo.effectiveMembership;
-      const access = await resolveModelAccessAsync(
-        modelId, defaultModelId, membershipType, reasoning, modelAccessOptions,
-      );
+      const access = await resolveModelAccessAsync(modelId, defaultModelId, reasoning, modelAccessOptions);
       if ('error' in access) {
         observation.fail('admission');
         return jsonError(access.error, access.status, { success: false });
       }
-      const { modelId: resolvedModelId, reasoningEnabled } = access;
+      const { modelId: resolvedModelId, modelConfig, reasoningEnabled } = access;
 
-      if (!authInfo.hasCredits) {
+      // 3. A positive balance admits the call; the call pays for its usage when it ends.
+      const balanceGuard = await getBalanceGuardResponse(user.id, modelConfig.pricing, scopedDbFor(authResult));
+      if (balanceGuard) {
         observation.fail('admission');
-        return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
+        return balanceGuard;
       }
+      observation.update({ billing: 'metered' });
+      const onUsage = usageBiller(user.id, 'analysis');
 
-      // 4. Deduct credit before rate admission and final prompt assembly.
-      const creditUse = await attemptCreditUse(user.id, {
-        db: scopedDbFor(authResult),
-        user,
-      });
-      if (!creditUse.ok) {
-        if (creditUse.reason === 'insufficient_credits') {
-          observation.fail('admission');
-          return jsonError('积分不足，请通过签到、激活码或会员权益获取积分后再使用', 402, { success: false });
-        }
-        observation.fail('admission');
-        return jsonError('积分扣减失败，请稍后重试', 500, { success: false });
-      }
-
-      observation.update({ billing: 'charged' });
       const prepared = await prepareAdmittedInterpretAnalysis(
-        config, request, input, user.id, promptContext,
-        { kind: 'charged', refund: () => refundCreditsOrLog(user.id, 1, `${tag} admission`) },
-        observation,
+        config, request, input, user.id, promptContext, false, observation,
       );
       if (prepared instanceof Response) return prepared;
       const { prompts: { systemPrompt, userPrompt } } = prepared;
 
-      // The use case owns completion/save/refund; SDK and HTTP stay in this adapter.
+      // The use case owns completion and saving; SDK and HTTP stay in this adapter.
       const mode = isVision && buildVisionOptions ? 'vision' : stream ? 'stream' : 'text';
       const complete = createManagedAnalysisCompletion(mode, {
-        // Non-stream response formatting remains inside the legacy compensation boundary.
+        // Non-stream responses report the terminal state after formatting.
         observation: mode === 'stream' ? observation : { ...observation, finish: state => observation.update(state ?? {}) },
         persist: async ({ content, reasoning }) => {
           const conversationId = await persistConversation(
@@ -834,7 +782,6 @@ export function createInterpretHandler<
           }
           return conversationId;
         },
-        refund: (reason) => refundCreditsOrLog(user.id, 1, `${tag} ${reason}`),
         isPersistenceError: (error) => error instanceof AIAnalysisConversationPersistenceError,
       });
 
@@ -842,7 +789,7 @@ export function createInterpretHandler<
       completionOwnsTerminal = mode === 'stream';
       try {
         if (mode === 'stream') {
-          return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete, observation);
+          return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete, observation, onUsage);
         }
 
         const outcome = await runManagedAnalysis(async () => {
@@ -853,7 +800,7 @@ export function createInterpretHandler<
               personality,
               resolvedModelId,
               `\n\n${systemPrompt}\n\n`,
-              { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts },
+              { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts, onUsage },
             );
             return { content, reasoning: null };
           }
@@ -862,18 +809,13 @@ export function createInterpretHandler<
             personality,
             resolvedModelId,
             `\n\n${systemPrompt}\n\n`,
-            { reasoning: reasoningEnabled, temperature: 0.7 },
+            { reasoning: reasoningEnabled, temperature: 0.7, onUsage },
           );
         }, complete);
         return formatManagedOutcome(outcome, mode === 'vision');
       } catch (aiError) {
-        // SDK setup failures use the completion latch. A response formatter failure
-        // after a successful save retains the existing refund policy.
-        const outcome = await complete({ kind: 'inference-failed', error: aiError });
-        if (outcome.status === 'saved') {
-          const context = aiError instanceof AIAnalysisConversationPersistenceError ? 'persistence' : 'ai-call';
-          await observeRefund(() => refundCreditsOrLog(user.id, 1, `${tag} ${context}`), observation);
-        }
+        // SDK setup failures use the completion latch.
+        await complete({ kind: 'inference-failed', error: aiError });
         if (aiError instanceof AIAnalysisConversationPersistenceError) {
           return jsonError('保存结果失败，请稍后重试', 500, { success: false });
         }
@@ -911,14 +853,14 @@ export function createInterpretHandler<
   async function handleStreamCall(
     resolvedModelId: string, reasoningEnabled: boolean,
     systemPrompt: string, userPrompt: string, complete: CompleteManagedAnalysis,
-    observation: RequestObservation,
+    observation: RequestObservation, onUsage: ReturnType<typeof usageBiller>,
   ): Promise<Response> {
     const streamResult = await callAIUIMessageResult(
       [{ role: 'user', content: userPrompt }],
       personality,
       `\n\n${systemPrompt}\n\n`,
       resolvedModelId,
-      { reasoning: reasoningEnabled, temperature: 0.7 },
+      { reasoning: reasoningEnabled, temperature: 0.7, onUsage },
     );
     return createPersistentStreamResponse({
       streamResult,

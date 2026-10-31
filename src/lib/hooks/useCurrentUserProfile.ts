@@ -15,9 +15,6 @@ function toUserProfile(bootstrap: ReturnType<typeof useAppBootstrap>['data']): U
     nickname: bootstrap.viewerSummary.nickname,
     avatar_url: bootstrap.viewerSummary.avatarUrl,
     is_admin: bootstrap.viewerSummary.isAdmin,
-    membership: bootstrap.viewerSummary.membershipType,
-    membership_expires_at: bootstrap.viewerSummary.membershipExpiresAt,
-    ai_chat_count: bootstrap.viewerSummary.aiChatCount,
   };
 }
 
@@ -35,6 +32,8 @@ export function useCurrentUserProfile(options?: { enabled?: boolean }) {
 
   return {
     profile: user ? profile : null,
+    /** Wallet plus what subscriptions still hold; null until the viewer state loads. */
+    balance: user && bootstrap.viewerStateLoaded ? bootstrap.data.billing : null,
     loading: enabled ? sessionLoading || (!!user && !bootstrap.viewerStateResolved) : false,
     resolved: profileResolved,
     error: bootstrap.viewerStateError,

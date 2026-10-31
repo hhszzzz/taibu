@@ -6,11 +6,27 @@ import { Button } from '@/components/ui/Button';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { requestBrowserJson } from '@/lib/browser-api';
+import { normalizeBrowserDirectError, streamBrowserDirectProvider } from '@/lib/ai/browser-direct-provider';
+import { getCustomProvider } from '@/lib/chat/custom-provider';
+import { PROMPT_ENHANCEMENT_MAX_LENGTH, PROMPT_ENHANCEMENT_MAX_TOKENS, PROMPT_ENHANCEMENT_SYSTEM_PROMPT } from '@/lib/chat/prompt-enhancement';
 import { CHAT_NEW_EVENT } from '@/lib/chat/ConversationListContext';
 import { requestConversationExport } from '@/lib/chat/conversation-export';
 import { fetchSkillCommands } from '@/lib/agent/skills/client';
 import type { SkillCommand } from '@/lib/agent/skills/config';
 type Command = { id: string; label: string; run: () => void };
+/** 自定义模型的润色由浏览器直连，不占每日次数、不计费。 */
+async function enhanceDirect(provider: NonNullable<ReturnType<typeof getCustomProvider>>, text: string): Promise<{ text?: string; error?: string }> {
+    if (text.length > PROMPT_ENHANCEMENT_MAX_LENGTH) return { error: `润色内容须为 1–${PROMPT_ENHANCEMENT_MAX_LENGTH} 个字符` };
+    try {
+        const result = await streamBrowserDirectProvider({
+            provider, maxTokens: PROMPT_ENHANCEMENT_MAX_TOKENS,
+            messages: [{ role: 'system', content: PROMPT_ENHANCEMENT_SYSTEM_PROMPT }, { role: 'user', content: text }],
+        });
+        return result.content.trim() ? { text: result.content.trim() } : { error: '模型没有返回润色结果' };
+    } catch (error) {
+        return { error: normalizeBrowserDirectError(error).message };
+    }
+}
 export function useComposerCommands({ userId, draftKey, text, change, textarea, mentionsOpen, model, agentMode = false }: {
     draftKey?: string;
     userId?: string | null; text: string; change: (value: string) => void; textarea: RefObject<HTMLTextAreaElement | null>; mentionsOpen: boolean; model: string;
@@ -37,10 +53,12 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         const owner = userId; const before = text; const key = draftKey;
         setPolishing(true);
         try {
-            const result = await requestBrowserJson<{ text: string }>('/api/chat/enhance', { method: 'POST', body: JSON.stringify({ text: before, model }) });
+            const provider = getCustomProvider();
+            const result = provider ? await enhanceDirect(provider, before) : await requestBrowserJson<{ text: string }>('/api/chat/enhance', { method: 'POST', body: JSON.stringify({ text: before, model }) })
+                .then(response => (response.error || !response.data ? { error: response.error?.message ?? '润色失败' } : { text: response.data.text }));
             if (scope.current.userId !== owner || scope.current.draftKey !== key || scope.current.text !== before) return;
-            if (result.error || !result.data) showToast('error', result.error?.message ?? '润色失败');
-            else setPreview({ owner, draftKey: key, before, after: result.data.text });
+            if (result.text === undefined) showToast('error', result.error ?? '润色失败');
+            else setPreview({ owner, draftKey: key, before, after: result.text });
         } finally { setPolishing(false); }
     };
     const dispatch = (name: string) => window.dispatchEvent(new Event(name));

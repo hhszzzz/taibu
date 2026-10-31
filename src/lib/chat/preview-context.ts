@@ -6,14 +6,12 @@ import { normalizeVisualizationSettings } from '@/lib/visualization/settings';
 import { normalizeIdentityUserProfile } from '@/lib/user/settings';
 import type { requireUserContext } from '@/lib/api-utils';
 import type { ChatRequestBody } from '@/lib/server/chat/request';
-import type { ResolvedChatRequest } from '@/lib/server/chat/request';
 import type { buildChatPromptContext } from '@/lib/server/chat/prompt-context';
 import type { ChatMessage } from '@/types';
 import type { Mention } from '@/types/mentions';
 import { isChatAttachment } from '@/lib/ai/document-formats';
 
 type PreviewAuthContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
-type PreviewMembershipType = ResolvedChatRequest['membershipType'];
 type SharedPromptContextBuilder = typeof buildChatPromptContext;
 
 const PREVIEW_TEXT_LIMIT = 500;
@@ -50,7 +48,6 @@ type PreviewBuilderOptions = {
     body: PreviewRequestBody;
     requestedModelId: string;
     reasoningEnabled: boolean;
-    membershipType: PreviewMembershipType;
     knowledgeBaseFeatureEnabled: boolean;
     sharedPromptContextBuilder: SharedPromptContextBuilder;
 };
@@ -127,7 +124,6 @@ async function buildSharedPreviewContext({
     body,
     requestedModelId,
     reasoningEnabled,
-    membershipType,
     knowledgeBaseFeatureEnabled,
     sharedPromptContextBuilder,
 }: PreviewBuilderOptions): Promise<PreviewContextResult> {
@@ -138,11 +134,9 @@ async function buildSharedPreviewContext({
             ...chatBody,
         },
         userId: auth.user.id,
-        canSkipCredit: false,
+        metered: false,
         requestedModelId,
-        membershipType,
         reasoningEnabled,
-        creditDeducted: false,
     });
 
   const previewText = sharedContext.systemPrompt.slice(0, PREVIEW_TEXT_LIMIT);
@@ -157,7 +151,7 @@ async function buildSharedPreviewContext({
         historyTokens,
         contextTotal,
         remainingContext: Math.max(0, contextTotal - historyTokens),
-        promptKnowledgeBases: knowledgeBaseFeatureEnabled && membershipType !== 'free' ? sharedContext.promptKnowledgeBases : [],
+        promptKnowledgeBases: knowledgeBaseFeatureEnabled ? sharedContext.promptKnowledgeBases : [],
         preview: sharedContext.systemPrompt.length > PREVIEW_TEXT_LIMIT ? `${previewText}...` : previewText,
   };
 }

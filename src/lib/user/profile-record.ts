@@ -13,8 +13,6 @@ export function buildUserRecordSeed(user: UserRecordSeedInput) {
     id: user.id,
     nickname: nickname || '命理爱好者',
     avatar_url: typeof user.image === 'string' && user.image ? user.image : null,
-    membership: 'free' as const,
-    ai_chat_count: 1,
   };
 }
 

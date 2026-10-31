@@ -55,6 +55,18 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS archived_sources_source_idx ON public.ar
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS archived_sources_user_idx ON public.archived_sources USING btree (user_id);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS billing_ledger_created_idx ON public.billing_ledger USING btree (created_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS billing_ledger_refund_idx ON public.billing_ledger USING btree (reference_id) WHERE (kind = 'refund'::text);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS billing_ledger_user_created_idx ON public.billing_ledger USING btree (user_id, created_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS payment_orders_status_created_idx ON public.payment_orders USING btree (status, created_at);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS payment_orders_user_created_idx ON public.payment_orders USING btree (user_id, created_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS user_subscriptions_user_status_idx ON public.user_subscriptions USING btree (user_id, status, ends_at);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS bazi_case_events_chart_idx ON public.bazi_case_events USING btree (bazi_chart_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS bazi_case_events_source_run ON public.bazi_case_events USING btree (source_run_id) WHERE (source_run_id IS NOT NULL);
@@ -81,12 +93,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_updated_at_idx ON public.c
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS conversations_user_id_idx ON public.conversations USING btree (user_id);
 
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_activation_keys_code ON public.activation_keys USING btree (key_code);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_activation_keys_type ON public.activation_keys USING btree (key_type);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_activation_keys_unused ON public.activation_keys USING btree (is_used) WHERE (is_used = false);
-
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_gateways_enabled ON public.ai_gateways USING btree (is_enabled);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_model_gateway_bindings_gateway_id ON public.ai_model_gateway_bindings USING btree (gateway_id);
@@ -100,10 +106,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_models_enabled ON public.ai_model
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_ai_models_vendor ON public.ai_models USING btree (vendor);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_annual_reports_user_year ON public.annual_reports USING btree (user_id, year);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_credit_transactions_user ON public.credit_transactions USING btree (user_id, created_at DESC);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_daily_checkins_user_date ON public.daily_checkins USING btree (user_id, checkin_date);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_meihua_divinations_conversation_id ON public.meihua_divinations USING btree (conversation_id) WHERE (conversation_id IS NOT NULL);
 
@@ -148,10 +150,6 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_community_posts_owner_idx ON pu
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_community_votes_owner_idx ON public.community_votes USING btree (user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_conversations_owner_idx ON public.conversations USING btree (user_id);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_credit_transactions_owner_idx ON public.credit_transactions USING btree (user_id);
-
-CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_daily_checkins_owner_idx ON public.daily_checkins USING btree (user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_daliuren_divinations_owner_idx ON public.daliuren_divinations USING btree (user_id);
 

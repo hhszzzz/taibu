@@ -1,5 +1,6 @@
 /**
- * 设置中心的管理页：公告、功能开关、激活码、AI 服务（含 Agent 任务排障）、Agent 扩展（MCP 服务、技能、智能体角色与用户扩展策略）
+ * 设置中心的管理页：公告、功能开关、计费（用量日志、用户账户、套餐、兑换码、订单、充值设置）、AI 服务（含 Agent 任务排障）、
+ * Agent 扩展（MCP 服务、技能、智能体角色与用户扩展策略）
  *
  * 'use client' 标记说明：
  * - 子页跟随路由切换，需要 useState / useEffect 记住访问过的子页并保留其状态
@@ -22,8 +23,23 @@ const LazyAnnouncementManagementPanel = lazy(async () => ({
 const LazyFeatureTogglePanel = lazy(async () => ({
   default: (await import('@/components/admin/FeatureTogglePanel')).FeatureTogglePanel,
 }));
-const LazyKeyManagementPanel = lazy(async () => ({
-  default: (await import('@/components/admin/KeyManagementPanel')).KeyManagementPanel,
+const LazyBillingUsagePanel = lazy(async () => ({
+  default: (await import('@/components/admin/billing/BillingUsagePanel')).BillingUsagePanel,
+}));
+const LazyBillingUsersPanel = lazy(async () => ({
+  default: (await import('@/components/admin/billing/BillingUsersPanel')).BillingUsersPanel,
+}));
+const LazyBillingPlansPanel = lazy(async () => ({
+  default: (await import('@/components/admin/billing/BillingPlansPanel')).BillingPlansPanel,
+}));
+const LazyBillingCodesPanel = lazy(async () => ({
+  default: (await import('@/components/admin/billing/BillingCodesPanel')).BillingCodesPanel,
+}));
+const LazyBillingOrdersPanel = lazy(async () => ({
+  default: (await import('@/components/admin/billing/BillingOrdersPanel')).BillingOrdersPanel,
+}));
+const LazyBillingSettingsPanel = lazy(async () => ({
+  default: (await import('@/components/admin/billing/BillingSettingsPanel')).BillingSettingsPanel,
 }));
 const LazyAIModelPanel = lazy(async () => ({
   default: (await import('@/components/admin/AIModelPanel')).AIModelPanel,
@@ -53,6 +69,7 @@ const LazyAgentScheduleLimitsPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentScheduleLimitsPanel')).AgentScheduleLimitsPanel,
 }));
 
+type AdminBillingTab = AdminSubTabId<'admin-billing'>;
 type AdminAITab = AdminSubTabId<'admin-ai-services'>;
 type AdminExtensionsTab = AdminSubTabId<'admin-agent-extensions'>;
 
@@ -64,6 +81,8 @@ function PanelFallback() {
   );
 }
 
+const resolveAdminBillingTab = (value: string | null | undefined): AdminBillingTab =>
+  resolveAdminSubTab('admin-billing', value);
 const resolveAdminAITab = (value: string | null | undefined): AdminAITab =>
   resolveAdminSubTab('admin-ai-services', value);
 const resolveAdminExtensionsTab = (value: string | null | undefined): AdminExtensionsTab =>
@@ -120,6 +139,13 @@ function AdminSubtabs<T extends string>({
   );
 }
 
+const renderBillingPanel = (tab: AdminBillingTab, active: boolean) => (
+  tab === 'usage' ? <LazyBillingUsagePanel active={active} />
+    : tab === 'users' ? <LazyBillingUsersPanel />
+      : tab === 'plans' ? <LazyBillingPlansPanel />
+        : tab === 'codes' ? <LazyBillingCodesPanel />
+          : tab === 'orders' ? <LazyBillingOrdersPanel active={active} /> : <LazyBillingSettingsPanel />
+);
 const renderAIPanel = (tab: AdminAITab, active: boolean) => (
   tab === 'models' ? <LazyAIModelPanel />
     : tab === 'gateways' ? <LazyAIGatewayPanel />
@@ -148,11 +174,13 @@ export function AdminFeaturesContent() {
   );
 }
 
-export function AdminActivationKeysContent() {
+export function AdminBillingContent() {
   return (
-    <Suspense fallback={<PanelFallback />}>
-      <LazyKeyManagementPanel />
-    </Suspense>
+    <AdminSubtabs
+      owner="admin-billing"
+      resolveTab={resolveAdminBillingTab}
+      renderPanel={renderBillingPanel}
+    />
   );
 }
 

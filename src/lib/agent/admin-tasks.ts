@@ -10,7 +10,7 @@ export interface AgentAdminRun {
   /** Absent when the account lookup fails; the list does not depend on it. */
   userEmail: string | null;
   status: AgentRunStatus;
-  billing: 'charged' | 'exempt' | 'refunded';
+  billing: 'metered' | 'exempt';
   title: string;
   model: string;
   /** The configuration the task was created with. */

@@ -11,8 +11,7 @@ import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } fro
 import { Maximize2, Minimize2 } from 'lucide-react';
 import type { AttachmentState, Mention } from '@/types';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import type { MembershipType } from '@/lib/user/membership';
-import { webSearchUnavailableTitle } from '@/lib/ai/web-search-access';
+import { formatUsd } from '@/lib/billing/money';
 import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
@@ -63,7 +62,7 @@ interface ChatComposerProps extends ModelSettingsProps {
     draftKey?: string;
     /** The empty-state composer is larger and carries the conversation-mode switch. */
     variant?: 'dock' | 'hero';
-    /** Shown above the input, such as follow-up suggestions or the credit notice. */
+    /** Shown above the input, such as the balance notice. */
     header?: ReactNode;
     /** 输入框内的追问命盘富文本 token（与提及同构、视觉区分）。 */
     contextToken?: ReactNode;
@@ -78,8 +77,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     imageGeneration?: ComposerImageGeneration;
     /** The server can search the web for plain chat. */
     plainWebAvailable?: boolean;
-    /** The lowest membership a search service serves, null when none is set up. */
-    webTier?: MembershipType | null;
     agentMode?: boolean;
     /** 在普通对话里从 + 菜单选技能时，切到 Agent 对话。 */
     onEnableAgent?: () => void;
@@ -105,7 +102,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     customProviderActive?: boolean;
     customProviderLabel?: string | null;
     userId?: string | null;
-    membershipType?: MembershipType;
+    /** The balance is spent and the chosen platform model is paid: the draft stays editable but does not send. */
+    balanceLocked?: boolean;
     attachmentState?: AttachmentState;
     onAttachmentChange?: (state: AttachmentState) => void;
     mentions?: Mention[];
@@ -136,7 +134,6 @@ export function ChatComposer({
     webControl,
     imageGeneration,
     plainWebAvailable = false,
-    webTier = null,
     agentMode = false,
     onEnableAgent,
     continuing = false,
@@ -161,7 +158,7 @@ export function ChatComposer({
     customProviderActive = false,
     customProviderLabel = null,
     userId,
-    membershipType = 'free',
+    balanceLocked = false,
     attachmentState,
     onAttachmentChange,
     mentions = [],
@@ -204,9 +201,11 @@ export function ChatComposer({
         setPrevImageDraftKey(draftKey);
         setImageMode(false);
     }
+    // 余额不足只拦对话发送；生图按生图模型的价格由服务端判断。
+    const sendLocked = balanceLocked && !imageMode;
 
     const state = useComposerState({
-        userId, membershipType,
+        userId,
         knowledgeBaseEnabled, promptKnowledgeBases,
         enabledDataSourceTypes: enabledMentionDataSourceTypes,
     });
@@ -220,7 +219,7 @@ export function ChatComposer({
         mentionLoadError, mentionDataSourceErrors,
         mentionLoading, mentionDefaultCategory, setMentionDefaultCategory,
         knowledgeBaseSavingId,
-        canUseWeb, canUseBoth, canUseKnowledgeBase,
+        canUseKnowledgeBase,
         canMentionAnything,
         promptKbIdSet,
         refreshMentionData,
@@ -327,12 +326,7 @@ export function ChatComposer({
         if (!onAttachmentChange) return;
         const problem = documentFileProblem(file);
         if (problem) { showToast('error', problem); return; }
-        if (!canUseBoth && attachmentState?.webSearchEnabled) {
-            onAttachmentChange({ file, webSearchEnabled: false });
-            showToast('info', '同时使用搜索和附件仅限 Pro 用户，已自动关闭搜索');
-        } else {
-            onAttachmentChange({ ...attachmentState, file, webSearchEnabled: attachmentState?.webSearchEnabled ?? false });
-        }
+        onAttachmentChange({ ...attachmentState, file, webSearchEnabled: attachmentState?.webSearchEnabled ?? false });
     };
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         if (agentMode) { void uploads.upload(Array.from(e.target.files ?? [])); e.target.value = ''; return; }
@@ -358,8 +352,8 @@ export function ChatComposer({
         return () => window.removeEventListener(COMPOSER_FILES_EVENT, onFiles);
     }, []);
 
-    const plainWebAllowed = plainWebAvailable && canUseWeb;
-    const plainWebTitle = !plainWebAvailable ? webSearchUnavailableTitle(webTier) : !canUseWeb ? '联网搜索需要 Plus 会员' : '联网搜索';
+    const plainWebAllowed = plainWebAvailable;
+    const plainWebTitle = plainWebAvailable ? '联网搜索' : '当前环境未配置联网搜索';
     const handleWebToggle = () => {
         if (!onAttachmentChange) return;
         const newWebSearch = !attachmentState?.webSearchEnabled;
@@ -368,20 +362,11 @@ export function ChatComposer({
             showToast('info', plainWebTitle);
             return;
         }
-        if (!canUseBoth && attachmentState?.file && newWebSearch) {
-            onAttachmentChange({ file: undefined, webSearchEnabled: true });
-            showToast('info', '同时使用搜索和附件仅限 Pro 用户，已自动清除附件');
-        } else {
-            onAttachmentChange({ ...attachmentState, webSearchEnabled: newWebSearch });
-        }
+        onAttachmentChange({ ...attachmentState, webSearchEnabled: newWebSearch });
     };
 
     const toggleKnowledgeBaseSearch = useCallback(async (kbId: string) => {
         if (!userId) return;
-        if (membershipType === 'free') {
-            showToast('info', '仅限 Plus 以上会员使用');
-            return;
-        }
         const nextPromptIds = promptKbIdSet.has(kbId)
             ? Array.from(promptKbIdSet).filter(id => id !== kbId)
             : Array.from(new Set([...promptKbIdSet, kbId]));
@@ -393,7 +378,7 @@ export function ChatComposer({
             return;
         }
         showToast('success', promptKbIdSet.has(kbId) ? '已关闭知识库搜索' : '已启用知识库搜索');
-    }, [membershipType, promptKbIdSet, showToast, userId, state]);
+    }, [promptKbIdSet, showToast, userId, state]);
 
     // 输入框高度：单行保持紧凑；换行后给足下方空白；超过上限出现右上角放大键，可原地加高。
     const [composerExpanded, setComposerExpanded] = useState(false);
@@ -480,7 +465,7 @@ export function ChatComposer({
                 }
             }
         }
-        if (e.key === 'Enter' && !e.shiftKey && !disabled && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
+        if (e.key === 'Enter' && !e.shiftKey && !disabled && !sendLocked && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
             e.preventDefault();
             if (!userId && onAuthRequired) {
                 onAuthRequired();
@@ -527,7 +512,7 @@ export function ChatComposer({
     const handleSelectMention = (mention: Mention) => {
         if (!onMentionsChange) return;
         if (mention.type === 'knowledge_base' && !canUseKnowledgeBase) {
-            showToast('info', '知识库仅限 Plus 以上会员使用');
+            showToast('info', '知识库已关闭');
             return;
         }
         if (mention.type !== 'knowledge_base' && !isFeatureEnabled(getDataSourceFeatureId(mention.type))) {
@@ -604,7 +589,8 @@ export function ChatComposer({
     const hasDraft = Boolean(inputValue.trim());
     let inputPlaceholder: string;
     let inputLabel: string;
-    if (disabled) { inputPlaceholder = '请先获取积分'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
+    if (disabled) { inputPlaceholder = '暂时无法发送'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
+    else if (sendLocked) { inputPlaceholder = '余额不足，充值后继续'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
     else if (awaitingInput) { inputPlaceholder = '补充信息，继续当前任务…'; inputLabel = '补充任务信息'; }
     else if (running) { inputPlaceholder = '补充信息或调整方向…'; inputLabel = '补充信息或调整方向'; }
     else if (imageMode) { inputPlaceholder = '描述要生成的图片，例如：水墨风格的山间小筑，晨雾缭绕…'; inputLabel = '描述要生成的图片'; }
@@ -618,19 +604,18 @@ export function ChatComposer({
     } else { inputPlaceholder = '问问命盘、运势，或最近困惑的事…'; inputLabel = '输入消息'; }
 
     const send: ComposerSendState = isSendingToList || uploads.uploading ? { kind: 'sending' }
-        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled || dreamContextLoading, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
+        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled || sendLocked || dreamContextLoading, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
         : isLoading && onStop ? { kind: 'stop' }
-        : { kind: 'send', disabled: !hasDraft || dreamContextLoading };
+        : { kind: 'send', disabled: !hasDraft || sendLocked || dreamContextLoading };
     const styles = useMemo<ChatMode[]>(() => ['normal', ...(canUseBaziChart && userId ? ['mangpai' as const] : []), ...(userId ? ['dream' as const] : [])], [canUseBaziChart, userId]);
     const toolbarProps = {
         agentMode,
         disabled,
         userId,
-        membershipType,
         webControl,
         image: imageGeneration ? {
             active: imageMode,
-            title: imageMode ? '退出生图，回到对话' : `生图（直接生成图片，不经过对话模型）${imageGeneration.creditCost > 0 ? ` · 每张 ${imageGeneration.creditCost} 积分` : ''}`,
+            title: imageMode ? '退出生图，回到对话' : `生图（直接生成图片，不经过对话模型）${imageGeneration.customModel ? ` · 使用 ${imageGeneration.customModel}，不计费` : imageGeneration.priceMicros > 0 ? ` · 每张 ${formatUsd(imageGeneration.priceMicros, { precise: true })}` : ''}`,
             onToggle: () => setImageMode(value => !value),
         } : undefined,
         imageMode,
@@ -669,7 +654,7 @@ export function ChatComposer({
     };
 
     return (
-        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled ? ' is-locked' : ''}`} style={dockStyle}>
+        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled || sendLocked ? ' is-locked' : ''}`} style={dockStyle}>
             <div className="chat-composer-inner">
                 {header && <div className="chat-composer-header">{header}</div>}
                 <MentionManager
@@ -786,14 +771,13 @@ export function ChatComposer({
                             options={Array.from({ length: imageGeneration.maxCount }, (_, index) => ({ value: index + 1, label: `${index + 1} 张` }))}
                         />
                     </label>
-                    <span className="chat-image-cost">{imageGeneration.creditCost > 0 ? `每张 ${imageGeneration.creditCost} 积分 · 共 ${imageGeneration.creditCost * imageCount} 积分` : '本模型不扣积分'}</span>
+                    <span className="chat-image-cost">{imageGeneration.customModel ? '使用自己的生图模型，不计费' : imageGeneration.priceMicros > 0 ? `每张 ${formatUsd(imageGeneration.priceMicros, { precise: true })} · 共 ${formatUsd(imageGeneration.priceMicros * imageCount, { precise: true })}` : '本模型免费'}</span>
                 </div>}
 
                 <ComposerStatusBar
                     agentMode={agentMode}
                     disabled={disabled}
                     userId={userId}
-                    membershipType={membershipType}
                     selectedModel={selectedModel}
                     onModelChange={onModelChange}
                     reasoningEnabled={reasoningEnabled}

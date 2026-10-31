@@ -19,12 +19,11 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import {
   MCP_EXPOSURES, MCP_EXPOSURE_HINTS, MCP_EXPOSURE_LABELS, MCP_RESULT_CHARS_RANGE, MCP_SERVER_NAME_PATTERN, MCP_TIMEOUT_RANGE,
-  MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS, USER_MCP_EXPOSURES,
+  USER_MCP_EXPOSURES,
   type McpExposure, type McpServerInput, type McpServerView,
 } from '@/lib/agent/mcp/config';
 import { MCP_PUBLIC_URL } from '@/lib/mcp-service-config';
 import type { McpServerScope } from '@/lib/agent/mcp/client';
-import type { MembershipType } from '@/lib/user/membership';
 
 /** What the editor starts from: a saved server, or a template for a new one. */
 export type McpEditorSeed =
@@ -39,7 +38,6 @@ type Draft = {
   url: string;
   description: string;
   exposure: McpExposure;
-  requiredTier: MembershipType;
   searchTool: string;
   fetchTool: string;
   routePriority: string;
@@ -61,7 +59,7 @@ function draftOf(seed: McpEditorSeed, scope: McpServerScope): Draft {
     const server = seed.server;
     return {
       displayName: server.displayName, name: server.name, url: server.url, description: server.description,
-      exposure: server.exposure, requiredTier: server.requiredTier,
+      exposure: server.exposure,
       searchTool: server.searchTool ?? '', fetchTool: server.fetchTool ?? '',
       routePriority: String(server.routePriority),
       headers: Object.entries(server.headers).map(([name, value]) => ({ key: nextKey(), name, value })),
@@ -73,7 +71,7 @@ function draftOf(seed: McpEditorSeed, scope: McpServerScope): Draft {
   const { input, secretHeader } = seed;
   return {
     displayName: input.displayName, name: input.name, url: input.url, description: input.description ?? '',
-    exposure: input.exposure ?? 'deferred', requiredTier: input.requiredTier ?? 'free',
+    exposure: input.exposure ?? 'deferred',
     searchTool: input.searchTool ?? '', fetchTool: input.fetchTool ?? '',
     routePriority: String(input.routePriority ?? 100), headers: [],
     // 用户连接器默认给一行空白密钥，填了再保存；平台服务沿用模板。
@@ -141,7 +139,6 @@ function payloadOf(draft: Draft, scope: McpServerScope): McpServerInput {
     maxResultChars: integer(draft.maxResultChars, '结果字数上限', MCP_RESULT_CHARS_RANGE.min, MCP_RESULT_CHARS_RANGE.max),
     sortOrder: integer(draft.sortOrder, '排序', -10_000, 10_000),
     ...(scope === 'platform' ? {
-      requiredTier: draft.requiredTier,
       searchTool: draft.searchTool.trim() || null, fetchTool: draft.fetchTool.trim() || null,
       routePriority: integer(draft.routePriority, '路由优先级', 0, 1000),
     } : {}),
@@ -276,14 +273,6 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                   {props => (
                     <Select ariaLabel="工具提供方式" id={props.id} value={draft.exposure}
                       onChange={exposure => set({ exposure })} options={exposures.map(exposure => ({ value: exposure, label: MCP_EXPOSURE_LABELS[exposure] }))} />
-                  )}
-                </Field>
-              ) : null}
-              {scope === 'platform' ? (
-                <Field label="会员等级" hint="达到这一等级的用户才能使用。">
-                  {props => (
-                    <Select ariaLabel="会员等级" id={props.id} value={draft.requiredTier}
-                      onChange={requiredTier => set({ requiredTier })} options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))} />
                   )}
                 </Field>
               ) : null}

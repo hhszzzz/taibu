@@ -18,7 +18,6 @@ import { Check, ImagePlus, Paperclip, Plus, Settings2, SlidersHorizontal, Square
 import { ConnectorsIcon, KnowledgeIcon, MemoryIcon, SearchIcon, SkillIcon } from '@/lib/navigation/nav-icons';
 import { BetaBadge } from '@/components/ui/BetaBadge';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import type { MembershipType } from '@/lib/user/membership';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
 import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
@@ -50,8 +49,10 @@ export interface ComposerMemoryControl {
 /** Standalone image generation: the composer talks to /api/images/generate instead of the chat model. */
 export interface ComposerImageGeneration {
     sizes: readonly string[];
-    /** 每张图扣除的积分；0 表示免费。 */
-    creditCost: number;
+    /** 每张图的价格（微美元）；0 表示免费。 */
+    priceMicros: number;
+    /** 自定义配置里的生图模型：浏览器直连生成，不计费。 */
+    customModel?: string;
     maxCount: number;
     onGenerate: (options: { prompt: string; size: string; count: number }) => void;
 }
@@ -77,7 +78,6 @@ interface ComposerToolbarProps extends ModelSettingsProps {
     agentMode: boolean;
     disabled: boolean;
     userId?: string | null;
-    membershipType: MembershipType;
     webControl?: ComposerWebControl;
     memory?: ComposerMemoryControl;
     /** Absent when no image model serves the member; the button stays hidden. */

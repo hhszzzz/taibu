@@ -50,7 +50,7 @@ export async function agentMcpDatabaseContracts(t, { sql, asActor, asOwner, admi
     for (const extra of [
       { exposure: 'hidden' }, { exposure: 'codemode' }, { search_tool: 'web_search_exa' }, { fetch_tool: 'web_fetch_exa' },
       { url: 'http://plain.example.com/mcp' }, { timeout_ms: 1000 }, { max_result_chars: 1000 }, { headers: [] },
-      { required_tier: 'gold' }, { display_name: '   ' },
+      { display_name: '   ' },
     ]) await assert.rejects(add(owner, owner, 'shape', extra), /23514/, JSON.stringify(extra));
     await assert.rejects(add(owner, owner, 'Bad-Name'), /23514/);
     await add(owner, owner, 'notes');

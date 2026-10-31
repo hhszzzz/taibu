@@ -44,9 +44,7 @@ test('collaboration progress counts finished members of the running analysis and
 });
 
 test('parallel children are isolated, all token usage is projected, and interrupted children replay once', { timeout: 20000 }, async t => {
-    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
     const features = require('../lib/app-settings') as typeof import('../lib/app-settings');
-    t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
     t.mock.method(features, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
     const run = row(), store = new MemoryStore(), abort = new AbortController();
     run.input.collaborators = [
@@ -112,9 +110,7 @@ test('parallel children are isolated, all token usage is projected, and interrup
 });
 
 test('failed configured collaboration reports an error without forcing an endless delegation loop', { timeout: 10000 }, async t => {
-    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
     const features = require('../lib/app-settings') as typeof import('../lib/app-settings');
-    t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
     t.mock.method(features, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
     const run = row(), store = new MemoryStore();
     run.input.collaborators = ['first', 'second'].map(id => ({ id, name: id, model: config.id, focus: '', reasoning: false, reasoningEffort: null }));

@@ -1,8 +1,6 @@
 import 'server-only';
 
 import type { ScopedDb } from '@/lib/db/context.server';
-import { buildMembershipInfo } from '@/lib/user/membership';
-import type { MembershipInfoSource } from '@/lib/user/membership';
 import type { ChatBootstrapData, ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
 import { isFeatureModuleEnabled } from '@/lib/app-settings';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
@@ -23,24 +21,24 @@ function toPromptKnowledgeBaseIds(value: unknown): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.length > 0);
 }
 
-async function loadMembershipRow(
+async function loadUserRow(
   db: ScopedDb,
   userId: string,
 ) {
   return await db.tx((trx) => trx
     .selectFrom('users')
-    .select(['id', 'membership', 'membership_expires_at', 'ai_chat_count'])
+    .select(['id'])
     .where('id', '=', userId)
     .executeTakeFirst());
 }
 
-async function loadMembershipRowWithRecovery(
+async function loadUserRowWithRecovery(
   db: ScopedDb,
   userId: string,
 ) {
-  let membershipRow = await loadMembershipRow(db, userId);
-  if (membershipRow) {
-    return { data: membershipRow, error: null };
+  let userRow = await loadUserRow(db, userId);
+  if (userRow) {
+    return { data: userRow, error: null };
   }
 
   const ensured = await ensureUserRecordRow(db, { id: userId });
@@ -51,8 +49,8 @@ async function loadMembershipRowWithRecovery(
     };
   }
 
-  membershipRow = await loadMembershipRow(db, userId);
-  return { data: membershipRow, error: null };
+  userRow = await loadUserRow(db, userId);
+  return { data: userRow, error: null };
 }
 
 export async function buildChatBootstrap(
@@ -60,19 +58,17 @@ export async function buildChatBootstrap(
   userId: string,
 ): Promise<ChatBootstrapData> {
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
-  const { data: membershipRow, error: membershipError } = await loadMembershipRowWithRecovery(db, userId)
+  const { data: userRow, error: userError } = await loadUserRowWithRecovery(db, userId)
     .catch((error) => ({ data: null, error }));
 
-  if (membershipError) {
-    throw resolveChatBootstrapError('load users row', membershipError);
+  if (userError) {
+    throw resolveChatBootstrapError('load users row', userError);
   }
-  if (!membershipRow || typeof membershipRow.ai_chat_count !== 'number') {
-    throw resolveChatBootstrapError('missing or invalid users row', membershipRow);
+  if (!userRow) {
+    throw resolveChatBootstrapError('missing users row');
   }
 
-  const membership = buildMembershipInfo(membershipRow as MembershipInfoSource);
-
-  const promptKbIds = membership?.type === 'free' || !knowledgeBaseFeatureEnabled
+  const promptKbIds = !knowledgeBaseFeatureEnabled
     ? []
     : await (async () => {
       const settingsRow = await db.tx((trx) => trx
@@ -85,7 +81,7 @@ export async function buildChatBootstrap(
       return toPromptKnowledgeBaseIds((settingsRow as PromptSettingsRow | null)?.prompt_kb_ids);
     })();
 
-  if (membership?.type === 'free' || !knowledgeBaseFeatureEnabled || promptKbIds.length === 0) {
+  if (!knowledgeBaseFeatureEnabled || promptKbIds.length === 0) {
     return {
       userId,
       promptKnowledgeBaseIds: [],

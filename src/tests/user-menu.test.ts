@@ -39,10 +39,11 @@ test('user menu uses registry icons and removes heavy account shortcuts', () => 
   assert.equal(source.includes('FloatingPanel'), false);
   assert.equal(source.includes('document.addEventListener(\'mousedown\''), false);
   assert.equal(source.includes('user-help-menu'), true);
-  // 用量从 composer 的圆环移到账户菜单，作为「用量」二级菜单；不再有独立的用量弹窗。
+  // 用量从 composer 的圆环移到账户菜单，作为「余额」二级菜单；不再有独立的用量弹窗。
   assert.equal(source.includes('user-usage-menu'), true);
-  assert.equal(source.includes('剩余积分'), true);
-  assert.equal(source.includes('查看订阅与积分'), true);
+  assert.equal(source.includes('可用额度'), true);
+  assert.equal(source.includes("openSettingsCenter('billing')"), true);
+  assert.equal(source.includes('订阅与余额'), true);
   assert.equal(source.includes('usage-dialog'), false);
   assert.equal(source.includes('isUsageOpen'), false);
 });

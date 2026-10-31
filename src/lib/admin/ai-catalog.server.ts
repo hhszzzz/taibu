@@ -9,7 +9,7 @@ import { MODEL_REQUEST_USER_AGENT } from '@/lib/ai/providers/ai-sdk-provider';
 import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 import type { AIUsageType } from '@/types';
 import type {
-    AdminGateway, AdminGatewayInput, AdminModel, AdminModelInput, CatalogTier, GatewayProbeResult,
+    AdminGateway, AdminGatewayInput, AdminModel, AdminModelInput, GatewayProbeResult,
 } from '@/lib/admin/ai-catalog';
 
 /** A catalog write the admin can correct: shown as is. */
@@ -131,10 +131,12 @@ export async function listModels(): Promise<AdminModel[]> {
         displayName: row.display_name,
         vendor: row.vendor,
         usageType: row.usage_type as AIUsageType,
-        creditCost: row.credit_cost ?? 1,
+        pricing: {
+            input: row.input_price, output: row.output_price, cacheRead: row.cache_read_price,
+            cacheWrite: row.cache_write_price, image: row.image_price,
+        },
         isEnabled: row.is_enabled !== false,
         sortOrder: row.sort_order ?? 0,
-        requiredTier: row.required_tier as CatalogTier,
         supportsVision: row.supports_vision === true,
         isReasoningDefault: row.is_reasoning_default === true,
         thinkingLevels: normalizeThinkingLevels(row.thinking_levels),
@@ -151,8 +153,10 @@ export async function listModels(): Promise<AdminModel[]> {
 function modelColumns(input: AdminModelInput) {
     return {
         model_key: input.modelKey, display_name: input.displayName, vendor: input.vendor,
-        usage_type: input.usageType, credit_cost: input.creditCost, is_enabled: input.isEnabled, sort_order: input.sortOrder,
-        required_tier: input.requiredTier, supports_vision: input.supportsVision,
+        usage_type: input.usageType, is_enabled: input.isEnabled, sort_order: input.sortOrder,
+        input_price: input.pricing.input, output_price: input.pricing.output, cache_read_price: input.pricing.cacheRead,
+        cache_write_price: input.pricing.cacheWrite, image_price: input.pricing.image,
+        supports_vision: input.supportsVision,
         is_reasoning_default: input.isReasoningDefault,
         thinking_levels: arrayValue(input.thinkingLevels),
         default_reasoning_effort: input.defaultReasoningEffort, context_window: input.contextWindow,

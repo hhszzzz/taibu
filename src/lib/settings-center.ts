@@ -3,7 +3,7 @@ export const SETTINGS_CENTER_NAMESPACE = 'settings';
 export const SETTINGS_CENTER_TABS = [
   'general',
   'profile',
-  'upgrade',
+  'billing',
   'shares',
   'personalization',
   'byok',
@@ -14,7 +14,7 @@ export const SETTINGS_CENTER_TABS = [
   'mcp-service',
   'admin-announcements',
   'admin-features',
-  'admin-keys',
+  'admin-billing',
   'admin-ai-services',
   'admin-agent-extensions',
   'help',
@@ -27,7 +27,7 @@ export type SettingsCenterFlags = {
   sharesEnabled: boolean;
   skillsEnabled: boolean;
   connectorsEnabled: boolean;
-  upgradeEnabled: boolean;
+  billingEnabled: boolean;
   chartsEnabled: boolean;
   knowledgeBaseEnabled: boolean;
   mcpServiceEnabled: boolean;
@@ -60,13 +60,13 @@ export const SETTINGS_CENTER_GROUP_LABELS: Record<SettingsCenterTabGroup, string
 };
 
 const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTabState, 'disabled'>> = {
-  profile: { id: 'profile', label: '账户', group: 'account', description: '管理个人资料、会员信息与登录安全。' },
+  profile: { id: 'profile', label: '账户', group: 'account', description: '管理个人资料与登录安全。' },
   general: { id: 'general', label: '常规', group: 'account', description: '调整外观、阅读字号与提醒方式。' },
-  upgrade: { id: 'upgrade', label: '订阅', group: 'account' },
+  billing: { id: 'billing', label: '订阅与余额', group: 'account', description: '平台模型按实际用量计费，先扣订阅额度，再扣余额。' },
   shares: { id: 'shares', label: '分享链接', group: 'account', description: '你公开分享过的对话。删除后原链接立即失效。' },
   help: { id: 'help', label: '帮助', group: 'account', description: '常见问题与联系方式。' },
   personalization: { id: 'personalization', label: '个性化', group: 'extensions', description: '这些偏好会带入 AI 对话与结果页解读。' },
-  byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '用你自己的 API Key 调用模型，不消耗本站积分。' },
+  byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '用你自己的 API Key 调用模型，不消耗本站余额。' },
   charts: { id: 'charts', label: '命盘', group: 'extensions', description: '保存过的命盘都在这里。默认八字命盘会用于日运、月运和每日早报。' },
   'knowledge-base': { id: 'knowledge-base', label: '知识库', group: 'extensions', description: '把命盘、解读和资料归档到知识库，AI 对话时可以检索引用。' },
   skills: { id: 'skills', label: '技能', group: 'extensions', beta: true, description: '添加自己的 Agent 技能，在相关任务中自动加载，或用 /skill:名称 调用。' },
@@ -74,7 +74,7 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   'mcp-service': { id: 'mcp-service', label: 'Taibu MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
   'admin-features': { id: 'admin-features', label: '功能开关', group: 'management', description: '按模块关闭入口与接口，关闭后前后端同时失效。' },
-  'admin-keys': { id: 'admin-keys', label: '激活码', group: 'management', description: '生成、查看和作废会员与积分激活码。' },
+  'admin-billing': { id: 'admin-billing', label: '计费', group: 'management', description: '管理套餐、兑换码、用户余额与订单，查看全站用量日志。' },
   'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关，查看 Agent 任务和测评结果。' },
   'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', beta: true, description: '管理平台 MCP、联网搜索、技能与智能体角色，并设置用户扩展权限。' },
 };
@@ -83,8 +83,8 @@ function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCent
   switch (tab) {
     case 'shares':
       return !flags.sharesEnabled;
-    case 'upgrade':
-      return !flags.upgradeEnabled;
+    case 'billing':
+      return !flags.billingEnabled;
     case 'personalization':
       return !flags.personalizationEnabled;
     case 'byok':
@@ -129,10 +129,10 @@ export function getSettingsCenterDisabledState(
         title: '暂未开放',
         description: '当前分享功能不可用。',
       };
-    case 'upgrade':
+    case 'billing':
       return {
         title: '暂未开放',
-        description: '当前订阅不可用。',
+        description: '当前订阅与余额不可用。',
       };
     case 'knowledge-base':
       return {

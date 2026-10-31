@@ -56,11 +56,7 @@ function resolveInvalidationKeys(pathname: string): ReadonlyArray<readonly unkno
   }
 
   if (
-    pathname.startsWith('/api/user/membership')
-    || pathname.startsWith('/api/membership')
-    || pathname.startsWith('/api/credits')
-    || pathname.startsWith('/api/checkin')
-    || pathname.startsWith('/api/activation-keys')
+    pathname.startsWith('/api/billing')
     || pathname.startsWith('/api/auth')
   ) {
     return [

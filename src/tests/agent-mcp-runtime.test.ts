@@ -15,11 +15,9 @@ let servers: McpServerRow[] = [];
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
   const store = require('../lib/agent/mcp/store.server') as typeof import('../lib/agent/mcp/store.server');
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
   t.mock.method(sdk, 'isModelAvailable', () => true);
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());

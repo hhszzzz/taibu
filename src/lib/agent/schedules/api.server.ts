@@ -4,8 +4,7 @@ import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/a
 import { getAgentScheduleLimits, readFeatureModuleStateFresh, setAgentScheduleLimits } from '@/lib/app-settings';
 import { isValidUUID } from '@/lib/validation';
 import {
-  AGENT_SCHEDULE_LIMIT_MAX, AGENT_SCHEDULE_MEMBERSHIP_LABELS, AGENT_SCHEDULE_MEMBERSHIP_TIERS,
-  AgentScheduleInputError, normalizeAgentScheduleLimits, parseAgentScheduleInput,
+  AGENT_SCHEDULE_LIMIT_MAX, AgentScheduleInputError, parseAgentScheduleInput, parseAgentScheduleLimit,
   type AgentScheduleLimits,
 } from './config';
 import {
@@ -163,14 +162,9 @@ export async function saveScheduleLimits(request: NextRequest) {
     const body = await readBody(request) as { limits?: unknown } | null;
     if (!body || typeof body !== 'object' || !body.limits || typeof body.limits !== 'object' || Array.isArray(body.limits))
       return jsonError('额度无效', 400);
-    const raw = body.limits as Record<string, unknown>;
-    for (const tier of AGENT_SCHEDULE_MEMBERSHIP_TIERS) {
-      const value = raw[tier];
-      const parsed = typeof value === 'string' && /^\d{1,3}$/u.test(value) ? Number(value) : value;
-      if (!Number.isInteger(parsed) || (parsed as number) < 0 || (parsed as number) > AGENT_SCHEDULE_LIMIT_MAX)
-        return jsonError(`${AGENT_SCHEDULE_MEMBERSHIP_LABELS[tier]}的额度须为 0–${AGENT_SCHEDULE_LIMIT_MAX} 的整数`, 400);
-    }
-    const limits: AgentScheduleLimits = normalizeAgentScheduleLimits(raw);
+    const limit = parseAgentScheduleLimit((body.limits as Record<string, unknown>).limit);
+    if (limit === null) return jsonError(`每人的定时任务上限须为 0–${AGENT_SCHEDULE_LIMIT_MAX} 的整数`, 400);
+    const limits: AgentScheduleLimits = { limit };
     await setAgentScheduleLimits(limits);
     return jsonOk({ limits });
   } catch (error) {

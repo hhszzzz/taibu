@@ -1,9 +1,6 @@
-import { chatWebSearchDenial } from '@/lib/ai/web-search-access';
-import type { MembershipType } from '@/lib/user/membership';
 import type {
   ChatActor,
   ChatPreparationInput,
-  ChatPreparationFailure,
   ChatPreparationResult,
   DirectChatOperations,
   ManagedChatOperations,
@@ -12,13 +9,10 @@ import type {
   ResolvedChatPreparation,
 } from '@/lib/server/chat/contracts';
 
-/** Web search is a membership right, so it is refused before anything is charged or counted. */
-function webSearchFailure(input: ChatPreparationInput, membership: MembershipType): ChatPreparationFailure | null {
-  const message = input.webSearch ? chatWebSearchDenial(membership, !!input.attachment) : null;
-  return message ? { kind: 'web-search-denied', message } : null;
-}
-
-/** Resolve admission and precharge once, independently of HTTP and database SDKs. */
+/**
+ * Resolve admission once, independently of HTTP and database SDKs. Nothing is charged here: a metered call needs a
+ * positive balance to start and pays for its usage when it ends.
+ */
 export async function resolveManagedChat(
   actor: ChatActor,
   input: ChatPreparationInput,
@@ -27,52 +21,21 @@ export async function resolveManagedChat(
   const requestedModelId = input.model?.trim() || operations.defaultModelId;
   const model = await operations.resolveModel(requestedModelId);
   if (!model) return { ok: false, error: { kind: 'invalid-model' } };
+  if (!model.offered) return { ok: false, error: { kind: 'model-unpriced' } };
 
-  const account = actor.userId ? await operations.loadAccount() : null;
-  if (account && !account.ok) return account;
-  const membershipType = account?.value.effectiveMembership ?? 'free';
-  if (!model.allowedMemberships.includes(membershipType)) {
-    return { ok: false, error: { kind: 'membership-denied' } };
-  }
-  const webSearchDenied = webSearchFailure(input, membershipType);
-  if (webSearchDenied) return { ok: false, error: webSearchDenied };
-  const reasoningEnabled = model.reasoningMemberships.includes(membershipType) ? !!input.reasoning : false;
-  const canSkipCredit = actor.creditPolicy === 'trusted-bypass';
-
-  let creditDeducted = false;
-  if (actor.userId && !canSkipCredit) {
-    if (!account?.value.hasCredits) {
-      return { ok: false, error: { kind: 'insufficient-credits' } };
-    }
-    // Both streaming and non-streaming requests retain their existing precharge.
-    const creditUse = await operations.deductCredit();
-    if (!creditUse.ok) {
-      return {
-        ok: false,
-        error: { kind: creditUse.reason === 'insufficient_credits' ? 'insufficient-credits' : 'deduction-failed' },
-      };
-    }
-    creditDeducted = true;
-
-    // Public admission is membership -> debit -> limit. A rejected slot must settle
-    // the actual debit before reporting a normal 429; trusted actors never enter here.
-    let admissionFailure: ChatPreparationFailure | null = null;
+  const metered = actor.billing === 'metered';
+  if (metered) {
+    let admitted: boolean;
     try {
-      if (!await operations.checkRateLimit()) admissionFailure = { kind: 'rate-limited' };
+      admitted = await operations.admit(model);
     } catch {
-      admissionFailure = { kind: 'rate-limit-failed' };
+      return { ok: false, error: { kind: 'balance-unavailable' } };
     }
-    if (admissionFailure) {
-      let refunded = false;
-      try {
-        refunded = await operations.refundRateLimitFailure();
-      } catch {
-        // A thrown refund is also an unsettled debit, not a successful rejection.
-      }
-      return {
-        ok: false,
-        error: refunded ? admissionFailure : { kind: 'rate-limit-refund-failed' },
-      };
+    if (!admitted) return { ok: false, error: { kind: 'insufficient-balance' } };
+    try {
+      if (!await operations.checkRateLimit()) return { ok: false, error: { kind: 'rate-limited' } };
+    } catch {
+      return { ok: false, error: { kind: 'rate-limit-failed' } };
     }
   }
 
@@ -81,16 +44,14 @@ export async function resolveManagedChat(
     value: {
       input,
       userId: actor.userId,
-      canSkipCredit,
+      metered,
       requestedModelId: model.id,
-      membershipType,
-      reasoningEnabled,
-      creditDeducted,
+      reasoningEnabled: model.supportsReasoning ? !!input.reasoning : false,
     },
   };
 }
 
-/** Owns prompt-assembly compensation only; execution/streaming still belongs to the route. */
+/** Prompt assembly follows admission; execution and streaming still belong to the route. */
 export async function prepareManagedChat(
   actor: ChatActor,
   input: ChatPreparationInput,
@@ -98,28 +59,16 @@ export async function prepareManagedChat(
 ): Promise<ChatPreparationResult<PreparedChat>> {
   const resolved = await resolveManagedChat(actor, input, operations);
   if (!resolved.ok) return resolved;
-
-  try {
-    const prompt = await operations.buildPrompt(resolved.value);
-    return { ok: true, value: { ...resolved.value, ...prompt } };
-  } catch (error) {
-    if (resolved.value.creditDeducted && resolved.value.userId && !resolved.value.canSkipCredit) {
-      await operations.refundPromptFailure();
-    }
-    throw error;
-  }
+  const prompt = await operations.buildPrompt(resolved.value);
+  return { ok: true, value: { ...resolved.value, ...prompt } };
 }
 
-/** Browser-direct validates account membership before limiting; it never debits. */
+/** Browser-direct calls the user's own model: limited, never billed. */
 export async function prepareDirectChat(
   actor: { userId: string },
   input: ChatPreparationInput,
   operations: DirectChatOperations,
 ): Promise<ChatPreparationResult<PreparedChat>> {
-  const account = await operations.loadAccount();
-  if (!account.ok) return account;
-  const webSearchDenied = webSearchFailure(input, account.value.effectiveMembership);
-  if (webSearchDenied) return { ok: false, error: webSearchDenied };
   if (!await operations.checkRateLimit()) {
     return { ok: false, error: { kind: 'rate-limited' } };
   }
@@ -127,11 +76,9 @@ export async function prepareDirectChat(
   const resolved: ResolvedChatPreparation = {
     input,
     userId: actor.userId,
-    canSkipCredit: true,
+    metered: false,
     requestedModelId: input.model?.trim() || operations.defaultModelId,
-    membershipType: account.value.effectiveMembership,
     reasoningEnabled: input.reasoning === true,
-    creditDeducted: false,
   };
   const prompt = await operations.buildPrompt(resolved);
   return { ok: true, value: { ...resolved, ...prompt } };

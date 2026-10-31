@@ -7,13 +7,12 @@ import { MemoryStore, row } from './helpers/agent-runtime-fixture';
 
 const imageModel: AIModelConfig = {
   id: 'image-fixture', name: '生图夹具', vendor: 'openai', modelId: 'gpt-image-1', apiUrl: 'https://gateway.example/v1',
-  supportsReasoning: false, requiredTier: 'free', creditCost: 2,
+  supportsReasoning: false, usageType: 'image', pricing: { input: null, output: null, cacheRead: null, cacheWrite: null, image: 0.04 },
   sources: [{ sourceKey: 'gw', sourceName: 'gw', gatewayId: 'gateway', apiUrl: 'https://gateway.example/v1', isEnabled: true }],
 };
 
 function modules() {
   return {
-    credits: require('../lib/user/credits') as typeof import('../lib/user/credits'),
     settings: require('../lib/app-settings') as typeof import('../lib/app-settings'),
     images: require('../lib/ai/image-generation.server') as typeof import('../lib/ai/image-generation.server'),
   };
@@ -21,8 +20,7 @@ function modules() {
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const { credits, settings } = modules();
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
+  const { settings } = modules();
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
 });
 
@@ -38,6 +36,7 @@ test('the image tool is offered only with an available image model and cannot go
   const tools = await createAgentTools(store, run, run.checkpoint);
   const tool = tools.find(item => item.name === 'generate_image');
   assert.ok(tool, 'a configured model registers the tool');
+  assert.match(tool.description, /每张 \$0\.04，从用户余额扣除/u);
   assert.equal(getAgentToolScope('generate_image'), 'image');
   assert.equal(getAgentToolFamily('generate_image'), 'image');
   assert.equal(AGENT_MEMBER_DENIED_TOOLS.has('generate_image'), true);
@@ -45,7 +44,7 @@ test('the image tool is offered only with an available image model and cannot go
 
   const generated = t.mock.method(images, 'generateImages', async () => ({
     images: [{ id: '11111111-1111-4111-8111-111111111111', size: '1024x1024', mimeType: 'image/png', url: '/api/images/11111111-1111-4111-8111-111111111111' }],
-    remaining: 5,
+    costMicros: 40_000,
   }));
   const result = await tool!.execute('1:call', { prompt: '画一只橘猫', size: '1024x1024', n: 2 });
   assert.match(result.content[0]!.type === 'text' ? result.content[0]!.text : '', /已生成 1 张图片/u);
@@ -70,10 +69,41 @@ test('a disabled 生图 scope blocks the call at execution time', async (t) => {
   t.mock.method(settings, 'readFeatureModuleStateFresh', async (id: string) => id === 'agent-tool:image'
     ? { status: 'disabled' as const }
     : { status: 'enabled' as const });
-  const generated = t.mock.method(images, 'generateImages', async () => ({ images: [], remaining: null }));
+  const generated = t.mock.method(images, 'generateImages', async () => ({ images: [], costMicros: 0 }));
   const run = row();
   const tools = await createAgentTools(new MemoryStore(), run, run.checkpoint);
   const tool = tools.find(item => item.name === 'generate_image')!;
   await assert.rejects(() => tool.execute('1:call', { prompt: '画一只橘猫' }), /Agent 工具范围已关闭：生图/u);
   assert.equal(generated.mock.callCount(), 0);
+});
+
+test('a task with the member\'s own image model uses it with the task\'s key, unbilled, and skips the platform model', async (t) => {
+  const { images } = modules();
+  const resolve = t.mock.method(images, 'resolveImageModel', async () => imageModel);
+  const platform = t.mock.method(images, 'generateImages', async () => { throw new Error('the platform model must not run'); });
+  const custom = t.mock.method(images, 'generateCustomImages', async () => ({
+    images: [{ id: '22222222-2222-4222-8222-222222222222', size: '1536x1024', mimeType: 'image/png', url: '/api/images/22222222-2222-4222-8222-222222222222' }],
+    costMicros: 0,
+  }));
+  const run = row();
+  const customImage = { apiUrl: 'https://model.example/v1', apiKey: 'member-key', modelId: 'gpt-image-1' };
+  const tools = await createAgentTools(new MemoryStore(), run, run.checkpoint, { customImage });
+  const tool = tools.find(item => item.name === 'generate_image')!;
+  assert.match(tool.description, /使用用户自己的生图模型，不计费/u);
+  assert.equal(resolve.mock.callCount(), 0, 'no platform model is looked up');
+
+  const result = await tool.execute('1:call', { prompt: '画一只橘猫', size: '1536x1024' });
+  assert.deepEqual(result.details, {
+    prompt: '画一只橘猫', size: '1536x1024', n: 1, model: { id: 'custom:gpt-image-1', name: 'gpt-image-1' },
+    images: [{ id: '22222222-2222-4222-8222-222222222222', size: '1536x1024', mimeType: 'image/png' }],
+  });
+  const [request, deps] = custom.mock.calls[0]!.arguments as [Record<string, unknown>, { fetch: unknown }];
+  assert.deepEqual(request.provider, customImage);
+  assert.deepEqual([request.userId, request.runId, request.conversationId, request.count], [run.user_id, run.id, run.conversation_id, 1]);
+  assert.equal(typeof deps.fetch, 'function', 'the caller supplies the public-address fetch');
+  assert.equal(platform.mock.callCount(), 0);
+  await assert.rejects(() => tool.execute('1:member', { prompt: '画一只橘猫' }, undefined, { member: true }), /协作成员不能生成图片/u);
+
+  const evaluation = await createAgentTools(new MemoryStore(), run, run.checkpoint, { customImage, images: false });
+  assert.equal(evaluation.some(item => item.name === 'generate_image'), false, 'evaluation runs never generate images');
 });

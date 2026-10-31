@@ -1,12 +1,11 @@
 /**
- * Browser calls for 定时任务 and the administrator's per-tier limit form.
+ * Browser calls for 定时任务 and the administrator's limit form.
  * The account id pins every request to the page's owner, as the extension settings do.
  */
 import { requestBrowserData } from '@/lib/browser-api';
 import type { AgentScheduleInput, AgentScheduleLimits, AgentScheduleRunView, AgentScheduleView } from './config';
-import type { MembershipType } from '@/lib/user/membership';
 
-export type AgentScheduleAllowance = { tier: MembershipType; limit: number; used: number };
+export type AgentScheduleAllowance = { limit: number; used: number };
 export type AgentScheduleListing = { schedules: AgentScheduleView[]; allowance: AgentScheduleAllowance };
 
 export type AgentScheduleClient = ReturnType<typeof agentScheduleClient>;

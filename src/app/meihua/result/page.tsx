@@ -24,7 +24,7 @@ import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { buildMeihuaCanonicalText, type MeihuaOutput, type MeihuaWebBundle } from '@/lib/divination/meihua';
 import { saveDivinationAction } from '@/lib/divination/save-client';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { openChatWithResult } from '@/lib/chat/result-handoff';
 
@@ -60,7 +60,7 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
   const router = useRouter();
   const { showToast } = useToast();
   const { setMenuItems, clearMenuItems } = useHeaderMenu();
-  const { userId, sessionLoading } = useSessionMembership();
+  const { userId, sessionLoading } = useSessionBalance();
   const [bundle, setBundle] = useState<MeihuaWebBundle | null>(null);
   const [divinationId, setDivinationId] = useState<string>();
   const [isLoading, setIsLoading] = useState(true);

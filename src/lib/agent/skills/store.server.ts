@@ -3,8 +3,6 @@ import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { isUniqueViolation } from '@/lib/db/errors';
 import { lockTransactionKey } from '@/lib/db/sql-helpers';
 import { createSharedCache } from '@/lib/cache/shared.server';
-import type { MembershipType } from '@/lib/user/membership';
-import { isMembershipTier } from '../mcp/config';
 import { SKILL_FILES_TOTAL_MAX_BYTES, type SkillDetail, type SkillFileView, type SkillView } from './config';
 import { SkillInputError, type SkillFields } from './input.server';
 
@@ -15,7 +13,6 @@ export interface SkillRow {
   name: string;
   description: string;
   version: number;
-  required_tier: MembershipType;
   is_enabled: boolean;
   disable_model_invocation: boolean;
   sort_order: number;
@@ -42,7 +39,7 @@ type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
 /** One owner's skills (null: the platform's) without SKILL.md, with its size. */
 function skillsOf(trx: Trx, owner: string | null) {
   const query = trx.selectFrom('agent_skills').select([
-    'id', 'owner_id', 'name', 'description', 'version', 'required_tier', 'is_enabled', 'disable_model_invocation',
+    'id', 'owner_id', 'name', 'description', 'version', 'is_enabled', 'disable_model_invocation',
     'sort_order', 'created_at', 'updated_at',
   ]).select((eb) => eb.fn<number>('octet_length', ['content']).as('bytes'));
   return owner === null ? query.where('owner_id', 'is', null) : query.where('owner_id', '=', owner);
@@ -142,7 +139,6 @@ export async function insertSkill(
       const { id } = await trx.insertInto('agent_skills').values({
         owner_id: owner, name: fields.document.name, description: fields.document.description, content: fields.document.content,
         disable_model_invocation: fields.document.manualOnly,
-        required_tier: owner === null ? fields.requiredTier ?? 'free' : 'free',
         is_enabled: fields.enabled ?? true, sort_order: fields.sortOrder ?? 0,
       }).returning('id').executeTakeFirstOrThrow();
       if (files.length) await trx.insertInto('agent_skill_files')
@@ -189,7 +185,6 @@ export async function updateSkill(db: ScopedDb, owner: string | null, id: string
           name: document.name, description: document.description, content: document.content,
           disable_model_invocation: document.manualOnly,
         } : {}),
-        ...(owner === null && fields.requiredTier !== undefined ? { required_tier: fields.requiredTier } : {}),
         ...(fields.enabled !== undefined ? { is_enabled: fields.enabled } : {}),
         ...(fields.sortOrder !== undefined ? { sort_order: fields.sortOrder } : {}),
       };
@@ -219,7 +214,6 @@ export function toSkillView(row: SkillRow, platformNames?: ReadonlySet<string>):
     name: row.name,
     description: row.description,
     version: row.version,
-    requiredTier: isMembershipTier(row.required_tier) ? row.required_tier : 'pro',
     enabled: row.is_enabled,
     manualOnly: row.disable_model_invocation,
     sortOrder: row.sort_order,

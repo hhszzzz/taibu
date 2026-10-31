@@ -9,25 +9,25 @@ import { SoundWaveLoader } from './SoundWaveLoader';
 import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
+import { useAvailableModels, type AvailableModel } from '@/lib/hooks/useAvailableModels';
 import { CUSTOM_PROVIDER_CHANGED_EVENT, getCustomProvider, getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
 import type { AIVendor, AIReasoningEffort } from '@/types';
 import { resolveThinkingLevel } from '@/lib/ai/thinking';
 import { type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
 import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
-import type { MembershipType } from '@/lib/user/membership';
+import { formatTokenPrices } from '@/lib/billing/format';
 
 interface ClientModelConfig {
     id: string; name: string; vendor: AIVendor; supportsReasoning: boolean;
     thinkingLevels?: AIReasoningEffort[]; defaultThinkingLevel?: AIReasoningEffort | null;
-    isReasoningDefault?: boolean; allowed?: boolean; tier?: 'free' | 'plus' | 'pro' | null; blockedReason?: string | null; reasoningAllowed?: boolean;
+    isReasoningDefault?: boolean; pricing?: AvailableModel['pricing'];
 }
 /** 多模型协作的成员上限：0–4 个，主模型不占名额。 */
 const MAX_COLLABORATORS = 4;
 interface ModelSelectorProps extends ModelSettingsProps {
     selectedModel?: string; onModelChange?: (modelId: string) => void;
     reasoningEnabled?: boolean; onReasoningChange?: (enabled: boolean) => void;
-    userId?: string | null; membershipType?: MembershipType; disabled?: boolean;
+    userId?: string | null; disabled?: boolean;
     compact?: boolean; toolbarStyle?: boolean;
     /** Extra menu rows rendered after the root items, such as custom-provider shortcuts. */
     extra?: ReactNode;
@@ -59,7 +59,7 @@ function modelEffort(model: ClientModelConfig | undefined, effort: AIReasoningEf
 
 /** What the reasoning setting reads as next to the model name, e.g. 高（claude 实测只显示档位，不加「推理」前缀）. */
 function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean, effort: AIReasoningEffort | null | undefined, levels: boolean): string | null {
-    if (!model?.supportsReasoning || model.reasoningAllowed === false) return null;
+    if (!model?.supportsReasoning) return null;
     if (!enabled) return '关';
     if (!levels || !model.thinkingLevels?.length) return '开';
     return effortLabel(modelEffort(model, effort), enabled);
@@ -67,9 +67,9 @@ function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
     reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, onCustomProvider,
-    userId, membershipType = 'free', disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
+    userId, disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
-    const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange, membershipType });
+    const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange });
     const models = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
     const collaborationPreset = useCollaborationPreset(userId ?? null);
     const [custom, setCustom] = useState<ReturnType<typeof getCustomProvider>>(null);
@@ -80,12 +80,11 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     }, []);
     useEffect(() => {
         if (!models.length || !onModelChange) return;
-        if (models.some(model => model.id === selectedModel && model.allowed !== false)) return;
-        const next = models.find(model => model.allowed !== false);
-        if (next && next.id !== selectedModel) onModelChange(next.id);
+        if (models.some(model => model.id === selectedModel)) return;
+        if (models[0].id !== selectedModel) onModelChange(models[0].id);
     }, [models, onModelChange, selectedModel]);
     const current = models.find(model => model.id === selectedModel) ?? models[0];
-    const reasoningAllowed = current?.supportsReasoning && (current.reasoningAllowed ?? true);
+    const reasoningAllowed = !!current?.supportsReasoning;
     useEffect(() => {
         if (!current || !onReasoningChange) return;
         if (!reasoningAllowed) {
@@ -102,11 +101,10 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     if (!onModelChange && !onReasoningChange) return null;
     if (custom && !toolbarStyle) return <div className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-sm text-foreground-secondary"><Cpu size={16} /><span>{getCustomProviderDisplayName(custom) || custom.modelId}</span></div>;
     const locked = disabled || query.isLoading || !current;
-    const available = models.filter(model => model.allowed !== false);
     const summary = reasoningSummary(current, reasoningEnabled, reasoningEffort, !!onReasoningEffortChange);
     const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
     const close = () => setOpen(false);
-    const reasoningSupported = !!current?.supportsReasoning && current.reasoningAllowed !== false;
+    const reasoningSupported = !!current?.supportsReasoning;
     const effortSupported = reasoningSupported && !!current.thinkingLevels?.length && !!onReasoningEffortChange;
     const effectiveEffort = modelEffort(current, reasoningEffort);
     const effortOptions = EFFORT_OPTIONS.filter(option => current?.thinkingLevels?.includes(option.value));
@@ -127,7 +125,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 name: template?.name ?? model.name,
                 model: model.id,
                 focus: template?.focus ?? '',
-                reasoning: template?.reasoning ?? (!!model.isReasoningDefault && model.reasoningAllowed !== false),
+                reasoning: template?.reasoning ?? !!model.isReasoningDefault,
                 reasoningEffort: template?.reasoningEffort ?? null,
                 ...(template?.profile ? { profile: template.profile } : {}),
             } satisfies AgentCollaborator];
@@ -156,9 +154,13 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             </MenuTrigger>}
             <MenuContent side="top" align={toolbarStyle ? 'end' : 'start'} sideOffset={6} className="chat-model-menu" aria-label="模型与分析设置">
                 <MenuRadioGroup className="chat-model-options" aria-label="选择模型" value={selectedModel ?? ''} onValueChange={value => onModelChange?.(value)}>
-                    {models.map(model => <MenuRadioItem key={model.id} value={model.id} disabled={model.allowed === false} closeOnClick>
-                        <span className="chat-model-option-name">{model.name}</span>
-                    </MenuRadioItem>)}
+                    {models.map(model => {
+                        const price = formatTokenPrices(model.pricing);
+                        return <MenuRadioItem key={model.id} value={model.id} closeOnClick>
+                            <span className="chat-model-option-name">{model.name}</span>
+                            {price && <span className="chat-model-option-price" title={price === '免费' ? undefined : '每百万 token：输入 / 输出（美元）'}>{price}</span>}
+                        </MenuRadioItem>;
+                    })}
                 </MenuRadioGroup>
                 {!models.length && !query.isLoading && <p className="chat-model-note">暂无可用模型。</p>}
                 {reasoningSupported && <MenuSeparator className="chat-model-separator" />}
@@ -168,7 +170,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                             <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span>
                         </MenuSubTrigger>
                         <MenuSubContent className="chat-model-menu chat-effort-menu" aria-label="努力程度">
-                            <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，且会更快消耗您的使用限额。</p>
+                            <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，用量与费用也越高。</p>
                             <MenuRadioGroup value={effortChoice} onValueChange={value => {
                                 if (value === 'off') { onReasoningChange?.(false); close(); return; }
                                 chooseEffort(value === 'default' ? null : value as AIReasoningEffort);
@@ -192,12 +194,12 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                     <span>努力程度</span><span className="chat-model-menu-value">不支持</span>
                 </MenuItem>}
                 {onCollaboratorsChange && <MenuSub>
-                    <MenuSubTrigger className="chat-model-action chat-model-menu-row" disabled={disabled || !available.length}>
+                    <MenuSubTrigger className="chat-model-action chat-model-menu-row" disabled={disabled || !models.length}>
                         <span>多模型协作<BetaBadge /></span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}
                     </MenuSubTrigger>
                     <MenuSubContent className="chat-model-menu chat-collab-menu" aria-label="多模型协作">
                         <p className="chat-collab-note">子模型可在个性化设置努力程度</p>
-                        {available.filter(model => model.id !== current?.id).map(model => {
+                        {models.filter(model => model.id !== current?.id).map(model => {
                             const checked = collaborators.some(member => member.model === model.id);
                             // 右侧 = 个性化里为该模型注册的名称（如「专项分析」），未注册时不显示。
                             const registered = collaborationPreset.members.find(member => member.model === model.id)?.name ?? '';

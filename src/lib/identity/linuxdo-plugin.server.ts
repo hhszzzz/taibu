@@ -14,26 +14,16 @@ import {
   normalizeLinuxDoReturnTo,
   type LinuxDoUser,
 } from '@/lib/oauth/linuxdo';
-import type { MembershipType } from '@/lib/user/membership';
 import { parseConfiguredOrigin } from '@/lib/runtime-env';
 
 const OAUTH_STATE_COOKIE = 'linuxdo-oauth-state';
-const CLAIM_INTENT = 'membership-claim';
 const PROVIDER_ID = 'linuxdo';
 
 type OAuthStatePayload = {
   state: string;
   codeVerifier: string;
-  intent: string;
   returnTo: string;
-  claimUserId?: string;
-  claimSub?: string;
 };
-
-type ClaimResult = {
-  status?: string;
-  next_available_at?: string | null;
-} | null;
 
 function appOrigin(ctx: { context: { baseURL: string } }): string {
   const configured = process.env.APP_ORIGIN;
@@ -49,10 +39,7 @@ function parseStateCookie(value: string | null | undefined): OAuthStatePayload |
     return {
       state: parsed.state,
       codeVerifier: parsed.codeVerifier,
-      intent: parsed.intent === CLAIM_INTENT ? CLAIM_INTENT : 'login',
       returnTo: normalizeLinuxDoReturnTo(parsed.returnTo),
-      ...(typeof parsed.claimUserId === 'string' ? { claimUserId: parsed.claimUserId } : {}),
-      ...(typeof parsed.claimSub === 'string' ? { claimSub: parsed.claimSub } : {}),
     };
   } catch {
     return null;
@@ -65,23 +52,6 @@ function resultUrl(origin: string, returnTo: string, params: Record<string, stri
     if (value) url.searchParams.set(key, value);
   }
   return url;
-}
-
-function resolveLinuxDoMembership(user: LinuxDoUser): MembershipType | null {
-  if (typeof user.trust_level !== 'number') return null;
-  if (user.trust_level >= 3) return 'pro';
-  if (user.trust_level === 2) return 'plus';
-  return null;
-}
-
-async function boundProvider(userId: string): Promise<{ provider_user_id: string } | null> {
-  const row = await systemDb().tx((trx) => trx
-    .selectFrom('user_oauth_providers')
-    .select(['provider_user_id'])
-    .where('user_id', '=', userId)
-    .where('provider', '=', PROVIDER_ID)
-    .executeTakeFirst());
-  return row ?? null;
 }
 
 async function rememberProvider(userId: string, user: LinuxDoUser, nickname: string): Promise<void> {
@@ -168,22 +138,11 @@ export function linuxdoPlugin() {
       linuxdoStart: createAuthEndpoint('/linuxdo', { method: 'GET' }, async (ctx) => {
         const url = new URL(ctx.request?.url ?? `${ctx.context.baseURL}/linuxdo`);
         const origin = appOrigin(ctx);
-        const intent = url.searchParams.get('intent') === CLAIM_INTENT ? CLAIM_INTENT : 'login';
         const returnTo = normalizeLinuxDoReturnTo(url.searchParams.get('returnTo'));
 
         const state = generateState();
         const { codeVerifier, codeChallenge } = generatePKCE();
-        const payload: OAuthStatePayload = { state, codeVerifier, intent, returnTo };
-
-        if (intent === CLAIM_INTENT) {
-          const authState = await getSessionFromCtx(ctx).catch(() => null);
-          const bound = authState?.user ? await boundProvider(authState.user.id) : null;
-          if (!authState?.user || !bound) {
-            throw ctx.redirect(resultUrl(origin, returnTo, { claim: 'missing_linuxdo' }).toString());
-          }
-          payload.claimUserId = authState.user.id;
-          payload.claimSub = bound.provider_user_id;
-        }
+        const payload: OAuthStatePayload = { state, codeVerifier, returnTo };
 
         await ctx.setSignedCookie(OAUTH_STATE_COOKIE, JSON.stringify(payload), ctx.context.secret, {
           httpOnly: true,
@@ -272,50 +231,7 @@ export function linuxdoPlugin() {
         if (!session) return redirectCurrentError('session_failed');
         await setSessionCookie(ctx, { session, user });
         await clearState();
-
-        if (stateCookie.intent !== CLAIM_INTENT) {
-          throw ctx.redirect(resultUrl(origin, stateCookie.returnTo, {}).toString());
-        }
-
-        const claimUserId = stateCookie.claimUserId;
-        const claimSub = stateCookie.claimSub;
-        if (!claimUserId || !claimSub || claimSub !== linuxdoUser.sub || claimUserId !== user.id) {
-          throw ctx.redirect(resultUrl(origin, stateCookie.returnTo, { claim: 'missing_linuxdo' }).toString());
-        }
-        const plan = resolveLinuxDoMembership(linuxdoUser);
-        if (!plan) {
-          throw ctx.redirect(resultUrl(origin, stateCookie.returnTo, { claim: 'no_eligibility' }).toString());
-        }
-
-        let result: ClaimResult = null;
-        let claimError = false;
-        try {
-          result = await systemDb().rpc('claim_linuxdo_membership_as_service', {
-            p_user_id: claimUserId,
-            p_plan_id: plan,
-            p_trust_level: linuxdoUser.trust_level ?? 0,
-            p_provider_user_id: linuxdoUser.sub,
-          }) as ClaimResult;
-        } catch (error) {
-          console.error('[linuxdo] membership claim failed:', error);
-          claimError = true;
-        }
-
-        const claim = claimError
-          ? 'claim_failed'
-          : result?.status === 'ok'
-            ? 'ok'
-            : result?.status === 'cooldown'
-              ? 'cooldown'
-              : result?.status === 'lower_tier_ignored'
-                ? 'lower_tier_ignored'
-                : result?.status === 'user_not_found'
-                  ? 'missing_linuxdo'
-                  : 'claim_failed';
-        throw ctx.redirect(resultUrl(origin, stateCookie.returnTo, {
-          claim,
-          next_available_at: claim === 'cooldown' ? result?.next_available_at ?? null : null,
-        }).toString());
+        throw ctx.redirect(resultUrl(origin, stateCookie.returnTo, {}).toString());
       }),
     },
   };

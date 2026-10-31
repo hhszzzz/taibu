@@ -40,10 +40,3 @@ export function parseStreamingSSEData(data: string): ParsedStreamingSSEFrame {
     }
 }
 
-/**
- * 检查错误是否为积分不足
- */
-export function isCreditsError(error: string | null): boolean {
-    if (!error) return false;
-    return error.includes('积分不足') || error.includes('充值') || error.includes('获取积分');
-}

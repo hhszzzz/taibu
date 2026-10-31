@@ -1,6 +1,5 @@
 
 import { NextRequest } from 'next/server';
-import { getEffectiveMembershipType, MembershipResolutionError } from '@/lib/user/membership-server';
 import type { DataSourceType } from '@/lib/data-sources/types';
 import { MING_RECORD_SOURCE_TYPE } from '@/lib/data-sources/types';
 import {
@@ -55,19 +54,6 @@ export async function POST(request: NextRequest) {
 
     if (!kb) return jsonError('知识库不存在或无权限', 403);
 
-    let membership;
-    try {
-        membership = await getEffectiveMembershipType(user.id, { db });
-    } catch (error) {
-        if (error instanceof MembershipResolutionError) {
-            return jsonError(error.message, 500);
-        }
-        throw error;
-    }
-    if (membership === 'free') {
-        return jsonError('当前会员等级无法使用知识库', 403);
-    }
-
     const options = { persistence: createKnowledgeBasePersistence(db) };
     const ingestResult = normalizedSourceType === 'conversation'
         ? await ingestConversationAsService(kbId, body.sourceId, user.id, db, options)
@@ -77,11 +63,9 @@ export async function POST(request: NextRequest) {
                 ? await ingestChatMessageAsService(kbId, body.sourceMeta?.conversationId || '', body.sourceId, user.id, db, options)
                 : await ingestDataSourceAsService(kbId, { type: normalizedSourceType, id: body.sourceId }, user.id, db, options);
 
-    if (membership === 'pro') {
-        try {
-            await backfillVectorsAsService(kbId, user.id, db, 100);
-        } catch {
-        }
+    try {
+        await backfillVectorsAsService(kbId, user.id, db, 100);
+    } catch {
     }
 
     return jsonOk({ success: true, ...ingestResult });

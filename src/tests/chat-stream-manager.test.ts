@@ -178,7 +178,7 @@ test('chat stream manager saves partial output when stopped manually', async () 
     assert.equal(assistant.content.includes('A'), true);
 });
 
-test('chat stream manager maps HTTP 402 to insufficient credits even without JSON payload', async () => {
+test('chat stream manager maps HTTP 402 to insufficient balance even without a JSON payload', async () => {
     const manager = new ChatStreamManager({
         fetcher: async () => new Response('payment required', { status: 402 }),
         saveConversation: async () => true,
@@ -201,7 +201,7 @@ test('chat stream manager maps HTTP 402 to insufficient credits even without JSO
 
     await waitFor(() => events.some(e => e.type === 'task_failed'));
     const failedEvent = events.find(e => e.type === 'task_failed');
-    assert.equal(failedEvent?.errorCode, 'INSUFFICIENT_CREDITS');
+    assert.equal(failedEvent?.errorCode, 'INSUFFICIENT_BALANCE');
 
     unsubscribe();
 });
@@ -387,7 +387,7 @@ test('chat stream manager invokes fetch with global this binding to avoid illega
 
         await waitFor(() => events.some(e => e.type === 'task_failed'));
         const failedEvent = events.find(e => e.type === 'task_failed');
-        assert.equal(failedEvent?.errorCode, 'INSUFFICIENT_CREDITS');
+        assert.equal(failedEvent?.errorCode, 'INSUFFICIENT_BALANCE');
 
         unsubscribe();
     } finally {
@@ -436,7 +436,7 @@ test('chat stream manager handles SSE structured error event without throwing', 
 
     await waitFor(() => events.some(e => e.type === 'task_failed'));
     const failedEvent = events.find(e => e.type === 'task_failed');
-    assert.equal(failedEvent?.errorCode, 'INSUFFICIENT_CREDITS');
+    assert.equal(failedEvent?.errorCode, 'REQUEST_FAILED');
     assert.equal(failedEvent?.errorMessage, '积分不足');
 
     unsubscribe();

@@ -30,7 +30,7 @@ export const DEFAULT_MOBILE_DRAWER_ORDER = [
   'bazi', 'hepan', 'ziwei', 'liuyao', 'meihua', 'xiaoliuren', 'tarot', 'qimen', 'daliuren',
   'face', 'palm', 'mbti', 'daily', 'monthly',
   'scheduled', 'records', 'community',
-  'settings-profile', 'settings-general', 'settings-upgrade',
+  'settings-profile', 'settings-general', 'settings-billing',
   'settings-personalization', 'settings-knowledge-base', 'settings-help',
   'settings-charts',
 ] as const;

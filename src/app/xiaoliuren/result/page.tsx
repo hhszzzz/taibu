@@ -24,7 +24,7 @@ import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSO
 import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/divination/xiaoliuren';
 import { saveDivinationAction } from '@/lib/divination/save-client';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { openChatWithResult } from '@/lib/chat/result-handoff';
 
@@ -83,7 +83,7 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
   const router = useRouter();
   const { showToast } = useToast();
   const { setMenuItems, clearMenuItems } = useHeaderMenu();
-  const { userId, sessionLoading } = useSessionMembership();
+  const { userId, sessionLoading } = useSessionBalance();
   const session = scopeResultSession(storedSession, userId);
   const bundle = session.resultData;
   const result = bundle.result;

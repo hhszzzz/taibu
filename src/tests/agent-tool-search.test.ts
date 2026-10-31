@@ -13,10 +13,8 @@ import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixt
 
 beforeEach((t) => {
   assert.ok('mock' in t);
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
   t.mock.method(sdk, 'isModelAvailable', () => true);
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());

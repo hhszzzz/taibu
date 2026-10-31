@@ -4,7 +4,6 @@ import type { RankedResult, SearchCandidate } from '@/lib/knowledge-base/types';
 import { KNOWLEDGE_QUERY_MAX_LENGTH } from '@/lib/knowledge-base/types';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { ensureFeatureRouteEnabled } from '@/lib/feature-gate-utils';
-import { MembershipResolutionError } from '@/lib/user/membership-server';
 
 export async function POST(request: NextRequest) {
     const featureError = await ensureFeatureRouteEnabled('knowledge-base');
@@ -36,9 +35,6 @@ export async function POST(request: NextRequest) {
     } catch (error) {
         if (error instanceof KnowledgeSearchContextError) {
             return jsonError(error.message, 401);
-        }
-        if (error instanceof MembershipResolutionError) {
-            return jsonError(error.message, 500);
         }
         throw error;
     }

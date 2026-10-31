@@ -26,7 +26,7 @@ export async function agentArchiveDatabaseContracts(t, { sql, asActor, asOwner, 
   const evidence = '2024年3月从老东家离职，换到了现在这家公司';
 
   const id = randomUUID(), cid = await conversation(owner, '档案契约', [message('current', '这段对话里也提到跳槽')]);
-  await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({ model: 'fixture', reasoning: false, webEnabled: false, memoryEnabled: true, systemPrompt: 'fixture', userMessage: message(`u:${id}`, said) })},${json(cp)},${json(assistant(id))},NULL,false);`);
+  await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({ model: 'fixture', reasoning: false, webEnabled: false, memoryEnabled: true, systemPrompt: 'fixture', userMessage: message(`u:${id}`, said) })},${json(cp)},${json(assistant(id))},NULL,'exempt');`);
   await admin("SELECT public.agent_worker_heartbeat('archive-db','pi-durable/1.4.0');");
   const r = JSON.parse(await admin("SELECT to_jsonb(public.agent_claim_run('archive-db'));"));
   assert.equal(r.id, id);

@@ -11,7 +11,7 @@ const LOADED_BOOTSTRAP: AppBootstrapData = {
   viewerLoaded: true,
   viewerSummary: null,
   viewerErrorMessage: null,
-  membership: null,
+  billing: null,
   featureToggles: {},
   featureTogglesLoaded: true,
   featureTogglesErrorMessage: null,

@@ -258,7 +258,7 @@ export function DataListView({ tools, runStatus, step }: { tools: AgentToolPart[
     const tool = latestCompleted(tools) ?? tools.at(-1)!;
     const data = getAgentDataResults(tool);
     return <section className="agent-ws-view" aria-labelledby={id}>
-        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '只读')} title="个人资料">当前账号已保存的命盘与占卜记录。每次读取前都会重新核对功能开关和会员权限。</WorkspaceViewHeading>
+        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '只读')} title="个人资料">当前账号已保存的命盘与占卜记录。每次读取前都会重新核对功能开关。</WorkspaceViewHeading>
         {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在读取资料列表…" />
             : !data ? <WorkspaceTextFallback tool={tool} note="资料列表格式无法识别，已显示原始返回。" />
             : <>
@@ -466,7 +466,7 @@ export function AttachmentView({ id, title, tools }: { id: string; title: string
     </section>;
 }
 
-/** 方法 (Main board): a built-in, versioned method. It shapes the reading steps and grants no tools or membership. */
+/** 方法 (Main board): a built-in, versioned method. It shapes the reading steps and grants no tools. */
 export function MethodView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
     const id = useId();
     const tool = latestCompleted(tools) ?? tools.at(-1)!;

@@ -2,9 +2,8 @@ import 'server-only';
 import { validateMcpServerUrl } from '../safe-fetch.server';
 import {
   MCP_EXPOSURES, MCP_RESULT_CHARS_RANGE, MCP_SERVER_NAME_PATTERN, MCP_TIMEOUT_RANGE, USER_MCP_EXPOSURES,
-  isMembershipTier, type McpExposure, type McpToolPolicy,
+  type McpExposure, type McpToolPolicy,
 } from './config';
-import type { MembershipType } from '@/lib/user/membership';
 
 /** A submission the settings pages can show as is. */
 export class McpInputError extends Error {}
@@ -36,7 +35,6 @@ export type McpServerFields = {
   searchTool: string | null;
   fetchTool: string | null;
   routePriority: number;
-  requiredTier: MembershipType;
   enabled: boolean;
   timeoutMs: number;
   maxResultChars: number;
@@ -158,12 +156,8 @@ export function parseMcpServerInput(body: unknown, scope: 'platform' | 'user', p
     if (has('searchTool')) result.searchTool = routeTool(raw.searchTool, '搜索工具');
     if (has('fetchTool')) result.fetchTool = routeTool(raw.fetchTool, '读网页工具');
     if (has('routePriority')) result.routePriority = integer(raw.routePriority, '路由优先级', 0, 1000);
-    if (has('requiredTier')) {
-      if (!isMembershipTier(raw.requiredTier)) fail('会员等级无效');
-      result.requiredTier = raw.requiredTier as MembershipType;
-    }
-  } else if (['searchTool', 'fetchTool', 'routePriority', 'requiredTier'].some(key => has(key) && raw[key] !== null)) {
-    fail('个人连接器不能设置联网路由或会员等级');
+  } else if (['searchTool', 'fetchTool', 'routePriority'].some(key => has(key) && raw[key] !== null)) {
+    fail('个人连接器不能设置联网路由');
   }
   if (has('enabled')) result.enabled = typeof raw.enabled === 'boolean' ? raw.enabled : fail('启用状态无效');
   if (has('timeoutMs')) result.timeoutMs = integer(raw.timeoutMs, '超时毫秒数', MCP_TIMEOUT_RANGE.min, MCP_TIMEOUT_RANGE.max);

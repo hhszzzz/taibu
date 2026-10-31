@@ -11,22 +11,11 @@ import { ChevronDown, Eye, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
-import type { AIVendor } from '@/types';
 import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
 import { getVendorName } from '@/lib/ai/vendor-labels';
+import { formatTokenPrices } from '@/lib/billing/format';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@/components/ui/Menu';
 import { Button } from '@/components/ui/Button';
-
-interface VisionModelConfig {
-    id: string;
-    name: string;
-    vendor: AIVendor;
-    supportsReasoning: boolean;
-    isReasoningDefault?: boolean;
-    allowed?: boolean;
-    blockedReason?: string | null;
-    reasoningAllowed?: boolean;
-}
 
 interface VisionModelSelectorProps {
     selectedModel?: string;
@@ -48,19 +37,15 @@ export function VisionModelSelector({
         enabled: !!onModelChange,
         vision: true,
     });
-    const models = useMemo(() => (modelsQuery.data ?? []) as VisionModelConfig[], [modelsQuery.data]);
+    const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
     const loading = modelsQuery.isLoading;
     const error = modelsQuery.error instanceof Error ? modelsQuery.error.message : null;
 
     // 确保选中的模型存在
     useEffect(() => {
         if (!models.length || !onModelChange) return;
-        const selected = models.find(model => model.id === selectedModel);
-        if (selected && selected.allowed !== false) return;
-        const nextModel = models.find(model => model.allowed !== false) || models[0];
-        if (nextModel && nextModel.id !== selectedModel) {
-            onModelChange(nextModel.id);
-        }
+        if (models.some(model => model.id === selectedModel)) return;
+        onModelChange(models[0].id);
     }, [models, onModelChange, selectedModel]);
 
     const currentModel = useMemo(() => {
@@ -70,18 +55,15 @@ export function VisionModelSelector({
     const isDisabled = disabled || loading || models.length === 0;
 
     // 推理模式相关逻辑
-    const reasoningAllowed = currentModel?.reasoningAllowed ?? currentModel?.supportsReasoning;
-    const canToggleReasoning = reasoningAllowed && currentModel?.supportsReasoning && !currentModel?.isReasoningDefault;
-    const isReasoningForced = reasoningAllowed && currentModel?.isReasoningDefault;
+    const canToggleReasoning = currentModel?.supportsReasoning && !currentModel?.isReasoningDefault;
+    const isReasoningForced = currentModel?.supportsReasoning && currentModel?.isReasoningDefault;
     const reasoningTooltip = !currentModel?.supportsReasoning
         ? '当前模型不支持推理模式'
-        : !reasoningAllowed
-            ? (currentModel?.blockedReason || '当前无法使用推理模式')
-            : isReasoningForced
-                ? '此模型默认开启推理'
-                : reasoningEnabled
-                    ? '关闭推理模式'
-                    : '开启推理模式';
+        : isReasoningForced
+            ? '此模型默认开启推理'
+            : reasoningEnabled
+                ? '关闭推理模式'
+                : '开启推理模式';
 
     const handleReasoningToggle = () => {
         if (canToggleReasoning && onReasoningChange) {
@@ -121,18 +103,17 @@ export function VisionModelSelector({
                             <ChevronDown className={`h-4 w-4 shrink-0 text-foreground-tertiary transition-transform lg:h-3.5 lg:w-3.5 ${dropdownOpen ? 'rotate-180' : ''}`} />
                         </MenuTrigger>
 
-                        <MenuContent side="bottom" align="start" className="w-52 overflow-hidden p-0" aria-label="视觉分析模型">
+                        <MenuContent side="bottom" align="start" className="w-64 overflow-hidden p-0" aria-label="视觉分析模型">
                             <div className="border-b border-border bg-background-secondary/50 px-3 py-2 text-xs font-medium text-foreground-secondary">
                                 视觉分析模型
                             </div>
                             <MenuRadioGroup value={selectedModel} onValueChange={value => onModelChange?.(value)}>
                                 {models.map((model) => {
-                                    const isAllowed = model.allowed !== false;
+                                    const prices = formatTokenPrices(model.pricing);
                                     return (
                                         <MenuRadioItem
                                             key={model.id}
                                             value={model.id}
-                                            disabled={!isAllowed}
                                             closeOnClick
                                             className="flex items-center gap-2 rounded-none px-3 py-2.5 text-sm data-checked:bg-accent/10 data-checked:text-accent"
                                         >
@@ -143,8 +124,8 @@ export function VisionModelSelector({
                                                     {getVendorName(model.vendor)}
                                                 </div>
                                             </div>
-                                            {!isAllowed && model.blockedReason && (
-                                                <span className="text-xs text-warning">{model.blockedReason}</span>
+                                            {prices && (
+                                                <span className="shrink-0 text-xs tabular-nums text-foreground-tertiary" title="每百万 token 输入 / 输出价格（美元）">{prices}</span>
                                             )}
                                         </MenuRadioItem>
                                     );
@@ -164,7 +145,7 @@ export function VisionModelSelector({
                 <Button unstyled
                     onClick={handleReasoningToggle}
                     disabled={disabled || !canToggleReasoning}
-                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm transition-colors lg:h-8 lg:rounded-lg lg:text-[0.8125rem] ${disabled || !currentModel?.supportsReasoning || !reasoningAllowed
+                    className={`flex h-11 shrink-0 items-center gap-1.5 rounded-xl px-2.5 text-sm transition-colors lg:h-8 lg:rounded-lg lg:text-[0.8125rem] ${disabled || !currentModel?.supportsReasoning
                         ? 'opacity-30 cursor-not-allowed text-foreground-secondary'
                         : isReasoningForced
                             ? 'text-warning cursor-default'

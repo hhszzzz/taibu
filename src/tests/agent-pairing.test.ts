@@ -11,7 +11,6 @@ const HER = { gender: 'female', birthYear: 1992, birthMonth: 8, birthDay: 3, bir
 
 beforeEach(t => {
   assert.ok('mock' in t);
-  t.mock.method(require('../lib/user/credits'), 'getUserCreditInfo', async () => ({ membership: 'plus', credits: 10, expiresAt: null }));
   t.mock.method(require('../lib/app-settings'), 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' }));
 });
 

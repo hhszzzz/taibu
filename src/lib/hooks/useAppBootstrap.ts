@@ -99,21 +99,13 @@ export function useAppBootstrap(options?: { enabled?: boolean }) {
     });
   }, [queryClient, queryKey]);
 
-  const markCreditsExhausted = useCallback(() => {
+  // The server refused a call for want of balance: show it as spent until the next refresh reads the real figures.
+  const markBalanceExhausted = useCallback(() => {
     queryClient.setQueryData(queryKey, (previous: AppBootstrapData | undefined) => ({
       ...(previous ?? EMPTY_APP_BOOTSTRAP),
-      membership: previous?.membership
-        ? {
-          ...previous.membership,
-          aiChatCount: 0,
-        }
-        : previous?.membership ?? null,
-      viewerSummary: previous?.viewerSummary
-        ? {
-          ...previous.viewerSummary,
-          aiChatCount: 0,
-        }
-        : previous?.viewerSummary ?? null,
+      billing: previous?.billing
+        ? { ...previous.billing, spendableMicros: Math.min(previous.billing.spendableMicros, 0) }
+        : previous?.billing ?? null,
     }));
   }, [queryClient, queryKey]);
 
@@ -125,6 +117,6 @@ export function useAppBootstrap(options?: { enabled?: boolean }) {
     viewerStateResolved: viewerState.resolved,
     viewerStateError: viewerState.error,
     refresh,
-    markCreditsExhausted,
+    markBalanceExhausted,
   };
 }

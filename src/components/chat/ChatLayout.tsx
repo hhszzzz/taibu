@@ -32,8 +32,6 @@ import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { BrandMark } from '@/components/brand/BrandMark';
 import type { ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
-import type { MembershipType } from '@/lib/user/membership';
-import { webSearchUnavailableTitle } from '@/lib/ai/web-search-access';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
@@ -111,10 +109,11 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onReasoningChange: (enabled: boolean) => void;
     customProviderActive: boolean;
     customProviderLabel: string | null;
+    /** 自定义配置里的生图模型；有值时生图走浏览器直连。 */
+    customImageModelId?: string | null;
     userId: string | null;
     /** Profile nickname for the empty-state greeting. */
     displayName?: string | null;
-    membershipType: MembershipType;
     attachmentState: AttachmentState;
     onAttachmentChange: (state: AttachmentState) => void;
     mentions: Mention[];
@@ -124,8 +123,8 @@ interface ChatLayoutProps extends ModelSettingsProps {
     dreamContextLoading: boolean;
     knowledgeBaseEnabled: boolean;
 
-    // Credit lock
-    isCreditLocked: boolean;
+    /** The balance is spent and the chosen platform model is paid: sending waits for a top-up. */
+    balanceLocked: boolean;
     onAuthRequired?: () => void;
 
     // Modals (rendered by parent)
@@ -143,12 +142,12 @@ export function ChatLayout(props: ChatLayoutProps) {
         inputValue, onInputChange, disabled,
         chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
-        customProviderActive, customProviderLabel,
-        userId, membershipType, attachmentState, onAttachmentChange,
+        customProviderActive, customProviderLabel, customImageModelId,
+        userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
-        isCreditLocked,
+        balanceLocked,
         onAuthRequired,
         children,
     } = props;
@@ -439,20 +438,22 @@ export function ChatLayout(props: ChatLayoutProps) {
     // 侧栏品牌行与移动抽屉通过 store 共享这一个控件（全页恰好一个「对话方式」单选组）。
     useEffect(() => { publishChatModeControl(modeControl); });
     useEffect(() => clearChatModeControl, []);
-    const webAllowed = !!agent?.capabilities.webAvailable && membershipType !== 'free';
+    const webAllowed = !!agent?.capabilities.webAvailable;
     const webControl: ComposerWebControl | undefined = agent && isAgentMode ? {
         enabled: agent.webEnabled && webAllowed,
         disabled: !webAllowed,
         label: agent.active ? '下次联网' : '按需联网',
-        title: !agent.capabilities.webAvailable ? webSearchUnavailableTitle(agent.capabilities.webTier) : membershipType === 'free' ? '联网搜索需要 Plus 会员' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
+        title: !webAllowed ? '当前环境未配置联网搜索' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
         onToggle: () => agent.setWebEnabled(!agent.webEnabled),
     } : undefined;
-    // 生图入口：当前会员有可用生图模型、且不在解梦模式或任务运行中时才提供。
-    const imageModels = useImageModels(userId, { membershipType, enabled: !!userId });
+    // 生图入口：有可用生图模型（自定义生图模型优先）、且不在解梦模式或任务运行中时才提供。
+    const imageModels = useImageModels(userId, { enabled: !!userId });
     const imageModel = imageModels.data?.models[0];
-    const imageGeneration = imageModel && chatMode !== 'dream' && !agent?.active ? {
+    const customImageModel = customProviderActive ? customImageModelId || undefined : undefined;
+    const imageGeneration = (customImageModel || imageModel) && chatMode !== 'dream' && !agent?.active ? {
         sizes: imageModels.data?.sizes.length ? imageModels.data.sizes : [...GENERATED_IMAGE_SIZES],
-        creditCost: imageModel.creditCost,
+        priceMicros: customImageModel ? 0 : imageModel?.priceMicros ?? 0,
+        customModel: customImageModel,
         maxCount: imageModels.data?.maxCount ?? IMAGE_MAX_COUNT,
         onGenerate: (options: { prompt: string; size: string; count: number }) => { void onImageGenerate?.(options); },
     } : undefined;
@@ -465,10 +466,9 @@ export function ChatLayout(props: ChatLayoutProps) {
         collaborators,
     };
     const note = composerNote(noteState);
-    const creditStrip = isCreditLocked ? <CreditStrip /> : undefined;
     // 追问建议不再显示为输入框上方的胶囊：任务跑完时那一条建议直接写进输入框（见上面的 seenRunStatus），
-    // 输入框上方只留积分不足的提示条。
-    const composerHeader = creditStrip;
+    // 输入框上方只留余额不足的提示条。
+    const composerHeader = balanceLocked ? <BalanceStrip /> : undefined;
     const citedParagraph = useCallback((cite: number) => getAgentCitedParagraph(messages, cite), [messages]);
     const composerProps = {
         draftKey: workspaceKey,
@@ -492,7 +492,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         customProviderActive, customProviderLabel,
-        userId, membershipType, attachmentState, onAttachmentChange,
+        userId, balanceLocked, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         quotes, onRemoveQuote: removeQuote,
         chartAsks: chartAskChips,
@@ -501,7 +501,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         webControl,
         imageGeneration,
         plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
-        webTier: agent?.capabilities.webTier ?? null,
     };
     const composer = <ChatComposer {...composerProps} onSend={sendWithContext} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
@@ -521,7 +520,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     // 右侧会话栏常驻（claude /code 无开关），仅在打开工作区时让位。
     const showSessionDetails = isAgentMode && Boolean(latestAgentData) && showHeader && !workspaceOpen;
     // 生成中锁住编辑、重新生成、版本切换与分叉：它们都会改写正在写入的分支。
-    const transcriptLocked = isCreditLocked || isLoading || !!props.agent?.active || !!props.agent?.restoring || !!props.agent?.syncing;
+    const transcriptLocked = balanceLocked || isLoading || !!props.agent?.active || !!props.agent?.restoring || !!props.agent?.syncing;
 
     return (
         <AgentResultContext.Provider value={resultWorkspace}><ChatRecordViewContext.Provider value={recordView}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
@@ -546,7 +545,6 @@ export function ChatLayout(props: ChatLayoutProps) {
                     workspaceButton={hasWorkspace && showHeader ? <Button ref={workspaceButtonRef} variant="ghost" className="chat-workspace-toggle" aria-label="任务工作区" aria-expanded={workspaceOpen} aria-controls="agent-workspace-panel" onClick={toggleWorkspace}>
                         <LayoutDashboard size={17} strokeWidth={1.8} aria-hidden="true" /><span className="chat-workspace-toggle-label">工作区</span>
                     </Button> : undefined}
-                    membershipType={membershipType}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
                     userId={userId}
                 />
@@ -565,14 +563,14 @@ export function ChatLayout(props: ChatLayoutProps) {
                 {conversationLoading ? (
                     <SoundWaveLoader variant="block" text="" />
                 ) : emptyState ? (
-                    /* claude 空态 = 问候 + composer，别无他物；建议/模板/积分提示一律不放。 */
+                    /* claude 空态 = 问候 + composer，别无他物；只在余额不足时放提示条。 */
                     <div className="chat-empty-state">
                         <div className="chat-empty-inner">
                             <div className="chat-empty-intro">
                                 <BrandMark className="chat-empty-symbol" />
                                 <h1>{displayName ? `${greeting}，${displayName}` : `${greeting}，想问什么？`}</h1>
                             </div>
-                            <ChatComposer {...composerProps} variant="hero" header={creditStrip} />
+                            <ChatComposer {...composerProps} variant="hero" header={composerHeader} />
                         </div>
                     </div>
                 ) : (
@@ -662,10 +660,10 @@ function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () => void }
     </Dialog>;
 }
 
-/** Platform credits ran out: hosted models lock, a custom model still works. */
-function CreditStrip() {
-    return <div className="chat-credit-strip" role="status">
-        <Lock size={15} aria-hidden="true" /><span>积分已用完</span>
-        <Link href={getSettingsCenterRouteTarget('upgrade')} onClick={event => { event.preventDefault(); openSettingsCenter('upgrade'); }}>获取积分</Link>
+/** The balance is spent: paid platform models wait for a top-up; free models and your own API still work. */
+function BalanceStrip() {
+    return <div className="chat-balance-strip" role="status">
+        <Lock size={15} aria-hidden="true" /><span>余额不足</span>
+        <Link href={getSettingsCenterRouteTarget('billing')} onClick={event => { event.preventDefault(); openSettingsCenter('billing'); }}>去充值</Link>
     </div>;
 }

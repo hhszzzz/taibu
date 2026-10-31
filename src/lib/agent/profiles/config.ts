@@ -4,7 +4,6 @@
  * way, as a file whose tools are the parent's minus a deny list or a list of their own. Three roles are built in;
  * administrators add others, stored in agent_profiles.
  */
-import type { MembershipType } from '@/lib/user/membership';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import {
   AGENT_CHART_NAMES, AGENT_MEMBER_DENIED_TOOLS, AGENT_SKILL_TOOLS, AGENT_WEB_TOOLS, getAgentToolFeatureId, getAgentToolScope, isAgentCoreTool,
@@ -47,7 +46,6 @@ export type AgentProfileView = {
   /** The model's effort; null: the model's default. Only used with `model`. */
   reasoningEffort: AgentProfileEffort | null;
   modes: AgentProfileMode[];
-  requiredTier: MembershipType;
   enabled: boolean;
   sortOrder: number;
   updatedAt: string | null;
@@ -64,7 +62,7 @@ export const DEFAULT_AGENT_PROFILE = 'specialist';
 export const AGENT_BUILTIN_PROFILES_KEY = 'agent_builtin_profiles';
 
 const builtin = (profile: Pick<AgentProfileView, 'name' | 'displayName' | 'description' | 'instructions' | 'tools' | 'sortOrder'>): AgentProfileView => ({
-  ...profile, builtin: true, skills: [], model: null, reasoningEffort: null, modes: [...AGENT_PROFILE_MODES], requiredTier: 'free', enabled: true, updatedAt: null,
+  ...profile, builtin: true, skills: [], model: null, reasoningEffort: null, modes: [...AGENT_PROFILE_MODES], enabled: true, updatedAt: null,
 });
 
 export const BUILTIN_AGENT_PROFILES: readonly AgentProfileView[] = [

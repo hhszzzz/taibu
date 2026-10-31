@@ -3,12 +3,13 @@ import 'server-only';
 import { createHash, randomUUID } from 'node:crypto';
 import { generateImage, type ImageModel, type GeneratedFile } from 'ai';
 import type { AIModelConfig } from '@/types';
-import type { MembershipType } from '@/lib/user/membership';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { getObjectStore } from '@/lib/storage/index.server';
 import type { ObjectStore } from '@/lib/storage/object-store';
 import { getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
-import { isModelAllowedForMembership } from '@/lib/ai/ai-access';
+import { isModelOffered } from '@/lib/ai/ai-access';
+import { InsufficientBalanceError, prepayImages, recordFreeImages, refundImages } from '@/lib/billing/account.server';
+import { imageCostMicros } from '@/lib/billing/pricing';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
 import { createImageModelFromConfig } from '@/lib/ai/providers/ai-sdk-provider';
 import {
@@ -31,7 +32,7 @@ export const GENERATED_IMAGE_RUN_LIMIT = 4;
 /** The whole request is bounded: image models are slow and expensive. */
 export const IMAGE_GENERATION_RATE_LIMIT = { endpoint: 'image-generation', maxRequests: 6, windowMs: 60_000 } as const;
 
-export type ImageGenerationErrorCode = 'INVALID' | 'INSUFFICIENT_CREDITS' | 'FAILED';
+export type ImageGenerationErrorCode = 'INVALID' | 'INSUFFICIENT_BALANCE' | 'FAILED';
 
 export class ImageGenerationError extends Error {
   constructor(message: string, readonly code: ImageGenerationErrorCode = 'INVALID') {
@@ -52,56 +53,43 @@ export type ImageGenerationRequest = {
   abortSignal?: AbortSignal;
 };
 
-export type ImageGenerationResult = {
-  images: GeneratedImageDto[];
-  /** Credits left after the charge and any partial refund; null when the model is free. */
-  remaining: number | null;
+/** What a stored image row records besides its bytes. */
+type StoredImageTarget = Pick<ImageGenerationRequest, 'userId' | 'prompt' | 'size' | 'conversationId' | 'runId' | 'messageId'> & {
+  modelId: string;
 };
 
-/** Everything a test replaces: the scoped database, the object store and the image model call. */
+/** A member's own image model; the key comes from the browser or the task's sealed credential, never from storage. */
+export type CustomImageProvider = { apiUrl: string; apiKey: string; modelId: string };
+
+export type ImageGenerationResult = {
+  images: GeneratedImageDto[];
+  /** What the delivered images cost, in micro-dollars. */
+  costMicros: number;
+};
+
+/** Everything a test replaces: the scoped database, the object store, the image model call and the billing. */
 export type ImageGenerationDeps = {
   db?: ScopedDb;
   store?: ObjectStore;
   createModel?: (config: AIModelConfig) => ImageModel;
   generate?: typeof generateImage;
   countRunImages?: (runId: string) => Promise<number>;
+  prepay?: typeof prepayImages;
+  refund?: typeof refundImages;
+  recordFree?: typeof recordFreeImages;
 };
 
 const EXTENSION: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
 
-/** The image model the member may use: the first enabled one with a callable source. */
-export async function resolveImageModel(membership: MembershipType): Promise<AIModelConfig | null> {
+/** The platform's image model: the first enabled, priced one with a callable source. */
+export async function resolveImageModel(): Promise<AIModelConfig | null> {
   const models = await getModelsByUsageTypeAsync('image');
-  return models.find(model => isModelAllowedForMembership(model, membership) && getOrderedModelSources(model).length > 0) ?? null;
+  return models.find(model => isModelOffered(model) && getOrderedModelSources(model).length > 0) ?? null;
 }
 
-export function imageModelCreditCost(model: AIModelConfig): number {
-  const cost = Math.round(model.creditCost ?? 1);
-  return Number.isFinite(cost) && cost > 0 ? Math.min(cost, 1000) : 0;
-}
-
-async function charge(db: ScopedDb, userId: string, amount: number): Promise<number | null> {
-  if (amount <= 0) return null;
-  let remaining: unknown;
-  try {
-    remaining = await db.rpc('decrement_ai_chat_count_by', { user_id: userId, amount });
-  } catch (error) {
-    console.error('[image-generation] credit charge failed:', error);
-    throw new ImageGenerationError('积分扣除失败，请稍后重试', 'FAILED');
-  }
-  if (typeof remaining !== 'number') throw new ImageGenerationError('积分不足，无法生成图片', 'INSUFFICIENT_CREDITS');
-  return remaining;
-}
-
-/** Best effort: a failed refund is reported, never hides the generation outcome. */
-async function refund(db: ScopedDb, userId: string, amount: number): Promise<void> {
-  if (amount <= 0) return;
-  try {
-    const remaining = await db.rpc('increment_ai_chat_count', { user_id: userId, amount });
-    if (typeof remaining !== 'number') console.error('[image-generation] credit refund failed', { userId, amount });
-  } catch (error) {
-    console.error('[image-generation] credit refund failed', { userId, amount, error });
-  }
+/** Micro-dollars per generated image. */
+export function imagePriceMicros(model: AIModelConfig): number {
+  return imageCostMicros(model.pricing, 1);
 }
 
 async function countRunImages(db: ScopedDb, runId: string): Promise<number> {
@@ -115,8 +103,8 @@ async function countRunImages(db: ScopedDb, runId: string): Promise<number> {
 async function storeImages(
   db: ScopedDb,
   store: ObjectStore,
-  request: ImageGenerationRequest,
-  files: readonly GeneratedFile[],
+  request: StoredImageTarget,
+  files: ReadonlyArray<Pick<GeneratedFile, 'uint8Array' | 'mediaType'> & { size?: string }>,
 ): Promise<GeneratedImageDto[]> {
   const written: Array<{ id: string; objectPath: string }> = [];
   const images: GeneratedImageDto[] = [];
@@ -127,6 +115,7 @@ async function storeImages(
       const extension = EXTENSION[mimeType];
       if (!extension) throw new Error(`unsupported image type ${mimeType}`);
       const id = randomUUID();
+      const size = file.size ?? request.size;
       const objectPath = `${request.userId}/${id}.${extension}`;
       await store.put(GENERATED_IMAGE_BUCKET, objectPath, bytes, { contentType: mimeType });
       written.push({ id, objectPath });
@@ -136,15 +125,15 @@ async function storeImages(
         conversation_id: request.conversationId ?? null,
         run_id: request.runId ?? null,
         message_id: request.messageId ?? null,
-        model_id: request.model.id,
+        model_id: request.modelId,
         prompt: request.prompt,
-        size: request.size,
+        size,
         object_path: objectPath,
         mime_type: mimeType,
         bytes: bytes.length,
         sha256: createHash('sha256').update(bytes).digest('hex'),
       }).execute());
-      images.push({ id, size: request.size, mimeType, url: generatedImageUrl(id) });
+      images.push({ id, size, mimeType, url: generatedImageUrl(id) });
     }
     return images;
   } catch (error) {
@@ -157,40 +146,56 @@ async function storeImages(
 }
 
 /**
- * Generate images for one user, charging `credit_cost` per delivered image.
+ * Generate images for one user, paid in full before generating at the model's price per image (never on credit).
  * Sources fail over in order; a failure before any image is delivered refunds the whole charge, and a source that
  * returns fewer images than asked refunds the difference.
  */
-export async function generateImages(
-  request: ImageGenerationRequest,
-  deps: ImageGenerationDeps = {},
-): Promise<ImageGenerationResult> {
+/** The trimmed prompt once the prompt, size and count are within bounds. */
+function checkImageRequest(request: Pick<ImageGenerationRequest, 'prompt' | 'size' | 'count'>): string {
   const prompt = request.prompt.trim();
   if (!prompt || prompt.length > GENERATED_IMAGE_PROMPT_MAX) throw new ImageGenerationError(`提示词须为 1–${GENERATED_IMAGE_PROMPT_MAX} 个字符`);
   if (!isGeneratedImageSize(request.size)) throw new ImageGenerationError('图片尺寸无效');
   if (!Number.isInteger(request.count) || request.count < 1 || request.count > GENERATED_IMAGE_MAX_COUNT) {
     throw new ImageGenerationError(`每次可生成 1–${GENERATED_IMAGE_MAX_COUNT} 张图片`);
   }
+  return prompt;
+}
 
+async function checkRunImageLimit(db: ScopedDb, request: Pick<ImageGenerationRequest, 'runId' | 'count'>, count?: ImageGenerationDeps['countRunImages']) {
+  if (!request.runId) return;
+  const used = count ? await count(request.runId) : await countRunImages(db, request.runId);
+  if (used + request.count > GENERATED_IMAGE_RUN_LIMIT) {
+    throw new ImageGenerationError(`本次任务最多生成 ${GENERATED_IMAGE_RUN_LIMIT} 张图片${used ? `（已生成 ${used} 张）` : ''}`);
+  }
+}
+
+export async function generateImages(
+  request: ImageGenerationRequest,
+  deps: ImageGenerationDeps = {},
+): Promise<ImageGenerationResult> {
+  const prompt = checkImageRequest(request);
   const db = deps.db ?? systemDb();
   const store = deps.store ?? getObjectStore();
   const generate = deps.generate ?? generateImage;
   const createModel = deps.createModel ?? createImageModelFromConfig;
   const count = request.count;
-
-  if (request.runId) {
-    const used = deps.countRunImages ? await deps.countRunImages(request.runId) : await countRunImages(db, request.runId);
-    if (used + count > GENERATED_IMAGE_RUN_LIMIT) {
-      throw new ImageGenerationError(`本次任务最多生成 ${GENERATED_IMAGE_RUN_LIMIT} 张图片${used ? `（已生成 ${used} 张）` : ''}`);
-    }
-  }
+  await checkRunImageLimit(db, request, deps.countRunImages);
 
   const sources = getOrderedModelSources(request.model);
   if (!sources.length) throw new ImageGenerationError('生图模型还没有可用的网关来源', 'FAILED');
 
-  const creditCost = imageModelCreditCost(request.model);
-  const charged = creditCost * count;
-  const remaining = await charge(db, request.userId, charged);
+  const refund = deps.refund ?? refundImages;
+  const reference = request.runId ? { referenceType: 'agent_run', referenceId: request.runId }
+    : request.conversationId ? { referenceType: 'conversation', referenceId: request.conversationId } : {};
+  let prepayment: Awaited<ReturnType<typeof prepayImages>>;
+  try {
+    prepayment = await (deps.prepay ?? prepayImages)({ userId: request.userId, model: request.model, images: count, ...reference });
+  } catch (error) {
+    if (error instanceof InsufficientBalanceError) throw new ImageGenerationError('余额不足，无法生成图片', 'INSUFFICIENT_BALANCE');
+    console.error('[image-generation] prepayment failed', { model: request.model.id });
+    throw new ImageGenerationError('扣费失败，请稍后重试', 'FAILED');
+  }
+  const perImage = prepayment ? prepayment.micros / count : 0;
   let lastError: unknown = null;
 
   for (const source of sources) {
@@ -206,17 +211,18 @@ export async function generateImages(
       });
       const files = result.images.slice(0, count);
       if (!files.length) throw new Error('the image model returned no images');
-      const images = await storeImages(db, store, { ...request, prompt }, files);
+      const images = await storeImages(db, store, { ...request, prompt, modelId: request.model.id }, files);
       const undelivered = count - images.length;
-      if (undelivered > 0) await refund(db, request.userId, creditCost * undelivered);
-      return { images, remaining: remaining === null ? null : remaining + creditCost * undelivered };
+      if (undelivered > 0 && prepayment) await refund(prepayment, undelivered);
+      if (!prepayment) await (deps.recordFree ?? recordFreeImages)({ userId: request.userId, model: request.model, images: images.length, ...reference });
+      return { images, costMicros: perImage * images.length };
     } catch (error) {
       lastError = error;
       if (request.abortSignal?.aborted) break;
     }
   }
 
-  await refund(db, request.userId, charged);
+  if (prepayment) await refund(prepayment, count);
   console.error('[image-generation] all sources failed', {
     model: request.model.id,
     sources: sources.map(source => source.sourceKey),
@@ -224,6 +230,53 @@ export async function generateImages(
   });
   if (request.abortSignal?.aborted) throw new ImageGenerationError('已停止生成', 'FAILED');
   throw new ImageGenerationError('生成图片失败，请稍后重试', 'FAILED');
+}
+
+/**
+ * Generate on a member's own image model with the key their Agent task holds: the platform's limits and storage, the
+ * row recorded under `custom:<model>`, never billed. The caller supplies the fetch, so a task's provider address goes
+ * through the same public-address checks as its chat model.
+ */
+export async function generateCustomImages(
+  request: Omit<ImageGenerationRequest, 'model'> & { provider: CustomImageProvider },
+  deps: Pick<ImageGenerationDeps, 'db' | 'store' | 'generate' | 'countRunImages'> & { fetch: typeof globalThis.fetch },
+): Promise<ImageGenerationResult> {
+  const prompt = checkImageRequest(request);
+  const db = deps.db ?? systemDb();
+  await checkRunImageLimit(db, request, deps.countRunImages);
+  const { provider } = request;
+  const model = createImageModelFromConfig(
+    { id: `custom:${provider.modelId}`, name: provider.modelId, vendor: 'other', modelId: provider.modelId, apiUrl: provider.apiUrl, supportsReasoning: false },
+    { apiKey: provider.apiKey, fetch: deps.fetch },
+  );
+  let files: GeneratedFile[];
+  try {
+    const result = await (deps.generate ?? generateImage)({
+      model, prompt, n: request.count, size: request.size, maxRetries: 0, abortSignal: request.abortSignal,
+    });
+    files = result.images.slice(0, request.count);
+  } catch (error) {
+    if (request.abortSignal?.aborted) throw new ImageGenerationError('已停止生成', 'FAILED');
+    console.warn('[image-generation] custom image model failed', { error: error instanceof Error ? error.name : typeof error });
+    throw new ImageGenerationError('自定义生图模型请求失败，请检查生图模型与 Key', 'FAILED');
+  }
+  if (!files.length) throw new ImageGenerationError('自定义生图模型没有返回图片', 'FAILED');
+  const images = await storeImages(db, deps.store ?? getObjectStore(), { ...request, prompt, modelId: `custom:${provider.modelId}` }, files);
+  return { images, costMicros: 0 };
+}
+
+/**
+ * Saves images the browser got from the member's own image model; the route has checked each is one still PNG, JPEG
+ * or WebP by its bytes and read its real size (a model may not honour the size asked). Stored like platform images
+ * under `custom:<model>`, never billed.
+ */
+export async function storeCustomImages(
+  target: Omit<StoredImageTarget, 'modelId'> & { customModelId: string },
+  files: ReadonlyArray<{ uint8Array: Uint8Array; mediaType: string; size: string }>,
+  deps: { db?: ScopedDb; store?: ObjectStore } = {},
+): Promise<GeneratedImageDto[]> {
+  const prompt = checkImageRequest({ prompt: target.prompt, size: target.size, count: files.length });
+  return storeImages(deps.db ?? systemDb(), deps.store ?? getObjectStore(), { ...target, prompt, modelId: `custom:${target.customModelId}` }, files);
 }
 
 /** Loads one image the caller may read: its own row, or through an active share of its conversation. */

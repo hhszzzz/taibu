@@ -4,6 +4,7 @@
  * 桌面端左侧照片上传区、右侧拍摄建议 · 问题 · 选项 · 开始分析，底部隐私提示；
  * 移动端单列，开始分析固定在底部导航之上。
  * 页面只提供文案、图标与额外选项；选图压缩、提交接口与跳转结果页在此统一处理。
+ * 启用自定义模型时，照片由浏览器直接发给用户的服务商，本站只备提示词、保存解读。
  */
 'use client'; // 需要文件选择/拖拽、表单状态、弹窗与路由跳转
 
@@ -13,18 +14,21 @@ import { Textarea } from '@/components/ui/Textarea';
 import { useId, useRef, useState, type ChangeEvent, type DragEvent, type ReactNode } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, Camera, ImageIcon, Lock, X } from 'lucide-react';
+import { AlertTriangle, Camera, ImageIcon, KeyRound, Lock, X } from 'lucide-react';
 import type { NavIcon } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
-import { CreditsModal } from '@/components/ui/CreditsModal';
 import { Dialog } from '@/components/ui/Dialog';
 import { VisionModelSelector } from '@/components/ui/VisionModelSelector';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
-import { isCreditsError } from '@/lib/hooks/useStreamingResponse';
+import { TOP_UP_TOAST } from '@/lib/billing/client';
+import { normalizeBrowserDirectError, streamBrowserDirectProvider } from '@/lib/ai/browser-direct-provider';
+import { getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
+import { useCustomProvider } from '@/lib/chat/use-custom-provider';
 import { preparePhoto, validatePhotoFile, type PreparedPhoto } from '@/lib/divination/photo-reading';
+import type { CustomProviderConfig } from '@/types';
 
 export type PhotoReadingKind = 'face' | 'palm';
 
@@ -55,7 +59,7 @@ export interface PhotoReadingCopy {
     missingPhoto: string;
     /** 底部隐私与免责提示 */
     notice: string;
-    /** 会员与积分说明 */
+    /** 计费说明 */
     billing: string;
 }
 
@@ -68,11 +72,62 @@ export interface PhotoAnalysisOption {
 interface PhotoReadingResponse {
     success?: boolean;
     error?: string;
+    code?: string;
     data?: {
         readingId?: string;
         conversationId?: string | null;
         analysis?: string;
+        systemPrompt?: string;
+        userPrompt?: string;
     };
+}
+
+type PhotoReadingOutcome =
+    | { error: string; code?: string }
+    | { error?: undefined; analysis?: string; readingId?: string; conversationId?: string | null };
+
+async function postReading(endpoint: string, body: Record<string, unknown>): Promise<{ ok: boolean; status: number; payload: PhotoReadingResponse }> {
+    const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+    });
+    return { ok: response.ok, status: response.status, payload: await response.json() as PhotoReadingResponse };
+}
+
+/** 自定义模型：本站备好提示词，浏览器带图直连服务商，再把解读交回本站保存；保存失败时仍展示结果。 */
+async function analyzeWithCustomProvider(
+    endpoint: string,
+    provider: CustomProviderConfig,
+    photo: PreparedPhoto,
+    reading: Record<string, unknown>,
+): Promise<PhotoReadingOutcome> {
+    const prepared = await postReading(endpoint, { ...reading, action: 'direct-prepare' });
+    const prompts = prepared.payload.data;
+    if (!prepared.ok || !prepared.payload.success || !prompts?.systemPrompt || !prompts.userPrompt) {
+        return { error: prepared.payload.error || '分析失败' };
+    }
+    let result;
+    try {
+        result = await streamBrowserDirectProvider({
+            provider,
+            messages: [
+                { role: 'system', content: prompts.systemPrompt },
+                { role: 'user', content: [{ type: 'text', text: prompts.userPrompt }, { type: 'image_url', image_url: { url: photo.dataUrl } }] },
+            ],
+        });
+    } catch (error) {
+        return { error: normalizeBrowserDirectError(error).message };
+    }
+    if (!result.content.trim()) return { error: '模型没有返回解读，请确认它支持图片输入' };
+    try {
+        const saved = await postReading(endpoint, {
+            ...reading, action: 'direct-persist', content: result.content, reasoningText: result.reasoning, customModelId: provider.modelId,
+        });
+        return { analysis: result.content, conversationId: saved.ok ? saved.payload.data?.conversationId ?? null : null };
+    } catch {
+        return { analysis: result.content, conversationId: null };
+    }
 }
 
 /** 选项行：移动端「标签在上、控件整行」，桌面端「标签在左、控件在右」。 */
@@ -149,6 +204,7 @@ export function PhotoReadingEntry({
     const router = useRouter();
     const { showToast } = useToast();
     const { user } = useSessionSafe();
+    const customProvider = useCustomProvider();
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const albumInputRef = useRef<HTMLInputElement>(null);
     /** 每次选图递增；较早的压缩结果晚到时直接丢弃，避免覆盖用户最后一次选择。 */
@@ -167,7 +223,6 @@ export function PhotoReadingEntry({
     const [isDragging, setIsDragging] = useState(false);
     const [showConsent, setShowConsent] = useState(false);
     const [consentAccepted, setConsentAccepted] = useState(false);
-    const [showCreditsModal, setShowCreditsModal] = useState(false);
 
     const analysisInfo = analysisTypes.find(type => type.id === analysisType);
     const needsConsent = Boolean(consent) && !consentAccepted;
@@ -238,34 +293,34 @@ export function PhotoReadingEntry({
 
         setIsAnalyzing(true);
         try {
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                // 公共字段放在附加字段之后，避免被同名附加字段覆盖
-                body: JSON.stringify({
-                    ...extraFields,
+            // 公共字段放在附加字段之后，避免被同名附加字段覆盖
+            const reading = { ...extraFields, analysisType, question: question.trim() || undefined };
+            let result: PhotoReadingOutcome;
+            if (customProvider) {
+                result = await analyzeWithCustomProvider(endpoint, customProvider, photo, reading);
+            } else {
+                const { ok, status, payload } = await postReading(endpoint, {
+                    ...reading,
                     action: 'analyze',
                     imageBase64: photo.base64,
                     imageMimeType: photo.mimeType,
-                    analysisType,
-                    question: question.trim() || undefined,
                     modelId: selectedModel,
                     reasoning: reasoningEnabled,
-                }),
-            });
-            const payload = await response.json() as PhotoReadingResponse;
-
-            if (!response.ok || !payload.success) {
-                if (isCreditsError(payload.error ?? null)) {
-                    setShowCreditsModal(true);
-                    return;
-                }
-                showToast('error', payload.error || '分析失败');
-                return;
+                });
+                result = ok && payload.success
+                    ? payload.data ?? {}
+                    : { error: payload.error || '分析失败', code: status === 402 ? 'INSUFFICIENT_BALANCE' : payload.code };
             }
 
-            const result = payload.data;
-            if (!result?.readingId && !result?.analysis) {
+            if (result.error !== undefined) {
+                if (result.code === 'INSUFFICIENT_BALANCE') {
+                    showToast('info', result.error || '余额不足，请充值、兑换或订阅后再试', TOP_UP_TOAST);
+                    return;
+                }
+                showToast('error', result.error);
+                return;
+            }
+            if (!result.readingId && !result.analysis) {
                 showToast('error', '未获取到分析结果');
                 return;
             }
@@ -275,7 +330,7 @@ export function PhotoReadingEntry({
                 conversationId: result.conversationId,
                 analysisType,
                 analysis: result.analysis,
-                isTemporary: !result.readingId,
+                isTemporary: !result.readingId && !result.conversationId,
             });
             router.push(resultPath);
         } catch (error) {
@@ -443,12 +498,22 @@ export function PhotoReadingEntry({
                                     />
                                 </PhotoOptionRow>
                                 <PhotoOptionRow label="视觉模型">
-                                    <VisionModelSelector
-                                        selectedModel={selectedModel}
-                                        onModelChange={setSelectedModel}
-                                        reasoningEnabled={reasoningEnabled}
-                                        onReasoningChange={setReasoningEnabled}
-                                    />
+                                    {customProvider ? (
+                                        <span
+                                            title="自定义模型（需支持图片输入）"
+                                            className="flex h-11 min-w-0 items-center gap-1.5 rounded-xl border-[0.5px] border-border-hover bg-surface px-3 text-[0.9375rem] text-foreground lg:h-8 lg:rounded-lg lg:border-0 lg:bg-background-secondary lg:px-2.5 lg:text-[0.8125rem]"
+                                        >
+                                            <KeyRound className="h-4 w-4 shrink-0 text-foreground-secondary lg:h-3.5 lg:w-3.5" aria-hidden="true" />
+                                            <span className="min-w-0 truncate lg:max-w-[160px]">{getCustomProviderDisplayName(customProvider)}</span>
+                                        </span>
+                                    ) : (
+                                        <VisionModelSelector
+                                            selectedModel={selectedModel}
+                                            onModelChange={setSelectedModel}
+                                            reasoningEnabled={reasoningEnabled}
+                                            onReasoningChange={setReasoningEnabled}
+                                        />
+                                    )}
                                 </PhotoOptionRow>
                             </div>
 
@@ -479,7 +544,9 @@ export function PhotoReadingEntry({
                         <Lock className="mt-0.5 hidden h-4 w-4 shrink-0 lg:block" strokeWidth={1.7} aria-hidden="true" />
                         <div className="flex flex-col gap-1">
                             <p>{copy.notice}</p>
-                            <p className="text-foreground-tertiary">{copy.billing}</p>
+                            <p className="text-foreground-tertiary">
+                                {customProvider ? '正在使用自定义模型：照片由浏览器直接发给你的服务商，不经过本站，也不计费。' : copy.billing}
+                            </p>
                         </div>
                     </div>
                 </div>
@@ -529,7 +596,6 @@ export function PhotoReadingEntry({
                     </div>
                 </Dialog>
             )}
-            <CreditsModal isOpen={showCreditsModal} onClose={() => setShowCreditsModal(false)} />
         </>
     );
 }

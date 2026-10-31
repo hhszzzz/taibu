@@ -6,7 +6,7 @@ import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.serve
 import { PARALLEL_SYSTEMS } from '../lib/agent/parallel.server';
 import { memberInstructions, systemTitle } from '../lib/agent/profiles/members.server';
 
-const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具、联网或会员权限。';
+const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具或联网权限。';
 const PRINCIPLES = '\n## 解读通则\n\n';
 
 test('every card loads its own text by id, and every Core tool loads its system default card', () => {

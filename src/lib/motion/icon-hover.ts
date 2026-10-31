@@ -211,8 +211,8 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
     // 设置：八齿齿轮转过一格 45°，齿对齿，停在原位。
     settings: [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(51deg)', .42], ['rotate(43deg)', .7], ['rotate(45deg)']], MOTION_EASE_OUT), options: { duration: 700 } }],
 
-    // 订阅：卡片从卡槽里抽出来又插回去。
-    upgrade: [{ part: '.ni-card', keyframes: float('0 -1.4px', .4), options: { duration: 560 } }],
+    // 订阅与余额：卡片从卡槽里抽出来又插回去。
+    billing: [{ part: '.ni-card', keyframes: float('0 -1.4px', .4), options: { duration: 560 } }],
 
     // 命理记录：一叠页，像翻卡片一样掀一下。
     records: PAGE_FLIP,
@@ -271,7 +271,7 @@ export const ICON_MOTIONS: Readonly<Record<string, readonly IconMotion[]>> = {
         },
     ],
 
-    // 功能与激活码：票券歪一下，像撕下来又贴回。
+    // 功能开关：票券歪一下，像撕下来又贴回。
     'feature-flags': [{ part: '.ni-glyph', keyframes: spin(12, 12, [['rotate(0deg)'], ['rotate(-7deg)', .34], ['rotate(2deg)', .7], ['rotate(0deg)']]), options: { duration: 600 } }],
 
     // AI 服务：两台机器的指示灯先后亮一下。

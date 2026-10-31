@@ -37,7 +37,7 @@ import {
 /** 侧栏收起状态只保存在本机。 */
 
 const LazyGeneralSettingsContent = lazy(() => import('@/components/settings/panels/GeneralSettingsPanel'));
-const LazyUpgradeContent = lazy(() => import('@/components/settings/panels/UpgradePanel'));
+const LazyBillingContent = lazy(() => import('@/components/settings/panels/BillingPanel'));
 const LazyAISettingsContent = lazy(() => import('@/components/settings/panels/AISettingsPanel'));
 const LazyBYOKContent = lazy(() => import('@/components/settings/panels/BYOKPanel'));
 const LazyChartsContent = lazy(() => import('@/components/settings/panels/ChartsPanel'));
@@ -54,8 +54,8 @@ const LazyAdminAnnouncementsContent = lazy(async () => ({
 const LazyAdminFeaturesContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminFeaturesContent,
 }));
-const LazyAdminActivationKeysContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminActivationKeysContent,
+const LazyAdminBillingContent = lazy(async () => ({
+  default: (await import('@/components/settings/AccountAdminPanels')).AdminBillingContent,
 }));
 const LazyAdminAIServicesContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminAIServicesContent,
@@ -166,8 +166,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyProfileContent />);
     case 'general':
       return renderLazyPanel(<LazyGeneralSettingsContent />);
-    case 'upgrade':
-      return renderLazyPanel(<LazyUpgradeContent />);
+    case 'billing':
+      return renderLazyPanel(<LazyBillingContent />);
     case 'shares':
       return renderLazyPanel(<LazySharedLinksContent />);
     case 'personalization':
@@ -190,8 +190,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyAdminAnnouncementsContent />);
     case 'admin-features':
       return renderLazyPanel(<LazyAdminFeaturesContent />);
-    case 'admin-keys':
-      return renderLazyPanel(<LazyAdminActivationKeysContent />);
+    case 'admin-billing':
+      return renderLazyPanel(<LazyAdminBillingContent />);
     case 'admin-ai-services':
       return renderLazyPanel(<LazyAdminAIServicesContent />);
     case 'admin-agent-extensions':
@@ -212,7 +212,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     sharesEnabled: !featureTogglesLoaded || isFeatureEnabled('shares'),
     skillsEnabled: !featureTogglesLoaded || isFeatureEnabled('skills'),
     connectorsEnabled: !featureTogglesLoaded || isFeatureEnabled('connectors'),
-    upgradeEnabled: !featureTogglesLoaded || isFeatureEnabled('upgrade'),
+    billingEnabled: !featureTogglesLoaded || isFeatureEnabled('billing'),
     chartsEnabled: !featureTogglesLoaded || isFeatureEnabled('charts'),
     knowledgeBaseEnabled: !featureTogglesLoaded || isFeatureEnabled('knowledge-base'),
     mcpServiceEnabled: !featureTogglesLoaded || isFeatureEnabled('mcp-service'),

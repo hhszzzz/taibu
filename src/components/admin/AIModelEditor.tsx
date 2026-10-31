@@ -19,9 +19,9 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { getVendorName, VENDOR_PRESETS } from '@/lib/ai/vendor-labels';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import {
-    CONTEXT_WINDOW_PRESETS, THINKING_LEVEL_LABELS, TIERS, USAGE_TYPES,
-    formatTokenCount, parseModelInput,
-    type AdminGateway, type AdminModel, type AdminModelInput, type AdminModelSource,
+    CONTEXT_WINDOW_PRESETS, PRICE_FIELDS, THINKING_LEVEL_LABELS, USAGE_TYPES,
+    formatTokenCount, parseModelInput, priceFieldsFor,
+    type AdminGateway, type AdminModel, type AdminModelInput, type AdminModelSource, type PriceField,
 } from '@/lib/admin/ai-catalog';
 import { probeGateway, probeSummary } from './AIGatewayPanel';
 import type { ModelsDevSuggestion } from '@/lib/admin/models-dev';
@@ -31,8 +31,9 @@ const CUSTOM_VENDOR = '__custom__';
 const CUSTOM_WINDOW = '__custom__';
 
 /** Form state: numbers and JSON stay text until saved, so a half-typed value is never lost. */
-type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'customParameters' | 'sortOrder'> & {
+type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'customParameters' | 'sortOrder' | 'pricing'> & {
     sortOrder: string; contextWindow: string; defaultMaxTokens: string; customParameters: string;
+    pricing: Record<PriceField, string>;
 };
 
 const text = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value));
@@ -40,8 +41,9 @@ const text = (value: number | null | undefined) => (value === null || value === 
 function draftOf(model: AdminModel | null, gateways: readonly AdminGateway[]): Draft {
     return {
         modelKey: model?.modelKey ?? '', displayName: model?.displayName ?? '', vendor: model?.vendor ?? 'openai',
-        usageType: model?.usageType ?? 'chat', creditCost: model?.creditCost ?? 1, isEnabled: model?.isEnabled ?? true,
-        sortOrder: text(model?.sortOrder ?? 0), requiredTier: model?.requiredTier ?? 'free',
+        usageType: model?.usageType ?? 'chat', isEnabled: model?.isEnabled ?? true,
+        pricing: Object.fromEntries(PRICE_FIELDS.map(field => [field.key, text(model?.pricing?.[field.key])])) as Record<PriceField, string>,
+        sortOrder: text(model?.sortOrder ?? 0),
         supportsVision: model?.supportsVision ?? false,
         isReasoningDefault: model?.isReasoningDefault ?? false,
         thinkingLevels: model?.thinkingLevels ?? [],
@@ -336,12 +338,23 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             </section>
 
             {image && <section className="ai-catalog-section" aria-labelledby={`${titleId}-image`}>
-                <header><h3 id={`${titleId}-image`}>生图</h3><p>输入框的「生图」按钮和 Agent 的 generate_image 工具使用这个模型；按张扣积分。</p></header>
-                <label className="ai-catalog-field"><span>每张图积分</span>
-                    <Input type="number" inputMode="numeric" min={0} max={1000} value={draft.creditCost}
-                        onChange={event => patch({ creditCost: Number(event.target.value) })} />
-                    <span className="ai-catalog-hint">0 表示不扣积分；每次最多生成 4 张。</span>
-                </label>
+                <header><h3 id={`${titleId}-image`}>生图与价格</h3><p>输入框的「生图」按钮和 Agent 的 generate_image 工具使用这个模型；按张计费。</p></header>
+                {priceFieldsFor(draft.usageType).map(field => <label key={field.key} className="ai-catalog-field"><span>{field.label}（{field.unit}）</span>
+                    <Input inputMode="decimal" value={draft.pricing[field.key]}
+                        onChange={event => patch({ pricing: { ...draft.pricing, [field.key]: event.target.value } })} />
+                    <span className="ai-catalog-hint">留空表示未定价，平台不提供这个模型；填 0 为免费模型。</span>
+                </label>)}
+            </section>}
+
+            {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-pricing`}>
+                <header><h3 id={`${titleId}-pricing`}>价格</h3><p>按实际用量计费，单位是美元/百万 token；推理 token 计入输出。</p></header>
+                <div className="ai-catalog-grid">
+                    {priceFieldsFor(draft.usageType).map(field => <label key={field.key} className="ai-catalog-field"><span>{field.label}（{field.unit}）</span>
+                        <Input inputMode="decimal" value={draft.pricing[field.key]}
+                            onChange={event => patch({ pricing: { ...draft.pricing, [field.key]: event.target.value } })} />
+                    </label>)}
+                </div>
+                <span className="ai-catalog-hint">留空表示未定价，平台不提供这个模型；输入与输出都填 0 为免费模型。缓存单价留空时按输入价计。</span>
             </section>}
 
             {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-limits`}>
@@ -404,9 +417,6 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             <section className="ai-catalog-section" aria-labelledby={`${titleId}-access`}>
                 <header><h3 id={`${titleId}-access`}>可见范围</h3></header>
                 <div className="ai-catalog-grid">
-                    <div className="ai-catalog-field"><span>所需会员</span>
-                        <SegmentedChoice ariaLabel="所需会员" value={draft.requiredTier} options={TIERS} onChange={requiredTier => patch({ requiredTier })} />
-                    </div>
                     <label className="ai-catalog-field"><span>排序</span>
                         <Input type="number" value={draft.sortOrder} onChange={event => patch({ sortOrder: event.target.value })} />
                         <span className="ai-catalog-hint">数值越小越靠前，第一个可用的对话模型是默认模型。</span>

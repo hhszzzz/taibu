@@ -116,7 +116,6 @@ test('ingestRecordAsService stores canonical ming_record source type', async () 
 
 test('knowledge-base ingest route normalizes legacy record source type to ming_record flow', async (t) => {
     const apiUtils = require('../lib/api-utils') as typeof import('../lib/api-utils');
-    const membershipModule = require('../lib/user/membership-server') as typeof import('../lib/user/membership-server');
     const featureGateModule = require('../lib/feature-gate-utils') as typeof import('../lib/feature-gate-utils');
     const ingestImpl = require('../lib/knowledge-base/ingest') as typeof import('../lib/knowledge-base/ingest');
     const routePath = require.resolve('../app/api/knowledge-base/ingest/route');
@@ -141,7 +140,6 @@ test('knowledge-base ingest route normalizes legacy record source type to ming_r
         user: { id: 'user-1' },
         db: scoped,
     }));
-    t.mock.method(membershipModule, 'getEffectiveMembershipType', async () => 'plus');
     t.mock.method(featureGateModule, 'ensureFeatureRouteEnabled', async () => null);
     t.mock.method(ingestImpl, 'ingestRecordAsService', async () => {
         recordCalls += 1;

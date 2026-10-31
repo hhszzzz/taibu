@@ -7,7 +7,6 @@ import { registerClientModelNames } from '@/lib/ai/model-name-cache';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import { queryKeys } from '@/lib/query/keys';
 import type { AIReasoningEffort, AIVendor } from '@/types';
-import type { MembershipType } from '@/lib/user/membership';
 import type { GeneratedImageSize } from '@/lib/images/generated';
 
 export type AvailableModel = {
@@ -20,20 +19,16 @@ export type AvailableModel = {
   defaultThinkingLevel?: AIReasoningEffort | null;
   contextWindow?: number | null;
   isReasoningDefault?: boolean;
-  allowed?: boolean;
-  /** Lowest membership that can use the model. */
-  tier?: 'free' | 'plus' | 'pro' | null;
-  blockedReason?: string | null;
-  reasoningAllowed?: boolean;
+  /** USD per million tokens; a null cache price charges the input price. */
+  pricing?: { input: number; output: number; cacheRead: number | null; cacheWrite: number | null };
 };
 
 export type AvailableImageModel = {
   id: string;
   name: string;
   vendor: AIVendor;
-  /** 每张图扣除的积分。 */
-  creditCost: number;
-  tier?: 'free' | 'plus' | 'pro' | null;
+  /** 每张图的价格（微美元）。 */
+  priceMicros: number;
 };
 
 type ImageCatalog = { models: AvailableImageModel[]; sizes: GeneratedImageSize[]; maxCount: number };
@@ -56,18 +51,14 @@ async function loadAvailableModels() {
   return result.data?.models ?? [];
 }
 
-export function useAvailableModels(userId?: string | null, options?: { vision?: boolean; enabled?: boolean; membershipType?: MembershipType | null }) {
+export function useAvailableModels(userId?: string | null, options?: { vision?: boolean; enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   const vision = options?.vision ?? false;
   const bootstrap = useAppBootstrap({ enabled });
   const effectiveUserId = userId ?? bootstrap.data.viewerSummary?.userId ?? null;
-  const effectiveMembershipType = options?.membershipType ?? bootstrap.data.membership?.type ?? 'free';
 
   const query = useQuery({
-    queryKey: queryKeys.models(effectiveUserId, {
-      vision,
-      membershipType: effectiveMembershipType,
-    }),
+    queryKey: queryKeys.models(effectiveUserId, { vision }),
     queryFn: loadAvailableModels,
     enabled,
     staleTime: 10 * 60_000,
@@ -88,13 +79,12 @@ export function useAvailableModels(userId?: string | null, options?: { vision?: 
 }
 
 /** 输入框「生图」入口的可用模型；没有可用模型时不显示入口。 */
-export function useImageModels(userId?: string | null, options?: { membershipType?: MembershipType | null; enabled?: boolean }) {
+export function useImageModels(userId?: string | null, options?: { enabled?: boolean }) {
   const enabled = options?.enabled ?? true;
   const bootstrap = useAppBootstrap({ enabled });
   const effectiveUserId = userId ?? bootstrap.data.viewerSummary?.userId ?? null;
-  const effectiveMembershipType = options?.membershipType ?? bootstrap.data.membership?.type ?? 'free';
   const query = useQuery({
-    queryKey: [...queryKeys.models(effectiveUserId, { membershipType: effectiveMembershipType }), 'image'] as const,
+    queryKey: [...queryKeys.models(effectiveUserId), 'image'] as const,
     queryFn: loadImageModels,
     enabled,
     staleTime: 10 * 60_000,

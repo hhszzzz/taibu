@@ -31,7 +31,10 @@ import { parseAgentCompactCommand } from '@/lib/agent/compaction';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
 import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
 import { normalizeMessageQuotes, type MessageQuote } from '@/lib/chat/quotes';
-import { requestBrowserJson } from '@/lib/browser-api';
+import { requestBrowserJson, type BrowserApiPayload } from '@/lib/browser-api';
+import { generateBrowserDirectImages } from '@/lib/ai/browser-direct-images';
+import { AgentHttpError } from '@/lib/agent/browser-client';
+import { TOP_UP_TOAST } from '@/lib/billing/client';
 import type { GeneratedImageDto } from '@/lib/images/generated';
 
 function shouldShowCheckKeyAction(message?: string): boolean {
@@ -92,6 +95,23 @@ function createCustomProviderChatRunner(customProvider: NonNullable<ReturnType<t
     };
 }
 
+type GeneratedImagesPayload = { images: GeneratedImageDto[]; model: { id: string; name: string } };
+
+/** 自定义生图模型：浏览器直连生成，再交给本站保存进当前对话；不计费。 */
+async function generateCustomImages(
+    provider: NonNullable<ReturnType<typeof getCustomProvider>> & { imageModelId: string },
+    request: { conversationId: string; prompt: string; size: string; count: number },
+): Promise<BrowserApiPayload<GeneratedImagesPayload>> {
+    const blobs = await generateBrowserDirectImages({ provider, prompt: request.prompt, size: request.size, count: request.count });
+    const form = new FormData();
+    form.append('prompt', request.prompt);
+    form.append('size', request.size);
+    form.append('modelId', provider.imageModelId);
+    form.append('conversationId', request.conversationId);
+    blobs.forEach((blob, index) => form.append('images', blob, `image-${index + 1}`));
+    return requestBrowserJson<GeneratedImagesPayload>('/api/images/upload', { method: 'POST', body: form });
+}
+
 /** Local-only failure notice: never saved, so it offers no fork. */
 const unavailableReply = (content: string): ChatMessage => ({ id: (Date.now() + 1).toString(), role: 'assistant', content, createdAt: new Date().toISOString(), metadata: { unsaved: true } });
 
@@ -100,7 +120,7 @@ interface UseChatMessagingParams {
     userId: string | null;
     user: { name?: string | null } | null;
     refreshViewerState: () => Promise<unknown>;
-    markViewerCreditsExhausted: () => void;
+    markViewerBalanceExhausted: () => void;
     showToast: ReturnType<typeof import('@/components/ui/Toast').useToast>['showToast'];
     router: ReturnType<typeof import('next/navigation').useRouter>;
     searchParams: ReturnType<typeof import('next/navigation').useSearchParams>;
@@ -111,7 +131,7 @@ export function useChatMessaging({
     userId,
     user,
     refreshViewerState,
-    markViewerCreditsExhausted,
+    markViewerBalanceExhausted,
     showToast,
     router,
     searchParams,
@@ -140,7 +160,6 @@ export function useChatMessaging({
         setPendingSidebarTitle,
         setKbModalOpen,
         setKbTargetMessage,
-        setShowCreditsModal,
         refreshConversationList,
         saveMessages,
         cacheConversationMessages,
@@ -176,13 +195,10 @@ export function useChatMessaging({
         [enabledDataSourceTypes, knowledgeBaseEnabled]
     );
 
-    const markCreditsExhausted = useCallback((message?: string) => {
-        markViewerCreditsExhausted();
-        setShowCreditsModal(true);
-        if (message) {
-            showToast('info', message);
-        }
-    }, [markViewerCreditsExhausted, setShowCreditsModal, showToast]);
+    const markBalanceExhausted = useCallback((message?: string) => {
+        markViewerBalanceExhausted();
+        showToast('info', message || '余额不足，请充值、兑换或订阅后再试', TOP_UP_TOAST);
+    }, [markViewerBalanceExhausted, showToast]);
 
     // Scroll helpers
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -264,7 +280,7 @@ export function useChatMessaging({
                 if (
                     event.type === 'task_failed' &&
                     !isAuthRequired &&
-                    event.errorCode !== 'INSUFFICIENT_CREDITS' &&
+                    event.errorCode !== 'INSUFFICIENT_BALANCE' &&
                     event.task.content.trim().length === 0
                 ) {
                     const errorMessage: ChatMessage = {
@@ -297,14 +313,14 @@ export function useChatMessaging({
                 });
             }
 
-            if (event.type === 'task_billed' || event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed') {
+            if (event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed') {
                 debouncedRefreshViewerState();
             }
             if (hasLoadedConversationsRef.current && (event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed')) {
                 void refreshConversationList();
             }
-            if (event.type === 'task_failed' && event.errorCode === 'INSUFFICIENT_CREDITS' && isActiveConversationEvent) {
-                markCreditsExhausted(event.errorMessage);
+            if (event.type === 'task_failed' && event.errorCode === 'INSUFFICIENT_BALANCE' && isActiveConversationEvent) {
+                markBalanceExhausted(event.errorMessage);
             }
             if (event.type === 'task_failed' && event.errorCode === 'PERSIST_FAILED' && isActiveConversationEvent) {
                 showToast('error', event.errorMessage || '保存对话失败，请稍后重试');
@@ -314,7 +330,7 @@ export function useChatMessaging({
             }
         });
         return unsubscribe;
-    }, [cacheConversationMessages, markCreditsExhausted, debouncedRefreshViewerState, refreshConversationList, showToast, activeConversationIdRef, hasLoadedConversationsRef, setMessages, setStreamingConversationIds, setDreamContext, customProviderConfig]);
+    }, [cacheConversationMessages, markBalanceExhausted, debouncedRefreshViewerState, refreshConversationList, showToast, activeConversationIdRef, hasLoadedConversationsRef, setMessages, setStreamingConversationIds, setDreamContext, customProviderConfig]);
 
     const handleArchiveMessage = useCallback((message: ChatMessage) => {
         if (!activeConversationId || !knowledgeBaseEnabled) return;
@@ -394,7 +410,7 @@ export function useChatMessaging({
 
     /**
      * 输入框直接生图：先建好对话，再调用生图接口，成功后把用户消息和助手消息一起写入。
-     * 失败时不留下空对话，积分由服务端在失败时退还。
+     * 失败时不留下空对话；预扣的费用由服务端按没生成的张数退回。自定义配置带生图模型时由浏览器直连生成。
      */
     const handleImageGenerate = async (options: { prompt: string; size: string; count: number }) => {
         const prompt = options.prompt.trim();
@@ -428,11 +444,15 @@ export function useChatMessaging({
                 metadata: { sources: [], pending: true },
             };
             if (isCurrent()) setMessages(prev => [...prev, userMessage, pendingMessage]);
-            const response = await requestBrowserJson<{ images: GeneratedImageDto[]; model: { id: string; name: string } }>('/api/images/generate', {
-                method: 'POST', headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ conversationId, prompt, size: options.size, count: options.count }),
-            });
+            const imageModelId = customProviderConfig?.imageModelId;
+            const response = customProviderConfig && imageModelId
+                ? await generateCustomImages({ ...customProviderConfig, imageModelId }, { conversationId, prompt, size: options.size, count: options.count })
+                : await requestBrowserJson<GeneratedImagesPayload>('/api/images/generate', {
+                    method: 'POST', headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ conversationId, prompt, size: options.size, count: options.count }),
+                });
             const images = response.data?.images ?? [];
+            if (response.status === 402) markViewerBalanceExhausted();
             if (response.error || !images.length) throw new Error(response.error?.message ?? '生成图片失败，请重试');
             const assistantMessage: ChatMessage = {
                 id: assistantId, role: 'assistant', createdAt: new Date().toISOString(),
@@ -545,7 +565,8 @@ export function useChatMessaging({
                         setMessages(messages);
                         void state.retryConversationLoad();
                     }
-                    showToast('error', error instanceof Error ? error.message : '创建任务失败');
+                    if (error instanceof AgentHttpError && error.status === 402) markBalanceExhausted(error.message);
+                    else showToast('error', error instanceof Error ? error.message : '创建任务失败');
                 }
                 return;
             }
@@ -593,7 +614,7 @@ export function useChatMessaging({
             });
             if (!startResult.ok) {
                 if (conversationId === activeConversationIdRef.current) setMessages(newMessages);
-                if (startResult.code === 'INSUFFICIENT_CREDITS') markCreditsExhausted(startResult.message);
+                if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
                 else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
             }
         } catch (error) {
@@ -687,7 +708,7 @@ export function useChatMessaging({
             });
             if (!startResult.ok) {
                 if (isTargetActive()) setMessages(originalSnapshot);
-                if (startResult.code === 'INSUFFICIENT_CREDITS') markCreditsExhausted(startResult.message);
+                if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
                 else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
             }
         } catch (error) {
@@ -793,7 +814,7 @@ export function useChatMessaging({
             });
             if (!startResult.ok) {
                 if (isTargetActive()) setMessages(originalSnapshot);
-                if (startResult.code === 'INSUFFICIENT_CREDITS') markCreditsExhausted(startResult.message);
+                if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
                 else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
             }
         } catch (error) {
@@ -819,7 +840,7 @@ export function useChatMessaging({
         handleQueueMessage,
         scrollToBottom,
         handleMessageListScroll,
-        markCreditsExhausted,
+        markBalanceExhausted,
         handleArchiveMessage,
         closeKbModal,
         handleStop,

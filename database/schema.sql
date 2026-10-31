@@ -20,7 +20,7 @@ CREATE TABLE public.agent_runs (
     event_cursor bigint DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT agent_runs_billing_check CHECK ((billing = ANY (ARRAY['charged'::text, 'exempt'::text, 'refunded'::text]))),
+    CONSTRAINT agent_runs_billing_check CHECK ((billing = ANY (ARRAY['metered'::text, 'exempt'::text]))),
     CONSTRAINT agent_runs_status_check CHECK ((status = ANY (ARRAY['queued'::text, 'running'::text, 'awaiting_input'::text, 'cancelling'::text, 'completed'::text, 'cancelled'::text, 'failed'::text])))
 )
 WITH (fillfactor='80', autovacuum_vacuum_scale_factor='0.02', autovacuum_analyze_scale_factor='0.02');
@@ -153,22 +153,6 @@ CREATE TABLE identity.verifications (
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
-CREATE TABLE public.activation_keys (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    key_code text NOT NULL,
-    key_type text NOT NULL,
-    membership_type text,
-    credits_amount integer,
-    is_used boolean DEFAULT false,
-    used_by uuid,
-    used_at timestamp with time zone,
-    created_by uuid NOT NULL,
-    created_at timestamp with time zone DEFAULT now(),
-    source text DEFAULT 'admin'::text NOT NULL,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT activation_keys_key_type_check CHECK ((key_type = ANY (ARRAY['membership'::text, 'credits'::text])))
-);
-
 CREATE TABLE public.agent_attachment_refs (
     attachment_id uuid NOT NULL,
     conversation_id uuid,
@@ -280,7 +264,6 @@ CREATE TABLE public.agent_mcp_servers (
     search_tool text,
     fetch_tool text,
     route_priority integer DEFAULT 100 NOT NULL,
-    required_tier text DEFAULT 'plus'::text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
     timeout_ms integer DEFAULT 30000 NOT NULL,
     max_result_chars integer DEFAULT 20000 NOT NULL,
@@ -296,7 +279,6 @@ CREATE TABLE public.agent_mcp_servers (
     CONSTRAINT agent_mcp_servers_json_check CHECK (((jsonb_typeof(headers) = 'object'::text) AND (jsonb_typeof(secret_headers) = 'object'::text) AND (jsonb_typeof(secret_query) = 'object'::text) AND (jsonb_typeof(tool_policy) = 'object'::text))),
     CONSTRAINT agent_mcp_servers_max_result_chars_check CHECK (((max_result_chars >= 2000) AND (max_result_chars <= 100000))),
     CONSTRAINT agent_mcp_servers_name_check CHECK ((name ~ '^[a-z][a-z0-9_]{1,30}$'::text)),
-    CONSTRAINT agent_mcp_servers_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
     CONSTRAINT agent_mcp_servers_route_tool_check CHECK ((((search_tool IS NULL) OR ((length(search_tool) >= 1) AND (length(search_tool) <= 128))) AND ((fetch_tool IS NULL) OR ((length(fetch_tool) >= 1) AND (length(fetch_tool) <= 128))))),
     CONSTRAINT agent_mcp_servers_timeout_check CHECK (((timeout_ms >= 5000) AND (timeout_ms <= 120000))),
     CONSTRAINT agent_mcp_servers_url_check CHECK (((url ~ '^https://'::text) AND (length(url) <= 2048))),
@@ -314,7 +296,6 @@ CREATE TABLE public.agent_profiles (
     model text,
     reasoning_effort text,
     modes text[] DEFAULT '{parallel,background}'::text[] NOT NULL,
-    required_tier text DEFAULT 'free'::text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -326,7 +307,6 @@ CREATE TABLE public.agent_profiles (
     CONSTRAINT agent_profiles_modes_check CHECK (((cardinality(modes) >= 1) AND (modes <@ ARRAY['parallel'::text, 'background'::text]))),
     CONSTRAINT agent_profiles_name_check CHECK (((name ~ '^[a-z][a-z0-9-]{1,31}$'::text) AND (name <> ALL (ARRAY['specialist'::text, 'researcher'::text, 'verifier'::text])))),
     CONSTRAINT agent_profiles_reasoning_effort_check CHECK (((reasoning_effort IS NULL) OR (reasoning_effort = ANY (ARRAY['off'::text, 'minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])))),
-    CONSTRAINT agent_profiles_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
     CONSTRAINT agent_profiles_skills_check CHECK ((cardinality(skills) <= 4)),
     CONSTRAINT agent_profiles_tools_check CHECK ((jsonb_typeof(tools) = 'object'::text))
 );
@@ -409,7 +389,6 @@ CREATE TABLE public.agent_skills (
     description text NOT NULL,
     content text NOT NULL,
     version integer DEFAULT 1 NOT NULL,
-    required_tier text DEFAULT 'free'::text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
     disable_model_invocation boolean DEFAULT false NOT NULL,
     sort_order integer DEFAULT 0 NOT NULL,
@@ -418,8 +397,6 @@ CREATE TABLE public.agent_skills (
     CONSTRAINT agent_skills_content_check CHECK ((octet_length(content) <= 131072)),
     CONSTRAINT agent_skills_description_check CHECK (((length(btrim(description)) >= 1) AND (length(description) <= 1024))),
     CONSTRAINT agent_skills_name_check CHECK (((length(name) <= 64) AND (name ~ '^[a-z0-9]+(-[a-z0-9]+)*$'::text))),
-    CONSTRAINT agent_skills_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
-    CONSTRAINT agent_skills_user_tier_check CHECK (((owner_id IS NULL) OR (required_tier = 'free'::text))),
     CONSTRAINT agent_skills_version_check CHECK ((version >= 1))
 );
 
@@ -506,23 +483,25 @@ CREATE TABLE public.ai_models (
     vendor text NOT NULL,
     is_enabled boolean DEFAULT true,
     sort_order integer DEFAULT 0,
-    required_tier text DEFAULT 'free'::text NOT NULL,
     is_reasoning_default boolean DEFAULT false,
     supports_vision boolean DEFAULT false,
     default_max_tokens integer DEFAULT 4000,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     usage_type text DEFAULT 'chat'::text NOT NULL,
-    credit_cost integer DEFAULT 1 NOT NULL,
     default_reasoning_effort text,
     custom_parameters jsonb,
     context_window integer,
     thinking_levels text[] DEFAULT '{}'::text[] NOT NULL,
+    input_price numeric(12,4),
+    output_price numeric(12,4),
+    cache_read_price numeric(12,4),
+    cache_write_price numeric(12,4),
+    image_price numeric(12,4),
     CONSTRAINT ai_models_context_window_check CHECK (((context_window IS NULL) OR ((context_window >= 1024) AND (context_window <= 10000000)))),
-    CONSTRAINT ai_models_credit_cost_check CHECK (((credit_cost >= 0) AND (credit_cost <= 1000))),
     CONSTRAINT ai_models_default_reasoning_effort_check CHECK (((default_reasoning_effort IS NULL) OR (default_reasoning_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])))),
     CONSTRAINT ai_models_default_thinking_level_check CHECK (((default_reasoning_effort IS NULL) OR (cardinality(thinking_levels) = 0) OR (default_reasoning_effort = ANY (thinking_levels)))),
-    CONSTRAINT ai_models_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
+    CONSTRAINT ai_models_price_check CHECK (((input_price >= (0)::numeric) AND (output_price >= (0)::numeric) AND (cache_read_price >= (0)::numeric) AND (cache_write_price >= (0)::numeric) AND (image_price >= (0)::numeric))),
     CONSTRAINT ai_models_thinking_levels_check CHECK ((thinking_levels <@ ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])),
     CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'embedding'::text, 'rerank'::text, 'image'::text])))
 );
@@ -606,6 +585,35 @@ CREATE TABLE public.bazi_charts (
     CONSTRAINT bazi_charts_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 100) AND (timezone = btrim(timezone))))
 );
 
+CREATE TABLE public.billing_accounts (
+    user_id uuid NOT NULL,
+    balance_micros bigint DEFAULT 0 NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+CREATE TABLE public.billing_ledger (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    amount_micros bigint NOT NULL,
+    wallet_micros bigint DEFAULT 0 NOT NULL,
+    subscription_parts jsonb DEFAULT '[]'::jsonb NOT NULL,
+    wallet_after_micros bigint NOT NULL,
+    source text DEFAULT ''::text NOT NULL,
+    model_key text,
+    usage jsonb,
+    reference_type text,
+    reference_id text,
+    idempotency_key text,
+    description text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT billing_ledger_description_check CHECK ((length(description) <= 500)),
+    CONSTRAINT billing_ledger_kind_check CHECK ((kind = ANY (ARRAY['usage'::text, 'refund'::text, 'topup'::text, 'subscription'::text, 'redeem'::text, 'adjust'::text]))),
+    CONSTRAINT billing_ledger_source_check CHECK ((length(source) <= 40)),
+    CONSTRAINT billing_ledger_subscription_parts_check CHECK ((jsonb_typeof(subscription_parts) = 'array'::text)),
+    CONSTRAINT billing_ledger_usage_check CHECK (((usage IS NULL) OR (jsonb_typeof(usage) = 'object'::text)))
+);
+
 CREATE TABLE public.community_comments (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     post_id uuid NOT NULL,
@@ -687,29 +695,6 @@ CREATE TABLE public.conversations (
     source_type text DEFAULT 'chat'::text,
     source_data jsonb,
     CONSTRAINT conversations_source_type_check CHECK ((source_type = ANY (ARRAY['chat'::text, 'bazi_wuxing'::text, 'bazi_personality'::text, 'tarot'::text, 'liuyao'::text, 'mbti'::text, 'hepan'::text, 'palm'::text, 'face'::text, 'dream'::text, 'qimen'::text, 'daliuren'::text, 'meihua'::text, 'xiaoliuren'::text, 'ziwei'::text])))
-);
-
-CREATE TABLE public.credit_transactions (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    amount integer NOT NULL,
-    type text NOT NULL,
-    source text NOT NULL,
-    description text,
-    created_at timestamp with time zone DEFAULT now(),
-    balance_after integer,
-    reference_type text,
-    reference_id text,
-    metadata jsonb DEFAULT '{}'::jsonb NOT NULL,
-    CONSTRAINT credit_transactions_type_check CHECK ((type = ANY (ARRAY['earn'::text, 'spend'::text, 'refund'::text])))
-);
-
-CREATE TABLE public.daily_checkins (
-    id uuid DEFAULT gen_random_uuid() NOT NULL,
-    user_id uuid NOT NULL,
-    checkin_date date NOT NULL,
-    reward_credits integer DEFAULT 0,
-    created_at timestamp with time zone DEFAULT now()
 );
 
 CREATE TABLE public.daliuren_divinations (
@@ -884,6 +869,30 @@ CREATE TABLE public.palm_readings (
     CONSTRAINT palm_readings_hand_type_check CHECK ((hand_type = ANY (ARRAY['left'::text, 'right'::text, 'both'::text])))
 );
 
+CREATE TABLE public.payment_orders (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    trade_no text NOT NULL,
+    user_id uuid NOT NULL,
+    kind text NOT NULL,
+    plan_id uuid,
+    credit_micros bigint,
+    pay_amount numeric(12,2) NOT NULL,
+    pay_currency text DEFAULT 'CNY'::text NOT NULL,
+    provider text DEFAULT 'epay'::text NOT NULL,
+    pay_method text,
+    status text DEFAULT 'pending'::text NOT NULL,
+    provider_trade_no text,
+    provider_payload jsonb,
+    paid_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT payment_orders_kind_check CHECK ((kind = ANY (ARRAY['topup'::text, 'subscription'::text]))),
+    CONSTRAINT payment_orders_pay_amount_check CHECK ((pay_amount > (0)::numeric)),
+    CONSTRAINT payment_orders_payload_check CHECK ((((kind = 'topup'::text) AND (credit_micros > 0) AND (plan_id IS NULL)) OR ((kind = 'subscription'::text) AND (plan_id IS NOT NULL)))),
+    CONSTRAINT payment_orders_provider_check CHECK ((provider = 'epay'::text)),
+    CONSTRAINT payment_orders_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'paid'::text, 'expired'::text, 'failed'::text])))
+);
+
 CREATE TABLE public.prompt_enhancement_usage (
     user_id uuid NOT NULL,
     local_date date NOT NULL,
@@ -920,6 +929,24 @@ CREATE TABLE public.qimen_charts (
     CONSTRAINT qimen_charts_zhi_fu_ji_gong_check CHECK ((zhi_fu_ji_gong = ANY (ARRAY['ji_liuyi'::text, 'ji_wugong'::text])))
 );
 
+CREATE TABLE public.redemption_codes (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    code text NOT NULL,
+    kind text NOT NULL,
+    amount_micros bigint,
+    plan_id uuid,
+    status text DEFAULT 'unused'::text NOT NULL,
+    used_by uuid,
+    used_at timestamp with time zone,
+    expires_at timestamp with time zone,
+    batch_note text,
+    created_by uuid,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT redemption_codes_kind_check CHECK ((kind = ANY (ARRAY['balance'::text, 'subscription'::text]))),
+    CONSTRAINT redemption_codes_payload_check CHECK ((((kind = 'balance'::text) AND (amount_micros > 0) AND (plan_id IS NULL)) OR ((kind = 'subscription'::text) AND (amount_micros IS NULL) AND (plan_id IS NOT NULL)))),
+    CONSTRAINT redemption_codes_status_check CHECK ((status = ANY (ARRAY['unused'::text, 'used'::text, 'disabled'::text])))
+);
+
 CREATE TABLE public.reminder_subscriptions (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid NOT NULL,
@@ -941,6 +968,33 @@ CREATE TABLE public.scheduled_reminders (
     sent boolean DEFAULT false,
     sent_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now()
+);
+
+CREATE TABLE public.subscription_plans (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    title text NOT NULL,
+    subtitle text DEFAULT ''::text NOT NULL,
+    features text[] DEFAULT '{}'::text[] NOT NULL,
+    price_usd numeric(10,2) DEFAULT 0 NOT NULL,
+    duration_unit text DEFAULT 'month'::text NOT NULL,
+    duration_value integer DEFAULT 1 NOT NULL,
+    allowance_micros bigint NOT NULL,
+    reset_period text DEFAULT 'never'::text NOT NULL,
+    purchasable boolean DEFAULT true NOT NULL,
+    enabled boolean DEFAULT true NOT NULL,
+    max_per_user integer,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT subscription_plans_allowance_micros_check CHECK ((allowance_micros > 0)),
+    CONSTRAINT subscription_plans_duration_unit_check CHECK ((duration_unit = ANY (ARRAY['day'::text, 'month'::text, 'year'::text]))),
+    CONSTRAINT subscription_plans_duration_value_check CHECK (((duration_value >= 1) AND (duration_value <= 3650))),
+    CONSTRAINT subscription_plans_features_check CHECK ((cardinality(features) <= 12)),
+    CONSTRAINT subscription_plans_max_per_user_check CHECK (((max_per_user IS NULL) OR (max_per_user >= 1))),
+    CONSTRAINT subscription_plans_price_usd_check CHECK ((price_usd >= (0)::numeric)),
+    CONSTRAINT subscription_plans_reset_period_check CHECK ((reset_period = ANY (ARRAY['never'::text, 'daily'::text, 'weekly'::text, 'monthly'::text]))),
+    CONSTRAINT subscription_plans_subtitle_check CHECK ((length(subtitle) <= 200)),
+    CONSTRAINT subscription_plans_title_check CHECK (((length(btrim(title)) >= 1) AND (length(title) <= 60)))
 );
 
 CREATE TABLE public.tarot_readings (
@@ -988,17 +1042,38 @@ CREATE TABLE public.user_settings (
     CONSTRAINT user_settings_expression_style_check CHECK ((expression_style = ANY (ARRAY['direct'::text, 'gentle'::text])))
 );
 
+CREATE TABLE public.user_subscriptions (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    plan_id uuid,
+    title text NOT NULL,
+    allowance_micros bigint NOT NULL,
+    reset_period text NOT NULL,
+    used_micros bigint DEFAULT 0 NOT NULL,
+    starts_at timestamp with time zone DEFAULT now() NOT NULL,
+    ends_at timestamp with time zone NOT NULL,
+    next_reset_at timestamp with time zone,
+    status text DEFAULT 'active'::text NOT NULL,
+    source text NOT NULL,
+    order_id uuid,
+    note text,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_subscriptions_allowance_micros_check CHECK ((allowance_micros > 0)),
+    CONSTRAINT user_subscriptions_check CHECK ((ends_at > starts_at)),
+    CONSTRAINT user_subscriptions_reset_period_check CHECK ((reset_period = ANY (ARRAY['never'::text, 'daily'::text, 'weekly'::text, 'monthly'::text]))),
+    CONSTRAINT user_subscriptions_source_check CHECK ((source = ANY (ARRAY['balance'::text, 'epay'::text, 'redeem'::text, 'admin'::text]))),
+    CONSTRAINT user_subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cancelled'::text, 'expired'::text]))),
+    CONSTRAINT user_subscriptions_used_micros_check CHECK (((used_micros >= 0) AND (used_micros <= allowance_micros)))
+);
+
 CREATE TABLE public.users (
     id uuid NOT NULL,
     nickname text,
     avatar_url text,
-    membership text DEFAULT 'free'::text,
-    membership_expires_at timestamp with time zone,
-    ai_chat_count integer DEFAULT 1,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    is_admin boolean DEFAULT false,
-    CONSTRAINT users_membership_check CHECK ((membership = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text])))
+    is_admin boolean DEFAULT false
 );
 
 CREATE TABLE public.xiaoliuren_divinations (
@@ -1059,12 +1134,6 @@ ALTER TABLE ONLY identity.users
 
 ALTER TABLE ONLY identity.verifications
     ADD CONSTRAINT verifications_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.activation_keys
-    ADD CONSTRAINT activation_keys_key_code_key UNIQUE (key_code);
-
-ALTER TABLE ONLY public.activation_keys
-    ADD CONSTRAINT activation_keys_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.agent_attachments
     ADD CONSTRAINT agent_attachments_object_path_key UNIQUE (object_path);
@@ -1183,6 +1252,15 @@ ALTER TABLE ONLY public.bazi_case_profiles
 ALTER TABLE ONLY public.bazi_charts
     ADD CONSTRAINT bazi_charts_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.billing_accounts
+    ADD CONSTRAINT billing_accounts_pkey PRIMARY KEY (user_id);
+
+ALTER TABLE ONLY public.billing_ledger
+    ADD CONSTRAINT billing_ledger_idempotency_key_key UNIQUE (idempotency_key);
+
+ALTER TABLE ONLY public.billing_ledger
+    ADD CONSTRAINT billing_ledger_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.community_comments
     ADD CONSTRAINT community_comments_pkey PRIMARY KEY (id);
 
@@ -1206,12 +1284,6 @@ ALTER TABLE ONLY public.conversation_shares
 
 ALTER TABLE ONLY public.conversations
     ADD CONSTRAINT conversations_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.credit_transactions
-    ADD CONSTRAINT credit_transactions_pkey PRIMARY KEY (id);
-
-ALTER TABLE ONLY public.daily_checkins
-    ADD CONSTRAINT daily_checkins_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.daliuren_divinations
     ADD CONSTRAINT daliuren_divinations_pkey PRIMARY KEY (id);
@@ -1255,11 +1327,23 @@ ALTER TABLE ONLY public.notifications
 ALTER TABLE ONLY public.palm_readings
     ADD CONSTRAINT palm_readings_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.payment_orders
+    ADD CONSTRAINT payment_orders_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.payment_orders
+    ADD CONSTRAINT payment_orders_trade_no_key UNIQUE (trade_no);
+
 ALTER TABLE ONLY public.prompt_enhancement_usage
     ADD CONSTRAINT prompt_enhancement_usage_pkey PRIMARY KEY (user_id, local_date);
 
 ALTER TABLE ONLY public.qimen_charts
     ADD CONSTRAINT qimen_charts_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_code_key UNIQUE (code);
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.reminder_subscriptions
     ADD CONSTRAINT reminder_subscriptions_pkey PRIMARY KEY (id);
@@ -1276,9 +1360,6 @@ ALTER TABLE ONLY public.annual_reports
 ALTER TABLE ONLY public.archived_sources
     ADD CONSTRAINT selfhost_archived_sources_unique UNIQUE (source_type, source_id, kb_id);
 
-ALTER TABLE ONLY public.daily_checkins
-    ADD CONSTRAINT selfhost_daily_checkins_unique UNIQUE (user_id, checkin_date);
-
 ALTER TABLE ONLY public.knowledge_entries
     ADD CONSTRAINT selfhost_knowledge_entries_unique UNIQUE (kb_id, source_type, source_id, chunk_index);
 
@@ -1290,6 +1371,9 @@ ALTER TABLE ONLY public.scheduled_reminders
 
 ALTER TABLE ONLY public.user_oauth_providers
     ADD CONSTRAINT selfhost_user_oauth_providers_unique UNIQUE (provider, provider_user_id);
+
+ALTER TABLE ONLY public.subscription_plans
+    ADD CONSTRAINT subscription_plans_pkey PRIMARY KEY (id);
 
 ALTER TABLE ONLY public.tarot_readings
     ADD CONSTRAINT tarot_readings_pkey PRIMARY KEY (id);
@@ -1306,6 +1390,9 @@ ALTER TABLE ONLY public.user_oauth_providers
 ALTER TABLE ONLY public.user_settings
     ADD CONSTRAINT user_settings_pkey PRIMARY KEY (user_id);
 
+ALTER TABLE ONLY public.user_subscriptions
+    ADD CONSTRAINT user_subscriptions_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
 
@@ -1320,12 +1407,6 @@ ALTER TABLE ONLY identity.accounts
 
 ALTER TABLE ONLY identity.sessions
     ADD CONSTRAINT sessions_user_id_fkey FOREIGN KEY (user_id) REFERENCES identity.users(id) ON DELETE CASCADE;
-
-ALTER TABLE ONLY public.activation_keys
-    ADD CONSTRAINT activation_keys_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id);
-
-ALTER TABLE ONLY public.activation_keys
-    ADD CONSTRAINT activation_keys_used_by_fkey FOREIGN KEY (used_by) REFERENCES public.users(id);
 
 ALTER TABLE ONLY public.agent_attachment_refs
     ADD CONSTRAINT agent_attachment_refs_attachment_id_fkey FOREIGN KEY (attachment_id) REFERENCES public.agent_attachments(id) ON DELETE CASCADE;
@@ -1435,6 +1516,12 @@ ALTER TABLE ONLY public.bazi_case_profiles
 ALTER TABLE ONLY public.bazi_charts
     ADD CONSTRAINT bazi_charts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
+ALTER TABLE ONLY public.billing_accounts
+    ADD CONSTRAINT billing_accounts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.billing_ledger
+    ADD CONSTRAINT billing_ledger_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY public.community_comments
     ADD CONSTRAINT community_comments_parent_id_fkey FOREIGN KEY (parent_id) REFERENCES public.community_comments(id);
 
@@ -1467,12 +1554,6 @@ ALTER TABLE ONLY public.conversation_shares
 
 ALTER TABLE ONLY public.conversations
     ADD CONSTRAINT conversations_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-ALTER TABLE ONLY public.credit_transactions
-    ADD CONSTRAINT credit_transactions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
-
-ALTER TABLE ONLY public.daily_checkins
-    ADD CONSTRAINT daily_checkins_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 ALTER TABLE ONLY public.daliuren_divinations
     ADD CONSTRAINT daliuren_divinations_conversation_id_fkey FOREIGN KEY (conversation_id) REFERENCES public.conversations(id);
@@ -1543,6 +1624,12 @@ ALTER TABLE ONLY public.palm_readings
 ALTER TABLE ONLY public.palm_readings
     ADD CONSTRAINT palm_readings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
 
+ALTER TABLE ONLY public.payment_orders
+    ADD CONSTRAINT payment_orders_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id);
+
+ALTER TABLE ONLY public.payment_orders
+    ADD CONSTRAINT payment_orders_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY public.prompt_enhancement_usage
     ADD CONSTRAINT prompt_enhancement_usage_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
@@ -1551,6 +1638,15 @@ ALTER TABLE ONLY public.qimen_charts
 
 ALTER TABLE ONLY public.qimen_charts
     ADD CONSTRAINT qimen_charts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id);
+
+ALTER TABLE ONLY public.redemption_codes
+    ADD CONSTRAINT redemption_codes_used_by_fkey FOREIGN KEY (used_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
 ALTER TABLE ONLY public.reminder_subscriptions
     ADD CONSTRAINT reminder_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
@@ -1581,6 +1677,15 @@ ALTER TABLE ONLY public.user_settings
 
 ALTER TABLE ONLY public.user_settings
     ADD CONSTRAINT user_settings_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+ALTER TABLE ONLY public.user_subscriptions
+    ADD CONSTRAINT user_subscriptions_order_id_fkey FOREIGN KEY (order_id) REFERENCES public.payment_orders(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.user_subscriptions
+    ADD CONSTRAINT user_subscriptions_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id) ON DELETE SET NULL;
+
+ALTER TABLE ONLY public.user_subscriptions
+    ADD CONSTRAINT user_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES identity.users(id) ON DELETE CASCADE;

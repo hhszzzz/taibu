@@ -5,9 +5,11 @@
  * - 请求解析与错误边界
  * - 复用 server-only chat orchestration
  * - 返回 JSON / SSE 响应
+ *
+ * 平台模型按实际用量计费：调用结束后按上游返回的 usage 入账，拿不到时按提示词与已产出文字估算。
  */
 
-import { createRequestObservation, observeRefund } from '@/lib/server/analysis';
+import { createRequestObservation } from '@/lib/server/analysis';
 import { NextRequest } from 'next/server';
 import { isTextUIPart } from 'ai';
 import {
@@ -15,7 +17,7 @@ import {
   callAIUIMessageResult,
 } from '@/lib/ai/ai';
 import { extractAIErrorInfo } from '@/lib/ai/ai-error';
-import { refundCreditsOrLog } from '@/lib/user/credits';
+import { usageBiller } from '@/lib/billing/account.server';
 import { jsonError, jsonOk } from '@/lib/api-utils';
 import {
   parseChatRequestBody,
@@ -28,9 +30,6 @@ export async function POST(request: NextRequest) {
   let streaming = false;
   let generationStarted = false;
   let streamTerminal: Promise<void> | undefined;
-  let creditDeducted = false;
-  let userId: string | null = null;
-  let canSkipCredit = false;
 
   try {
     const featureGuardResponse = await getGlobalAIFeatureGuardResponse();
@@ -51,14 +50,10 @@ export async function POST(request: NextRequest) {
       return preparedRequest;
     }
 
-    ({
-      creditDeducted,
-      userId,
-      canSkipCredit,
-    } = preparedRequest);
-
     const {
       body: resolvedBody,
+      userId,
+      metered,
       requestedModelId,
       reasoningEnabled,
       sanitizedMessages,
@@ -66,8 +61,11 @@ export async function POST(request: NextRequest) {
       fallbackPersonality,
       systemPrompt,
     } = preparedRequest;
+    const onUsage = metered && userId
+      ? usageBiller(userId, 'chat', resolvedBody.conversationId ? { type: 'conversation', id: resolvedBody.conversationId } : undefined)
+      : undefined;
 
-    observation.update({ billing: creditDeducted ? 'charged' : 'not-applicable' });
+    observation.update({ billing: onUsage ? 'metered' : 'not-applicable' });
     observation.phase('generation');
     generationStarted = true;
 
@@ -77,7 +75,7 @@ export async function POST(request: NextRequest) {
         fallbackPersonality,
         '',
         requestedModelId,
-        { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined }
+        { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined, onUsage }
       );
 
       const response = streamResult.toUIMessageStreamResponse({
@@ -93,11 +91,6 @@ export async function POST(request: NextRequest) {
             const hasVisibleText = responseMessage.parts.some(part => isTextUIPart(part) && part.text.trim().length > 0);
             const generation = isAborted ? 'aborted' : finishReason === 'error' ? 'failed' : hasVisibleText ? 'completed' : 'empty';
             observation.update({ generation });
-            // Keep the legacy chat policy: lack of visible stream text refunds,
-            // including abort; unlike analysis streams, visible partial text stays charged.
-            if (!hasVisibleText && userId && !canSkipCredit && creditDeducted) {
-              if (await observeRefund(() => refundCreditsOrLog(userId!, 1, 'chat stream empty-response'), observation)) creditDeducted = false;
-            }
             observation.finish();
           })();
           await streamTerminal;
@@ -112,7 +105,7 @@ export async function POST(request: NextRequest) {
       fallbackPersonality,
       requestedModelId,
       '',
-      { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined }
+      { reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined, onUsage }
     );
 
     observation.finish({ generation: content?.trim() ? 'completed' : 'empty' });
@@ -120,9 +113,6 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     observation.fail(generationStarted ? 'inference' : undefined);
     if (generationStarted) observation.update({ generation: 'failed' });
-    if (creditDeducted && userId && !canSkipCredit) {
-      await observeRefund(() => refundCreditsOrLog(userId!, 1, 'chat route failure'), observation);
-    }
 
     const errorInfo = extractAIErrorInfo(error);
     return jsonError(errorInfo.message, errorInfo.status, { code: errorInfo.code });

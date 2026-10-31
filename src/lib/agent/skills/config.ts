@@ -3,8 +3,6 @@
  * frontmatter with its name and description, then the instructions, plus optional text files beside it. Platform
  * skills (owner null) are the administrators'; a user's own skills serve only that user.
  */
-import type { MembershipType } from '@/lib/user/membership';
-
 /** pi's rules for a skill name: lowercase letters, digits and single hyphens, at most 64 characters. */
 export const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/u;
 export const SKILL_NAME_MAX = 64;
@@ -28,7 +26,6 @@ export type SkillView = {
   description: string;
   /** Raised whenever SKILL.md or the files change. */
   version: number;
-  requiredTier: MembershipType;
   enabled: boolean;
   /** `disable-model-invocation`: only the user's `/skill:名称` uses it; the model is not told about it. */
   manualOnly: boolean;
@@ -52,7 +49,6 @@ export type SkillDetail = SkillView & { content: string };
 export type SkillInput = {
   content?: string;
   files?: Array<{ path: string; content?: string }>;
-  requiredTier?: MembershipType;
   enabled?: boolean;
   sortOrder?: number;
 };

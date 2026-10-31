@@ -27,7 +27,6 @@ const BUILTIN: readonly SkillEntry[] = listAnalysisMethods().map((item) => {
     name: method.id,
     description: method.description,
     version: 0,
-    required_tier: 'free',
     is_enabled: true,
     disable_model_invocation: false,
     sort_order: 0,

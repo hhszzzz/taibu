@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import {
+  BillingIcon,
   ChartsIcon,
   ConnectorsIcon,
   FeatureFlagsIcon,
@@ -15,7 +16,6 @@ import {
   SettingsIcon,
   ShareLinkIcon,
   SkillIcon,
-  UpgradeIcon,
 } from '@/lib/navigation/nav-icons';
 import type { SettingsCenterTab } from '@/lib/settings-center';
 
@@ -47,7 +47,7 @@ function withDefaultSize(Icon: ComponentType<{ className?: string; size?: number
 export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<SettingsCenterIconProps>> = {
   profile: withDefaultSize(ProfileIcon),
   general: withDefaultSize(SettingsIcon),
-  upgrade: withDefaultSize(UpgradeIcon),
+  billing: withDefaultSize(BillingIcon),
   shares: withDefaultSize(ShareLinkIcon),
   personalization: withDefaultSize(PersonalizationIcon),
   byok: withDefaultSize(KeyIcon),
@@ -59,7 +59,7 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   'mcp-service': withDefaultSize(McpIcon),
   'admin-announcements': withDefaultSize(MegaphoneIcon),
   'admin-features': withDefaultSize(FeatureFlagsIcon),
-  'admin-keys': withDefaultSize(KeyIcon),
+  'admin-billing': withDefaultSize(BillingIcon),
   'admin-ai-services': withDefaultSize(ServerIcon),
   'admin-agent-extensions': withDefaultSize(PluginIcon),
 };

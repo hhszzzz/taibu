@@ -12,15 +12,12 @@ import { FolderUp, X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import { Select } from '@/components/ui/Select';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { MEMBERSHIP_TIERS, MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import {
   SKILL_CONTENT_MAX_BYTES, SKILL_DOCUMENT, SKILL_FILES_TOTAL_MAX_BYTES, formatSkillBytes,
-  type SkillInput, type SkillScope, type SkillView,
+  type SkillInput, type SkillView,
 } from '@/lib/agent/skills/config';
 import { readPickedSkill } from '@/lib/agent/skills/folder';
-import type { MembershipType } from '@/lib/user/membership';
 
 export type SkillEditorSeed = { skill: SkillView | null };
 
@@ -44,8 +41,7 @@ function frontmatterValue(content: string, key: string) {
   return inline.replace(/^['"]|['"]$/gu, '');
 }
 
-export function SkillEditor({ scope, seed, onClose, onSubmit }: {
-  scope: SkillScope;
+export function SkillEditor({ seed, onClose, onSubmit }: {
   /** Null while closed. */
   seed: SkillEditorSeed | null;
   onClose: () => void;
@@ -55,15 +51,13 @@ export function SkillEditor({ scope, seed, onClose, onSubmit }: {
   const titleId = useId();
   const folderRef = useRef<HTMLInputElement | null>(null);
   const uploadRef = useRef<HTMLButtonElement>(null);
-  const [state, setState] = useState<{ seed: SkillEditorSeed | null; picked: Picked | null; tier: MembershipType }>(
-    { seed: null, picked: null, tier: 'free' },
-  );
+  const [state, setState] = useState<{ seed: SkillEditorSeed | null; picked: Picked | null }>({ seed: null, picked: null });
   const [saving, setSaving] = useState(false);
   const [reading, setReading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // A new seed (opening the dialog) starts empty; closing keeps the last one for the exit animation.
   if (seed && seed !== state.seed) {
-    setState({ seed, picked: null, tier: seed.skill?.requiredTier ?? 'free' });
+    setState({ seed, picked: null });
     setError(null);
   }
   const picked = state.picked;
@@ -100,7 +94,6 @@ export function SkillEditor({ scope, seed, onClose, onSubmit }: {
         content: picked.content,
         files: picked.files.map(file => ({ path: file.path, content: file.content })),
         enabled: state.seed.skill?.enabled ?? true,
-        ...(scope === 'platform' ? { requiredTier: state.tier } : {}),
       });
     } catch (problem) {
       setError(problem instanceof Error ? problem.message : '保存失败');
@@ -139,17 +132,6 @@ export function SkillEditor({ scope, seed, onClose, onSubmit }: {
                 <dt>文件</dt><dd>{SKILL_DOCUMENT} 与 {picked.files.length} 个附属文件 · {formatSkillBytes(size)}</dd>
                 {picked.skipped.length ? <><dt>跳过</dt><dd>{picked.skipped.length} 个不支持的文件</dd></> : null}
               </dl>
-            ) : null}
-            {scope === 'platform' ? (
-              <div className="settings-field">
-                <span>会员等级</span>
-                <Select
-                  ariaLabel="会员等级"
-                  value={state.tier}
-                  onChange={tier => setState(current => ({ ...current, tier }))}
-                  options={MEMBERSHIP_TIERS.map(tier => ({ value: tier, label: `${MEMBERSHIP_TIER_LABELS[tier]} 及以上` }))}
-                />
-              </div>
             ) : null}
           </div>
           <div className="mcp-editor-foot">

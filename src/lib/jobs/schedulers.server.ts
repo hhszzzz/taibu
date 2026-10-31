@@ -17,6 +17,8 @@ export const MAINTENANCE_SCHEDULERS: readonly MaintenanceSchedulerDefinition[] =
   { id: 'reminders', job: 'reminders', repeat: { every: 5 * 60 * 1000 } },
   { id: 'agent-schedules', job: 'agent-schedules', repeat: { every: 60 * 1000 } },
   { id: 'agent-attachments-cleanup', job: 'agent-attachments-cleanup', repeat: { every: 15 * 60 * 1000 } },
+  // Ends subscriptions past their end and pending payment orders nobody paid.
+  { id: 'billing-maintenance', job: 'billing-maintenance', repeat: { every: 10 * 60 * 1000 } },
   // BullMQ v6 cron patterns include seconds; 03:17 Asia/Shanghai.
   { id: 'notifications-prune', job: 'notifications-prune', repeat: { pattern: '0 17 3 * * *', tz: 'Asia/Shanghai' } },
   { id: 'agent-retention', job: 'agent-retention', repeat: { pattern: '0 37 3 * * *', tz: 'Asia/Shanghai' } },

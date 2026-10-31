@@ -50,7 +50,7 @@ export function ScheduledTasksPage() {
 
   useEffect(() => {
     if (sessionLoading) return;
-    if (!userId) { setState({ status: 'ready', schedules: [], allowance: { tier: 'free', limit: 0, used: 0 } }); return; }
+    if (!userId) { setState({ status: 'ready', schedules: [], allowance: { limit: 0, used: 0 } }); return; }
     const controller = new AbortController();
     setState({ status: 'loading' });
     client.list(controller.signal).then(
@@ -139,9 +139,9 @@ export function ScheduledTasksPage() {
       <header className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl text-foreground">定时任务</h1>
-          <p className="mt-1 text-sm text-foreground-secondary">按每天、每周、每月或固定间隔让 Agent 在固定对话里追加一轮；每次运行照常扣积分。</p>
+          <p className="mt-1 text-sm text-foreground-secondary">按每天、每周、每月或固定间隔让 Agent 在固定对话里追加一轮；始终使用平台模型，每次运行按用量扣费。</p>
           {state.status === 'ready' ? (
-            <p className="mt-1 text-xs text-foreground-tertiary">当前会员最多 {state.allowance.limit} 个，已用 {state.allowance.used} 个。</p>
+            <p className="mt-1 text-xs text-foreground-tertiary">每人最多 {state.allowance.limit} 个，已用 {state.allowance.used} 个。</p>
           ) : null}
         </div>
         <Button

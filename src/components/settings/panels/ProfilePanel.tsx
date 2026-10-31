@@ -6,7 +6,8 @@ import Link from 'next/link';
 import { Camera, ChevronRight } from 'lucide-react';
 import { ensureUserRecord, updateNickname } from '@/lib/auth';
 import { uploadAvatarForCurrentUser } from '@/lib/user/profile';
-import { buildMembershipInfo, formatMembershipExpiryDate, getPlanConfig } from '@/lib/user/membership';
+import { formatUsd } from '@/lib/billing/money';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getUserEmailDisplay } from '@/lib/user-email';
 import { getSettingsCenterRouteTarget } from '@/lib/settings-center';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
@@ -38,7 +39,8 @@ export default function ProfilePanel() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const ensuredUserIdRef = useRef<string | null>(null);
   const { user, loading: sessionLoading } = useSessionSafe();
-  const { profile, loading: profileLoading, resolved: profileResolved, error: profileError, refresh: refreshProfile } = useCurrentUserProfile({ enabled: !!user });
+  const { profile, balance, loading: profileLoading, resolved: profileResolved, error: profileError, refresh: refreshProfile } = useCurrentUserProfile({ enabled: !!user });
+  const { isFeatureEnabled } = useFeatureToggles();
   const [nickname, setNickname] = useState('');
   const [originalNickname, setOriginalNickname] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -159,9 +161,7 @@ export default function ProfilePanel() {
 
   const hasNicknameChanges = nickname !== originalNickname;
   const displayEmail = getUserEmailDisplay(user);
-  const membership = buildMembershipInfo(profile);
-  const planName = getPlanConfig(membership.type).name;
-  const membershipText = membership.expiresAt ? `${planName} · ${formatMembershipExpiryDate(membership.expiresAt)} 到期` : planName;
+  const balanceText = balance ? `可用 ${formatUsd(balance.spendableMicros)}` : '—';
 
   return (
     <div>
@@ -200,12 +200,12 @@ export default function ProfilePanel() {
           <div className="settings-group">
             <SettingsRow label="电子邮箱" control={<span className="text-sm text-foreground-secondary">{displayEmail}</span>} />
             <SettingsRow
-              label="会员"
-              control={(
-                <Link href={getSettingsCenterRouteTarget('upgrade')} className="inline-flex items-center gap-1 text-sm text-accent hover:text-accent-hover">
-                  {membershipText}<ChevronRight size={15} aria-hidden="true" />
+              label="余额"
+              control={isFeatureEnabled('billing') ? (
+                <Link href={getSettingsCenterRouteTarget('billing')} className="inline-flex items-center gap-1 text-sm tabular-nums text-accent hover:text-accent-hover">
+                  {balanceText}<ChevronRight size={15} aria-hidden="true" />
                 </Link>
-              )}
+              ) : <span className="text-sm tabular-nums text-foreground-secondary">{balanceText}</span>}
             />
           </div>
         </div>

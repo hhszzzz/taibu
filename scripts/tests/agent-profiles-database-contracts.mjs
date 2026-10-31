@@ -18,7 +18,7 @@ export async function agentProfilesDatabaseContracts(t, { sql, asActor, adminId 
   await t.test('roles are read and written by administrators only', async () => {
     assert.equal(await add(adminId, 'archivist', {
       tools: { sql: `'{"inherit": false, "allow": ["web", "mcp:exa"], "deny": []}'::jsonb` }, skills: { sql: "ARRAY['case-review']" },
-      modes: { sql: "ARRAY['parallel']" }, model: 'fixture-model', reasoning_effort: 'high', required_tier: 'plus',
+      modes: { sql: "ARRAY['parallel']" }, model: 'fixture-model', reasoning_effort: 'high',
     }), 'archivist');
     await assert.rejects(add(member, 'forged'), /42501/, 'a member cannot add a role');
     assert.equal(await asActor(member, 'SELECT count(*) FROM public.agent_profiles;'), '0', 'nor read one');
@@ -26,8 +26,8 @@ export async function agentProfilesDatabaseContracts(t, { sql, asActor, adminId 
     assert.equal(await asActor(member, "DELETE FROM public.agent_profiles WHERE name='archivist' RETURNING name;"), '');
     await assert.rejects(asActor(null, 'SELECT count(*) FROM public.agent_profiles;', 'anon'), /42501/);
 
-    assert.equal(await asActor(adminId, "SELECT name || ':' || array_to_string(modes, '+') || ':' || (tools->'allow'->>1) || ':' || required_tier FROM public.agent_profiles;"),
-      'archivist:parallel:mcp:exa:plus');
+    assert.equal(await asActor(adminId, "SELECT name || ':' || array_to_string(modes, '+') || ':' || (tools->'allow'->>1) FROM public.agent_profiles;"),
+      'archivist:parallel:mcp:exa');
     assert.equal(await asActor(adminId, "UPDATE public.agent_profiles SET description='整理资料' WHERE name='archivist' RETURNING updated_at > created_at;"), 't');
     assert.equal(await asActor(adminId, "DELETE FROM public.agent_profiles WHERE name='archivist' RETURNING name;"), 'archivist');
   });
@@ -39,12 +39,11 @@ export async function agentProfilesDatabaseContracts(t, { sql, asActor, adminId 
       { display_name: '   ' }, { display_name: '一二三四五六七八九十一二三' }, { description: { sql: "repeat('述', 301)" } },
       { instructions: { sql: "repeat('令', 8001)" } }, { tools: { sql: "'[]'::jsonb" } }, { skills: { sql: "ARRAY['a','b','c','d','e']" } },
       { model: '' }, { reasoning_effort: 'extreme' }, { modes: { sql: 'ARRAY[]::text[]' } }, { modes: { sql: "ARRAY['solo']" } },
-      { required_tier: 'gold' },
     ]) await assert.rejects(add(adminId, 'shape', extra), /23514/, JSON.stringify(extra));
     assert.equal(await add(adminId, 'scribe'), 'scribe');
     await assert.rejects(add(adminId, 'scribe'), /23505/);
-    assert.equal(await asActor(adminId, "SELECT tools::text || ':' || array_to_string(modes, '+') || ':' || required_tier FROM public.agent_profiles WHERE name='scribe';"),
-      '{"deny": [], "allow": [], "inherit": false}:parallel+background:free', 'a role defaults to no tools, both modes and every member');
+    assert.equal(await asActor(adminId, "SELECT tools::text || ':' || array_to_string(modes, '+') FROM public.agent_profiles WHERE name='scribe';"),
+      '{"deny": [], "allow": [], "inherit": false}:parallel+background', 'a role defaults to no tools and both modes');
     await asActor(adminId, "DELETE FROM public.agent_profiles WHERE name='scribe';");
   });
 }

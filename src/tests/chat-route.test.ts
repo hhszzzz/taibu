@@ -25,13 +25,19 @@ const waitForMicrotask = () => new Promise((resolve) => setTimeout(resolve, 0));
 interface MockState {
     events: string[];
     promptCalls: number;
-    authInfoCalls: number;
-    useCreditCalls: number;
-    addCreditCalls: number;
+    balanceCalls: number;
     aiUiCalls: number;
     rateLimitCalls: number;
     rateLimitEndpoint: string | null;
+    balance: number | Error;
+    /** One entry per biller the route created: who pays, for which source and reference. */
+    billers: Array<{ userId: string; source: string; reference?: { type: string; id: string } }>;
+    charges: unknown[];
+    /** The options of the last model call. */
+    aiOptions: Record<string, unknown> | null;
 }
+
+const PRICED = { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null };
 
 function createUIChunkStream(chunks: Array<Record<string, unknown>>): ReadableStream<Record<string, unknown>> {
     return new ReadableStream<Record<string, unknown>>({
@@ -98,53 +104,53 @@ function createMockUIMessageResult(
 
 function setupRouteMocks(
     t: { after: (fn: () => void) => void },
-    streamBody: ReadableStream<unknown>
+    streamBody: ReadableStream<unknown>,
+    model: Record<string, unknown> = {},
 ): MockState {
     const routeModulePath = require.resolve('../app/api/chat/route');
     const directPrepareRouteModulePath = require.resolve('../app/api/chat/direct/prepare/route');
     const requestModulePath = require.resolve('../lib/server/chat/request');
     const aiModule = require('../lib/ai/ai') as any;
-    const creditsModule = require('../lib/user/credits') as any;
+    const billingModule = require('../lib/billing/account.server') as any;
     const aiConfigServerModule = require('../lib/server/ai-config') as any;
-    const aiAccessModule = require('../lib/ai/ai-access') as any;
     const promptBuilderModule = require('../lib/ai/prompt-builder') as any;
     const contextModule = require('../lib/db/context.server') as any;
     const apiUtilsModule = require('../lib/api-utils') as any;
     const rateLimitModule = require('../lib/rate-limit') as any;
 
-    const originalCallAIStream = aiModule.callAIStream;
-    const originalCallAIUIMessageResult = aiModule.callAIUIMessageResult;
-    const originalGetUserAuthInfo = creditsModule.getUserAuthInfo;
-    const originalAttemptCreditUse = creditsModule.attemptCreditUse;
-    const originalUseCredit = creditsModule.useCredit;
-    const originalRefundCreditsOrLog = creditsModule.refundCreditsOrLog;
-    const originalAddCredits = creditsModule.addCredits;
-    const originalGetModelConfigAsync = aiConfigServerModule.getModelConfigAsync;
-    const originalGetDefaultModelConfigAsync = aiConfigServerModule.getDefaultModelConfigAsync;
-    const originalIsModelAllowedForMembership = aiAccessModule.isModelAllowedForMembership;
-    const originalIsReasoningAllowedForMembership = aiAccessModule.isReasoningAllowedForMembership;
-    const originalBuildPromptWithSources = promptBuilderModule.buildPromptWithSources;
-    const originalBuildMinimalChatSystemPrompt = promptBuilderModule.buildMinimalChatSystemPrompt;
-    const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
-    const originalResolvePersonalities = promptBuilderModule.resolvePersonalities;
-    const originalSystemDb = contextModule.systemDb;
-    const originalRequireUserContext = apiUtilsModule.requireUserContext;
-    const originalCheckRateLimit = rateLimitModule.checkRateLimit;
+    const originals = {
+        callAIStream: aiModule.callAIStream,
+        callAIUIMessageResult: aiModule.callAIUIMessageResult,
+        getSpendableMicros: billingModule.getSpendableMicros,
+        usageBiller: billingModule.usageBiller,
+        getModelConfigAsync: aiConfigServerModule.getModelConfigAsync,
+        getDefaultModelConfigAsync: aiConfigServerModule.getDefaultModelConfigAsync,
+        buildPromptWithSources: promptBuilderModule.buildPromptWithSources,
+        buildMinimalChatSystemPrompt: promptBuilderModule.buildMinimalChatSystemPrompt,
+        calculatePromptBudget: promptBuilderModule.calculatePromptBudget,
+        resolvePersonalities: promptBuilderModule.resolvePersonalities,
+        systemDb: contextModule.systemDb,
+        requireUserContext: apiUtilsModule.requireUserContext,
+        checkRateLimit: rateLimitModule.checkRateLimit,
+    };
 
     const state: MockState = {
         events: [],
         promptCalls: 0,
-        authInfoCalls: 0,
-        useCreditCalls: 0,
-        addCreditCalls: 0,
+        balanceCalls: 0,
         aiUiCalls: 0,
         rateLimitCalls: 0,
         rateLimitEndpoint: null,
+        balance: 1_000_000,
+        billers: [],
+        charges: [],
+        aiOptions: null,
     };
 
     aiModule.callAIStream = async () => createUIChunkStream([]);
-    aiModule.callAIUIMessageResult = async () => {
+    aiModule.callAIUIMessageResult = async (...args: unknown[]) => {
         state.aiUiCalls += 1;
+        state.aiOptions = (args[4] ?? null) as Record<string, unknown> | null;
         const chunks: Array<Record<string, unknown>> = [];
         const reader = streamBody.getReader();
         while (true) {
@@ -172,35 +178,15 @@ function setupRouteMocks(
 
         return createMockUIMessageResult(chunks, { parts: responseParts });
     };
-    creditsModule.getUserAuthInfo = async () => {
-        state.events.push('account');
-        state.authInfoCalls += 1;
-        return {
-            credits: 1,
-            effectiveMembership: 'free',
-            hasCredits: true,
-        };
+    billingModule.getSpendableMicros = async () => {
+        state.events.push('balance');
+        state.balanceCalls += 1;
+        if (state.balance instanceof Error) throw state.balance;
+        return state.balance;
     };
-    creditsModule.useCredit = async () => {
-        state.useCreditCalls += 1;
-        return 0;
-    };
-    creditsModule.attemptCreditUse = async () => {
-        state.events.push('debit');
-        state.useCreditCalls += 1;
-        return {
-            ok: true,
-            remaining: 0,
-        };
-    };
-    creditsModule.addCredits = async () => {
-        state.addCreditCalls += 1;
-        return 1;
-    };
-    creditsModule.refundCreditsOrLog = async () => {
-        state.events.push('refund');
-        state.addCreditCalls += 1;
-        return true;
+    billingModule.usageBiller = (userId: string, source: string, reference?: { type: string; id: string }) => {
+        state.billers.push({ userId, source, ...(reference ? { reference } : {}) });
+        return async (report: unknown) => { state.charges.push(report); };
     };
 
     const mockModelConfig = {
@@ -209,12 +195,11 @@ function setupRouteMocks(
         vendor: 'deepseek',
         supportsReasoning: true,
         supportsVision: false,
-        requiredTier: 'free',
+        pricing: PRICED,
+        ...model,
     };
     aiConfigServerModule.getModelConfigAsync = async () => mockModelConfig;
     aiConfigServerModule.getDefaultModelConfigAsync = async () => mockModelConfig;
-    aiAccessModule.isModelAllowedForMembership = () => true;
-    aiAccessModule.isReasoningAllowedForMembership = () => true;
 
     promptBuilderModule.calculatePromptBudget = async () => 1024;
     promptBuilderModule.resolvePersonalities = () => ({ personalities: ['general'] });
@@ -237,6 +222,7 @@ function setupRouteMocks(
     };
     apiUtilsModule.requireUserContext = async () => ({
         user: { id: 'user-1' },
+        db: createMockScopedDb({}),
     });
     rateLimitModule.checkRateLimit = async (_identifier: string, endpoint: string) => {
         state.events.push('rate-limit');
@@ -270,24 +256,19 @@ function setupRouteMocks(
     delete require.cache[requestModulePath];
 
     t.after(() => {
-        aiModule.callAIStream = originalCallAIStream;
-        aiModule.callAIUIMessageResult = originalCallAIUIMessageResult;
-        creditsModule.getUserAuthInfo = originalGetUserAuthInfo;
-        creditsModule.attemptCreditUse = originalAttemptCreditUse;
-        creditsModule.useCredit = originalUseCredit;
-        creditsModule.refundCreditsOrLog = originalRefundCreditsOrLog;
-        creditsModule.addCredits = originalAddCredits;
-        aiConfigServerModule.getModelConfigAsync = originalGetModelConfigAsync;
-        aiConfigServerModule.getDefaultModelConfigAsync = originalGetDefaultModelConfigAsync;
-        aiAccessModule.isModelAllowedForMembership = originalIsModelAllowedForMembership;
-        aiAccessModule.isReasoningAllowedForMembership = originalIsReasoningAllowedForMembership;
-        promptBuilderModule.buildPromptWithSources = originalBuildPromptWithSources;
-        promptBuilderModule.buildMinimalChatSystemPrompt = originalBuildMinimalChatSystemPrompt;
-        promptBuilderModule.calculatePromptBudget = originalGetPromptBudget;
-        promptBuilderModule.resolvePersonalities = originalResolvePersonalities;
-        contextModule.systemDb = originalSystemDb;
-        apiUtilsModule.requireUserContext = originalRequireUserContext;
-        rateLimitModule.checkRateLimit = originalCheckRateLimit;
+        aiModule.callAIStream = originals.callAIStream;
+        aiModule.callAIUIMessageResult = originals.callAIUIMessageResult;
+        billingModule.getSpendableMicros = originals.getSpendableMicros;
+        billingModule.usageBiller = originals.usageBiller;
+        aiConfigServerModule.getModelConfigAsync = originals.getModelConfigAsync;
+        aiConfigServerModule.getDefaultModelConfigAsync = originals.getDefaultModelConfigAsync;
+        promptBuilderModule.buildPromptWithSources = originals.buildPromptWithSources;
+        promptBuilderModule.buildMinimalChatSystemPrompt = originals.buildMinimalChatSystemPrompt;
+        promptBuilderModule.calculatePromptBudget = originals.calculatePromptBudget;
+        promptBuilderModule.resolvePersonalities = originals.resolvePersonalities;
+        contextModule.systemDb = originals.systemDb;
+        apiUtilsModule.requireUserContext = originals.requireUserContext;
+        rateLimitModule.checkRateLimit = originals.checkRateLimit;
         delete require.cache[routeModulePath];
         delete require.cache[directPrepareRouteModulePath];
         delete require.cache[requestModulePath];
@@ -378,110 +359,76 @@ function createInvalidJsonRequest(url: string) {
     });
 }
 
-test('chat route does not charge when stream ends before visible content', async (t) => {
-    const streamBody = createUIChunkStream([
-        { type: 'reasoning-delta', id: 'r1', delta: 'thinking' },
-    ]);
-    const state = setupRouteMocks(t, streamBody);
+test('chat route meters the member: the model call carries their biller, which charges what the provider reports', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: '你好' }]));
     const { POST } = await import('../app/api/chat/route');
 
-    const response = await POST(createChatRequest());
+    const response = await POST(createChatRequest({ conversationId: 'conversation-a' }));
     await response.text();
     await waitForMicrotask();
 
-    assert.equal(state.authInfoCalls, 1);
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.addCreditCalls, 1);
+    assert.equal(response.status, 200);
+    assert.deepEqual(state.events, ['balance', 'rate-limit', 'prompt']);
+    assert.deepEqual(state.billers, [{ userId: 'user-1', source: 'chat', reference: { type: 'conversation', id: 'conversation-a' } }]);
+    const onUsage = state.aiOptions?.onUsage as ((report: unknown) => Promise<void>) | undefined;
+    assert.equal(typeof onUsage, 'function');
+    const report = { model: { id: 'deepseek-chat', pricing: PRICED }, usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 } };
+    await onUsage!(report);
+    assert.deepEqual(state.charges, [report]);
 });
 
-test('chat route blocks before deduction when combined auth info reports no credits', async (t) => {
-    const streamBody = createUIChunkStream([
-        { type: 'text-delta', id: 't1', delta: '你好' },
-    ]);
-    const state = setupRouteMocks(t, streamBody);
-    const creditsModule = require('../lib/user/credits') as any;
-    creditsModule.getUserAuthInfo = async () => {
-        state.events.push('account');
-        state.authInfoCalls += 1;
-        return {
-            credits: 0,
-            effectiveMembership: 'free',
-            hasCredits: false,
-        };
-    };
-
+test('chat route refuses an empty balance with 402 before the rate limit, the prompt and the model', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: '你好' }]));
+    state.balance = 0;
     const { POST } = await import('../app/api/chat/route');
 
     const response = await POST(createChatRequest());
     const payload = await response.json();
 
     assert.equal(response.status, 402);
-    assert.equal(payload.code, 'INSUFFICIENT_CREDITS');
-    assert.equal(state.authInfoCalls, 1);
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.rateLimitCalls, 0);
+    assert.equal(payload.code, 'INSUFFICIENT_BALANCE');
+    assert.equal(payload.error, '余额不足，请充值、兑换或订阅后再试');
+    assert.deepEqual(state.events, ['balance']);
     assert.equal(state.aiUiCalls, 0);
+    assert.deepEqual(state.billers, []);
 });
 
-test('chat route rejects streamed requests when upfront credit deduction fails', async (t) => {
-    const streamBody = createUIChunkStream([
-        { type: 'text-delta', id: 't1', delta: '你好' },
-    ]);
-    const state = setupRouteMocks(t, streamBody);
-    const creditsModule = require('../lib/user/credits') as any;
-    creditsModule.attemptCreditUse = async () => {
-        state.events.push('debit');
-        state.useCreditCalls += 1;
-        return {
-            ok: false,
-            reason: 'deduction_failed',
-        };
-    };
-
-    const { POST } = await import('../app/api/chat/route');
-
-    const response = await POST(createChatRequest());
-    const payload = await response.json();
-
-    assert.equal(response.status, 500);
-    assert.equal(payload.code, 'CREDIT_DEDUCTION_FAILED');
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.rateLimitCalls, 0);
-    assert.equal(state.aiUiCalls, 0);
-});
-
-test('chat route keeps upfront charge when stream produces visible content', async (t) => {
-    const streamBody = createUIChunkStream([
-        { type: 'reasoning-delta', id: 'r1', delta: 'thinking' },
-        { type: 'text-delta', id: 't1', delta: '你' },
-        { type: 'text-delta', id: 't1', delta: '好' },
-    ]);
-    const state = setupRouteMocks(t, streamBody);
+test('a free model runs on an empty balance without reading it, and is still metered for the usage log', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]), {
+        pricing: { ...PRICED, input: 0, output: 0 },
+    });
+    state.balance = 0;
     const { POST } = await import('../app/api/chat/route');
 
     const response = await POST(createChatRequest());
     await response.text();
-    await waitForMicrotask();
-
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.addCreditCalls, 0);
+    assert.equal(response.status, 200);
+    assert.deepEqual(state.events, ['rate-limit', 'prompt']);
+    assert.equal(state.billers.length, 1);
 });
 
-test('chat route keeps charge and does not refund when stream fails after visible content', async (t) => {
-    const failingStream = createUIChunkStream([
-        { type: 'text-delta', id: 't1', delta: 'partial' },
-        { type: 'error', errorText: 'stream read failed' },
-    ]);
-
-    const state = setupRouteMocks(t, failingStream);
+test('an unreadable balance fails closed with 500 and never reaches the model', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([]));
+    state.balance = new Error('database down');
     const { POST } = await import('../app/api/chat/route');
 
     const response = await POST(createChatRequest());
-    await response.text().catch(() => undefined);
-    await waitForMicrotask();
+    assert.equal(response.status, 500);
+    assert.equal((await response.json()).code, 'BALANCE_UNAVAILABLE');
+    assert.equal(state.rateLimitCalls, 0);
+    assert.equal(state.aiUiCalls, 0);
+});
 
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.addCreditCalls, 0);
+test('chat route refuses an unpriced model with 403 before the balance is read', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([]), { pricing: { ...PRICED, output: null } });
+    const { POST } = await import('../app/api/chat/route');
+
+    const response = await POST(createChatRequest());
+    assert.equal(response.status, 403);
+    assert.equal((await response.json()).code, 'MODEL_UNPRICED');
+    assert.equal(state.balanceCalls, 0);
+    assert.equal(state.rateLimitCalls, 0);
+    assert.equal(state.aiUiCalls, 0);
 });
 
 test('chat route no longer uses the legacy BYOK server proxy path', async (t) => {
@@ -495,10 +442,10 @@ test('chat route no longer uses the legacy BYOK server proxy path', async (t) =>
     await waitForMicrotask();
 
     assert.equal(response.status, 200);
-    assert.equal(state.authInfoCalls, 1);
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.addCreditCalls, 0);
+    assert.equal(state.balanceCalls, 1, 'the platform model is admitted and metered as usual');
+    assert.equal(state.billers.length, 1);
     assert.equal(state.aiUiCalls, 1);
+    assert.doesNotMatch(JSON.stringify(state.aiOptions), /sk-test/);
 });
 
 test('chat route returns 400 for invalid JSON bodies', async (t) => {
@@ -512,8 +459,9 @@ test('chat route returns 400 for invalid JSON bodies', async (t) => {
     assert.equal(payload.error, '请求体不是合法 JSON');
 });
 
-test('chat direct prepare builds prompt context without deducting credits', async (t) => {
+test('chat direct prepare builds prompt context without reading the balance', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([]));
+    state.balance = 0;
     const { POST } = await import('../app/api/chat/direct/prepare/route');
 
     const response = await POST(createDirectPrepareRequest());
@@ -525,9 +473,8 @@ test('chat direct prepare builds prompt context without deducting credits', asyn
     };
 
     assert.equal(response.status, 200);
-    assert.equal(state.authInfoCalls, 1);
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.addCreditCalls, 0);
+    assert.equal(state.balanceCalls, 0);
+    assert.deepEqual(state.billers, []);
     assert.equal(state.rateLimitCalls, 1);
     assert.equal(state.rateLimitEndpoint, '/api/chat/direct/prepare');
     assert.equal(payload.requestedModelId, 'gpt-4.1-mini');
@@ -556,16 +503,12 @@ test('chat direct prepare returns 429 when BYOK rate limit is exhausted', async 
 
     assert.equal(response.status, 429);
     assert.equal(payload.error, '请求过于频繁，请稍后再试');
-    assert.equal(state.rateLimitCalls, 1);
     assert.equal(state.rateLimitEndpoint, '/api/chat/direct/prepare');
-    assert.equal(state.authInfoCalls, 1);
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.addCreditCalls, 0);
     assert.equal(state.promptCalls, 0);
-    assert.deepEqual(state.events, ['account', 'rate-limit']);
+    assert.deepEqual(state.events, ['rate-limit']);
 });
 
-test('managed chat uses the shared limit after debit and before prompt assembly', async (t) => {
+test('managed chat uses the shared limit after the balance check and before prompt assembly', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
     const limits = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
     const original = limits.checkRateLimit;
@@ -580,93 +523,44 @@ test('managed chat uses the shared limit after debit and before prompt assembly'
     const response = await POST(createChatRequest());
     await response.text();
     assert.equal(response.status, 200);
-    assert.deepEqual(state.events, ['account', 'debit', 'rate-limit', 'prompt']);
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.addCreditCalls, 0);
+    assert.deepEqual(state.events, ['balance', 'rate-limit', 'prompt']);
     assert.equal(state.aiUiCalls, 1);
 });
 
-// chat-use-case.test.ts owns the complete limiter × refund matrix. The route
-// checks each distinct HTTP mapping and both false-return/throw refund adapters.
-for (const [limiter, refund] of [
-    ['deny', 'success'], ['throw', 'success'], ['deny', 'failure'], ['throw', 'throw'],
-] as const) {
-    test(`managed route limiter ${limiter}, refund ${refund}: controlled outcome without AI execution`, async (t) => {
+for (const limiter of ['deny', 'throw'] as const) {
+    test(`managed route limiter ${limiter}: controlled outcome without prompt or AI execution`, async (t) => {
         const state = setupRouteMocks(t, createUIChunkStream([]));
         const limits = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
-        const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
         t.mock.method(limits, 'checkRateLimit', async () => {
             state.events.push('rate-limit');
             state.rateLimitCalls += 1;
             if (limiter === 'throw') throw new Error('limiter infrastructure failed');
             return { allowed: false, remaining: 0, resetAt: new Date() };
         });
-        t.mock.method(credits, 'refundCreditsOrLog', async (userId: string, amount: number, context: string) => {
-            state.events.push('refund');
-            state.addCreditCalls += 1;
-            assert.equal(userId, 'user-1');
-            assert.equal(amount, 1);
-            assert.equal(context, 'chat rate-limit admission');
-            if (refund === 'throw') throw new Error('refund infrastructure failed');
-            return refund === 'success';
-        });
         const { POST } = await import('../app/api/chat/route');
         const response = await POST(createChatRequest());
         const payload = await response.json();
-        if (refund !== 'success') {
-            assert.equal(response.status, 500);
-            assert.equal(payload.code, 'CREDIT_REFUND_FAILED');
-            assert.equal(payload.refundFailed, true);
-        } else if (limiter === 'throw') {
+        if (limiter === 'throw') {
             assert.equal(response.status, 500);
             assert.equal(payload.code, 'RATE_LIMIT_FAILED');
         } else {
             assert.equal(response.status, 429);
             assert.equal(payload.error, '请求过于频繁，请稍后再试');
         }
-        assert.deepEqual(state.events, ['account', 'debit', 'rate-limit', 'refund']);
-        assert.equal(state.useCreditCalls, 1);
-        assert.equal(state.rateLimitCalls, 1);
-        assert.equal(state.addCreditCalls, 1);
+        assert.deepEqual(state.events, ['balance', 'rate-limit']);
         assert.equal(state.promptCalls, 0);
         assert.equal(state.aiUiCalls, 0);
     });
 }
 
-test('direct account validation failure does not consume a rate slot or debit', async (t) => {
-    const state = setupRouteMocks(t, createUIChunkStream([]));
-    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-    t.mock.method(credits, 'getUserAuthInfo', async () => {
-        state.events.push('account');
-        throw new credits.UserStateResolutionError('account unavailable', 'USER_QUERY_FAILED');
+test('chat route validates the carried document and search flag, and admits search for every member', async (t) => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
+    const webSearch = require('../lib/ai/web-search.server') as typeof import('../lib/ai/web-search.server');
+    const searched: string[] = [];
+    t.mock.method(webSearch, 'searchChatWeb', async (query: string) => {
+        searched.push(query);
+        return { status: 'unavailable' as const, query };
     });
-    const { POST } = await import('../app/api/chat/direct/prepare/route');
-    const response = await POST(createDirectPrepareRequest());
-    assert.equal(response.status, 500);
-    assert.equal((await response.json()).code, 'USER_QUERY_FAILED');
-    assert.deepEqual(state.events, ['account']);
-    assert.equal(state.rateLimitCalls, 0);
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.addCreditCalls, 0);
-    assert.equal(state.promptCalls, 0);
-});
-
-test('chat route refuses a member-only model without debit or AI execution', async (t) => {
-    const state = setupRouteMocks(t, createUIChunkStream([]));
-    const access = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
-    t.mock.method(access, 'isModelAllowedForMembership', () => false);
-    const { POST } = await import('../app/api/chat/route');
-
-    const response = await POST(createChatRequest());
-    assert.equal(response.status, 403);
-    assert.equal((await response.json()).error, '当前会员等级无法使用该模型');
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.rateLimitCalls, 0);
-    assert.equal(state.aiUiCalls, 0);
-});
-
-test('chat route validates the carried document and search flag, and refuses search to a free account before any debit', async (t) => {
-    const state = setupRouteMocks(t, createUIChunkStream([]));
     const { POST } = await import('../app/api/chat/route');
 
     for (const [overrides, error] of [
@@ -678,16 +572,14 @@ test('chat route validates the carried document and search flag, and refuses sea
         assert.equal(response.status, 400);
         assert.equal((await response.json()).error, error);
     }
-    const denied = await POST(createChatRequest({ webSearch: true }));
-    assert.equal(denied.status, 403);
-    assert.deepEqual(await denied.json(), { success: false, error: '免费用户无法使用网络搜索功能，请升级会员', code: 'MEMBERSHIP_REQUIRED' });
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.rateLimitCalls, 0);
-    assert.equal(state.promptCalls, 0);
-    assert.equal(state.aiUiCalls, 0);
+    assert.equal(state.balanceCalls, 0);
+    const admitted = await POST(createChatRequest({ webSearch: true, attachment: { name: '命书.md', text: '正文' } }));
+    await admitted.text();
+    assert.equal(admitted.status, 200);
+    assert.deepEqual(searched, ['你好']);
 });
 
-test('chat route refunds prompt assembly failure once, without a second route refund', async (t) => {
+test('chat route reports prompt assembly failure as 500 without reaching the model or billing', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([]));
     const promptBuilder = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
     t.mock.method(promptBuilder, 'buildPromptWithSources', async () => { throw new Error('prompt assembly failed'); });
@@ -695,26 +587,8 @@ test('chat route refunds prompt assembly failure once, without a second route re
 
     const response = await POST(createChatRequest());
     assert.equal(response.status, 500);
-    assert.equal(state.useCreditCalls, 1);
-    assert.equal(state.addCreditCalls, 1);
     assert.equal(state.aiUiCalls, 0);
-});
-
-test('chat route maps account infrastructure errors without debit', async (t) => {
-    const state = setupRouteMocks(t, createUIChunkStream([]));
-    const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-    t.mock.method(credits, 'getUserAuthInfo', async () => {
-        throw new credits.UserStateResolutionError('account unavailable', 'USER_QUERY_FAILED');
-    });
-    const { POST } = await import('../app/api/chat/route');
-
-    const response = await POST(createChatRequest());
-    const payload = await response.json();
-    assert.equal(response.status, 500);
-    assert.equal(payload.code, 'USER_QUERY_FAILED');
-    assert.equal(payload.error, 'account unavailable');
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.aiUiCalls, 0);
+    assert.deepEqual(state.billers, []);
 });
 
 test('chat route rejects untrusted bypass flags when authentication fails', async (t) => {
@@ -724,22 +598,21 @@ test('chat route rejects untrusted bypass flags when authentication fails', asyn
     t.mock.method(api, 'getAuthContext', async () => { throw new Error('Untrusted caller reached optional auth'); });
     const { POST } = await import('../app/api/chat/route');
 
-    const response = await POST(createChatRequest({ skipCreditCheck: true, internalSecret: 'wrong-secret' }));
+    const response = await POST(createChatRequest({ skipBilling: true, internalSecret: 'wrong-secret' }));
     assert.equal(response.status, 401);
-    assert.equal(state.authInfoCalls, 0);
-    assert.equal(state.useCreditCalls, 0);
+    assert.equal(state.balanceCalls, 0);
     assert.equal(state.aiUiCalls, 0);
 });
 
-test('chat route keeps normal-user debit and strips authorization fields before the use case', async (t) => {
+test('chat route meters a normal user and strips authorization fields before the use case', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
     const useCase = require('../lib/server/chat/use-case') as typeof import('../lib/server/chat/use-case');
     const original = useCase.prepareManagedChat;
     let observed = false;
     t.mock.method(useCase, 'prepareManagedChat', async (...args: Parameters<typeof original>) => {
         observed = true;
-        assert.equal(args[0].creditPolicy, 'charge');
-        assert.equal('skipCreditCheck' in args[1], false);
+        assert.equal(args[0].billing, 'metered');
+        assert.equal('skipBilling' in args[1], false);
         assert.equal('internalSecret' in args[1], false);
         assert.equal('accessTokenForKB' in args[1], false);
         assert.equal('customProvider' in args[1], false);
@@ -748,7 +621,7 @@ test('chat route keeps normal-user debit and strips authorization fields before 
     const { POST } = await import('../app/api/chat/route');
 
     const response = await POST(createChatRequest({
-        skipCreditCheck: true,
+        skipBilling: true,
         internalSecret: 'wrong-secret',
         accessTokenForKB: 'untrusted-token',
         customProvider: { apiKey: 'must-not-enter-use-case' },
@@ -756,11 +629,12 @@ test('chat route keeps normal-user debit and strips authorization fields before 
     await response.text();
     assert.equal(response.status, 200);
     assert.equal(observed, true);
-    assert.equal(state.useCreditCalls, 1);
+    assert.equal(state.balanceCalls, 1);
+    assert.equal(state.billers.length, 1);
     assert.equal(state.aiUiCalls, 1);
 });
 
-test('chat route grants secret-validated bypass without leaking credentials into provider arguments', async (t) => {
+test('chat route grants secret-validated bypass without metering or leaking credentials into provider arguments', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
     const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
     t.mock.method(api, 'getAuthContext', async () => createMockAuthContext(null));
@@ -768,95 +642,65 @@ test('chat route grants secret-validated bypass without leaking credentials into
     const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
     const original = ai.callAIUIMessageResult;
     t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
-        assert.doesNotMatch(JSON.stringify(args), /internal-secret|test-token|accessTokenForKB|skipCreditCheck/);
+        assert.doesNotMatch(JSON.stringify(args), /internal-secret|test-token|accessTokenForKB|skipBilling/);
         return original(...args);
     });
     const { POST } = await import('../app/api/chat/route');
 
-    const response = await POST(createChatRequest({ skipCreditCheck: true, internalSecret: 'internal-secret' }));
+    const response = await POST(createChatRequest({ skipBilling: true, internalSecret: 'internal-secret' }));
     await response.text();
     assert.equal(response.status, 200);
-    assert.equal(state.authInfoCalls, 0);
-    assert.equal(state.useCreditCalls, 0);
-    assert.equal(state.addCreditCalls, 0);
+    assert.equal(state.balanceCalls, 0);
     assert.equal(state.rateLimitCalls, 0);
+    assert.deepEqual(state.billers, []);
+    assert.equal(state.aiOptions?.onUsage, undefined);
     assert.equal(state.aiUiCalls, 1);
 });
 
-test('chat forwards the selected conversation reasoning level after permission checks', async t => {
+test('chat forwards the selected conversation reasoning level on a model that reasons', async t => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
-    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
-    const original = ai.callAIUIMessageResult;
-    let observed = false;
-    t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
-        observed = true;
-        assert.equal(args[4]?.reasoning, true);
-        assert.equal(args[4]?.reasoningEffort, 'xhigh');
-        return original(...args);
-    });
     const { POST } = await import('../app/api/chat/route');
     const response = await POST(createChatRequest({ reasoning: true, reasoningEffort: 'xhigh' }));
     await response.text();
     assert.equal(response.status, 200);
-    assert.equal(observed, true);
-    assert.equal(state.useCreditCalls, 1);
+    assert.equal(state.aiOptions?.reasoning, true);
+    assert.equal(state.aiOptions?.reasoningEffort, 'xhigh');
 });
 
-test('chat clears a requested reasoning level when reasoning permission is unavailable', async t => {
-    setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
-    const access = require('../lib/ai/ai-access') as typeof import('../lib/ai/ai-access');
-    t.mock.method(access, 'isReasoningAllowedForMembership', () => false);
-    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
-    const original = ai.callAIUIMessageResult;
-    let observed = false;
-    t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
-        observed = true;
-        assert.equal(args[4]?.reasoning, false);
-        assert.equal(args[4]?.reasoningEffort, null);
-        return original(...args);
-    });
+test('chat clears a requested reasoning level when the model cannot reason', async t => {
+    const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]), { supportsReasoning: false });
     const { POST } = await import('../app/api/chat/route');
     const response = await POST(createChatRequest({ reasoning: true, reasoningEffort: 'max' }));
     await response.text();
     assert.equal(response.status, 200);
-    assert.equal(observed, true);
+    assert.equal(state.aiOptions?.reasoning, false);
+    assert.equal(state.aiOptions?.reasoningEffort, null);
 });
 
-test('invalid conversation reasoning levels fail before charging or model execution', async t => {
+test('invalid conversation reasoning levels fail before the balance check or model execution', async t => {
     const state = setupRouteMocks(t, createUIChunkStream([]));
     const { POST } = await import('../app/api/chat/route');
     const response = await POST(createChatRequest({ reasoning: true, reasoningEffort: 'extreme' }));
     assert.equal(response.status, 400);
-    assert.equal(state.useCreditCalls, 0);
+    assert.equal(state.balanceCalls, 0);
     assert.equal(state.aiUiCalls, 0);
 });
 
 test('chat forwards the conversation id and its owner so the prompt cache key stays stable, and rejects a malformed one', async t => {
     const state = setupRouteMocks(t, createUIChunkStream([{ type: 'text-delta', id: 't1', delta: 'ok' }]));
-    const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
-    const original = ai.callAIUIMessageResult;
-    let forwarded: string | undefined;
-    let forwardedScope: string | undefined;
-    t.mock.method(ai, 'callAIUIMessageResult', async (...args: Parameters<typeof original>) => {
-        forwarded = args[4]?.conversationId;
-        forwardedScope = args[4]?.cacheScope;
-        return original(...args);
-    });
     const { POST } = await import('../app/api/chat/route');
     const response = await POST(createChatRequest({ conversationId: 'conversation-a' }));
     await response.text();
     assert.equal(response.status, 200);
-    assert.equal(forwarded, 'conversation-a');
-    assert.equal(forwardedScope, 'user-1', 'the key is scoped to the member whose request it is');
+    assert.equal(state.aiOptions?.conversationId, 'conversation-a');
+    assert.equal(state.aiOptions?.cacheScope, 'user-1', 'the key is scoped to the member whose request it is');
 
     for (const conversationId of ['', 'x'.repeat(129), 42]) {
         const rejected = await POST(createChatRequest({ conversationId }));
         assert.equal(rejected.status, 400, String(conversationId));
     }
-    assert.equal(state.useCreditCalls, 1, 'only the accepted request is charged');
+    assert.equal(state.billers.length, 1, 'only the accepted request is metered');
 });
-
-
 
 test('chat direct prepare returns 400 for invalid JSON bodies', async (t) => {
     const state = setupRouteMocks(t, createUIChunkStream([]));
@@ -868,40 +712,34 @@ test('chat direct prepare returns 400 for invalid JSON bodies', async (t) => {
     assert.equal(response.status, 400);
     assert.equal(payload.error, '请求体不是合法 JSON');
     assert.equal(state.rateLimitCalls, 0);
-    assert.equal(state.authInfoCalls, 0);
-    assert.equal(state.useCreditCalls, 0);
+    assert.equal(state.balanceCalls, 0);
 });
 
 for (const failure of ['prompt', 'inference', 'empty-stream'] as const) {
-  for (const refund of ['false', 'throw'] as const) {
-    test(`chat ${failure} logs exactly one safe terminal after ${refund} compensation`, async t => {
-      setupRouteMocks(t, createUIChunkStream([]));
-      const logs: unknown[][] = [];
-      for (const method of ['info', 'warn', 'error', 'log'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args); });
-      const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
-      let refunds = 0;
-      t.mock.method(credits, 'refundCreditsOrLog', async () => { refunds++; if (refund === 'throw') throw new Error('PRIVATE_REFUND'); return false; });
-      if (failure === 'prompt') {
-        const prompts = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
-        t.mock.method(prompts, 'buildPromptWithSources', async () => { throw new Error('PRIVATE_PROMPT'); });
-      }
-      if (failure === 'inference') {
-        const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
-        t.mock.method(ai, 'callAIUIMessageResult', async () => { throw new Error('PRIVATE_PROVIDER'); });
-      }
-      const { POST } = await import('../app/api/chat/route');
-      const response = await POST(createChatRequest({ mentions: [{ type: 'knowledge_base', name: 'PRIVATE_PROFILE', id: 'kb' }] }));
-      await response.text();
-      const events = logs.filter(log => log[0] === '[ai-request]').map(log => log[1] as import('../lib/server/analysis').RequestObservationEvent);
-      const terminal = events.filter(event => event.phase === 'terminal');
-      assert.equal(terminal.length, 1);
-      assert.equal(refunds, 1);
-      assert.equal(terminal[0].billing, 'refund-failed');
-      assert.equal(terminal[0].refundFailure, refund === 'throw' ? 'exception' : 'rejected');
-      assert.ok(events.every(event => event.requestId === terminal[0].requestId));
-      assert.ok(!JSON.stringify(logs).includes('PRIVATE_'));
+    test(`chat ${failure} logs exactly one safe terminal`, async t => {
+        setupRouteMocks(t, createUIChunkStream([]));
+        const logs: unknown[][] = [];
+        for (const method of ['info', 'warn', 'error', 'log'] as const) t.mock.method(console, method, (...args: unknown[]) => { logs.push(args); });
+        if (failure === 'prompt') {
+            const prompts = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+            t.mock.method(prompts, 'buildPromptWithSources', async () => { throw new Error('PRIVATE_PROMPT'); });
+        }
+        if (failure === 'inference') {
+            const ai = require('../lib/ai/ai') as typeof import('../lib/ai/ai');
+            t.mock.method(ai, 'callAIUIMessageResult', async () => { throw new Error('PRIVATE_PROVIDER'); });
+        }
+        const { POST } = await import('../app/api/chat/route');
+        const response = await POST(createChatRequest({ mentions: [{ type: 'knowledge_base', name: 'PRIVATE_PROFILE', id: 'kb' }] }));
+        await response.text();
+        const events = logs.filter(log => log[0] === '[ai-request]').map(log => log[1] as import('../lib/server/analysis').RequestObservationEvent);
+        const terminal = events.filter(event => event.phase === 'terminal');
+        assert.equal(terminal.length, 1);
+        assert.equal(terminal[0].failure, failure === 'empty-stream' ? 'none' : failure);
+        assert.equal(terminal[0].generation, failure === 'prompt' ? 'not-started' : failure === 'inference' ? 'failed' : 'empty');
+        assert.equal(terminal[0].billing, failure === 'prompt' ? 'not-applicable' : 'metered');
+        assert.ok(events.every(event => event.requestId === terminal[0].requestId));
+        assert.ok(!JSON.stringify(logs).includes('PRIVATE_'));
     });
-  }
 }
 
 for (const scenario of ['success', 'prompt', 'admission'] as const) {

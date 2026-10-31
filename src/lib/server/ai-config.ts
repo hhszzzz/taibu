@@ -40,7 +40,11 @@ interface DBModelRow {
   display_name: string;
   vendor: string;
   usage_type?: string;
-  credit_cost?: number | null;
+  input_price: number | null;
+  output_price: number | null;
+  cache_read_price: number | null;
+  cache_write_price: number | null;
+  image_price: number | null;
   is_reasoning_default: boolean;
   supports_vision: boolean;
   default_max_tokens: number | null;
@@ -48,7 +52,6 @@ interface DBModelRow {
   thinking_levels: string[] | null;
   context_window: number | null;
   custom_parameters?: Record<string, unknown> | null;
-  required_tier?: string;
   bindings?: DBModelGatewayBindingRow[];
 }
 
@@ -91,7 +94,10 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       name: row.display_name,
       vendor: row.vendor as AIVendor,
       usageType: row.usage_type as AIModelConfig['usageType'],
-      creditCost: row.credit_cost == null ? undefined : Number(row.credit_cost),
+      pricing: {
+        input: row.input_price, output: row.output_price, cacheRead: row.cache_read_price,
+        cacheWrite: row.cache_write_price, image: row.image_price,
+      },
       modelId: row.model_key,
       apiUrl: '',
       supportsReasoning: thinkingLevels.length > 0,
@@ -102,7 +108,6 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       defaultMaxTokens: row.default_max_tokens ?? undefined,
       defaultReasoningEffort: row.default_reasoning_effort ?? undefined,
       customParameters: (row.custom_parameters as Record<string, unknown> | null) ?? null,
-      requiredTier: row.required_tier as AIModelConfig['requiredTier'],
       sources,
     };
 
@@ -120,10 +125,11 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
       const models = await trx
         .selectFrom('ai_models')
         .select([
-          'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'credit_cost',
+          'id', 'model_key', 'display_name', 'vendor', 'usage_type',
+          'input_price', 'output_price', 'cache_read_price', 'cache_write_price', 'image_price',
           'is_reasoning_default', 'supports_vision',
           'default_max_tokens', 'default_reasoning_effort',
-          'thinking_levels', 'context_window', 'custom_parameters', 'required_tier',
+          'thinking_levels', 'context_window', 'custom_parameters',
         ])
         .where('is_enabled', '=', true)
         .orderBy('sort_order', 'asc')

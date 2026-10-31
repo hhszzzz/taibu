@@ -16,10 +16,11 @@ function modules() {
     api: require('../lib/api-utils') as typeof import('../lib/api-utils'),
     context: require('../lib/db/context.server') as typeof import('../lib/db/context.server'),
     storage: require('../lib/storage/index.server') as typeof import('../lib/storage/index.server'),
-    credits: require('../lib/user/credits') as typeof import('../lib/user/credits'),
     images: require('../lib/ai/image-generation.server') as typeof import('../lib/ai/image-generation.server'),
   };
 }
+
+const PRICED = { input: null, output: null, cacheRead: null, cacheWrite: null, image: 0.02 };
 
 const location = (overrides: Record<string, unknown> = {}) => ({
   object_path: `owner/${IMAGE_ID}.png`, mime_type: 'image/png', bytes: BYTES.length, sha256: SHA, ...overrides,
@@ -101,21 +102,20 @@ test('a public share reads the images of its conversation', async (t) => {
 });
 
 test('the generate route validates input, model access and ownership before charging', async (t) => {
-  const { api, credits, images } = modules();
+  const { api, images } = modules();
   mockAIFeatureState(t);
   mockAIRateLimit(t);
   const conversationQuery: Record<string, unknown> = {};
   Object.assign(conversationQuery, { select: () => conversationQuery, where: () => conversationQuery, executeTakeFirst: async () => ({ id: randomUUID() }) });
   const db = { scope: { kind: 'user', userId: 'owner-1' }, tx: async (work: (trx: unknown) => unknown) => work({ selectFrom: () => conversationQuery }), rpc: async () => [] } as unknown as ScopedDb;
   const auth = t.mock.method(api, 'requireUserContext', async () => createMockAuthContext('owner-1', db));
-  t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 10, effectiveMembership: 'plus', hasCredits: true }));
   const model = {
     id: 'image-fixture', name: '生图夹具', vendor: 'openai', modelId: 'gpt-image-1', apiUrl: 'https://gateway.example/v1',
-    supportsReasoning: false, requiredTier: 'free', creditCost: 2, sources: [],
+    supportsReasoning: false, requiredTier: 'free', pricing: PRICED, sources: [],
   };
   t.mock.method(images, 'resolveImageModel', async () => model);
   const generated = t.mock.method(images, 'generateImages', async () => ({
-    images: [{ id: IMAGE_ID, size: '1024x1024', mimeType: 'image/png', url: `/api/images/${IMAGE_ID}` }], remaining: 6,
+    images: [{ id: IMAGE_ID, size: '1024x1024', mimeType: 'image/png', url: `/api/images/${IMAGE_ID}` }], costMicros: 20_000,
   }));
   const { POST } = await import('../app/api/images/generate/route');
   const body = { prompt: '水墨山居', size: '1024x1024', count: 2, conversationId: randomUUID() };
@@ -123,7 +123,7 @@ test('the generate route validates input, model access and ownership before char
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), {
     images: [{ id: IMAGE_ID, size: '1024x1024', mimeType: 'image/png', url: `/api/images/${IMAGE_ID}` }],
-    model: { id: 'image-fixture', name: '生图夹具', creditCost: 2 }, remaining: 6,
+    model: { id: 'image-fixture', name: '生图夹具', priceMicros: 20_000 }, costMicros: 20_000,
   });
   const call = generated.mock.calls[0]!.arguments[0] as Record<string, unknown>;
   assert.equal(call.userId, 'owner-1');
@@ -141,8 +141,8 @@ test('the generate route validates input, model access and ownership before char
   assert.equal((await POST(new NextRequest('http://localhost/api/images/generate', { method: 'POST', body: JSON.stringify({ prompt: '画' }) }))).status, 401);
 });
 
-test('the generate route reports missing models, foreign conversations and insufficient credits', async (t) => {
-  const { api, credits, images } = modules();
+test('the generate route reports missing models, foreign conversations and insufficient balance', async (t) => {
+  const { api, images } = modules();
   mockAIFeatureState(t);
   mockAIRateLimit(t);
   const conversationQuery: Record<string, unknown> = {};
@@ -150,23 +150,92 @@ test('the generate route reports missing models, foreign conversations and insuf
   Object.assign(conversationQuery, { select: () => conversationQuery, where: () => conversationQuery, executeTakeFirst: async () => conversationExists ? { id: randomUUID() } : undefined });
   const db = { scope: { kind: 'user', userId: 'owner-1' }, tx: async (work: (trx: unknown) => unknown) => work({ selectFrom: () => conversationQuery }), rpc: async () => [] } as unknown as ScopedDb;
   t.mock.method(api, 'requireUserContext', async () => createMockAuthContext('owner-1', db));
-  t.mock.method(credits, 'getUserAuthInfo', async () => ({ credits: 0, effectiveMembership: 'free', hasCredits: false }));
   const resolve = t.mock.method(images, 'resolveImageModel', async () => null);
-  t.mock.method(images, 'generateImages', async () => ({ images: [], remaining: null }));
+  t.mock.method(images, 'generateImages', async () => ({ images: [], costMicros: 0 }));
   const { POST } = await import('../app/api/images/generate/route');
   const post = (body: unknown) => POST(new NextRequest('http://localhost/api/images/generate', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
 
   assert.equal((await post({ prompt: '画' })).status, 403, 'no image model for this member');
   assert.equal(resolve.mock.callCount(), 1);
 
-  const model = { id: 'image-fixture', name: '模型', vendor: 'openai', modelId: 'm', apiUrl: 'https://gateway.example/v1', supportsReasoning: false, requiredTier: 'free', creditCost: 1, sources: [] };
+  const model = { id: 'image-fixture', name: '模型', vendor: 'openai', modelId: 'm', apiUrl: 'https://gateway.example/v1', supportsReasoning: false, requiredTier: 'free', pricing: PRICED, sources: [] };
   resolve.mock.mockImplementation(async () => model as never);
   assert.equal((await post({ prompt: '画', conversationId: randomUUID() })).status, 404, 'a conversation the caller does not own');
 
   conversationExists = true;
-  const insufficient = t.mock.method(images, 'generateImages', async () => { throw new images.ImageGenerationError('积分不足，无法生成图片', 'INSUFFICIENT_CREDITS'); });
+  const insufficient = t.mock.method(images, 'generateImages', async () => { throw new images.ImageGenerationError('余额不足，无法生成图片', 'INSUFFICIENT_BALANCE'); });
   const response = await post({ prompt: '画', conversationId: randomUUID() });
   assert.equal(response.status, 402);
-  assert.equal((await response.json()).code, 'INSUFFICIENT_CREDITS');
+  assert.equal((await response.json()).code, 'INSUFFICIENT_BALANCE');
   assert.equal(insufficient.mock.callCount(), 1);
 });
+
+async function imageBytes(width = 200, height = 120): Promise<Buffer> {
+  const { default: sharp } = await import('sharp');
+  return sharp({ create: { width, height, channels: 3, background: { r: 10, g: 20, b: 30 } } }).png().toBuffer();
+}
+
+function uploadRequest(fields: Record<string, string>, images: Array<{ bytes: Buffer }> = []): NextRequest {
+  const form = new FormData();
+  for (const [name, value] of Object.entries(fields)) form.set(name, value);
+  for (const [index, image] of images.entries()) form.append('images', new File([new Uint8Array(image.bytes)], `image-${index}.png`, { type: 'image/png' }));
+  return new NextRequest('http://localhost/api/images/upload', { method: 'POST', body: form });
+}
+
+test('the upload route sniffs custom-model images before saving them', async (t) => {
+  const { api, images } = modules();
+  mockAIFeatureState(t);
+  mockAIRateLimit(t);
+  const conversationQuery: Record<string, unknown> = {};
+  Object.assign(conversationQuery, { select: () => conversationQuery, where: () => conversationQuery, executeTakeFirst: async () => ({ id: randomUUID() }) });
+  const db = { scope: { kind: 'user', userId: 'owner-1' }, tx: async (work: (trx: unknown) => unknown) => work({ selectFrom: () => conversationQuery }), rpc: async () => [] } as unknown as ScopedDb;
+  const auth = t.mock.method(api, 'requireUserContext', async () => createMockAuthContext('owner-1', db));
+  const stored = t.mock.method(images, 'storeCustomImages', async () => [{ id: IMAGE_ID, size: '200x120', mimeType: 'image/png', url: `/api/images/${IMAGE_ID}` }]);
+  const { POST } = await import('../app/api/images/upload/route');
+  const bytes = await imageBytes();
+  const conversationId = randomUUID();
+  const response = await POST(uploadRequest({ prompt: '自定义图', size: '1024x1024', modelId: 'dall-e-3', conversationId }, [{ bytes }]));
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    images: [{ id: IMAGE_ID, size: '200x120', mimeType: 'image/png', url: `/api/images/${IMAGE_ID}` }],
+    model: { id: 'custom:dall-e-3', name: 'dall-e-3' },
+  });
+  const [target, files] = stored.mock.calls[0]!.arguments as unknown as [
+    Record<string, unknown>, Array<Record<string, unknown>>,
+  ];
+  assert.deepEqual(target, {
+    userId: 'owner-1', prompt: '自定义图', size: '1024x1024', customModelId: 'dall-e-3', conversationId,
+  });
+  assert.equal(files.length, 1);
+  assert.equal(files[0]!.mediaType, 'image/png');
+  assert.equal(files[0]!.size, '200x120', 'the real dimensions are recorded, not the requested size');
+  assert.equal(auth.mock.callCount(), 1);
+});
+
+test('the upload route refuses unauthenticated, malformed and non-image input', async (t) => {
+  const { api, images } = modules();
+  mockAIFeatureState(t);
+  mockAIRateLimit(t);
+  const db = { scope: { kind: 'user', userId: 'owner-1' }, tx: async (work: (trx: unknown) => unknown) => work({ selectFrom: () => {
+    const query: Record<string, unknown> = { select: () => query, where: () => query, executeTakeFirst: async () => null };
+    return query;
+  } }), rpc: async () => [] } as unknown as ScopedDb;
+  const auth = t.mock.method(api, 'requireUserContext', async () => createMockAuthContext('owner-1', db));
+  const store = t.mock.method(images, 'storeCustomImages', async () => { assert.fail('invalid uploads must not be stored'); });
+  const { POST } = await import('../app/api/images/upload/route');
+  const bytes = await imageBytes();
+  const base = { prompt: '图', size: '1024x1024', modelId: 'dall-e-3' };
+
+  auth.mock.mockImplementation(async () => ({ error: { message: '请先登录', status: 401 } } as never));
+  assert.equal((await POST(uploadRequest(base, [{ bytes }]))).status, 401);
+  auth.mock.mockImplementation(async () => createMockAuthContext('owner-1', db));
+
+  assert.equal((await POST(uploadRequest(base))).status, 400, 'no image');
+  assert.equal((await POST(uploadRequest({ ...base, size: '10x10' }, [{ bytes }]))).status, 400);
+  assert.equal((await POST(uploadRequest({ ...base, modelId: '' }, [{ bytes }]))).status, 400);
+  assert.equal((await POST(uploadRequest(base, [{ bytes: Buffer.from('not an image') }]))).status, 400);
+  assert.equal((await POST(uploadRequest(base, Array.from({ length: 5 }, () => ({ bytes }))))).status, 400);
+  assert.equal((await POST(uploadRequest({ ...base, conversationId: randomUUID() }, [{ bytes }]))).status, 404, 'a conversation the caller does not own');
+  assert.equal(store.mock.callCount(), 0);
+});
+

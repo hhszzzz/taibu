@@ -1,5 +1,4 @@
 import 'server-only';
-import type { MembershipType } from '@/lib/user/membership';
 import { searchWeb, webRouteAvailable } from '@/lib/agent/mcp/web-route.server';
 import { WEB_SEARCH_QUERY_MAX, type WebSearchResult } from '@/lib/agent/mcp/web-results';
 
@@ -12,14 +11,14 @@ export type ChatWebSearch =
 
 /**
  * Searches for the user's question as asked, cut to the length every route accepts, through the search services an
- * administrator set up for the member's tier (see web-route.server.ts).
+ * administrator set up (see web-route.server.ts).
  */
-export async function searchChatWeb(question: string, membership: MembershipType, signal?: AbortSignal): Promise<ChatWebSearch> {
+export async function searchChatWeb(question: string, signal?: AbortSignal): Promise<ChatWebSearch> {
     const query = Array.from(question.replace(/\s+/gu, ' ').trim()).slice(0, WEB_SEARCH_QUERY_MAX).join('');
-    if (!(await webRouteAvailable('search', membership))) return { status: 'unavailable', query };
+    if (!(await webRouteAvailable('search'))) return { status: 'unavailable', query };
     if (!query) return { status: 'ok', query, results: [] };
     try {
-        return { status: 'ok', query, results: await searchWeb(query, { membership, signal }) };
+        return { status: 'ok', query, results: await searchWeb(query, { signal }) };
     } catch {
         signal?.throwIfAborted();
         console.warn('[chat-web-search]', { code: 'WEB_SEARCH_FAILED' });

@@ -3,14 +3,14 @@
  */
 
 /** Request-local allowlisted telemetry; adapters supply the trusted ID, clock and sink. */
-export type RequestPhase = 'admission' | 'prompt' | 'generation' | 'persistence' | 'compensation';
+export type RequestPhase = 'admission' | 'prompt' | 'generation' | 'persistence';
 export type RequestFailure = 'none' | 'admission' | 'prompt' | 'stream-adapter' | 'inference' | 'persistence' | 'empty';
 export interface RequestObservationState {
   failure: RequestFailure;
   generation: 'not-started' | 'completed' | 'empty' | 'failed' | 'aborted' | 'external';
   persistence: 'not-needed' | 'saved' | 'failed';
-  billing: 'not-applicable' | 'charged' | 'refunded' | 'refund-failed';
-  refundFailure?: 'rejected' | 'exception';
+  /** A metered request pays for what its model calls used; nothing is charged up front or refunded. */
+  billing: 'not-applicable' | 'metered';
 }
 export interface RequestObservationEvent extends RequestObservationState {
   requestId: string;
@@ -41,7 +41,6 @@ export function createRequestObservation(
     if (next.generation !== undefined) state.generation = next.generation;
     if (next.persistence !== undefined) state.persistence = next.persistence;
     if (next.billing !== undefined) state.billing = next.billing;
-    if (next.refundFailure !== undefined) state.refundFailure = next.refundFailure;
   };
   const emit = (phase: RequestPhase | 'terminal', durationMs: number) => {
     try {
@@ -72,61 +71,24 @@ export function createRequestObservation(
   };
 }
 
-/** False and thrown refunds are distinct safe states, never raw financial errors in logs. */
-export async function observeRefund(refund: () => Promise<boolean>, observation?: RequestObservation): Promise<boolean> {
-  observation?.phase('compensation');
-  try {
-    const refunded = await refund();
-    observation?.update({ billing: refunded ? 'refunded' : 'refund-failed', ...(!refunded ? { refundFailure: 'rejected' as const } : {}) });
-    return refunded;
-  } catch {
-    observation?.update({ billing: 'refund-failed', refundFailure: 'exception' });
-    return false;
-  }
-}
-
-export type AnalysisAdmissionBilling =
-  | { kind: 'charged'; refund: () => Promise<boolean> }
-  | { kind: 'not-applicable' };
-
 export type AnalysisAdmissionResult<TInput, TContext> =
   | { ok: true; value: PreparedAnalysis<TInput, TContext> }
-  | {
-      ok: false;
-      reason: 'limited' | 'rate-error' | 'prompt-error';
-      billing: 'not-applicable' | 'refunded' | 'refund-failed';
-      error?: unknown;
-      refundError?: unknown;
-    };
+  | { ok: false; reason: 'limited' | 'rate-error' | 'prompt-error'; error?: unknown };
 
-/** Called only after account/member admission and any managed debit.
- * Owns compensation until prompts are ready; inference completion stays separate.
- */
+/** Called only after model and balance admission: the endpoint rate, then the prompts. Nothing has been charged. */
 export async function prepareAdmittedAnalysis<TInput, TContext>(
-  billing: AnalysisAdmissionBilling,
   operations: {
     checkRateLimit: () => Promise<boolean>;
     prepare: () => Promise<PreparedAnalysis<TInput, TContext>>;
     observation?: RequestObservation;
   },
 ): Promise<AnalysisAdmissionResult<TInput, TContext>> {
-  const fail = async (
+  const fail = (
     reason: 'limited' | 'rate-error' | 'prompt-error',
     error?: unknown,
-  ): Promise<AnalysisAdmissionResult<TInput, TContext>> => {
+  ): AnalysisAdmissionResult<TInput, TContext> => {
     operations.observation?.fail(reason === 'prompt-error' ? 'prompt' : 'admission');
-    if (billing.kind === 'not-applicable') {
-      return { ok: false, reason, billing: 'not-applicable', error };
-    }
-    operations.observation?.phase('compensation');
-    try {
-      const refunded = await billing.refund();
-      operations.observation?.update({ billing: refunded ? 'refunded' : 'refund-failed', ...(!refunded ? { refundFailure: 'rejected' as const } : {}) });
-      return { ok: false, reason, billing: refunded ? 'refunded' : 'refund-failed', error };
-    } catch (refundError) {
-      operations.observation?.update({ billing: 'refund-failed', refundFailure: 'exception' });
-      return { ok: false, reason, billing: 'refund-failed', error, refundError };
-    }
+    return { ok: false, reason, error };
   };
 
   let allowed: boolean;
@@ -191,15 +153,12 @@ export interface AnalysisOutput {
 }
 
 type GenerationState = 'completed' | 'empty' | 'failed';
-type RefundState = 'refunded' | 'refund-failed';
-export type AnalysisRefundReason = 'empty-result' | 'stream-empty' | 'persistence' | 'ai-call' | 'stream-persist';
 
 export type ManagedAnalysisOutcome =
   | {
       status: 'saved';
       generation: 'completed' | 'empty';
       persistence: 'saved';
-      billing: 'charged';
       output: AnalysisOutput;
       conversationId: string;
     }
@@ -207,16 +166,13 @@ export type ManagedAnalysisOutcome =
       status: 'aborted';
       generation: 'aborted';
       persistence: 'not-needed';
-      billing: 'charged';
     }
   | {
       status: 'failed';
       generation: GenerationState;
       persistence: 'not-needed' | 'failed';
-      billing: RefundState;
       failure: 'empty' | 'inference' | 'persistence';
       error?: unknown;
-      refundError?: unknown;
     };
 
 export type ManagedAnalysisCompletion =
@@ -226,79 +182,52 @@ export type ManagedAnalysisCompletion =
 
 export type CompleteManagedAnalysis = (completion: ManagedAnalysisCompletion) => Promise<ManagedAnalysisOutcome>;
 
-/** One completion owner per charged request, not cross-request idempotency.
- * Text, vision and stream deliberately retain their existing empty/refund rules.
- * Explicit stream abort neither saves partial content nor refunds the charge.
+/** One completion owner per request, not cross-request idempotency. The model call bills its own usage, so the
+ * outcome only decides what is saved and reported. Text and stream reject an empty result; vision keeps it.
+ * Explicit stream abort saves nothing.
  */
 export function createManagedAnalysisCompletion(
   mode: 'text' | 'vision' | 'stream',
   operations: {
     persist: (output: AnalysisOutput) => Promise<string>;
-    refund: (reason: AnalysisRefundReason) => Promise<boolean>;
     isPersistenceError: (error: unknown) => boolean;
     observation?: RequestObservation;
   },
 ): CompleteManagedAnalysis {
   let terminal: Promise<ManagedAnalysisOutcome> | undefined;
 
-  async function fail(
+  function fail(
     failure: 'empty' | 'inference' | 'persistence',
     generation: GenerationState,
-    reason: AnalysisRefundReason,
     error?: unknown,
-  ): Promise<ManagedAnalysisOutcome> {
-    operations.observation?.update({ generation, persistence: failure === 'persistence' ? 'failed' : 'not-needed' });
-    operations.observation?.phase('compensation');
-    let billing: RefundState;
-    let refundError: unknown;
-    let refundThrew = false;
-    try {
-      billing = await operations.refund(reason) ? 'refunded' : 'refund-failed';
-    } catch (error) {
-      billing = 'refund-failed';
-      refundError = error;
-      refundThrew = true;
-    }
-    operations.observation?.update({ billing, ...(billing === 'refund-failed' ? { refundFailure: refundThrew ? 'exception' as const : 'rejected' as const } : {}) });
-    return {
-      status: 'failed',
-      failure,
-      generation,
-      persistence: failure === 'persistence' ? 'failed' : 'not-needed',
-      billing,
-      error,
-      refundError,
-    };
+  ): ManagedAnalysisOutcome {
+    const persistence = failure === 'persistence' ? 'failed' : 'not-needed';
+    operations.observation?.update({ generation, persistence });
+    return { status: 'failed', failure, generation, persistence, error };
   }
 
   async function finish(completion: ManagedAnalysisCompletion): Promise<ManagedAnalysisOutcome> {
     if (completion.kind === 'aborted') {
-      return { status: 'aborted', generation: 'aborted', persistence: 'not-needed', billing: 'charged' };
+      return { status: 'aborted', generation: 'aborted', persistence: 'not-needed' };
     }
     if (completion.kind === 'inference-failed') {
       // Preserve the existing error-class distinction at the adapter boundary.
-      const persistenceError = operations.isPersistenceError(completion.error);
-      return fail(persistenceError ? 'persistence' : 'inference', 'failed',
-        persistenceError ? 'persistence' : 'ai-call', completion.error);
+      return fail(operations.isPersistenceError(completion.error) ? 'persistence' : 'inference', 'failed', completion.error);
     }
 
     const { output } = completion;
     const generation = output.content?.trim() ? 'completed' : 'empty';
     if (generation === 'empty' && mode !== 'vision') {
-      return fail('empty', generation, mode === 'stream' ? 'stream-empty' : 'empty-result');
+      return fail('empty', generation);
     }
 
     try {
       operations.observation?.update({ generation });
       operations.observation?.phase('persistence');
       const conversationId = await operations.persist(output);
-      return { status: 'saved', generation, persistence: 'saved', billing: 'charged', output, conversationId };
+      return { status: 'saved', generation, persistence: 'saved', output, conversationId };
     } catch (error) {
-      // Legacy non-stream post-persist hooks report generic failures as ai-call.
-      const reason = mode === 'stream'
-        ? 'stream-persist'
-        : operations.isPersistenceError(error) ? 'persistence' : 'ai-call';
-      return fail('persistence', generation, reason, error);
+      return fail('persistence', generation, error);
     }
   }
 
@@ -312,7 +241,7 @@ export function createManagedAnalysisCompletion(
   };
 }
 
-/** Non-stream inference is injected; the completion owner decides save/refund. */
+/** Non-stream inference is injected; the completion owner decides what is saved. */
 export async function runManagedAnalysis(
   infer: () => Promise<AnalysisOutput>,
   complete: CompleteManagedAnalysis,

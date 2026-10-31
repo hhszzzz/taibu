@@ -19,13 +19,14 @@ import {
     setCustomProvider,
 } from '@/lib/chat/custom-provider';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
-import { CUSTOM_PROVIDER_MAX_MODEL_NAME_LENGTH, hasRedundantVersionSuffix, maskCustomProviderApiKey, validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
+import { CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH, CUSTOM_PROVIDER_MAX_MODEL_NAME_LENGTH, hasRedundantVersionSuffix, maskCustomProviderApiKey, validateCustomProviderInput } from '@/lib/ai/custom-provider-url';
 
 type CustomProviderDraft = {
     apiUrl: string;
     apiKey: string;
     modelId: string;
     modelName: string;
+    imageModelId: string;
 };
 
 type CustomProviderFormErrors = {
@@ -33,6 +34,7 @@ type CustomProviderFormErrors = {
     apiKey?: string;
     modelId?: string;
     modelName?: string;
+    imageModelId?: string;
 };
 
 interface CustomProviderPanelProps {
@@ -47,6 +49,7 @@ const EMPTY_DRAFT: CustomProviderDraft = {
     apiKey: '',
     modelId: '',
     modelName: '',
+    imageModelId: '',
 };
 
 function draftFromConfig(config: CustomProviderConfig | null): CustomProviderDraft {
@@ -56,6 +59,7 @@ function draftFromConfig(config: CustomProviderConfig | null): CustomProviderDra
         apiKey: config.apiKey,
         modelId: config.modelId,
         modelName: config.modelName ?? '',
+        imageModelId: config.imageModelId ?? '',
     };
 }
 
@@ -89,7 +93,7 @@ function StorageNotice({ compact }: { compact: boolean }) {
         return (
             <p className="flex items-start gap-2 rounded-xl bg-background-secondary px-3 py-2.5 text-xs leading-relaxed text-foreground-secondary">
                 <LockKeyhole aria-hidden="true" className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
-                <span>Key 只存在浏览器，对话直连；Agent 会加密临时保存。</span>
+                <span>Key 只存在浏览器，对话与生图直连；Agent 会加密临时保存。</span>
             </p>
         );
     }
@@ -97,11 +101,11 @@ function StorageNotice({ compact }: { compact: boolean }) {
         <div className="flex flex-col gap-2.5 rounded-xl bg-background-secondary px-[18px] py-4 text-[13px] leading-relaxed text-foreground">
             <p className="flex items-start gap-2.5">
                 <Monitor aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-foreground-secondary" />
-                <span><b className="font-medium">普通对话与解读</b>：Key 只存在当前标签页，由浏览器直连模型供应商，不经过本站服务器；关闭页面即失效。</span>
+                <span><b className="font-medium">对话、解读、润色与生图</b>：Key 只存在当前标签页，由浏览器直连模型供应商，不经过本站服务器；关闭页面即失效。生成的图片会上传到本站保存。</span>
             </p>
             <p className="flex items-start gap-2.5">
                 <LockKeyhole aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-foreground-secondary" />
-                <span><b className="font-medium">Agent 任务</b>：Key 会加密后临时保存，任务结束即删除。</span>
+                <span><b className="font-medium">Agent 任务</b>：Key 会加密后临时保存，任务结束即删除。定时任务始终使用本站模型。</span>
             </p>
         </div>
     );
@@ -117,6 +121,7 @@ function resolveDraftConfig(draft: CustomProviderDraft): CustomProviderConfig {
         apiKey: draft.apiKey.trim(),
         modelId: draft.modelId.trim(),
         modelName: draft.modelName.trim() || undefined,
+        imageModelId: draft.imageModelId.trim() || undefined,
     };
 }
 
@@ -128,6 +133,9 @@ function buildFormErrors(draft: CustomProviderDraft): CustomProviderFormErrors {
     });
     if (draft.modelName.trim().length > CUSTOM_PROVIDER_MAX_MODEL_NAME_LENGTH) {
         errors.modelName = '显示名称过长';
+    }
+    if (draft.imageModelId.trim().length > CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH) {
+        errors.imageModelId = '生图模型过长';
     }
     return errors;
 }
@@ -269,6 +277,7 @@ export function CustomProviderPanel({
     const apiUrlError = submitted ? errors.apiUrl : undefined;
     const modelIdError = submitted ? errors.modelId : undefined;
     const modelNameError = submitted ? errors.modelName : undefined;
+    const imageModelIdError = submitted ? errors.imageModelId : undefined;
 
     const apiKeyToggle = (
         <IconButton
@@ -305,6 +314,12 @@ export function CustomProviderPanel({
                     <div className={`flex items-center gap-4 ${compact ? 'px-4 py-3' : 'px-5 py-3.5'}`}>
                         <dt className="flex-shrink-0 text-foreground-tertiary">接口地址</dt>
                         <dd className="min-w-0 flex-1 truncate text-right font-mono text-foreground-secondary" title={activeUrl}>{activeUrl}</dd>
+                    </div>
+                    <div className={`flex items-center gap-4 border-t border-border ${compact ? 'px-4 py-3' : 'px-5 py-3.5'}`}>
+                        <dt className="flex-shrink-0 text-foreground-tertiary">生图模型</dt>
+                        <dd className="min-w-0 flex-1 truncate text-right text-foreground-secondary">
+                            {activeConfig.imageModelId ? <code className="font-mono">{activeConfig.imageModelId}</code> : '未设置，生图使用本站模型'}
+                        </dd>
                     </div>
                     <div className={`flex items-center gap-4 border-t border-border ${compact ? 'py-1.5 pl-4 pr-2' : 'py-2 pl-5 pr-3'}`}>
                         <dt className="flex-shrink-0 text-foreground-tertiary">API Key</dt>
@@ -423,6 +438,25 @@ export function CustomProviderPanel({
                     </div>
                 </div>
 
+                <div className="flex flex-col gap-2">
+                    <FieldLabel htmlFor={`${fieldId}-image-model-id`}>生图模型（可选）</FieldLabel>
+                    <Input
+                        id={`${fieldId}-image-model-id`}
+                        value={draft.imageModelId}
+                        onChange={(event) => handleFieldChange('imageModelId', event.target.value)}
+                        aria-invalid={imageModelIdError ? true : undefined}
+                        aria-describedby={`${fieldId}-image-model-id-hint${imageModelIdError ? ` ${fieldId}-image-model-id-error` : ''}`}
+                        className={monoFieldClass}
+                        placeholder="例如 gpt-image-1"
+                        autoComplete="off"
+                        spellCheck={false}
+                    />
+                    <p id={`${fieldId}-image-model-id-hint`} className="text-xs text-foreground-tertiary">
+                        同一地址与 Key 下的生图模型，供输入框生图与 Agent 使用；留空时生图使用本站模型并按张计费。
+                    </p>
+                    <InputError id={`${fieldId}-image-model-id-error`} message={imageModelIdError} />
+                </div>
+
                 <div className="flex flex-wrap gap-2 pt-1">
                     <Button size="lg" onClick={handleActivate} className={primaryButtonClass}>
                         {activeConfig ? '保存并启用' : '启用服务'}
@@ -460,7 +494,7 @@ export function CustomProviderPanel({
                         <h3 id="custom-provider-panel-title" className="font-display text-lg leading-snug text-foreground">自定义模型</h3>
                         <span className="rounded-full bg-background-secondary px-2 py-0.5 text-[11px] font-medium tracking-wide text-foreground-secondary">BYOK</span>
                     </div>
-                    <p className="mt-0.5 text-[13px] leading-relaxed text-foreground-secondary">用你自己的 API Key 调用模型，不消耗本站积分。</p>
+                    <p className="mt-0.5 text-[13px] leading-relaxed text-foreground-secondary">用你自己的 API Key 调用模型，不消耗本站余额。</p>
                 </div>
             </div>
             {body}

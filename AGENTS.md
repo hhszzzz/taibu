@@ -52,7 +52,7 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
 
 - API 复用 `src/lib/api-utils.ts` 的鉴权、`jsonOk/jsonError`；管理员接口使用 `requireAdminUser()` / `requireAdminContext()`。
 - 数据访问通过 `src/lib/db/context.server.ts` 的 `userDb()` / `anonDb()` / `systemDb()`，禁止在路由内创建连接池。缺少用户身份时失败，不得回退为系统主体。
-- 占术解读复用 `src/lib/api/divination-pipeline.ts`；来源在 `src/lib/source-contracts.ts` 注册，保存通过现有 `createAIAnalysisConversation`。会员、模型权限、积分、限流和失败补偿保持现有用例边界。
+- 占术解读复用 `src/lib/api/divination-pipeline.ts`；来源在 `src/lib/source-contracts.ts` 注册，保存通过现有 `createAIAnalysisConversation`。模型定价与余额准入、按用量计费、限流和失败处理保持现有用例边界。
 - 占术计算、文本和 JSON 复用 `taibu-core/<领域>` 的公开接口，Web / MCP 不重复实现算法或规范渲染。
 - 页面保持轻量，复杂逻辑复用业务模块；保持 TypeScript strict，不引入无必要的 `any` 或 `@ts-ignore`。
 - 主题、交互反馈和 Toast 复用现有体系；客户端不使用 `alert`。默认使用 Server Component，需要交互时再用客户端组件。
@@ -64,7 +64,7 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
 - 纯文案/样式微调：至少本地手动验证相关页面。
 - 业务逻辑变更（`src/lib/*`）：新增或更新对应单测。
 - API 行为变更（`src/app/api/*`）：补充路由相关测试（成功、失败、权限边界至少覆盖两类）。
-- 涉及鉴权/积分/会员/限流/计费：必须补充回归测试。
+- 涉及鉴权/计费/限流：必须补充回归测试。
 
 ## 提交与变更说明
 
@@ -96,7 +96,7 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
 
 - [ ] 变更范围清晰，未引入无关重构。
 - [ ] 复用现有模块，避免重复实现。
-- [ ] 鉴权、权限、积分、限流链路完整。
+- [ ] 鉴权、权限、计费、限流链路完整。
 - [ ] 错误路径可观测（错误码/错误信息一致）。
 - [ ] 测试、lint 与 build 已通过，或已明确说明未执行原因。
 - [ ] 文档已同步（如涉及接口、配置、迁移、行为变化）。

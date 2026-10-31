@@ -43,8 +43,10 @@ test('schedule options keep only known fields and fall back safely', () => {
     baziChartId: '22222222-2222-4222-8222-222222222222', collaborators: [], notify: false,
   });
   assert.deepEqual(normalizeAgentScheduleOptions({ model: 42, reasoningEffort: 'unknown', collaborators: 'bad', notify: 'no' }), normalizeAgentScheduleOptions(undefined));
-  assert.deepEqual(normalizeAgentScheduleLimits({ free: '0', plus: 8, pro: 500 }), { free: 0, plus: 8, pro: 20 });
-  assert.deepEqual(normalizeAgentScheduleLimits('bad'), { free: 1, plus: 5, pro: 20 });
+  assert.deepEqual(normalizeAgentScheduleLimits({ limit: '0' }), { limit: 0 });
+  assert.deepEqual(normalizeAgentScheduleLimits({ limit: 500 }), { limit: 20 });
+  assert.deepEqual(normalizeAgentScheduleLimits({ free: 1, plus: 5, pro: 8 }), { limit: 20 }, 'a tiered value falls back to the single default');
+  assert.deepEqual(normalizeAgentScheduleLimits('bad'), { limit: 20 });
 });
 
 test('prompt variables read the occurrence instant in the schedule zone, not the wall clock', () => {
@@ -152,20 +154,22 @@ function claimFixture() {
 
 function mockRuntime(
   t: TestContext,
-  options: { credits?: number; features?: 'enabled' | 'disabled'; modelAllowed?: boolean; submitError?: Error } = {},
+  options: { balance?: number; free?: boolean; features?: 'enabled' | 'disabled'; modelAllowed?: boolean; submitError?: Error } = {},
   order?: string[],
 ) {
   t.mock.reset();
   const appSettings = require('../lib/app-settings') as typeof import('../lib/app-settings');
-  const credits = require('../lib/user/credits') as typeof import('../lib/user/credits');
+  const billing = require('../lib/billing/account.server') as typeof import('../lib/billing/account.server');
   const aiConfig = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
   const submit = require('../lib/agent/submit.server') as typeof import('../lib/agent/submit.server');
   const submitted: Array<{ body: unknown; origin: string; runId?: string }> = [];
-  t.mock.method(appSettings, 'getAgentScheduleLimits', async () => ({ free: 1, plus: 5, pro: 20 }));
+  const price = options.free ? 0 : 1;
+  const model = { id: 'fixture', name: 'fixture', pricing: { input: price, output: price, cacheRead: null, cacheWrite: null, image: null } };
+  t.mock.method(appSettings, 'getAgentScheduleLimits', async () => ({ limit: 20 }));
   t.mock.method(appSettings, 'readFeatureModuleStateFresh', async () => ({ status: options.features ?? 'enabled' } as never));
-  t.mock.method(credits, 'getUserCreditInfo', async () => ({ credits: options.credits ?? 5, membership: 'plus' as const, expiresAt: null }));
-  t.mock.method(aiConfig, 'getModelConfigAsync', async () => options.modelAllowed === false ? null : ({ id: 'fixture', name: 'fixture', requiredTier: 'free' } as never));
-  t.mock.method(aiConfig, 'getDefaultModelConfigAsync', async () => ({ id: 'fixture', name: 'fixture', requiredTier: 'free' } as never));
+  t.mock.method(billing, 'getSpendableMicros', async () => options.balance ?? 1_000_000);
+  t.mock.method(aiConfig, 'getModelConfigAsync', async () => options.modelAllowed === false ? null : (model as never));
+  t.mock.method(aiConfig, 'getDefaultModelConfigAsync', async () => model as never);
   t.mock.method(submit, 'submitAgentTask', async (_ctx: unknown, body: unknown, origin: string, runtime: { runId?: string } = {}) => {
     order?.push('submit');
     submitted.push({ body, origin, runId: runtime.runId });
@@ -211,15 +215,20 @@ test('a run the worker finishes before the link commits is settled from its stat
   assert.equal(settled[1].values.p_error, null);
 });
 
-test('a member without credits skips the occurrence and writes the reason', async (t) => {
+test('a member without balance skips the occurrence and writes the reason; a free model still runs', async (t) => {
   const settled: SettleCall[] = [];
   const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()]);
-  const runtime = mockRuntime(t, { credits: 0 });
+  const runtime = mockRuntime(t, { balance: 0 });
   const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
   assert.deepEqual(await processAgentSchedules({ db }), { claimed: 1, submitted: 0, skipped: 1, failed: 0 });
   assert.equal(runtime.submitted.length, 0);
   assert.deepEqual(settled.map(item => item.status), ['skipped']);
-  assert.equal(settled[0].values.p_skip_reason, 'insufficient_credits');
+  assert.equal(settled[0].values.p_skip_reason, 'insufficient_balance');
+
+  const freeSettled: SettleCall[] = [];
+  const free = mockRuntime(t, { balance: 0, free: true });
+  assert.deepEqual(await processAgentSchedules({ db: mockScheduleDb(scheduleFixture(), freeSettled, [claimFixture()]) }), { claimed: 1, submitted: 1, skipped: 0, failed: 0 });
+  assert.equal(free.submitted.length, 1);
 });
 
 test('a closed feature or a model the member cannot use also skips instead of failing', async (t) => {
@@ -234,8 +243,8 @@ test('a closed feature or a model the member cannot use also skips instead of fa
   }
 });
 
-test('a submit-time credit or permission refusal is classified as a skip', async (t) => {
-  for (const [code, reason] of [['INSUFFICIENT_CREDITS', 'insufficient_credits'], ['MEMBERSHIP_REQUIRED', 'model_unavailable']] as const) {
+test('a submit-time balance or pricing refusal is classified as a skip', async (t) => {
+  for (const [code, reason] of [['INSUFFICIENT_BALANCE', 'insufficient_balance'], ['MODEL_UNPRICED', 'model_unavailable'], ['PROFILE_UNAVAILABLE', 'model_unavailable']] as const) {
     const settled: SettleCall[] = [];
     const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()]);
     const submit = require('../lib/agent/submit.server') as typeof import('../lib/agent/submit.server');

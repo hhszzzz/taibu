@@ -5,8 +5,6 @@
  * 按职责分组导出给各子组件使用。
  */
 import { useState, useRef, useMemo, useCallback, useLayoutEffect } from 'react';
-import type { MembershipType } from '@/lib/user/membership';
-import { chatWebSearchAccess } from '@/lib/ai/web-search-access';
 import { DATA_INDEX_INVALIDATED_EVENT } from '@/lib/browser-api';
 import { readLocalCache, removeLocalCache, writeLocalCache } from '@/lib/cache/local-storage';
 import {
@@ -33,7 +31,6 @@ function getMentionCacheKeys(userId: string) {
 
 export interface UseComposerStateOptions {
     userId?: string | null;
-    membershipType?: MembershipType;
     knowledgeBaseEnabled?: boolean;
     promptKnowledgeBases?: KnowledgeBaseSummary[];
     enabledDataSourceTypes?: readonly DataSourceType[];
@@ -42,7 +39,6 @@ export interface UseComposerStateOptions {
 export function useComposerState(opts: UseComposerStateOptions) {
     const {
         userId,
-        membershipType = 'free',
         knowledgeBaseEnabled = true,
         promptKnowledgeBases = [],
         enabledDataSourceTypes = [],
@@ -71,13 +67,10 @@ export function useComposerState(opts: UseComposerStateOptions) {
     const [knowledgeBaseSavingId, setKnowledgeBaseSavingId] = useState<string | null>(null);
 
     // --- Derived values ---
-    const webAccess = chatWebSearchAccess(membershipType);
-    const canUseWeb = webAccess.search;
-    const canUseBoth = webAccess.withDocument;
-    const canUseKnowledgeBase = membershipType !== 'free' && knowledgeBaseEnabled;
+    const canUseKnowledgeBase = knowledgeBaseEnabled;
     const canMentionDataSources = enabledDataSourceTypes.length > 0;
     const canMentionAnything = canMentionDataSources || canUseKnowledgeBase;
-    const mentionIdentity = JSON.stringify([userId ?? null, membershipType, knowledgeBaseEnabled, [...enabledDataSourceTypes].sort()]);
+    const mentionIdentity = JSON.stringify([userId ?? null, knowledgeBaseEnabled, [...enabledDataSourceTypes].sort()]);
     const mentionsAreCurrent = !!userId && mentionOwnerIdentity === mentionIdentity;
     const visibleDataSources = useMemo(() => mentionsAreCurrent
         ? mentionDataSources.filter(item => enabledDataSourceTypes.includes(item.type))
@@ -209,7 +202,7 @@ export function useComposerState(opts: UseComposerStateOptions) {
         // Knowledge base
         knowledgeBaseSavingId, setKnowledgeBaseSavingId,
         // Derived
-        canUseWeb, canUseBoth, canUseKnowledgeBase,
+        canUseKnowledgeBase,
         canMentionAnything,
         promptKbIdSet,
         // Helpers

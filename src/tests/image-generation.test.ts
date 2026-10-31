@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
 import { MockImageModelV3 } from 'ai/test';
 import type { ImageModel } from 'ai';
-import type { AIModelConfig } from '../types';
+import type { AIModelConfig, AIModelPricing } from '../types';
 import type { ScopedDb } from '../lib/db/context.server';
 import type { ObjectStore } from '../lib/storage/object-store';
+import { InsufficientBalanceError } from '../lib/billing/account.server';
 import {
   GENERATED_IMAGE_BUCKET,
   ImageGenerationError,
@@ -16,6 +17,7 @@ import {
 
 const sealed = { version: 1 as const, iv: 'aXY=', tag: 'dGFn', data: 'c2VhbGVk' };
 const PNG = Buffer.from('89504e470d0a1a0a0000000d49484452000000010000000108060000001f15c489', 'hex');
+const PRICED: AIModelPricing = { input: null, output: null, cacheRead: null, cacheWrite: null, image: 0.02 };
 
 function imageModel(count: number | ((call: number, n: number) => number), maxImagesPerCall = 2) {
   let calls = 0;
@@ -37,7 +39,7 @@ function imageModel(count: number | ((call: number, n: number) => number), maxIm
 function imageConfig(sources = 1, overrides: Partial<AIModelConfig> = {}): AIModelConfig {
   return {
     id: 'image-fixture', name: '生图夹具', vendor: 'openai', modelId: 'gpt-image-1', apiUrl: 'https://gateway.example/v1',
-    supportsReasoning: false, requiredTier: 'free', creditCost: 2,
+    supportsReasoning: false, pricing: PRICED,
     sources: Array.from({ length: sources }, (_, index) => ({
       sourceKey: `gw-${index}`, sourceName: `gw-${index}`, gatewayId: `gateway-${index}`,
       apiUrl: 'https://gateway.example/v1', apiKeySecret: sealed, isEnabled: true,
@@ -46,8 +48,7 @@ function imageConfig(sources = 1, overrides: Partial<AIModelConfig> = {}): AIMod
   };
 }
 
-function fakeDb(options: { charge?: number | null; runImages?: number; chargeThrows?: boolean } = {}) {
-  const calls: Array<{ name: string; args: Record<string, unknown> }> = [];
+function fakeDb(options: { runImages?: number } = {}) {
   const inserts: Array<Record<string, unknown>> = [];
   const deletes: unknown[] = [];
   const table = (name: string) => {
@@ -70,17 +71,8 @@ function fakeDb(options: { charge?: number | null; runImages?: number; chargeThr
       if (name !== 'generated_images') throw new Error(`unexpected table ${name}`);
       return { where: (_field: string, _operator: string, value: unknown) => { deletes.push(value); return { execute: async () => undefined }; } };
     } }),
-    rpc: async (name: string, args: Record<string, unknown>) => {
-      calls.push({ name, args });
-      if (name === 'decrement_ai_chat_count_by') {
-        if (options.chargeThrows) throw new Error('credit backend down');
-        return options.charge === undefined ? 8 : options.charge;
-      }
-      if (name === 'increment_ai_chat_count') return 12;
-      throw new Error(`unexpected rpc ${name}`);
-    },
   } as unknown as ScopedDb;
-  return { db, calls, inserts, deletes };
+  return { db, inserts, deletes };
 }
 
 function memoryStore() {
@@ -104,6 +96,38 @@ function memoryStore() {
   return { store, objects };
 }
 
+type BillingDouble = {
+  prepay: NonNullable<ImageGenerationDeps['prepay']>;
+  refund: NonNullable<ImageGenerationDeps['refund']>;
+  recordFree: NonNullable<ImageGenerationDeps['recordFree']>;
+  prepays: unknown[];
+  refunds: unknown[];
+  freeRecords: unknown[];
+};
+
+function billing(options: { prepay?: 'insufficient' | 'failed' | null } = {}): BillingDouble {
+  const prepays: unknown[] = [];
+  const refunds: unknown[] = [];
+  const freeRecords: unknown[] = [];
+  return {
+    prepay: async input => {
+      prepays.push(input);
+      if (options.prepay === 'insufficient') throw new InsufficientBalanceError();
+      if (options.prepay === 'failed') throw new Error('billing unavailable');
+      if (options.prepay === null) return null;
+      return { key: `image:${input.images}`, micros: input.images * 20_000, images: input.images };
+    },
+    refund: async (prepayment, missing) => {
+      refunds.push({ prepayment, missing });
+      return true;
+    },
+    recordFree: async input => { freeRecords.push(input); },
+    prepays,
+    refunds,
+    freeRecords,
+  };
+}
+
 const request = (overrides: Partial<Parameters<typeof generateImages>[0]> = {}) => ({
   userId: randomUUID(),
   prompt: '水墨山居',
@@ -113,17 +137,29 @@ const request = (overrides: Partial<Parameters<typeof generateImages>[0]> = {}) 
   ...overrides,
 });
 
-function deps(db: ReturnType<typeof fakeDb>, store: ReturnType<typeof memoryStore>, model: ImageModel): ImageGenerationDeps {
-  return { db: db.db, store: store.store, createModel: () => model };
+function deps(
+  db: ReturnType<typeof fakeDb>,
+  store: ReturnType<typeof memoryStore>,
+  model: ImageModel,
+  charges = billing(),
+): ImageGenerationDeps {
+  return {
+    db: db.db, store: store.store, createModel: () => model,
+    prepay: charges.prepay, refund: charges.refund, recordFree: charges.recordFree,
+  };
 }
 
-test('generation charges per image, stores bytes and records each row', async () => {
-  const db = fakeDb({ charge: 8 }), storage = memoryStore();
-  const result = await generateImages(request({ userId: 'user-1' }), deps(db, storage, imageModel((_call, n) => n)));
+test('generation prepays every image, stores bytes and records each row', async () => {
+  const db = fakeDb(), storage = memoryStore(), charges = billing();
+  const result = await generateImages(request({ userId: 'user-1' }), deps(db, storage, imageModel((_call, n) => n), charges));
 
   assert.equal(result.images.length, 2);
-  assert.equal(result.remaining, 8);
-  assert.deepEqual(db.calls.map(call => [call.name, call.args]), [['decrement_ai_chat_count_by', { user_id: 'user-1', amount: 4 }]]);
+  assert.equal(result.costMicros, 40_000);
+  assert.equal(charges.prepays.length, 1);
+  assert.deepEqual(charges.prepays[0], {
+    userId: 'user-1', model: imageConfig(), images: 2,
+  });
+  assert.deepEqual(charges.refunds, []);
   assert.equal(db.inserts.length, 2);
   for (const [index, image] of result.images.entries()) {
     assert.match(image.id, /^[0-9a-f-]{36}$/u);
@@ -145,75 +181,101 @@ test('generation charges per image, stores bytes and records each row', async ()
 });
 
 test('a failed source fails over to the next one', async () => {
-  const db = fakeDb({ charge: 6 }), storage = memoryStore();
+  const db = fakeDb(), storage = memoryStore(), charges = billing();
   const models = [imageModel(0, 1), imageModel(1, 1)];
   const result = await generateImages(request({ count: 1, model: imageConfig(2) }), {
     db: db.db, store: storage.store, createModel: () => models.shift() ?? imageModel(1, 1),
+    prepay: charges.prepay, refund: charges.refund, recordFree: charges.recordFree,
   });
   assert.equal(result.images.length, 1);
   assert.equal(db.inserts.length, 1);
-  assert.equal(db.calls.length, 1, 'one charge covers the whole call');
+  assert.equal(charges.prepays.length, 1, 'one prepayment covers the whole call');
+  assert.deepEqual(charges.refunds, []);
 });
 
-test('when every source fails the whole charge is refunded and nothing is stored', async () => {
-  const db = fakeDb({ charge: 10 }), storage = memoryStore();
+test('when every source fails the whole prepayment is refunded and nothing is stored', async () => {
+  const db = fakeDb(), storage = memoryStore(), charges = billing();
   await assert.rejects(
-    () => generateImages(request({ count: 2, model: imageConfig(2) }), deps(db, storage, imageModel(0, 1))),
+    () => generateImages(request({ count: 2, model: imageConfig(2) }), deps(db, storage, imageModel(0, 1), charges)),
     (error: unknown) => error instanceof ImageGenerationError && error.code === 'FAILED',
   );
-  assert.deepEqual(db.calls.map(call => call.name), ['decrement_ai_chat_count_by', 'increment_ai_chat_count']);
-  assert.deepEqual(db.calls[1]!.args, { user_id: db.calls[0]!.args.user_id, amount: 4 });
+  assert.equal(charges.prepays.length, 1);
+  assert.deepEqual(charges.refunds, [{ prepayment: { key: 'image:2', micros: 40_000, images: 2 }, missing: 2 }]);
   assert.equal(db.inserts.length, 0);
   assert.equal(storage.objects.size, 0);
 });
 
 test('a source returning fewer images refunds only the undelivered ones', async () => {
-  const db = fakeDb({ charge: 8 }), storage = memoryStore();
-  const result = await generateImages(request({ count: 2 }), deps(db, storage, imageModel(1, 2)));
+  const db = fakeDb(), storage = memoryStore(), charges = billing();
+  const result = await generateImages(request({ count: 2 }), deps(db, storage, imageModel(1, 2), charges));
   assert.equal(result.images.length, 1);
-  assert.equal(result.remaining, 10);
-  assert.deepEqual(db.calls.map(call => call.name), ['decrement_ai_chat_count_by', 'increment_ai_chat_count']);
-  assert.equal(db.calls[1]!.args.amount, 2);
+  assert.equal(result.costMicros, 20_000);
+  assert.deepEqual(charges.refunds, [{ prepayment: { key: 'image:2', micros: 40_000, images: 2 }, missing: 1 }]);
 });
 
-test('storage failures before the row is written refund the charge', async () => {
-  const db = fakeDb({ charge: 8 }), storage = memoryStore();
+test('storage failures before the row is written refund the whole prepayment', async () => {
+  const db = fakeDb(), storage = memoryStore(), charges = billing();
   storage.store.put = async () => { throw new Error('disk full'); };
-  await assert.rejects(() => generateImages(request(), deps(db, storage, imageModel((_call, n) => n))),
+  await assert.rejects(() => generateImages(request(), deps(db, storage, imageModel((_call, n) => n), charges)),
     (error: unknown) => error instanceof ImageGenerationError && error.code === 'FAILED');
-  assert.deepEqual(db.calls.map(call => call.name), ['decrement_ai_chat_count_by', 'increment_ai_chat_count']);
+  assert.deepEqual(charges.refunds, [{ prepayment: { key: 'image:2', micros: 40_000, images: 2 }, missing: 2 }]);
   assert.equal(db.inserts.length, 0);
 });
 
-test('insufficient credits stop before any model call', async () => {
-  const db = fakeDb({ charge: null }), storage = memoryStore();
+test('insufficient balance stops before any model call', async () => {
+  const db = fakeDb(), storage = memoryStore(), charges = billing({ prepay: 'insufficient' });
   let created = 0;
-  await assert.rejects(() => generateImages(request(), { db: db.db, store: storage.store, createModel: () => { created += 1; return imageModel(1); } }),
-    (error: unknown) => error instanceof ImageGenerationError && error.code === 'INSUFFICIENT_CREDITS');
+  await assert.rejects(() => generateImages(request(), {
+    db: db.db, store: storage.store, prepay: charges.prepay, refund: charges.refund,
+    createModel: () => { created += 1; return imageModel(1); },
+  }), (error: unknown) => error instanceof ImageGenerationError && error.code === 'INSUFFICIENT_BALANCE');
   assert.equal(created, 0);
   assert.equal(db.inserts.length, 0);
 });
 
-test('a run may spend at most four images and a free model charges nothing', async () => {
-  const used = fakeDb({ runImages: 3 }), storage = memoryStore();
-  await assert.rejects(() => generateImages(request({ runId: randomUUID(), count: 2 }), deps(used, storage, imageModel(1))),
-    (error: unknown) => error instanceof ImageGenerationError && error.code === 'INVALID' && /4 张/.test(error.message));
-  assert.equal(used.calls.length, 0, 'the limit is checked before charging');
-
-  const free = fakeDb({ charge: 8 }), freeStorage = memoryStore();
-  const result = await generateImages(request({ model: imageConfig(1, { creditCost: 0 }) }), deps(free, freeStorage, imageModel((_call, n) => n)));
-  assert.equal(result.images.length, 2);
-  assert.equal(result.remaining, null);
-  assert.equal(free.calls.length, 0, 'a zero-cost model never touches the ledger');
+test('a prepayment backend failure is reported without starting generation', async () => {
+  const db = fakeDb(), storage = memoryStore(), charges = billing({ prepay: 'failed' });
+  let created = 0;
+  await assert.rejects(() => generateImages(request(), {
+    db: db.db, store: storage.store, prepay: charges.prepay, refund: charges.refund,
+    createModel: () => { created += 1; return imageModel(1); },
+  }), (error: unknown) => error instanceof ImageGenerationError && error.code === 'FAILED' && /扣费失败/u.test(error.message));
+  assert.equal(created, 0);
+  assert.equal(db.inserts.length, 0);
 });
 
-test('invalid requests are refused before charging', async (t: TestContext) => {
-  const db = fakeDb(), storage = memoryStore();
+test('a run may spend at most four images and a free model is recorded at zero', async () => {
+  const used = fakeDb({ runImages: 3 }), storage = memoryStore(), charges = billing();
+  await assert.rejects(() => generateImages(request({ runId: randomUUID(), count: 2 }), deps(used, storage, imageModel(1), charges)),
+    (error: unknown) => error instanceof ImageGenerationError && error.code === 'INVALID' && /4 张/.test(error.message));
+  assert.equal(charges.prepays.length, 0, 'the limit is checked before prepaying');
+
+  const free = fakeDb(), freeStorage = memoryStore(), freeCharges = billing({ prepay: null });
+  const userId = randomUUID();
+  const freeModel = imageConfig(1, { pricing: { ...PRICED, image: 0 } });
+  const result = await generateImages(request({ userId, model: freeModel }), deps(free, freeStorage, imageModel((_call, n) => n), freeCharges));
+  assert.equal(result.images.length, 2);
+  assert.equal(result.costMicros, 0);
+  assert.deepEqual(freeCharges.refunds, []);
+  assert.equal(freeCharges.freeRecords.length, 1);
+  const recorded = freeCharges.freeRecords[0] as Record<string, unknown>;
+  assert.equal(recorded.userId, userId);
+  assert.equal(recorded.images, 2);
+  assert.deepEqual(recorded.model, freeModel);
+});
+
+test('invalid requests are refused before prepaying or calling a model', async (t: TestContext) => {
+  const db = fakeDb(), storage = memoryStore(), charges = billing();
+  let created = 0;
   for (const overrides of [{ count: 5 }, { count: 0 }, { size: '10x10' as never }, { prompt: '   ' }]) {
-    await assert.rejects(() => generateImages(request(overrides), deps(db, storage, imageModel(1))), ImageGenerationError, JSON.stringify(overrides));
+    await assert.rejects(() => generateImages(request(overrides), {
+      db: db.db, store: storage.store, prepay: charges.prepay, refund: charges.refund,
+      createModel: () => { created += 1; return imageModel(1); },
+    }), ImageGenerationError, JSON.stringify(overrides));
   }
-  assert.equal(db.calls.length, 0);
-  t.diagnostic('invalid requests never reach the credit ledger or the model');
+  assert.equal(charges.prepays.length, 0);
+  assert.equal(created, 0);
+  t.diagnostic('invalid requests never reach the billing ledger or the model');
 });
 
 test('an image object whose row is gone is removed once it is a day old', async () => {

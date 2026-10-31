@@ -12,10 +12,30 @@ import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { useListMotion } from '@/lib/motion/list';
-import { THINKING_LEVEL_LABELS, USAGE_TYPES, formatTokenCount, type AdminGateway, type AdminModel } from '@/lib/admin/ai-catalog';
+import { THINKING_LEVEL_LABELS, USAGE_TYPES, formatTokenCount, priceFieldsFor, type AdminGateway, type AdminModel } from '@/lib/admin/ai-catalog';
+import { formatPrice } from '@/lib/billing/money';
+import { isFreeTextModel, isImagePriced, isTextPriced } from '@/lib/billing/pricing';
 import { AIModelEditor } from './AIModelEditor';
 import './ai-catalog.css';
 import { Input } from '@/components/ui/Input';
+
+/** The row's price tag: unpriced models are not offered, free ones need no balance. */
+function priceTagOf(model: AdminModel): { label: string; tone?: 'free' | 'unpriced' } | null {
+    if (!priceFieldsFor(model.usageType).length) return null;
+    if (model.usageType === 'image') {
+        if (!isImagePriced(model.pricing)) return { label: '未定价', tone: 'unpriced' };
+        return model.pricing.image ? { label: `${formatPrice(model.pricing.image)} / 张` } : { label: '免费', tone: 'free' };
+    }
+    if (!isTextPriced(model.pricing)) return { label: '未定价', tone: 'unpriced' };
+    if (isFreeTextModel(model.pricing)) return { label: '免费', tone: 'free' };
+    return { label: `${formatPrice(model.pricing.input as number)} / ${formatPrice(model.pricing.output as number)}` };
+}
+
+function PriceTag({ model }: { model: AdminModel }) {
+    const tag = priceTagOf(model);
+    const title = !tag?.tone && model.usageType !== 'image' ? '输入 / 输出，美元每百万 token' : undefined;
+    return tag ? <span className="ai-catalog-price" data-tone={tag.tone} title={title}>{tag.label}</span> : null;
+}
 
 function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyMap<string, AdminGateway> }) {
     const callable = model.sources.filter(source => source.isEnabled && gateways.get(source.gatewayId)?.isEnabled && gateways.get(source.gatewayId)?.apiKeyHint);
@@ -26,7 +46,6 @@ function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyM
         {(model.usageType === 'chat') && <span>
             {model.contextWindow ? `${formatTokenCount(model.contextWindow)} 上下文` : '未设上下文'} · {model.defaultMaxTokens ? `${formatTokenCount(model.defaultMaxTokens)} 输出` : '不限输出'}
         </span>}
-        {model.usageType === 'image' && <span>{model.creditCost} 积分 / 张</span>}
         {model.thinkingLevels.length > 0 && <span>思考 {model.thinkingLevels.map(level => THINKING_LEVEL_LABELS[level]).join('/')}</span>}
         {model.supportsVision && <span><Eye size={12} aria-label="支持图片" style={{ display: 'inline', verticalAlign: '-1px' }} /></span>}
         <span data-tone={callable.length ? undefined : 'warning'}>{names.length ? names.join(' → ') : '没有来源'}{names.length && !callable.length ? '（不可用）' : ''}</span>
@@ -109,7 +128,7 @@ export function AIModelPanel() {
                     </span>
                 </Button>
                 <span className="ai-catalog-row-side">
-                    <span className="ai-catalog-tier" data-tier={model.requiredTier}>{model.requiredTier === 'free' ? 'Free' : model.requiredTier === 'plus' ? 'Plus' : 'Pro'}</span>
+                    <PriceTag model={model} />
                     <SettingsSwitch label={`启用 ${model.displayName}`} checked={model.isEnabled} disabled={updating === model.id} onToggle={() => void toggle(model)} />
                 </span>
             </div>)}

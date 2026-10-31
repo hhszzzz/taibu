@@ -15,7 +15,7 @@ test('resolveModelAccessAsync should use server-configured chat default when mod
     modelId: 'chat-online-default',
     apiUrl: '',
     supportsReasoning: false,
-    requiredTier: 'free',
+    pricing: { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null },
   });
 
   t.after(() => {
@@ -24,7 +24,7 @@ test('resolveModelAccessAsync should use server-configured chat default when mod
   });
 
   const { resolveModelAccessAsync } = await import('../lib/ai/ai-access');
-  const result = await resolveModelAccessAsync(undefined, '', 'free', false);
+  const result = await resolveModelAccessAsync(undefined, '', false);
 
   assert.equal('error' in result, false);
   if ('error' in result) return;
@@ -47,7 +47,7 @@ test('resolveModelAccessAsync should use server-configured vision default when m
       apiUrl: '',
       supportsReasoning: true,
       supportsVision: true,
-      requiredTier: 'plus',
+      pricing: { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null },
     }
     : null;
 
@@ -57,7 +57,7 @@ test('resolveModelAccessAsync should use server-configured vision default when m
   });
 
   const { resolveModelAccessAsync } = await import('../lib/ai/ai-access');
-  const result = await resolveModelAccessAsync(undefined, '', 'plus', false, { requireVision: true });
+  const result = await resolveModelAccessAsync(undefined, '', false, { requireVision: true });
 
   assert.equal('error' in result, false);
   if ('error' in result) return;

@@ -8,7 +8,6 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { QueryClient, QueryObserver } from '@tanstack/react-query';
 import { SessionContext } from '../lib/hooks/session-context';
 import { EMPTY_APP_BOOTSTRAP, type AppBootstrapData } from '../lib/app/bootstrap';
-import { buildMembershipInfo } from '../lib/user/membership';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { createMockScopedDb } from './helpers/db-mock';
 
@@ -18,7 +17,7 @@ function bootstrapSnapshot(data: AppBootstrapData, state: Pick<BootstrapSnapshot
   const client = new QueryClient();
   const result = new QueryObserver(client, { queryKey: ['hook-fixture'], queryFn: async () => data, enabled: false }).getCurrentResult();
   client.clear();
-  return { ...result, data, ...state, viewerStateError: null, refresh: async () => data, markCreditsExhausted() {} };
+  return { ...result, data, ...state, viewerStateError: null, refresh: async () => data, markBalanceExhausted() {} };
 }
 
 function userFor(id: string) {
@@ -175,26 +174,26 @@ test('useAppBootstrap should defer viewer failures briefly before surfacing them
   assert.match(source, /if \(viewerPendingKey && !viewerFailureTimedOut\)/u);
 });
 
-test('session membership distinguishes anonymous, pending, failed, loaded and refreshing viewer states', async (t) => {
+test('session balance distinguishes anonymous, pending, failed, loaded and refreshing viewer states', async (t) => {
   const bootstrapModule = require('../lib/hooks/useAppBootstrap') as typeof import('../lib/hooks/useAppBootstrap');
-  const { useSessionMembership } = require('../lib/hooks/useSessionMembership') as typeof import('../lib/hooks/useSessionMembership');
+  const { useSessionBalance } = require('../lib/hooks/useSessionBalance') as typeof import('../lib/hooks/useSessionBalance');
   const user = createMockAuthContext('user-1').user;
-  const membership = buildMembershipInfo({ membership: 'pro', ai_chat_count: 12 });
+  const billing = { walletMicros: 1_500_000, subscriptionMicros: 250_000, spendableMicros: 1_750_000 };
   const cases = [
     { name: 'anonymous', user: null, sessionLoading: false, loaded: false, resolved: false, expectedResolved: true, expectedLoading: false },
     { name: 'initial session', user: null, sessionLoading: true, loaded: false, resolved: false, expectedResolved: true, expectedLoading: true },
     { name: 'pending viewer failure grace', user, sessionLoading: false, loaded: false, resolved: false, expectedResolved: false, expectedLoading: true },
     { name: 'settled viewer failure', user, sessionLoading: false, loaded: false, resolved: true, expectedResolved: true, expectedLoading: false },
-    { name: 'loaded membership', user, sessionLoading: false, loaded: true, resolved: true, expectedResolved: true, expectedLoading: false },
+    { name: 'loaded balance', user, sessionLoading: false, loaded: true, resolved: true, expectedResolved: true, expectedLoading: false },
     { name: 'session refreshing', user, sessionLoading: true, loaded: true, resolved: true, expectedResolved: true, expectedLoading: true },
   ];
   let snapshot = bootstrapSnapshot(EMPTY_APP_BOOTSTRAP, { hasBootstrapData: false, viewerStateLoaded: false, viewerStateResolved: false });
   t.mock.method(bootstrapModule, 'useAppBootstrap', () => snapshot);
-  const observed: ReturnType<typeof useSessionMembership>[] = [];
-  function Probe() { observed.push(useSessionMembership()); return null; }
+  const observed: ReturnType<typeof useSessionBalance>[] = [];
+  function Probe() { observed.push(useSessionBalance()); return null; }
 
   for (const scenario of cases) {
-    snapshot = bootstrapSnapshot({ ...EMPTY_APP_BOOTSTRAP, viewerLoaded: scenario.loaded, membership }, {
+    snapshot = bootstrapSnapshot({ ...EMPTY_APP_BOOTSTRAP, viewerLoaded: scenario.loaded, billing }, {
       hasBootstrapData: true, viewerStateLoaded: scenario.loaded, viewerStateResolved: scenario.resolved,
     });
     renderToStaticMarkup(React.createElement(SessionContext.Provider, {
@@ -203,10 +202,10 @@ test('session membership distinguishes anonymous, pending, failed, loaded and re
     const actual = observed.pop();
     assert.ok(actual, scenario.name);
     assert.equal(actual.user, scenario.user, scenario.name);
-    assert.equal(actual.membershipResolved, scenario.expectedResolved, scenario.name);
-    assert.equal(actual.membershipLoading, scenario.expectedLoading, scenario.name);
-    assert.equal(actual.membershipInfo, scenario.loaded ? membership : null, scenario.name);
-    assert.equal(await actual.refreshMembership(), scenario.loaded ? membership : null, scenario.name);
+    assert.equal(actual.balanceResolved, scenario.expectedResolved, scenario.name);
+    assert.equal(actual.balanceLoading, scenario.expectedLoading, scenario.name);
+    assert.equal(actual.balance, scenario.loaded ? billing : null, scenario.name);
+    assert.equal(await actual.refreshBalance(), scenario.loaded ? billing : null, scenario.name);
   }
 });
 

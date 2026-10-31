@@ -3,7 +3,8 @@ import { getAuthContext, jsonOk, type AppUser } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { readFeatureTogglesState } from '@/lib/app-settings';
 import { getNotificationRetentionCutoffIso } from '@/lib/notification-server';
-import { buildMembershipInfo, type MembershipInfo, type MembershipInfoSource } from '@/lib/user/membership';
+import { getBillingSummary } from '@/lib/billing/account.server';
+import type { BillingBalance } from '@/lib/billing/config';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
 import type { AppBootstrapData, AppBootstrapViewerSummary } from '@/lib/app/bootstrap';
 
@@ -12,23 +13,27 @@ type UserRow = {
   nickname: string | null;
   avatar_url: string | null;
   is_admin: boolean | null;
-  membership: MembershipInfoSource['membership'];
-  membership_expires_at: string | null;
-  ai_chat_count: number | null;
 };
 
-const PROFILE_COLUMNS = ['id', 'nickname', 'avatar_url', 'is_admin', 'membership', 'membership_expires_at', 'ai_chat_count'] as const;
+const PROFILE_COLUMNS = ['id', 'nickname', 'avatar_url', 'is_admin'] as const;
 
-function buildViewerSummary(row: UserRow, membership: MembershipInfo): AppBootstrapViewerSummary {
+function buildViewerSummary(row: UserRow): AppBootstrapViewerSummary {
   return {
     userId: row.id,
     nickname: row.nickname,
     avatarUrl: row.avatar_url,
     isAdmin: !!row.is_admin,
-    membershipType: membership.type,
-    membershipExpiresAt: membership.expiresAt ? membership.expiresAt.toISOString() : null,
-    aiChatCount: membership.aiChatCount,
   };
+}
+
+async function loadBalance(db: ScopedDb, userId: string): Promise<BillingBalance | null> {
+  try {
+    const { walletMicros, subscriptionMicros, spendableMicros } = await getBillingSummary(userId, db);
+    return { walletMicros, subscriptionMicros, spendableMicros };
+  } catch (error) {
+    console.error('[bootstrap] failed to load balance:', error);
+    return null;
+  }
 }
 
 async function loadUserRow(db: ScopedDb, userId: string): Promise<UserRow | undefined> {
@@ -62,7 +67,7 @@ async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>)
       viewerLoaded: false,
       viewerSummary: null,
       viewerErrorMessage: auth.authError.message,
-      membership: null,
+      billing: null,
       unreadCount: 0,
       unreadCountLoaded: false,
     };
@@ -73,14 +78,14 @@ async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>)
       viewerLoaded: true,
       viewerSummary: null,
       viewerErrorMessage: null,
-      membership: null,
+      billing: null,
       unreadCount: 0,
       unreadCountLoaded: true,
     };
   }
 
   const user = auth.user;
-  const [profileOutcome, unreadOutcome] = await Promise.all([
+  const [profileOutcome, unreadOutcome, billing] = await Promise.all([
     loadViewerProfile(auth.db, user).then(
       (row) => ({ ok: true as const, row }),
       (error: unknown) => {
@@ -95,34 +100,28 @@ async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>)
         return { ok: false as const };
       },
     ),
+    loadBalance(auth.db, user.id),
   ]);
 
   const unreadCount = unreadOutcome.ok ? unreadOutcome.count : 0;
   const unreadCountLoaded = unreadOutcome.ok;
   const row = profileOutcome.ok ? profileOutcome.row : undefined;
-  if (!row || typeof row.ai_chat_count !== 'number' || Number.isNaN(row.ai_chat_count)) {
+  if (!row) {
     return {
       viewerLoaded: false,
       viewerSummary: null,
       viewerErrorMessage: '加载账户状态失败',
-      membership: null,
+      billing: null,
       unreadCount,
       unreadCountLoaded,
     };
   }
 
-  const membership = buildMembershipInfo({
-    membership: row.membership,
-    membership_expires_at: row.membership_expires_at,
-    ai_chat_count: row.ai_chat_count,
-  });
-  const viewerSummary = buildViewerSummary(row, membership);
-
   return {
     viewerLoaded: true,
-    viewerSummary,
+    viewerSummary: buildViewerSummary(row),
     viewerErrorMessage: null,
-    membership,
+    billing,
     unreadCount,
     unreadCountLoaded,
   };
@@ -151,7 +150,7 @@ export async function GET(request: NextRequest) {
     viewerLoaded: viewerState.viewerLoaded,
     viewerSummary: viewerState.viewerSummary,
     viewerErrorMessage: viewerState.viewerErrorMessage,
-    membership: viewerState.membership,
+    billing: viewerState.billing,
     featureToggles: featureToggleState.toggles,
     featureTogglesLoaded: featureToggleState.loaded,
     featureTogglesErrorMessage: featureToggleState.loaded ? null : '功能状态加载失败',
@@ -160,6 +159,7 @@ export async function GET(request: NextRequest) {
   };
 
   const hasPartialFailure = !!data.viewerErrorMessage
+    || (!!data.viewerSummary && !data.billing)
     || !data.featureTogglesLoaded
     || !data.unreadCountLoaded;
 

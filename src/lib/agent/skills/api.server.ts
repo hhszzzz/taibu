@@ -4,7 +4,6 @@ import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/a
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh } from '@/lib/app-settings';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
-import { getUserCreditInfo } from '@/lib/user/credits';
 import { isValidUUID } from '@/lib/validation';
 import { extensionAllowance, type ExtensionAllowanceView } from '../mcp/config';
 import { BUILTIN_SKILL_NAMES } from './builtin.server';
@@ -69,16 +68,10 @@ async function reserveName(owner: Owner, name: string | undefined) {
   if ((await platformSkills()).some((row) => row.name === name)) throw new SkillInputError(`平台已有名为「${name}」的技能，请修改 SKILL.md 里的 name`);
 }
 
-/** The user's allowance: whether the administrator allows skills at all, for their tier, and how many. */
+/** The user's allowance: whether the administrator allows skills at all, and how many. */
 async function skillAllowance(owner: Owner): Promise<ExtensionAllowanceView> {
-  const [policy, account, used] = await Promise.all([
-    getAgentExtensionsPolicy(), getUserCreditInfo(owner.userId, {}), countSkills(owner.db, owner.userId),
-  ]);
-  const gate = policy.skills;
-  return {
-    enabled: gate.enabled, tierAllowed: gate.tiers.includes(account.membership),
-    limit: extensionAllowance(gate, account.membership), used, tiers: gate.tiers.filter(tier => gate.limits[tier] > 0),
-  };
+  const [policy, used] = await Promise.all([getAgentExtensionsPolicy(), countSkills(owner.db, owner.userId)]);
+  return { enabled: policy.skills.enabled, limit: extensionAllowance(policy.skills), used };
 }
 
 async function list(owner: Owner) {
@@ -105,13 +98,12 @@ async function detail(owner: Owner, id: string) {
 
 async function create(owner: Owner, request: NextRequest) {
   try {
-    const fields = parseSkillInput(await readBody(request), owner.owner === null ? 'platform' : 'user', false) as
+    const fields = parseSkillInput(await readBody(request), false) as
       Partial<SkillFields> & Pick<SkillFields, 'document'>;
     let limit: number | undefined;
     if (owner.owner !== null) {
       const allowance = await skillAllowance(owner);
-      if (!allowance.enabled) return jsonError('管理员已关闭个人技能', 403);
-      if (!allowance.tierAllowed || allowance.limit === 0) return jsonError('当前会员不能添加技能', 403);
+      if (!allowance.enabled || allowance.limit === 0) return jsonError('管理员已关闭个人技能', 403);
       limit = allowance.limit;
     }
     await reserveName(owner, fields.document.name);
@@ -126,7 +118,7 @@ async function create(owner: Owner, request: NextRequest) {
 async function update(owner: Owner, request: NextRequest, id: string) {
   if (!isValidUUID(id)) return jsonError('技能标识无效', 400);
   try {
-    const fields = parseSkillInput(await readBody(request), owner.owner === null ? 'platform' : 'user', true);
+    const fields = parseSkillInput(await readBody(request), true);
     await reserveName(owner, fields.document?.name);
     const row = await updateSkill(owner.db, owner.owner, id, fields);
     if (!row) return jsonError('技能不存在', 404);
@@ -200,15 +192,14 @@ export async function deleteUserSkill(request: NextRequest, id: string) {
   return owner instanceof Response ? owner : remove(owner, id);
 }
 
-/** The skills the composer's `/skill:` menu offers this member: none while the Agent is off. */
+/** The skills the composer's `/skill:` menu offers this user: none while the Agent is off. */
 export async function listSkillCommands(request: NextRequest) {
   const owner = await member(request);
   if (owner instanceof Response) return owner;
   try {
     if ((await readFeatureModuleStateFresh('agent')).status !== 'enabled') return jsonOk({ skills: [] });
     if ((await readFeatureModuleStateFresh('skills')).status !== 'enabled') return jsonOk({ skills: [] });
-    const { membership } = await getUserCreditInfo(owner.userId, {});
-    return jsonOk({ skills: await skillCommands(owner.userId, membership) });
+    return jsonOk({ skills: await skillCommands(owner.userId) });
   } catch (error) {
     return failure(error, '读取技能');
   }

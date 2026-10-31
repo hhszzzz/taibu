@@ -16,7 +16,6 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useListMotion } from '@/lib/motion/list';
-import { MEMBERSHIP_TIER_LABELS } from '@/lib/agent/mcp/config';
 import { AGENT_PROFILE_MODE_LABELS, DEFAULT_AGENT_PROFILE, profileTokenLabel, type AgentProfileInput, type AgentProfileView } from '@/lib/agent/profiles/config';
 import { agentProfileClient, type AgentProfileCatalog } from '@/lib/agent/profiles/client';
 import { AgentProfileEditor, type ProfileEditorSeed } from './AgentProfileEditor';
@@ -119,7 +118,7 @@ export function AgentProfilesPanel() {
     <div className="flex flex-col gap-4">
       <p className="mcp-notice">
         主任务用 parallel_analysis 派出协作成员、用 background_agent 派出后台子分析时为每位成员选择角色；用户也可以在「设置 → 个性化 → 多模型协作」里给自己的成员选角色。
-        成员只能用角色给它的工具，每次调用仍按用户会员、联网开关与工具范围重新核验。
+        成员只能用角色给它的工具，每次调用仍按联网开关与工具范围重新核验。
       </p>
       <div className="mcp-toolbar">
         <p>共 {profiles.length} 个角色</p>
@@ -136,7 +135,6 @@ export function AgentProfilesPanel() {
                   {profile.displayName}
                   <span className="skill-name profile-name">{profile.name}</span>
                   {profile.builtin ? <span className="mcp-badge mcp-badge-accent">内置</span> : null}
-                  {profile.requiredTier !== 'free' ? <span className="mcp-badge">{MEMBERSHIP_TIER_LABELS[profile.requiredTier]}+</span> : null}
                   {profile.modes.length === 1 ? <span className="mcp-badge">仅{AGENT_PROFILE_MODE_LABELS[profile.modes[0]]}</span> : null}
                   {profile.enabled ? null : <span className="mcp-badge mcp-badge-muted">已停用</span>}
                 </strong>

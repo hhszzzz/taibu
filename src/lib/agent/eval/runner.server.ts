@@ -13,11 +13,11 @@ import { createPiModelStream } from '../pi-stream.server';
 import { AGENT_ENGINE } from '../engine';
 import type { AgentStreamTelemetry } from '../telemetry.server';
 import type {
-  AgentAccountProvider, AgentCheckpoint, AgentFeatureStateProvider, AgentRunStatus, AgentRuntimeInfo, PiStreamFn,
+  AgentCheckpoint, AgentFeatureStateProvider, AgentRunStatus, AgentRuntimeInfo, PiStreamFn,
 } from '../types';
 import type { AgentEvalCase, AgentEvalToolCall } from './types';
 
-/** The evaluation runs as this synthetic member: no user data, no credits, no run rows. */
+/** The evaluation runs as this synthetic member: no user data, no billing, no run rows. */
 const EVAL_USER_ID = '00000000-0000-4000-8000-00000000e5a1';
 const TRACE_ARGUMENT_LIMIT = 2000;
 const TRACE_LIMIT = 50;
@@ -35,7 +35,7 @@ export interface AgentEvalFinished {
 
 /**
  * A production-grade isolated store for one evaluation case. It keeps Pi's durable writes and tool artifacts in
- * memory, so the runner never creates `agent_runs`, never charges credits and never reads or writes a member's data.
+ * memory, so the runner never creates `agent_runs`, never bills anyone and never reads or writes a member's data.
  */
 export class EvalAgentStore extends AgentStore {
   readonly drafts = new Map<string, AgentArtifactRow>();
@@ -263,7 +263,6 @@ export interface RunAgentEvalCaseOptions {
   case: AgentEvalCase;
   config: AIModelConfig;
   createStream?: AgentEvalStreamFactory;
-  account?: AgentAccountProvider;
   featureState?: AgentFeatureStateProvider;
   /** Absent skips quality scoring (the CLI's offline mode). */
   judge?: AgentEvalJudgeOptions | null;
@@ -296,7 +295,6 @@ export interface AgentEvalCaseOutcome {
   judgeError?: string;
 }
 
-const EVAL_ACCOUNT: AgentAccountProvider = async () => ({ membership: 'pro', credits: 0, expiresAt: null });
 const EVAL_FEATURES: AgentFeatureStateProvider = async () => ({ status: 'enabled' });
 
 function errorMessage(error: unknown): string {
@@ -348,7 +346,6 @@ export async function runAgentEvalCase(options: RunAgentEvalCaseOptions): Promis
     await executeAgentRun(store, run, options.signal, {
       config: options.config,
       streamFn,
-      account: options.account ?? EVAL_ACCOUNT,
       featureState: options.featureState ?? EVAL_FEATURES,
       // An evaluation compares single models; collaboration members are not part of a case.
       profiles: [],

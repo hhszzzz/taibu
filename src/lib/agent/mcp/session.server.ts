@@ -2,10 +2,8 @@ import 'server-only';
 import type { ConversationId, Extension, PromptSection, ToolRegistration } from '@earendil-works/pi-durable';
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from '@/lib/app-settings';
 import { systemDb } from '@/lib/db/context.server';
-import { getUserCreditInfo } from '@/lib/user/credits';
-import type { MembershipType } from '@/lib/user/membership';
 import type { AgentRunRow } from '../store.server';
-import { MCP_PLATFORM_TOOL_LIMIT, MCP_USER_TOOL_LIMIT, extensionAllowance, meetsTier, type McpExposure } from './config';
+import { MCP_PLATFORM_TOOL_LIMIT, MCP_USER_TOOL_LIMIT, extensionAllowance, type McpExposure } from './config';
 import { describeMcpError, resolveMcpServer, type ResolvedMcpServer } from './endpoint.server';
 import { mcpPool, type McpPool, type McpServerDescription } from './pool.server';
 import { currentMcpServer, platformMcpServers, recordMcpServerCheck, userMcpServers, type McpServerRow } from './store.server';
@@ -47,17 +45,17 @@ const EXPOSURE_TEXT: Record<Exclude<McpExposure, 'hidden'>, string> = {
 };
 
 /**
- * Servers this member may use: enabled platform servers their tier reaches, then their own connectors, as many as the
- * policy allows them (the first by the order they set). Hidden servers only serve search routing; code mode servers
- * need a task with code mode. A policy that cannot be read leaves the user's connectors out.
+ * Servers this user may use: enabled platform servers, then their own connectors, as many as the policy allows (the
+ * first by the order they set). Hidden servers only serve search routing; code mode servers need a task with code
+ * mode. A policy that cannot be read leaves the user's connectors out.
  */
-export async function availableMcpServers(userId: string, membership: MembershipType, options: { codeMode: boolean }) {
+export async function availableMcpServers(userId: string, options: { codeMode: boolean }) {
   const platform = (await platformMcpServers()).filter((row) => row.is_enabled && row.exposure !== 'hidden'
-    && (row.exposure !== 'codemode' || options.codeMode) && meetsTier(membership, row.required_tier));
+    && (row.exposure !== 'codemode' || options.codeMode));
   let own: McpServerRow[] = [];
   try {
     const connectorsEnabled = (await readFeatureModuleStateFresh('connectors')).status === 'enabled';
-    const allowance = connectorsEnabled ? extensionAllowance((await getAgentExtensionsPolicy()).connectors, membership) : 0;
+    const allowance = connectorsEnabled ? extensionAllowance((await getAgentExtensionsPolicy()).connectors) : 0;
     if (allowance > 0) own = (await userMcpServers(userId)).filter((row) => row.is_enabled).slice(0, allowance);
   } catch {
     own = [];
@@ -66,16 +64,15 @@ export async function availableMcpServers(userId: string, membership: Membership
 }
 
 /** Re-reads the server for each call: a change in the settings applies to the next call of a running task. */
-function authorizer(userId: string) {
+function authorizer() {
   return async (spec: McpToolSpec) => {
     const row = await currentMcpServer(spec.server.id, spec.server.owner_id);
     if (!row || !row.is_enabled) throw new Error(`外部服务「${spec.server.display_name}」已停用或已删除`);
     if (row.tool_policy?.[spec.remote.name]?.enabled === false) throw new Error('这个外部工具已被停用');
-    const membership = (await getUserCreditInfo(userId, {})).membership;
     if (row.owner_id === null) {
-      if (row.exposure === 'hidden' || !meetsTier(membership, row.required_tier)) throw new Error('当前会员不能使用这个外部服务');
-    } else if (extensionAllowance((await getAgentExtensionsPolicy()).connectors, membership) === 0) {
-      throw new Error('个人连接器已被管理员关闭，或当前会员不能使用');
+      if (row.exposure === 'hidden') throw new Error('这个外部服务只用于联网路由');
+    } else if (extensionAllowance((await getAgentExtensionsPolicy()).connectors) === 0) {
+      throw new Error('个人连接器已被管理员关闭');
     }
     return row;
   };
@@ -90,7 +87,6 @@ function authorizer(userId: string) {
  */
 export async function openAgentMcp(options: {
   run: Pick<AgentRunRow, 'id' | 'user_id' | 'input'>;
-  membership: MembershipType;
   confirm: McpConfirm;
   /** Whether a prompt is for the task's main conversation rather than a member's. */
   main: (conversationId: ConversationId) => boolean;
@@ -102,7 +98,7 @@ export async function openAgentMcp(options: {
   const empty: AgentMcpSession = { titles: new Map(), searchTitles: new Map(), memberTools: new Map(), skipped: [] };
   if (!run.input.webEnabled) return empty;
   if ((await readFeatureModuleStateFresh(toAgentToolScopeFeatureId('web'))).status !== 'enabled') return empty;
-  const rows = await availableMcpServers(run.user_id, options.membership, { codeMode: run.input.codeMode === true });
+  const rows = await availableMcpServers(run.user_id, { codeMode: run.input.codeMode === true });
   if (!rows.length) return empty;
   const pool = options.pool ?? mcpPool;
   // Every platform name counts, enabled or not, so a user's tool names stay the same from task to task.
@@ -123,7 +119,7 @@ export async function openAgentMcp(options: {
     }
   }));
 
-  const authorize = authorizer(run.user_id);
+  const authorize = authorizer();
   const tools: ToolRegistration[] = [], specs: McpToolSpec[] = [];
   const titles = new Map<string, string>(), searchTitles = new Map<string, string>();
   const memberTools = new Map<string, string | null>();

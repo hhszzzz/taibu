@@ -32,7 +32,7 @@ import {
 } from '@/lib/divination/tarot';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { openChatWithResult } from '@/lib/chat/result-handoff';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
@@ -90,7 +90,7 @@ function TarotResultContent() {
     const [saving, setSaving] = useState(false);
     /** 本页已抽出牌并换掉了抽牌地址：牌面与翻牌状态都在内存中 */
     const drawnInPageRef = useRef(false);
-    const { user, userId, sessionLoading } = useSessionMembership();
+    const { user, userId, sessionLoading } = useSessionBalance();
     const captureIdentity = useIdentityGuard(userId);
     const [resultOwnerId, setResultOwnerId] = useState<string | null | undefined>(undefined);
     const readingId = resultOwnerId === userId ? storedReadingId : null;

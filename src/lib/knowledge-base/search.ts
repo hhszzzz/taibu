@@ -1,7 +1,6 @@
 import 'server-only';
 
 import type { ScopedDb } from '@/lib/db/context.server';
-import { getEffectiveMembershipType } from '@/lib/user/membership-server';
 import { callReranker } from '@/lib/knowledge-base/reranker';
 import { checkVectorIndexExists, generateEmbedding, getEmbeddingDimensionAsync } from '@/lib/knowledge-base/embedding-config';
 import type { KnowledgeSearchPersistence, RankedResult, SearchCandidate, SearchOptions } from '@/lib/knowledge-base/types';
@@ -259,21 +258,20 @@ export async function rerankCandidates(
 }
 
 export async function searchKnowledge(query: string, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
-    if (options.membershipType === 'free') return [];
     const db = requireSearchDb(options.db);
     const userId = options.userId ?? scopedUserId(db);
-    const membership = options.membershipType ?? await getEffectiveMembershipType(userId, { db });
-    if (membership === 'free') return [];
-    return searchKnowledgeWithPersistence(query, userId, membership, createKnowledgeBasePersistence(db), options);
+    return searchKnowledgeWithPersistence(query, userId, createKnowledgeBasePersistence(db), options);
 }
 
-/** A server adapter must bind an owner-scoped persistence implementation before using this entry point. */
-export async function searchKnowledgeWithPersistence(query: string, userId: string, membership: NonNullable<SearchOptions['membershipType']>, persistence: KnowledgeSearchPersistence, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
-    if (membership === 'free') return [];
+/**
+ * A server adapter must bind an owner-scoped persistence implementation before using this entry point. Vector search,
+ * the second pass over high-weight bases and reranking serve everyone.
+ */
+export async function searchKnowledgeWithPersistence(query: string, userId: string, persistence: KnowledgeSearchPersistence, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
     if (query.length > KNOWLEDGE_QUERY_MAX_LENGTH) throw new Error(`检索内容不能超过 ${KNOWLEDGE_QUERY_MAX_LENGTH} 字`);
     const candidates = await searchCandidates(query, {
         ...options,
-        useVector: membership === 'pro' && options.useVector !== false
+        useVector: options.useVector !== false
     }, persistence);
     let weighted: { candidates: SearchCandidate[]; highKbIds: string[] };
     try {
@@ -287,7 +285,7 @@ export async function searchKnowledgeWithPersistence(query: string, userId: stri
     const highKbIds = weighted.highKbIds;
 
     const topK = options.topK ?? 5;
-    if (membership === 'pro' && highKbIds.length > 0) {
+    if (highKbIds.length > 0) {
         try {
             const baseLimit = options.limit ?? 20;
             const extraCandidates = await searchCandidates(query, {
@@ -304,7 +302,7 @@ export async function searchKnowledgeWithPersistence(query: string, userId: stri
         }
     }
 
-    if (membership === 'pro' && weightedCandidates.length > Math.max(5, topK)) {
+    if (weightedCandidates.length > Math.max(5, topK)) {
         try {
             return await rerankCandidates(query, weightedCandidates, topK);
         } catch {

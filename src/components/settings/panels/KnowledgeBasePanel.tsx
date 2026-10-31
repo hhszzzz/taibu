@@ -8,12 +8,11 @@
 'use client';
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import Link from 'next/link';
 import { ChevronDown, FileText, PencilLine, Plus, Search, Trash2, Unlink2, Upload } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { useSessionMembership } from '@/lib/hooks/useSessionMembership';
+import { useSessionSafe } from '@/lib/hooks/session-context';
 import { useToast } from '@/components/ui/Toast';
-import { Button, buttonVariants } from '@/components/ui/Button';
+import { Button } from '@/components/ui/Button';
 import { Select } from '@/components/ui/Select';
 import { IconButton } from '@/components/ui/IconButton';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -32,7 +31,7 @@ import {
     updateKnowledgeBase,
     uploadKnowledgeBaseFile,
 } from '@/lib/knowledge-base/browser-client';
-import type { KnowledgeBaseWeight } from '@/lib/knowledge-base/types';
+import { KNOWLEDGE_BASE_LIMIT, type KnowledgeBaseWeight } from '@/lib/knowledge-base/types';
 import { KNOWLEDGE_FILE_ACCEPT, KNOWLEDGE_FILE_HINT, validateKnowledgeFile } from '@/lib/knowledge-base/upload-policy';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
@@ -121,13 +120,8 @@ const CARD = 'rounded-2xl border border-border bg-surface';
 
 export default function KnowledgeBasePanel() {
     const { showToast } = useToast();
-    const {
-        userId,
-        sessionLoading,
-        membershipInfo,
-        membershipLoading,
-        membershipResolved,
-    } = useSessionMembership();
+    const { user, loading: sessionLoading } = useSessionSafe();
+    const userId = user?.id ?? null;
     const [loading, setLoading] = useState(true);
     const [listError, setListError] = useState<string | null>(null);
     const [createError, setCreateError] = useState<string | null>(null);
@@ -156,9 +150,7 @@ export default function KnowledgeBasePanel() {
     const initializedUserIdRef = useRef<string | null>(null);
     const archivesRef = useRef<Record<string, ArchiveBucket>>({});
     const archiveRequestKeyRef = useRef<Record<string, string>>({});
-    const membershipType = membershipResolved ? (membershipInfo?.type ?? 'free') : null;
-    // 创建、导入与检索都要求 Plus 及以上；会员状态未确定前不锁界面，最终由服务端校验。
-    const membershipLocked = membershipType === 'free';
+    const atLimit = kbs.length >= KNOWLEDGE_BASE_LIMIT;
     const draftKb = draft ? kbs.find((kb) => kb.id === draft.id) ?? null : null;
     const draftDirty = !!draft && !!draftKb
         && (draft.name !== draftKb.name || draft.description !== (draftKb.description ?? ''));
@@ -391,14 +383,6 @@ export default function KnowledgeBasePanel() {
 
     const togglePromptKb = useCallback(async (kbId: string) => {
         if (!userId) return;
-        if (membershipLoading) {
-            showToast('info', '会员状态加载中，请稍后重试');
-            return;
-        }
-        if (membershipType === 'free') {
-            showToast('info', '仅限 Plus 以上会员使用');
-            return;
-        }
         const next = promptKbIds.includes(kbId)
             ? promptKbIds.filter(id => id !== kbId)
             : [...promptKbIds, kbId];
@@ -412,7 +396,7 @@ export default function KnowledgeBasePanel() {
             return;
         }
         setPromptKbIds(saved.promptKbIds);
-    }, [membershipLoading, membershipType, promptKbIds, showToast, userId]);
+    }, [promptKbIds, showToast, userId]);
 
     const updateKb = useCallback(async (
         kbId: string,
@@ -665,8 +649,8 @@ export default function KnowledgeBasePanel() {
                             type="button"
                             aria-pressed={searchEnabled}
                             onClick={() => togglePromptKb(kb.id)}
-                            disabled={membershipLoading || membershipLocked || promptSavingId === kb.id}
-                            title={membershipLocked ? '仅限 Plus 以上会员使用' : '对话时检索这个知识库'}
+                            disabled={promptSavingId === kb.id}
+                            title="对话时检索这个知识库"
                             className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border-hover bg-surface px-3 text-[13px] text-foreground-secondary transition-colors duration-150 hover:bg-background-secondary disabled:cursor-not-allowed disabled:opacity-60 aria-pressed:border-transparent aria-pressed:bg-accent-soft aria-pressed:text-accent-strong"
                         >
                             <Search aria-hidden="true" className="h-3.5 w-3.5" />
@@ -721,15 +705,6 @@ export default function KnowledgeBasePanel() {
     return (
         <>
             <div className="flex flex-col gap-9">
-                {membershipLocked ? (
-                    <div className={`flex flex-wrap items-center justify-between gap-3 px-5 py-4 ${CARD}`}>
-                        <p className="min-w-0 flex-[1_1_16rem] text-sm leading-relaxed text-foreground-secondary">
-                            知识库需要 Plus 及以上会员。升级后可以新建知识库、导入资料，并在对话中检索引用。
-                        </p>
-                        <Link href="/settings/upgrade" className={buttonVariants({ variant: 'secondary' })}>查看订阅</Link>
-                    </div>
-                ) : null}
-
                 <section aria-labelledby="kb-list-heading" className="flex flex-col gap-3">
                     <div className="flex min-h-10 items-center justify-between gap-3">
                         <h3 id="kb-list-heading" className={SECTION_TITLE}>
@@ -737,7 +712,8 @@ export default function KnowledgeBasePanel() {
                             {!loading ? <span className="ml-1.5 font-normal">{kbs.length}</span> : null}
                         </h3>
                         {!createOpen ? (
-                            <Button onClick={() => setCreateOpen(true)} disabled={membershipLocked}>
+                            <Button onClick={() => setCreateOpen(true)} disabled={loading || atLimit}
+                                title={atLimit ? `每人最多 ${KNOWLEDGE_BASE_LIMIT} 个知识库` : undefined}>
                                 <Plus aria-hidden="true" className="h-4 w-4" />
                                 新建知识库
                             </Button>
@@ -807,7 +783,7 @@ export default function KnowledgeBasePanel() {
                     )}
 
                     <p className="settings-help">
-                        启用检索需 Plus 及以上会员。在对话、命理记录和各占术结果页点「加入知识库」，即可把内容归档到这里。
+                        每人最多 {KNOWLEDGE_BASE_LIMIT} 个知识库。在对话、命理记录和各占术结果页点「加入知识库」，即可把内容归档到这里。
                     </p>
                 </section>
 
@@ -820,7 +796,7 @@ export default function KnowledgeBasePanel() {
                                 ariaLabel="导入到"
                                 value={targetUploadKbId ?? ''}
                                 onChange={setUploadKbId}
-                                disabled={kbs.length === 0 || membershipLocked}
+                                disabled={kbs.length === 0}
                                 placeholder="暂无知识库"
                                 className="w-full"
                                 options={kbs.map(kb => ({ value: kb.id, label: kb.name }))}
@@ -842,7 +818,7 @@ export default function KnowledgeBasePanel() {
                                     type="file"
                                     accept={KNOWLEDGE_FILE_ACCEPT}
                                     onChange={(event) => selectUploadFile(event.target.files?.[0] ?? null)}
-                                    disabled={uploading || membershipLocked}
+                                    disabled={uploading}
                                     aria-labelledby="kb-file-label"
                                     aria-describedby="kb-file-hint"
                                     className="sr-only"
@@ -856,7 +832,7 @@ export default function KnowledgeBasePanel() {
                                 onClick={uploadKnowledgeFile}
                                 loading={uploading}
                                 loadingText="上传中…"
-                                disabled={uploading || !targetUploadKbId || !uploadFile || membershipLocked}
+                                disabled={uploading || !targetUploadKbId || !uploadFile}
                             >
                                 <Upload aria-hidden="true" className="h-4 w-4" />
                                 开始上传

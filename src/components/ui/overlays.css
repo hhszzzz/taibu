@@ -77,7 +77,7 @@
 .all-divinations-panel { display: flex; flex-direction: column; padding: 0; max-height: min(720px, var(--available-height, calc(100dvh - 16px))); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
 /* 账户菜单「帮助」二级：与一级菜单保持间距的独立浮层。 */
 .user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }
-/* 账户菜单「用量」二级：积分余额、套餐上限与已用占比。 */
+/* 账户菜单「余额」二级：可用额度、余额与订阅剩余。 */
 .user-usage-menu { width: min(16rem, calc(100vw - 2rem)); }
 .all-divinations-panel input:focus-visible { outline: none; }
 /* 全部占术 = claude 菜单族：32px 行 / 28px 前导槽 / 13px 分组标签 / 搜索行白 50% */

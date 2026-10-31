@@ -1,9 +1,8 @@
 import 'server-only';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { getAgentScheduleLimits } from '@/lib/app-settings';
-import { getUserCreditInfo } from '@/lib/user/credits';
 import {
-  agentScheduleLimitFor, normalizeAgentScheduleCadence, normalizeAgentScheduleOptions,
+  normalizeAgentScheduleCadence, normalizeAgentScheduleOptions,
   type AgentScheduleInput, type AgentScheduleRunView, type AgentScheduleRunStatus, type AgentScheduleStatus,
   type AgentScheduleTemplate, type AgentScheduleView,
 } from './config';
@@ -91,20 +90,19 @@ export async function listAgentSchedules(db: ScopedDb, userId: string): Promise<
   return rows.map(toAgentScheduleView);
 }
 
-/** The member's effective tier and how many schedule slots it allows; used to gate creation. */
+/** How many schedules the user may keep and how many they have; used to gate creation. */
 export async function agentScheduleAllowance(db: ScopedDb, userId: string): Promise<AgentScheduleAllowance> {
-  const [limits, account, rows] = await Promise.all([
+  const [limits, rows] = await Promise.all([
     getAgentScheduleLimits(),
-    getUserCreditInfo(userId, { db }),
     db.tx((trx) => trx.selectFrom('agent_schedules').select(({ fn }) => fn.countAll<string>().as('count'))
       .where('user_id', '=', userId).executeTakeFirst()),
   ]);
-  return { tier: account.membership, limit: agentScheduleLimitFor(limits, account.membership), used: Number(rows?.count ?? 0) };
+  return { limit: limits.limit, used: Number(rows?.count ?? 0) };
 }
 
 function failure(error: unknown): never {
   const message = error instanceof Error ? error.message : '';
-  if (message.includes('AGENT_SCHEDULE_LIMIT')) throw new AgentScheduleError('定时任务数量已达当前会员上限', 409, 'AGENT_SCHEDULE_LIMIT');
+  if (message.includes('AGENT_SCHEDULE_LIMIT')) throw new AgentScheduleError('定时任务数量已达上限', 409, 'AGENT_SCHEDULE_LIMIT');
   if (message.includes('AGENT_SCHEDULE_NOT_FOUND')) throw new AgentScheduleError('定时任务不存在', 404, 'AGENT_SCHEDULE_NOT_FOUND');
   if (message.includes('AGENT_SCHEDULE_CONVERSATION_MISSING')) throw new AgentScheduleError('绑定的对话已删除，请新建任务', 409, 'AGENT_SCHEDULE_CONVERSATION_MISSING');
   if (message.includes('AGENT_SCHEDULE_RUN_BUSY')) throw new AgentScheduleError('上一次运行尚未结束', 409, 'AGENT_SCHEDULE_RUN_BUSY');
@@ -119,12 +117,12 @@ function failure(error: unknown): never {
 
 export async function createAgentSchedule(db: ScopedDb, userId: string, input: AgentScheduleInput): Promise<AgentScheduleView> {
   const allowance = await agentScheduleAllowance(db, userId);
-  if (allowance.limit <= 0) throw new AgentScheduleError('当前会员不能创建定时任务', 403, 'AGENT_SCHEDULE_TIER');
-  if (allowance.used >= allowance.limit) throw new AgentScheduleError(`当前会员最多创建 ${allowance.limit} 个定时任务`, 409, 'AGENT_SCHEDULE_LIMIT');
+  if (allowance.limit <= 0) throw new AgentScheduleError('管理员已关闭定时任务创建', 403, 'AGENT_SCHEDULE_DISABLED');
+  if (allowance.used >= allowance.limit) throw new AgentScheduleError(`每人最多创建 ${allowance.limit} 个定时任务`, 409, 'AGENT_SCHEDULE_LIMIT');
   try {
     const row = await db.rpc('create_agent_schedule', {
       p_name: input.name, p_template: input.template, p_prompt: input.prompt,
-      // The quota is the function's own business: it reads the admin setting and the member's tier itself.
+      // The quota is the function's own business: it reads the admin setting itself.
       p_cadence: input.cadence, p_timezone: input.timezone, p_options: input.options,
     });
     return toAgentScheduleView(row as unknown as AgentScheduleRow);

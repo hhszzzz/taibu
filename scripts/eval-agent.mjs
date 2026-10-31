@@ -20,8 +20,7 @@ const argument = name => { const index = argv.indexOf(name); return index < 0 ? 
 const runTimeoutMs = Number(argument('--timeout')) || 900000;
 /** The judge reads the whole chart as evidence, so it gets its own ten minutes. */
 const judgeTimeoutMs = Number(argument('--judge-timeout')) || 600000;
-// The CLI evaluates as the same kind of member the admin runner does: no database mocks, fixed account and switches.
-const account = async () => ({ membership: 'plus', credits: 10, expiresAt: null });
+// The CLI evaluates the way the admin runner does: no database mocks, fixed switches.
 const featureState = async () => ({ status: 'enabled' });
 let config = fixtureConfig;
 try {
@@ -35,7 +34,7 @@ try {
         const { sealGatewayApiKey } = require('../src/lib/ai/gateway-secrets.server.ts');
         const gatewayId = 'eval-gateway', { secret: apiKeySecret } = sealGatewayApiKey(gatewayId, apiKey);
         const source = { sourceKey: 'eval', sourceName: 'eval', gatewayId, apiKeySecret, apiUrl: model.apiUrl, modelIdOverride: model.modelId, priority: 0, isEnabled: true, isActive: true };
-        config = { ...model, requiredTier: 'free', supportsVision: !!model.supportsVision, gatewayId, apiKeySecret, sources: [source] };
+        config = { ...model, supportsVision: !!model.supportsVision, gatewayId, apiKeySecret, sources: [source] };
     }
     const { createPiModelStream } = require('../src/lib/agent/pi-stream.server.ts');
     let visionBytes;
@@ -96,7 +95,6 @@ try {
             case: item,
             config,
             createStream,
-            account,
             featureState,
             // A stalled provider still fails instead of hanging the sweep; live readings simply get longer.
             signal: AbortSignal.timeout(runTimeoutMs),

@@ -291,8 +291,8 @@ export const SettingsIcon = createNavIcon('settings', <g className="ni-glyph">
     <circle cx="12" cy="12" r="2.8" />
 </g>);
 
-/** 订阅：一张卡（横向关键线）——会员和积分都落在这一张上；悬停时像抽出卡槽再插回。 */
-export const UpgradeIcon = createNavIcon('upgrade', <g className="ni-card">
+/** 订阅与余额：一张卡（横向关键线）——订阅额度和余额都落在这一张上；悬停时像抽出卡槽再插回。 */
+export const BillingIcon = createNavIcon('billing', <g className="ni-card">
     <rect x="2.6" y="5" width="18.8" height="14" rx="2.2" />
     <path d="M2.6 9.2h18.8" />
     <path d="M6 15.2h4.2" />
@@ -381,7 +381,7 @@ export const MegaphoneIcon = createNavIcon('megaphone', enlarged(<>
     <path className="ni-sound" d="M19.6 9.5a3.4 3.4 0 0 1 0 5" />
 </>, 1.1));
 
-/** 功能与激活码：一张票券（两侧月牙口、虚线撕口）——激活码就是它；悬停时歪一下。 */
+/** 功能开关：一张票券（两侧月牙口、虚线撕口）；悬停时歪一下。 */
 export const FeatureFlagsIcon = createNavIcon('feature-flags', enlarged(<g className="ni-glyph">
     <path d="M3 8a1.5 1.5 0 0 1 1.5-1.5h15A1.5 1.5 0 0 1 21 8v1.6a2.4 2.4 0 0 0 0 4.8V16a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 16v-1.6a2.4 2.4 0 0 0 0-4.8z" />
     <path d="M15 9v.6M15 11.7v.6M15 14.4v.6" />

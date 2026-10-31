@@ -13,155 +13,33 @@ CREATE OR REPLACE FUNCTION identity.handle_user_created() RETURNS trigger
     SET search_path TO 'public', 'pg_temp'
     AS $$
 BEGIN
-  INSERT INTO public.users (id, nickname, avatar_url, membership, ai_chat_count)
+  INSERT INTO public.users (id, nickname, avatar_url)
   VALUES (
     NEW.id,
     COALESCE(NULLIF(btrim(NEW.name), ''), '命理爱好者'),
-    NEW.image,
-    'free',
-    1
+    NEW.image
   )
   ON CONFLICT (id) DO NOTHING;
   RETURN NEW;
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.activate_key_as_service(p_user_id uuid, p_key_code text) RETURNS TABLE(success boolean, error text, key_type text, membership_type text, credits_amount integer)
+CREATE OR REPLACE FUNCTION public.admin_find_users_by_email(p_query text, p_limit integer DEFAULT 20) RETURNS TABLE(user_id uuid, email text)
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'identity'
     AS $$
-DECLARE
-    v_key activation_keys%ROWTYPE;
-    v_current_credits INT;
-    v_new_credits INT;
-    v_current_membership text;
-    v_current_membership_expires_at timestamptz;
-    v_effective_membership text;
-    v_next_expires_at timestamptz;
-    v_now timestamptz := now();
 BEGIN
+  IF NOT public.is_admin_user() THEN
+    RAISE EXCEPTION 'Only admin can read auth user emails' USING ERRCODE = '42501';
+  END IF;
 
-IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-END IF;
-
-
-    IF p_key_code IS NULL OR length(trim(p_key_code)) = 0 THEN
-        RETURN QUERY SELECT false, '激活码不能为空', NULL, NULL, NULL;
-        RETURN;
-    END IF;
-
-    SELECT * INTO v_key
-    FROM public.activation_keys
-    WHERE key_code = p_key_code
-    FOR UPDATE;
-
-    IF NOT FOUND THEN
-        RETURN QUERY SELECT false, '激活码不存在', NULL, NULL, NULL;
-        RETURN;
-    END IF;
-
-    IF v_key.is_used THEN
-        RETURN QUERY SELECT false, '该激活码已被使用', v_key.key_type, v_key.membership_type, v_key.credits_amount;
-        RETURN;
-    END IF;
-
-    IF v_key.key_type = 'membership' THEN
-        IF v_key.membership_type NOT IN ('plus', 'pro') THEN
-            RETURN QUERY SELECT false, '无效的会员类型', v_key.key_type, v_key.membership_type, NULL;
-            RETURN;
-        END IF;
-
-        SELECT membership, membership_expires_at
-        INTO v_current_membership, v_current_membership_expires_at
-        FROM public.users
-        WHERE id = p_user_id
-        FOR UPDATE;
-
-        IF NOT FOUND THEN
-            RETURN QUERY SELECT false, '获取用户信息失败', v_key.key_type, v_key.membership_type, NULL;
-            RETURN;
-        END IF;
-
-        v_effective_membership := CASE
-            WHEN v_current_membership IN ('plus', 'pro')
-                AND v_current_membership_expires_at IS NOT NULL
-                AND v_current_membership_expires_at > v_now
-              THEN v_current_membership
-            ELSE 'free'
-        END;
-
-        IF public.membership_rank(v_effective_membership) > public.membership_rank(v_key.membership_type) THEN
-            RETURN QUERY SELECT false, '当前已有更高等级会员', v_key.key_type, v_key.membership_type, NULL;
-            RETURN;
-        END IF;
-
-        IF public.membership_rank(v_effective_membership) = public.membership_rank(v_key.membership_type)
-            AND v_effective_membership <> 'free'
-            AND v_current_membership_expires_at IS NOT NULL
-            AND v_current_membership_expires_at > v_now THEN
-            v_next_expires_at := v_current_membership_expires_at + INTERVAL '30 days';
-        ELSE
-            v_next_expires_at := v_now + INTERVAL '30 days';
-        END IF;
-
-        UPDATE public.users
-        SET
-            membership = v_key.membership_type,
-            membership_expires_at = v_next_expires_at,
-            updated_at = now()
-        WHERE id = p_user_id;
-    ELSE
-        IF COALESCE(v_key.credits_amount, 0) <= 0 THEN
-            RETURN QUERY SELECT false, '无效的积分数量', v_key.key_type, NULL, NULL;
-            RETURN;
-        END IF;
-
-        SELECT COALESCE(ai_chat_count, 0)
-        INTO v_current_credits
-        FROM public.users
-        WHERE id = p_user_id
-        FOR UPDATE;
-
-        IF NOT FOUND THEN
-            RETURN QUERY SELECT false, '获取用户信息失败', v_key.key_type, NULL, NULL;
-            RETURN;
-        END IF;
-
-        v_new_credits := v_current_credits + COALESCE(v_key.credits_amount, 0);
-
-        UPDATE public.users
-        SET
-            ai_chat_count = v_new_credits,
-            updated_at = now()
-        WHERE id = p_user_id;
-
-        PERFORM public.record_credit_transaction(
-            p_user_id,
-            COALESCE(v_key.credits_amount, 0),
-            'earn',
-            'activation_key',
-            v_new_credits,
-            'activation_key',
-            v_key.id::text,
-            format('激活码充值 +%s 积分', COALESCE(v_key.credits_amount, 0)),
-            jsonb_build_object('key_source', COALESCE(v_key.source, 'admin'))
-        );
-    END IF;
-
-    UPDATE public.activation_keys
-    SET
-        is_used = true,
-        used_by = p_user_id,
-        used_at = now()
-    WHERE id = v_key.id AND is_used = false;
-
-    IF NOT FOUND THEN
-        RETURN QUERY SELECT false, '激活失败，请重试', v_key.key_type, v_key.membership_type, v_key.credits_amount;
-        RETURN;
-    END IF;
-
-    RETURN QUERY SELECT true, NULL, v_key.key_type, v_key.membership_type, v_key.credits_amount;
+  -- Prefix match on the stored lowercase address, exact match first; LIKE wildcards in the query are literal.
+  RETURN QUERY
+  SELECT au.id, au.email::text
+  FROM identity.users au
+  WHERE au.email LIKE replace(replace(replace(lower(btrim(p_query)), '\', '\\'), '%', '\%'), '_', '\_') || '%'
+  ORDER BY au.email = lower(btrim(p_query)) DESC, au.email
+  LIMIT least(greatest(coalesce(p_limit, 20), 1), 100);
 END;
 $$;
 
@@ -442,12 +320,12 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.agent_create_run(p_id uuid, p_user_id uuid, p_conversation_id uuid, p_request_id text, p_request_hash text, p_input jsonb, p_checkpoint jsonb, p_message jsonb, p_credential jsonb, p_charge boolean) RETURNS public.agent_runs
+CREATE OR REPLACE FUNCTION public.agent_create_run(p_id uuid, p_user_id uuid, p_conversation_id uuid, p_request_id text, p_request_hash text, p_input jsonb, p_checkpoint jsonb, p_message jsonb, p_credential jsonb, p_billing text) RETURNS public.agent_runs
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $_$
 DECLARE
-  r public.agent_runs; c public.conversations; balance integer; messages jsonb;
+  r public.agent_runs; c public.conversations; messages jsonb;
   anchor_position bigint; anchor_message jsonb; old_answer jsonb; versions jsonb;
   version_index integer; version_snapshot jsonb; tail_position bigint; previous_write text;
 BEGIN
@@ -463,12 +341,8 @@ BEGIN
   IF EXISTS(SELECT 1 FROM public.agent_runs WHERE conversation_id=p_conversation_id AND status IN ('queued','running','awaiting_input','cancelling')) THEN
     RAISE EXCEPTION 'AGENT_CONVERSATION_BUSY' USING ERRCODE='23505';
   END IF;
-  IF p_charge THEN
-    balance:=public.decrement_ai_chat_count(p_user_id);
-    IF balance IS NULL THEN RAISE EXCEPTION 'INSUFFICIENT_CREDITS' USING ERRCODE='P0001'; END IF;
-  END IF;
   INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing)
-    VALUES(p_id,p_user_id,p_conversation_id,p_request_id,p_request_hash,p_input,p_checkpoint,p_message,CASE WHEN p_charge THEN 'charged' ELSE 'exempt' END) RETURNING * INTO r;
+    VALUES(p_id,p_user_id,p_conversation_id,p_request_id,p_request_hash,p_input,p_checkpoint,p_message,p_billing) RETURNING * INTO r;
   IF p_credential IS NOT NULL THEN INSERT INTO public.agent_run_credentials VALUES(p_id,p_credential); END IF;
   messages:=coalesce(c.messages,'[]');
   IF p_input->>'replaceFromMessageId' IS NOT NULL THEN
@@ -633,12 +507,8 @@ BEGIN
   IF final_status IN ('completed','awaiting_input') AND EXISTS(SELECT 1 FROM public.agent_run_commands WHERE run_id=p_run_id AND NOT consumed AND (final_status<>'awaiting_input' OR (mode='reply' AND NOT durable_admitted))) THEN
     final_status:='queued';
   END IF;
-  IF final_status IN ('failed','cancelled') AND r.billing='charged' AND coalesce(btrim(p_message->>'content'),'')='' AND r.record_id IS NULL THEN
-    IF public.increment_ai_chat_count(r.user_id,1) IS NULL THEN RAISE EXCEPTION 'AGENT_REFUND_FAILED'; END IF;
-    r.billing:='refunded';
-  END IF;
   p_message:=jsonb_set(p_message,'{agent,status}',to_jsonb(final_status));
-  UPDATE public.agent_runs SET status=final_status,checkpoint=p_checkpoint,public_message=p_message,billing=r.billing,
+  UPDATE public.agent_runs SET status=final_status,checkpoint=p_checkpoint,public_message=p_message,
     lease_until=NULL,worker_id=NULL,updated_at=now() WHERE id=p_run_id RETURNING * INTO r;
   IF final_status IN ('completed','failed','cancelled') THEN DELETE FROM public.agent_run_credentials WHERE run_id=p_run_id; END IF;
   PERFORM public.agent_emit(p_run_id,final_status);
@@ -793,27 +663,16 @@ BEGIN
 END;
 $$;
 
--- The number of schedules a member's tier allows. Read inside the definer context, so
--- the caller cannot argue a quota of its own; the defaults match the application's
--- (free 1, plus 5, pro 20) and an unknown member gets the strictest one.
-CREATE OR REPLACE FUNCTION public.agent_schedule_limit_for(p_user_id uuid) RETURNS integer
+-- The number of schedules each member may keep. Read inside the definer context, so
+-- the caller cannot argue a quota of its own; the default matches the application's.
+CREATE OR REPLACE FUNCTION public.agent_schedule_limit() RETURNS integer
     LANGUAGE sql STABLE SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-  SELECT coalesce(least(greatest(coalesce(configured, t.fallback), 0), 100), 1)
-  FROM (
-    SELECT CASE WHEN u.membership = 'pro' AND (u.membership_expires_at IS NULL OR u.membership_expires_at > now()) THEN 20
-                WHEN u.membership = 'plus' AND (u.membership_expires_at IS NULL OR u.membership_expires_at > now()) THEN 5
-                ELSE 1 END AS fallback,
-           CASE WHEN u.membership IN ('plus','pro') AND (u.membership_expires_at IS NULL OR u.membership_expires_at > now())
-                THEN u.membership ELSE 'free' END AS tier
-      FROM public.users u WHERE u.id = p_user_id
-  ) t
-  LEFT JOIN LATERAL (
-    SELECT CASE WHEN s.setting_value->>t.tier ~ '^[0-9]{1,3}$' THEN (s.setting_value->>t.tier)::integer END AS configured
+  SELECT coalesce((
+    SELECT least((s.setting_value->>'limit')::integer, 100)
       FROM public.app_settings s
-     WHERE s.setting_key = 'agent_schedule_limits' AND jsonb_typeof(s.setting_value) = 'object'
-  ) c ON true;
+     WHERE s.setting_key = 'agent_schedule_limits' AND s.setting_value->>'limit' ~ '^[0-9]{1,3}$'), 20);
 $$;
 
 CREATE OR REPLACE FUNCTION public.create_agent_schedule(p_name text, p_template text, p_prompt text, p_cadence jsonb, p_timezone text, p_options jsonb) RETURNS public.agent_schedules
@@ -827,10 +686,10 @@ BEGIN
   IF coalesce(btrim(p_prompt),'')='' OR length(p_prompt)>4000 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_PROMPT_INVALID' USING ERRCODE='22023'; END IF;
   IF p_template NOT IN ('custom','daily_briefing') THEN RAISE EXCEPTION 'AGENT_SCHEDULE_TEMPLATE_INVALID' USING ERRCODE='22023'; END IF;
   IF jsonb_typeof(p_options) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_OPTIONS_INVALID' USING ERRCODE='22023'; END IF;
-  -- Serialize the count and the insert so two tabs cannot exceed the tier's number.
+  -- Serialize the count and the insert so two tabs cannot exceed the limit.
   PERFORM pg_advisory_xact_lock(hashtextextended(v_user::text,721));
-  -- The tier's number is read here, never taken from the caller.
-  v_limit := public.agent_schedule_limit_for(v_user);
+  -- The limit is read here, never taken from the caller.
+  v_limit := public.agent_schedule_limit();
   SELECT count(*) INTO v_count FROM public.agent_schedules WHERE user_id=v_user;
   IF v_count >= v_limit THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505'; END IF;
   v_next := public.agent_next_run_at(p_cadence,p_timezone,now());
@@ -856,9 +715,9 @@ BEGIN
   IF coalesce(btrim(p_prompt),'')='' OR length(p_prompt)>4000 THEN RAISE EXCEPTION 'AGENT_SCHEDULE_PROMPT_INVALID' USING ERRCODE='22023'; END IF;
   IF jsonb_typeof(p_options) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_OPTIONS_INVALID' USING ERRCODE='22023'; END IF;
   IF p_enabled AND s.conversation_id IS NULL THEN RAISE EXCEPTION 'AGENT_SCHEDULE_CONVERSATION_MISSING' USING ERRCODE='23505'; END IF;
-  -- Switching a paused schedule back on may not push the member past its tier again.
+  -- Switching a paused schedule back on may not push the member past the limit again.
   IF p_enabled AND NOT s.enabled
-     AND (SELECT count(*) FROM public.agent_schedules WHERE user_id=s.user_id AND enabled) >= public.agent_schedule_limit_for(s.user_id) THEN
+     AND (SELECT count(*) FROM public.agent_schedules WHERE user_id=s.user_id AND enabled) >= public.agent_schedule_limit() THEN
     RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505';
   END IF;
   v_next := CASE WHEN p_enabled THEN public.agent_next_run_at(p_cadence,p_timezone,now()) ELSE NULL END;
@@ -898,25 +757,24 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.enforce_agent_schedule_limits(p_limits jsonb) RETURNS integer
+-- Pauses the newest enabled schedules beyond the limit, after an administrator lowers it.
+CREATE OR REPLACE FUNCTION public.enforce_agent_schedule_limits() RETURNS integer
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE paused integer;
+DECLARE paused integer; v_limit integer;
 BEGIN
   PERFORM public.agent_require_admin();
-  IF p_limits IS NULL OR jsonb_typeof(p_limits) IS DISTINCT FROM 'object' THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMITS_INVALID' USING ERRCODE='22023'; END IF;
+  v_limit := public.agent_schedule_limit();
   WITH ranked AS (
     SELECT s.id,
-      row_number() OVER (PARTITION BY s.user_id ORDER BY s.created_at, s.id) AS position,
-      CASE WHEN u.membership IN ('plus','pro') AND (u.membership_expires_at IS NULL OR u.membership_expires_at>now())
-        THEN u.membership ELSE 'free' END AS tier
-    FROM public.agent_schedules s JOIN public.users u ON u.id=s.user_id
+      row_number() OVER (PARTITION BY s.user_id ORDER BY s.created_at, s.id) AS position
+    FROM public.agent_schedules s
     WHERE s.enabled
   ), paused_rows AS (
     UPDATE public.agent_schedules s SET enabled=false,next_run_at=NULL,last_status='paused',updated_at=now()
     FROM ranked r
-    WHERE s.id=r.id AND r.position > coalesce((p_limits->>r.tier)::integer,0)
+    WHERE s.id=r.id AND r.position > v_limit
     RETURNING s.id
   )
   SELECT count(*) INTO paused FROM paused_rows;
@@ -961,11 +819,11 @@ BEGIN
     ELSIF p_status='failed' AND notify THEN
       v_title:='定时任务「'||s.name||'」未完成';
       v_content:=coalesce(nullif(btrim(p_error),''),'运行失败，打开对话查看原因。');
-    ELSIF p_status='skipped' AND p_skip_reason IN ('insufficient_credits','model_unavailable','feature_disabled','conversation_missing') THEN
+    ELSIF p_status='skipped' AND p_skip_reason IN ('insufficient_balance','model_unavailable','feature_disabled','conversation_missing') THEN
       v_title:='定时任务「'||s.name||'」已跳过';
       v_content:=CASE p_skip_reason
-        WHEN 'insufficient_credits' THEN '积分不足，本次运行已跳过。'
-        WHEN 'model_unavailable' THEN '模型不可用或当前会员无权限，本次运行已跳过。'
+        WHEN 'insufficient_balance' THEN '余额不足，本次运行已跳过。'
+        WHEN 'model_unavailable' THEN '模型不可用或未定价，本次运行已跳过。'
         WHEN 'feature_disabled' THEN '功能已关闭，本次运行已跳过。'
         ELSE '绑定的对话已删除，任务已暂停，请重新创建。' END;
     END IF;
@@ -1341,10 +1199,6 @@ CREATE OR REPLACE FUNCTION public.agent_search_knowledge(p_run_id uuid, p_worker
 DECLARE r public.agent_runs; result jsonb; previous_sub text; previous_claims text; kb_ids uuid[]; query_text text; max_rows integer;
 BEGIN
   r:=public.agent_require_lease(p_run_id,p_worker_id,p_fence);
-  IF NOT EXISTS(SELECT 1 FROM public.users u WHERE u.id=r.user_id AND u.membership IN ('plus','pro') AND (u.membership_expires_at IS NULL OR u.membership_expires_at>now())) THEN
-    RAISE EXCEPTION 'MEMBERSHIP_REQUIRED' USING ERRCODE='42501';
-  END IF;
-  IF p_method='vector' AND NOT EXISTS(SELECT 1 FROM public.users u WHERE u.id=r.user_id AND u.membership='pro') THEN RAISE EXCEPTION 'MEMBERSHIP_REQUIRED' USING ERRCODE='42501'; END IF;
   SELECT array_agg(v::uuid) INTO kb_ids FROM jsonb_array_elements_text(nullif(p_args->'p_kb_ids','null'::jsonb)) AS t(v);
   query_text:=p_args->>'p_query'; max_rows:=coalesce((p_args->>'p_limit')::integer,20);
   IF max_rows<1 OR max_rows>100 THEN RAISE EXCEPTION 'INVALID_SEARCH_LIMIT'; END IF;
@@ -1850,6 +1704,355 @@ BEGIN
 END;
 $_$;
 
+-- Creates the wallet on first use and locks it: every balance change for one
+-- member is serialized on this row, allowances included.
+CREATE OR REPLACE FUNCTION public.billing_lock_account(p_user_id uuid) RETURNS bigint
+    LANGUAGE plpgsql
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE balance bigint;
+BEGIN
+  INSERT INTO public.billing_accounts(user_id) VALUES(p_user_id) ON CONFLICT (user_id) DO NOTHING;
+  SELECT balance_micros INTO STRICT balance FROM public.billing_accounts WHERE user_id=p_user_id FOR UPDATE;
+  RETURN balance;
+END;
+$$;
+
+-- The first reset boundary after p_after, counted from the start so month ends
+-- do not drift; NULL when the allowance never resets or the boundary reaches the end.
+CREATE OR REPLACE FUNCTION public.billing_next_reset(p_starts_at timestamp with time zone, p_ends_at timestamp with time zone, p_period text, p_after timestamp with time zone) RETURNS timestamp with time zone
+    LANGUAGE plpgsql STABLE
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE steps integer; step interval; candidate timestamp with time zone;
+BEGIN
+  IF p_period NOT IN ('daily','weekly','monthly') THEN RETURN NULL; END IF;
+  step := CASE p_period WHEN 'monthly' THEN interval '1 month' WHEN 'weekly' THEN interval '7 days' ELSE interval '1 day' END;
+  steps := greatest(CASE p_period
+    WHEN 'monthly' THEN (extract(year FROM age(p_after,p_starts_at))*12 + extract(month FROM age(p_after,p_starts_at)))::integer
+    ELSE floor(extract(epoch FROM p_after-p_starts_at)/extract(epoch FROM step))::integer END, 1);
+  LOOP
+    candidate := p_starts_at + step*steps;
+    EXIT WHEN candidate > p_after;
+    steps := steps + 1;
+  END LOOP;
+  RETURN CASE WHEN candidate < p_ends_at THEN candidate END;
+END;
+$$;
+
+-- Applies a reset that has come due to a locked subscription row.
+CREATE OR REPLACE FUNCTION public.billing_apply_reset(p_subscription public.user_subscriptions) RETURNS public.user_subscriptions
+    LANGUAGE plpgsql
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF p_subscription.next_reset_at IS NULL OR p_subscription.next_reset_at > now() THEN RETURN p_subscription; END IF;
+  UPDATE public.user_subscriptions SET used_micros=0,
+    next_reset_at=public.billing_next_reset(starts_at,ends_at,reset_period,now()),updated_at=now()
+    WHERE id=p_subscription.id RETURNING * INTO p_subscription;
+  RETURN p_subscription;
+END;
+$$;
+
+-- Starts a subscription from a plan now. Title, allowance and reset period are
+-- copied, so a later edit of the plan does not change what was sold.
+CREATE OR REPLACE FUNCTION public.billing_open_subscription(p_user_id uuid, p_plan public.subscription_plans, p_source text, p_order_id uuid, p_note text) RETURNS public.user_subscriptions
+    LANGUAGE plpgsql
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE sub public.user_subscriptions; starts timestamp with time zone := now(); ends timestamp with time zone;
+BEGIN
+  ends := starts + CASE p_plan.duration_unit
+    WHEN 'day' THEN make_interval(days=>p_plan.duration_value)
+    WHEN 'month' THEN make_interval(months=>p_plan.duration_value)
+    ELSE make_interval(years=>p_plan.duration_value) END;
+  INSERT INTO public.user_subscriptions(user_id,plan_id,title,allowance_micros,reset_period,starts_at,ends_at,next_reset_at,source,order_id,note)
+    VALUES(p_user_id,p_plan.id,p_plan.title,p_plan.allowance_micros,p_plan.reset_period,starts,ends,
+      public.billing_next_reset(starts,ends,p_plan.reset_period,starts),p_source,p_order_id,p_note)
+    RETURNING * INTO sub;
+  RETURN sub;
+END;
+$$;
+
+-- What the member can spend now: the wallet plus every active allowance, an
+-- allowance whose reset is due counting as full again.
+CREATE OR REPLACE FUNCTION public.billing_spendable(p_user_id uuid) RETURNS bigint
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF p_user_id IS NULL OR (p_user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
+  END IF;
+  RETURN coalesce((SELECT balance_micros FROM public.billing_accounts WHERE user_id=p_user_id),0)
+    + coalesce((SELECT sum(CASE WHEN s.next_reset_at<=now() THEN s.allowance_micros ELSE s.allowance_micros-s.used_micros END)
+        FROM public.user_subscriptions s
+        WHERE s.user_id=p_user_id AND s.status='active' AND s.starts_at<=now() AND s.ends_at>now()),0);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.billing_summary(p_user_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql STABLE SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE wallet bigint; remaining bigint; subscriptions jsonb;
+BEGIN
+  IF p_user_id IS NULL OR (p_user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
+  END IF;
+  wallet := coalesce((SELECT balance_micros FROM public.billing_accounts WHERE user_id=p_user_id),0);
+  SELECT coalesce(sum(t.allowance-t.used),0),
+      coalesce(jsonb_agg(jsonb_build_object('id',t.id,'planId',t.plan_id,'title',t.title,'source',t.source,
+        'allowanceMicros',t.allowance,'usedMicros',t.used,'resetPeriod',t.reset_period,
+        'startsAt',t.starts_at,'endsAt',t.ends_at,'nextResetAt',t.next_reset) ORDER BY t.ends_at,t.id),'[]'::jsonb)
+    INTO remaining, subscriptions
+    FROM (SELECT s.id,s.plan_id,s.title,s.source,s.reset_period,s.starts_at,s.ends_at,s.allowance_micros AS allowance,
+        CASE WHEN s.next_reset_at<=now() THEN 0 ELSE s.used_micros END AS used,
+        CASE WHEN s.next_reset_at<=now() THEN public.billing_next_reset(s.starts_at,s.ends_at,s.reset_period,now()) ELSE s.next_reset_at END AS next_reset
+      FROM public.user_subscriptions s
+      WHERE s.user_id=p_user_id AND s.status='active' AND s.starts_at<=now() AND s.ends_at>now()) t;
+  RETURN jsonb_build_object('walletMicros',wallet,'subscriptionMicros',remaining,
+    'spendableMicros',wallet+remaining,'subscriptions',subscriptions);
+END;
+$$;
+
+-- Meters one usage charge: active allowances first, soonest to end first and
+-- after any due reset, then the wallet. With p_allow_debt the wallet may go
+-- negative for usage that already happened; a prepaid charge never does. A
+-- repeated idempotency key returns the entry it recorded.
+CREATE OR REPLACE FUNCTION public.billing_charge(p_user_id uuid, p_amount bigint, p_allow_debt boolean, p_source text, p_model_key text DEFAULT NULL::text, p_usage jsonb DEFAULT NULL::jsonb, p_reference_type text DEFAULT NULL::text, p_reference_id text DEFAULT NULL::text, p_idempotency_key text DEFAULT NULL::text, p_description text DEFAULT ''::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE entry public.billing_ledger; sub public.user_subscriptions; wallet bigint; remaining bigint; take bigint; parts jsonb := '[]';
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  IF p_amount IS NULL OR p_amount<0 THEN RAISE EXCEPTION 'BILLING_AMOUNT_INVALID' USING ERRCODE='22023'; END IF;
+  wallet := public.billing_lock_account(p_user_id);
+  -- Checked under the lock, so a concurrent duplicate has committed by now.
+  SELECT * INTO entry FROM public.billing_ledger WHERE idempotency_key=p_idempotency_key AND user_id=p_user_id;
+  IF FOUND THEN RETURN to_jsonb(entry)||jsonb_build_object('replayed',true); END IF;
+  remaining := p_amount;
+  FOR sub IN SELECT * FROM public.user_subscriptions
+      WHERE user_id=p_user_id AND status='active' AND starts_at<=now() AND ends_at>now()
+      ORDER BY ends_at,created_at,id FOR UPDATE LOOP
+    EXIT WHEN remaining=0;
+    sub := public.billing_apply_reset(sub);
+    take := least(remaining,sub.allowance_micros-sub.used_micros);
+    CONTINUE WHEN take<=0;
+    UPDATE public.user_subscriptions SET used_micros=used_micros+take,updated_at=now() WHERE id=sub.id;
+    parts := parts||jsonb_build_array(jsonb_build_object('id',sub.id,'title',sub.title,'micros',-take));
+    remaining := remaining-take;
+  END LOOP;
+  IF remaining>0 THEN
+    IF NOT p_allow_debt AND wallet<remaining THEN RAISE EXCEPTION 'INSUFFICIENT_BALANCE' USING ERRCODE='P0001'; END IF;
+    wallet := wallet-remaining;
+    UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=p_user_id;
+  END IF;
+  INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,subscription_parts,wallet_after_micros,
+      source,model_key,usage,reference_type,reference_id,idempotency_key,description)
+    VALUES(p_user_id,'usage',-p_amount,-remaining,parts,wallet,coalesce(p_source,''),p_model_key,p_usage,
+      p_reference_type,p_reference_id,p_idempotency_key,left(coalesce(p_description,''),500))
+    RETURNING * INTO entry;
+  RETURN to_jsonb(entry)||jsonb_build_object('replayed',false);
+END;
+$$;
+
+-- Returns part or all of a usage charge in reverse order: the wallet share
+-- first, then the allowances last to first. An allowance that has since reset
+-- or ended cannot take its share back; that share lapses with it.
+CREATE OR REPLACE FUNCTION public.billing_refund(p_charge_key text, p_amount bigint, p_idempotency_key text, p_description text DEFAULT ''::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE charge public.billing_ledger; entry public.billing_ledger; sub public.user_subscriptions; part jsonb;
+  wallet bigint; due bigint; wallet_back bigint; restore bigint; restored bigint := 0; parts jsonb := '[]';
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  IF p_amount IS NULL OR p_amount<=0 OR p_idempotency_key IS NULL THEN RAISE EXCEPTION 'BILLING_AMOUNT_INVALID' USING ERRCODE='22023'; END IF;
+  SELECT * INTO charge FROM public.billing_ledger WHERE idempotency_key=p_charge_key AND kind='usage';
+  IF NOT FOUND THEN RAISE EXCEPTION 'BILLING_CHARGE_NOT_FOUND' USING ERRCODE='P0002'; END IF;
+  wallet := public.billing_lock_account(charge.user_id);
+  SELECT * INTO entry FROM public.billing_ledger WHERE idempotency_key=p_idempotency_key AND user_id=charge.user_id;
+  IF FOUND THEN RETURN to_jsonb(entry)||jsonb_build_object('replayed',true); END IF;
+  wallet_back := greatest(least(p_amount, -charge.wallet_micros - coalesce((SELECT sum(l.wallet_micros) FROM public.billing_ledger l
+    WHERE l.kind='refund' AND l.reference_type='billing_ledger' AND l.reference_id=charge.id::text),0)),0);
+  due := p_amount-wallet_back;
+  FOR part IN SELECT t.value FROM jsonb_array_elements(charge.subscription_parts) WITH ORDINALITY t(value,n) ORDER BY t.n DESC LOOP
+    EXIT WHEN due=0;
+    restore := least(due, -(part->>'micros')::bigint - coalesce((SELECT sum((p.value->>'micros')::bigint)
+      FROM public.billing_ledger l CROSS JOIN LATERAL jsonb_array_elements(l.subscription_parts) p
+      WHERE l.kind='refund' AND l.reference_type='billing_ledger' AND l.reference_id=charge.id::text AND p.value->>'id'=part->>'id'),0));
+    CONTINUE WHEN restore<=0;
+    SELECT * INTO sub FROM public.user_subscriptions
+      WHERE id=(part->>'id')::uuid AND status='active' AND ends_at>now() FOR UPDATE;
+    CONTINUE WHEN NOT FOUND;
+    sub := public.billing_apply_reset(sub);
+    restore := least(restore,sub.used_micros);
+    CONTINUE WHEN restore<=0;
+    UPDATE public.user_subscriptions SET used_micros=used_micros-restore,updated_at=now() WHERE id=sub.id;
+    parts := parts||jsonb_build_array(jsonb_build_object('id',sub.id,'title',sub.title,'micros',restore));
+    restored := restored+restore;
+    due := due-restore;
+  END LOOP;
+  IF wallet_back+restored=0 THEN RETURN NULL; END IF;
+  IF wallet_back>0 THEN
+    wallet := wallet+wallet_back;
+    UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=charge.user_id;
+  END IF;
+  INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,subscription_parts,wallet_after_micros,
+      source,model_key,reference_type,reference_id,idempotency_key,description)
+    VALUES(charge.user_id,'refund',wallet_back+restored,wallet_back,parts,wallet,charge.source,charge.model_key,
+      'billing_ledger',charge.id::text,p_idempotency_key,left(coalesce(p_description,''),500))
+    RETURNING * INTO entry;
+  RETURN to_jsonb(entry)||jsonb_build_object('replayed',false);
+END;
+$$;
+
+-- An administrator's manual credit or debit. A debit may not take the wallet below zero.
+CREATE OR REPLACE FUNCTION public.billing_adjust_wallet(p_user_id uuid, p_amount bigint, p_description text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE entry public.billing_ledger; wallet bigint;
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  IF p_amount IS NULL OR p_amount=0 THEN RAISE EXCEPTION 'BILLING_AMOUNT_INVALID' USING ERRCODE='22023'; END IF;
+  wallet := public.billing_lock_account(p_user_id);
+  IF p_amount<0 AND wallet+p_amount<0 THEN RAISE EXCEPTION 'INSUFFICIENT_BALANCE' USING ERRCODE='P0001'; END IF;
+  wallet := wallet+p_amount;
+  UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=p_user_id;
+  INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,wallet_after_micros,source,reference_type,reference_id,description)
+    VALUES(p_user_id,'adjust',p_amount,p_amount,wallet,'admin','user',auth.uid()::text,left(coalesce(p_description,''),500))
+    RETURNING * INTO entry;
+  RETURN to_jsonb(entry);
+END;
+$$;
+
+-- An administrator gives a plan; the per-member purchase limit does not apply.
+CREATE OR REPLACE FUNCTION public.billing_grant_subscription(p_user_id uuid, p_plan_id uuid, p_note text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE plan public.subscription_plans; sub public.user_subscriptions; wallet bigint;
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  wallet := public.billing_lock_account(p_user_id);
+  SELECT * INTO plan FROM public.subscription_plans WHERE id=p_plan_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'BILLING_PLAN_NOT_FOUND' USING ERRCODE='P0002'; END IF;
+  sub := public.billing_open_subscription(p_user_id,plan,'admin',NULL,p_note);
+  INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_after_micros,source,reference_type,reference_id,description)
+    VALUES(p_user_id,'subscription',0,wallet,'admin','user_subscription',sub.id::text,format('管理员开通「%s」',plan.title));
+  RETURN to_jsonb(sub);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.billing_cancel_subscription(p_subscription_id uuid, p_note text DEFAULT NULL::text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE owner_id uuid; sub public.user_subscriptions; wallet bigint;
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  SELECT user_id INTO owner_id FROM public.user_subscriptions WHERE id=p_subscription_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'BILLING_SUBSCRIPTION_NOT_FOUND' USING ERRCODE='P0002'; END IF;
+  wallet := public.billing_lock_account(owner_id);
+  UPDATE public.user_subscriptions SET status='cancelled',note=coalesce(p_note,note),updated_at=now()
+    WHERE id=p_subscription_id AND status='active' RETURNING * INTO sub;
+  IF NOT FOUND THEN RAISE EXCEPTION 'BILLING_SUBSCRIPTION_NOT_ACTIVE' USING ERRCODE='22023'; END IF;
+  INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_after_micros,source,reference_type,reference_id,description)
+    VALUES(owner_id,'subscription',0,wallet,'admin','user_subscription',sub.id::text,format('管理员取消「%s」',sub.title));
+  RETURN to_jsonb(sub);
+END;
+$$;
+
+-- The member buys a plan with the wallet. Never on credit: the price must be covered.
+CREATE OR REPLACE FUNCTION public.billing_buy_plan_with_balance(p_user_id uuid, p_plan_id uuid) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE plan public.subscription_plans; sub public.user_subscriptions; entry public.billing_ledger; wallet bigint; price bigint;
+BEGIN
+  IF p_user_id IS NULL OR (p_user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
+  END IF;
+  wallet := public.billing_lock_account(p_user_id);
+  SELECT * INTO plan FROM public.subscription_plans WHERE id=p_plan_id AND enabled AND purchasable;
+  IF NOT FOUND THEN RAISE EXCEPTION 'BILLING_PLAN_UNAVAILABLE' USING ERRCODE='P0002'; END IF;
+  IF plan.max_per_user IS NOT NULL
+     AND (SELECT count(*) FROM public.user_subscriptions WHERE user_id=p_user_id AND plan_id=plan.id)>=plan.max_per_user THEN
+    RAISE EXCEPTION 'BILLING_PLAN_LIMIT' USING ERRCODE='23505';
+  END IF;
+  price := round(plan.price_usd*1000000)::bigint;
+  IF wallet<price THEN RAISE EXCEPTION 'INSUFFICIENT_BALANCE' USING ERRCODE='P0001'; END IF;
+  wallet := wallet-price;
+  UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=p_user_id;
+  sub := public.billing_open_subscription(p_user_id,plan,'balance',NULL,NULL);
+  INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,wallet_after_micros,source,reference_type,reference_id,description)
+    VALUES(p_user_id,'subscription',-price,-price,wallet,'balance','user_subscription',sub.id::text,format('余额购买「%s」',plan.title))
+    RETURNING * INTO entry;
+  RETURN jsonb_build_object('subscription',to_jsonb(sub),'entry',to_jsonb(entry));
+END;
+$$;
+
+-- Redeems a code once: balance into the wallet, or a plan started now.
+CREATE OR REPLACE FUNCTION public.billing_redeem(p_user_id uuid, p_code text) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE code public.redemption_codes; plan public.subscription_plans; sub public.user_subscriptions; entry public.billing_ledger; wallet bigint;
+BEGIN
+  IF p_user_id IS NULL OR (p_user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
+  END IF;
+  SELECT * INTO code FROM public.redemption_codes c WHERE c.code=btrim(coalesce(p_code,'')) FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'REDEMPTION_CODE_NOT_FOUND' USING ERRCODE='P0002'; END IF;
+  IF code.status='used' THEN RAISE EXCEPTION 'REDEMPTION_CODE_USED' USING ERRCODE='23505'; END IF;
+  IF code.status<>'unused' OR code.expires_at<=now() THEN RAISE EXCEPTION 'REDEMPTION_CODE_UNAVAILABLE' USING ERRCODE='22023'; END IF;
+  wallet := public.billing_lock_account(p_user_id);
+  IF code.kind='balance' THEN
+    wallet := wallet+code.amount_micros;
+    UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=p_user_id;
+    INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,wallet_after_micros,source,reference_type,reference_id,description)
+      VALUES(p_user_id,'redeem',code.amount_micros,code.amount_micros,wallet,'code','redemption_code',code.id::text,'兑换码充值')
+      RETURNING * INTO entry;
+  ELSE
+    SELECT * INTO STRICT plan FROM public.subscription_plans WHERE id=code.plan_id;
+    sub := public.billing_open_subscription(p_user_id,plan,'redeem',NULL,NULL);
+    INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_after_micros,source,reference_type,reference_id,description)
+      VALUES(p_user_id,'redeem',0,wallet,'code','redemption_code',code.id::text,format('兑换「%s」',plan.title))
+      RETURNING * INTO entry;
+  END IF;
+  UPDATE public.redemption_codes SET status='used',used_by=p_user_id,used_at=now() WHERE id=code.id;
+  RETURN jsonb_build_object('kind',code.kind,'entry',to_jsonb(entry),'subscription',to_jsonb(sub));
+END;
+$$;
+
+-- Maintenance: marks ended subscriptions and abandoned checkouts. Spending
+-- already ignores both; this keeps the stored status truthful.
+CREATE OR REPLACE FUNCTION public.billing_expire_due(p_limit integer DEFAULT 500) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE subscriptions integer; orders integer;
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  WITH ended AS (
+    UPDATE public.user_subscriptions SET status='expired',updated_at=now() WHERE id IN (
+      SELECT id FROM public.user_subscriptions WHERE status='active' AND ends_at<=now()
+      ORDER BY ends_at LIMIT least(greatest(p_limit,1),5000) FOR UPDATE SKIP LOCKED)
+    RETURNING id)
+  SELECT count(*) INTO subscriptions FROM ended;
+  WITH abandoned AS (
+    UPDATE public.payment_orders SET status='expired',updated_at=now() WHERE id IN (
+      SELECT id FROM public.payment_orders WHERE status='pending' AND created_at<now()-interval '2 hours'
+      ORDER BY created_at LIMIT least(greatest(p_limit,1),5000) FOR UPDATE SKIP LOCKED)
+    RETURNING id)
+  SELECT count(*) INTO orders FROM abandoned;
+  RETURN jsonb_build_object('subscriptions',subscriptions,'orders',orders);
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.check_vector_index_exists(p_dim integer DEFAULT NULL::integer) RETURNS boolean
     LANGUAGE sql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'public'
@@ -1874,122 +2077,6 @@ BEGIN
    SELECT a.id FROM public.agent_attachments a WHERE (a.status='deleting' OR a.orphaned_at<now()-interval '24 hours') AND NOT EXISTS(SELECT 1 FROM public.agent_attachment_refs r WHERE r.attachment_id=a.id)
    ORDER BY a.created_at LIMIT least(greatest(p_limit,1),100) FOR UPDATE SKIP LOCKED
  ) RETURNING *;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.claim_linuxdo_membership_as_service(p_user_id uuid, p_plan_id text, p_trust_level integer, p_provider_user_id text) RETURNS jsonb
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-DECLARE
-  v_last_claim_at timestamptz;
-  v_current_membership text;
-  v_current_membership_expires_at timestamptz;
-  v_effective_membership text := 'free';
-  v_next_expires_at timestamptz;
-  v_now timestamptz := now();
-BEGIN
-
-IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-END IF;
-
-
-  IF p_plan_id NOT IN ('plus', 'pro') THEN
-    RETURN jsonb_build_object('status', 'invalid_plan');
-  END IF;
-
-  -- Serialize per-user monthly claims so the cooldown check and grant write
-  -- happen inside the same critical section.
-  PERFORM pg_advisory_xact_lock(hashtextextended('linuxdo_monthly_claim:' || p_user_id::text, 0));
-
-  SELECT used_at
-  INTO v_last_claim_at
-  FROM public.activation_keys
-  WHERE used_by = p_user_id
-    AND key_type = 'membership'
-    AND source = 'linuxdo_monthly'
-  ORDER BY used_at DESC
-  LIMIT 1;
-
-  IF v_last_claim_at IS NOT NULL AND v_last_claim_at > v_now - INTERVAL '30 days' THEN
-    RETURN jsonb_build_object(
-      'status', 'cooldown',
-      'next_available_at', v_last_claim_at + INTERVAL '30 days'
-    );
-  END IF;
-
-  SELECT membership, membership_expires_at
-  INTO v_current_membership, v_current_membership_expires_at
-  FROM public.users
-  WHERE id = p_user_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('status', 'user_not_found');
-  END IF;
-
-  IF v_current_membership IN ('plus', 'pro')
-    AND v_current_membership_expires_at IS NOT NULL
-    AND v_current_membership_expires_at > v_now THEN
-    v_effective_membership := v_current_membership;
-  END IF;
-
-  IF public.membership_rank(v_effective_membership) > public.membership_rank(p_plan_id) THEN
-    RETURN jsonb_build_object(
-      'status', 'lower_tier_ignored',
-      'membership', v_effective_membership,
-      'expires_at', v_current_membership_expires_at
-    );
-  END IF;
-
-  IF public.membership_rank(v_effective_membership) = public.membership_rank(p_plan_id)
-    AND v_effective_membership <> 'free'
-    AND v_current_membership_expires_at IS NOT NULL
-    AND v_current_membership_expires_at > v_now THEN
-    v_next_expires_at := v_current_membership_expires_at + INTERVAL '30 days';
-  ELSE
-    v_next_expires_at := v_now + INTERVAL '30 days';
-  END IF;
-
-  INSERT INTO public.activation_keys (
-    key_code,
-    key_type,
-    membership_type,
-    is_used,
-    used_by,
-    used_at,
-    created_by,
-    source,
-    metadata
-  )
-  VALUES (
-    'sk-auto-' || replace(gen_random_uuid()::text, '-', ''),
-    'membership',
-    p_plan_id,
-    true,
-    p_user_id,
-    v_now,
-    p_user_id,
-    'linuxdo_monthly',
-    jsonb_build_object(
-      'trust_level', p_trust_level,
-      'provider_user_id', p_provider_user_id
-    )
-  );
-
-  UPDATE public.users
-  SET
-    membership = p_plan_id,
-    membership_expires_at = v_next_expires_at,
-    updated_at = now()
-  WHERE id = p_user_id;
-
-  RETURN jsonb_build_object(
-    'status', 'ok',
-    'membership', p_plan_id,
-    'expires_at', v_next_expires_at
-  );
 END;
 $$;
 
@@ -2477,90 +2564,6 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.decrement_ai_chat_count(user_id uuid) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-DECLARE
-  new_count integer;
-BEGIN
-
-IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-END IF;
-
-
-  UPDATE public.users
-  SET
-    ai_chat_count = GREATEST(COALESCE(ai_chat_count, 0) - 1, 0),
-    updated_at = now()
-  WHERE id = user_id
-    AND COALESCE(ai_chat_count, 0) > 0
-  RETURNING ai_chat_count INTO new_count;
-
-  IF new_count IS NULL THEN
-    RETURN NULL;
-  END IF;
-
-  PERFORM public.record_credit_transaction(
-    user_id,
-    -1,
-    'spend',
-    'ai_usage',
-    new_count,
-    'credit_usage',
-    NULL,
-    'AI 使用消费 1 积分',
-    '{}'::jsonb
-  );
-
-  RETURN new_count;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.decrement_ai_chat_count_by(user_id uuid, amount integer) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-DECLARE
-  new_count integer;
-BEGIN
-  IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-  END IF;
-
-  IF amount IS NULL OR amount <= 0 THEN
-    RAISE EXCEPTION 'amount must be greater than zero' USING ERRCODE = '22023';
-  END IF;
-
-  UPDATE public.users
-  SET
-    ai_chat_count = COALESCE(ai_chat_count, 0) - amount,
-    updated_at = now()
-  WHERE id = user_id
-    AND COALESCE(ai_chat_count, 0) >= amount
-  RETURNING ai_chat_count INTO new_count;
-
-  IF new_count IS NULL THEN
-    RETURN NULL;
-  END IF;
-
-  PERFORM public.record_credit_transaction(
-    user_id,
-    -amount,
-    'spend',
-    'ai_usage',
-    new_count,
-    'credit_usage',
-    NULL,
-    'AI 生图消费 ' || amount || ' 积分',
-    '{}'::jsonb
-  );
-
-  RETURN new_count;
-END;
-$$;
-
 CREATE OR REPLACE FUNCTION public.delete_agent_retention(p_event_days integer DEFAULT 30, p_commit_days integer DEFAULT 7, p_worker_hours integer DEFAULT 24, p_limit integer DEFAULT 1000, p_metric_days integer DEFAULT 30) RETURNS TABLE(events_deleted bigint, commits_deleted bigint, workers_deleted bigint, metrics_deleted bigint)
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -2767,15 +2770,10 @@ BEGIN
     END IF;
 
     IF TG_OP = 'INSERT' THEN
-        IF NEW.is_admin IS DISTINCT FROM false
-           OR NEW.membership IS DISTINCT FROM 'free'::text
-           OR NEW.membership_expires_at IS NOT NULL
-           OR NEW.ai_chat_count IS DISTINCT FROM 1 THEN
+        IF NEW.is_admin IS DISTINCT FROM false THEN
             RAISE EXCEPTION 'Account entitlement changes require administrator authority' USING ERRCODE = '42501';
         END IF;
-    ELSIF ROW(NEW.id, NEW.is_admin, NEW.membership, NEW.membership_expires_at, NEW.ai_chat_count)
-          IS DISTINCT FROM
-          ROW(OLD.id, OLD.is_admin, OLD.membership, OLD.membership_expires_at, OLD.ai_chat_count) THEN
+    ELSIF ROW(NEW.id, NEW.is_admin) IS DISTINCT FROM ROW(OLD.id, OLD.is_admin) THEN
         RAISE EXCEPTION 'Account entitlement changes require administrator authority' USING ERRCODE = '42501';
     END IF;
 
@@ -2884,50 +2882,6 @@ BEGIN
     'recordsImported', v_records_imported,
     'notesImported', v_notes_imported
   );
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.increment_ai_chat_count(user_id uuid, amount integer) RETURNS integer
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
-    AS $$
-DECLARE
-  new_count integer;
-BEGIN
-
-IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-END IF;
-
-
-  IF amount IS NULL OR amount <= 0 THEN
-    RAISE EXCEPTION 'amount must be greater than zero' USING ERRCODE = '22023';
-  END IF;
-
-  UPDATE public.users
-  SET
-    ai_chat_count = COALESCE(ai_chat_count, 0) + amount,
-    updated_at = now()
-  WHERE id = user_id
-  RETURNING ai_chat_count INTO new_count;
-
-  IF new_count IS NULL THEN
-    RETURN NULL;
-  END IF;
-
-  PERFORM public.record_credit_transaction(
-    user_id,
-    amount,
-    'refund',
-    'ai_refund',
-    new_count,
-    'credit_refund',
-    NULL,
-    format('AI 失败退款 +%s 积分', amount),
-    '{}'::jsonb
-  );
-
-  RETURN new_count;
 END;
 $$;
 
@@ -3093,28 +3047,6 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.membership_credit_limit(p_plan_id text) RETURNS integer
-    LANGUAGE sql IMMUTABLE
-    SET search_path TO 'public'
-    AS $$
-  SELECT CASE p_plan_id
-    WHEN 'pro' THEN 50
-    WHEN 'plus' THEN 20
-    ELSE 10
-  END
-$$;
-
-CREATE OR REPLACE FUNCTION public.membership_rank(p_plan_id text) RETURNS integer
-    LANGUAGE sql IMMUTABLE
-    SET search_path TO 'public'
-    AS $$
-  SELECT CASE p_plan_id
-    WHEN 'pro' THEN 2
-    WHEN 'plus' THEN 1
-    ELSE 0
-  END
-$$;
-
 CREATE OR REPLACE FUNCTION public.orphan_agent_attachment() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
@@ -3125,121 +3057,64 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.perform_daily_checkin_as_service(p_user_id uuid) RETURNS jsonb
+-- A checkout waiting for the payment provider. Plan availability and the
+-- per-member limit are checked here; the paid callback no longer refuses.
+CREATE OR REPLACE FUNCTION public.payment_order_create(p_user_id uuid, p_trade_no text, p_kind text, p_plan_id uuid, p_credit_micros bigint, p_pay_amount numeric, p_pay_currency text, p_pay_method text) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'public'
+    SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE
-  v_today date := current_date;
-  v_current_credits integer := 0;
-  v_new_credits integer := 0;
-  v_membership text := 'free';
-  v_membership_expires_at timestamptz;
-  v_effective_membership text := 'free';
-  v_credit_limit integer := 10;
-  v_base_reward integer := 1;
-  v_reward_credits integer := 0;
+DECLARE plan public.subscription_plans; o public.payment_orders;
 BEGIN
-
-IF NOT public.is_admin_user() THEN
-    RAISE EXCEPTION 'forbidden' USING ERRCODE = '42501';
-END IF;
-
-
-  SELECT
-    COALESCE(ai_chat_count, 0),
-    COALESCE(membership, 'free'),
-    membership_expires_at
-  INTO
-    v_current_credits,
-    v_membership,
-    v_membership_expires_at
-  FROM public.users
-  WHERE id = p_user_id
-  FOR UPDATE;
-
-  IF NOT FOUND THEN
-    RETURN jsonb_build_object('status', 'user_not_found');
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  IF p_kind='subscription' THEN
+    PERFORM public.billing_lock_account(p_user_id);
+    SELECT * INTO plan FROM public.subscription_plans WHERE id=p_plan_id AND enabled AND purchasable;
+    IF NOT FOUND THEN RAISE EXCEPTION 'BILLING_PLAN_UNAVAILABLE' USING ERRCODE='P0002'; END IF;
+    IF plan.max_per_user IS NOT NULL
+       AND (SELECT count(*) FROM public.user_subscriptions WHERE user_id=p_user_id AND plan_id=plan.id)>=plan.max_per_user THEN
+      RAISE EXCEPTION 'BILLING_PLAN_LIMIT' USING ERRCODE='23505';
+    END IF;
   END IF;
+  INSERT INTO public.payment_orders(trade_no,user_id,kind,plan_id,credit_micros,pay_amount,pay_currency,pay_method)
+    VALUES(p_trade_no,p_user_id,p_kind,p_plan_id,p_credit_micros,p_pay_amount,coalesce(p_pay_currency,'CNY'),p_pay_method)
+    RETURNING * INTO o;
+  RETURN to_jsonb(o);
+END;
+$$;
 
-  IF EXISTS (
-    SELECT 1
-    FROM public.daily_checkins
-    WHERE user_id = p_user_id
-      AND checkin_date = v_today
-  ) THEN
-    RETURN jsonb_build_object(
-      'status', 'already_checked_in',
-      'reward_credits', 0
-    );
+-- Settles a paid order once. The callback must name an order of this provider
+-- and its exact amount; a repeated callback for a paid order changes nothing.
+-- An order expired by maintenance is still honoured: the money was taken.
+CREATE OR REPLACE FUNCTION public.payment_order_complete(p_trade_no text, p_provider text, p_paid_amount numeric, p_provider_trade_no text, p_payload jsonb) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE o public.payment_orders; plan public.subscription_plans; sub public.user_subscriptions; wallet bigint;
+BEGIN
+  IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
+  SELECT * INTO o FROM public.payment_orders WHERE trade_no=p_trade_no FOR UPDATE;
+  IF NOT FOUND THEN RAISE EXCEPTION 'PAYMENT_ORDER_NOT_FOUND' USING ERRCODE='P0002'; END IF;
+  IF o.provider IS DISTINCT FROM p_provider THEN RAISE EXCEPTION 'PAYMENT_PROVIDER_MISMATCH' USING ERRCODE='22023'; END IF;
+  IF o.status='paid' THEN RETURN jsonb_build_object('status','already_paid','order',to_jsonb(o)); END IF;
+  IF o.status NOT IN ('pending','expired') THEN RAISE EXCEPTION 'PAYMENT_ORDER_STATUS_INVALID' USING ERRCODE='22023'; END IF;
+  IF p_paid_amount IS DISTINCT FROM o.pay_amount THEN RAISE EXCEPTION 'PAYMENT_AMOUNT_MISMATCH' USING ERRCODE='22023'; END IF;
+  wallet := public.billing_lock_account(o.user_id);
+  IF o.kind='topup' THEN
+    wallet := wallet+o.credit_micros;
+    UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=o.user_id;
+    INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,wallet_after_micros,source,reference_type,reference_id,idempotency_key,description)
+      VALUES(o.user_id,'topup',o.credit_micros,o.credit_micros,wallet,o.provider,'payment_order',o.id::text,'payment:'||o.trade_no,
+        format('在线充值 %s %s',o.pay_amount,o.pay_currency));
+  ELSE
+    SELECT * INTO STRICT plan FROM public.subscription_plans WHERE id=o.plan_id;
+    sub := public.billing_open_subscription(o.user_id,plan,'epay',o.id,NULL);
+    INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_after_micros,source,reference_type,reference_id,idempotency_key,description)
+      VALUES(o.user_id,'subscription',0,wallet,o.provider,'payment_order',o.id::text,'payment:'||o.trade_no,
+        format('在线购买「%s」 %s %s',plan.title,o.pay_amount,o.pay_currency));
   END IF;
-
-  IF v_membership IN ('plus', 'pro')
-    AND v_membership_expires_at IS NOT NULL
-    AND v_membership_expires_at > now() THEN
-    v_effective_membership := v_membership;
-  END IF;
-
-  v_credit_limit := public.membership_credit_limit(v_effective_membership);
-
-  IF v_current_credits >= v_credit_limit THEN
-    RETURN jsonb_build_object(
-      'status', 'credit_cap_reached',
-      'reward_credits', 0,
-      'credits', v_current_credits,
-      'credit_limit', v_credit_limit
-    );
-  END IF;
-
-  v_base_reward := FLOOR(random() * 3)::integer + 1;
-  v_reward_credits := CASE v_effective_membership
-    WHEN 'pro' THEN v_base_reward * 3
-    WHEN 'plus' THEN v_base_reward * 2
-    ELSE v_base_reward
-  END;
-  v_new_credits := v_current_credits + v_reward_credits;
-
-  INSERT INTO public.daily_checkins (
-    user_id,
-    checkin_date,
-    reward_credits
-  ) VALUES (
-    p_user_id,
-    v_today,
-    v_reward_credits
-  );
-
-  UPDATE public.users
-  SET
-    ai_chat_count = v_new_credits,
-    updated_at = now()
-  WHERE id = p_user_id;
-
-  PERFORM public.record_credit_transaction(
-    p_user_id,
-    v_reward_credits,
-    'earn',
-    'checkin',
-    v_new_credits,
-    'daily_checkin',
-    v_today::text,
-    format('每日签到 +%s 积分', v_reward_credits),
-    jsonb_build_object('membership', v_effective_membership, 'base_reward', v_base_reward)
-  );
-
-  RETURN jsonb_build_object(
-    'status', 'ok',
-    'reward_credits', v_reward_credits,
-    'credits', v_new_credits,
-    'membership', v_effective_membership,
-    'credit_limit', v_credit_limit
-  );
-EXCEPTION
-  WHEN unique_violation THEN
-    RETURN jsonb_build_object(
-      'status', 'already_checked_in',
-      'reward_credits', 0
-    );
+  UPDATE public.payment_orders SET status='paid',paid_at=now(),provider_trade_no=p_provider_trade_no,
+    provider_payload=p_payload,updated_at=now() WHERE id=o.id RETURNING * INTO o;
+  RETURN jsonb_build_object('status','paid','order',to_jsonb(o));
 END;
 $$;
 
@@ -3331,41 +3206,6 @@ BEGIN
   IF replacement IS DISTINCT FROM original THEN RAISE EXCEPTION 'FORK_HISTORY_READ_ONLY' USING ERRCODE='22023'; END IF;
  END LOOP;
  RETURN NEW;
-END;
-$$;
-
-CREATE OR REPLACE FUNCTION public.record_credit_transaction(p_user_id uuid, p_amount integer, p_type text, p_source text, p_balance_after integer, p_reference_type text DEFAULT NULL::text, p_reference_id text DEFAULT NULL::text, p_description text DEFAULT NULL::text, p_metadata jsonb DEFAULT '{}'::jsonb) RETURNS uuid
-    LANGUAGE plpgsql SECURITY DEFINER
-    SET search_path TO 'pg_catalog', 'public'
-    AS $$
-DECLARE
-  v_transaction_id uuid;
-BEGIN
-  INSERT INTO public.credit_transactions (
-    user_id,
-    amount,
-    type,
-    source,
-    description,
-    balance_after,
-    reference_type,
-    reference_id,
-    metadata
-  )
-  VALUES (
-    p_user_id,
-    p_amount,
-    p_type,
-    p_source,
-    p_description,
-    p_balance_after,
-    p_reference_type,
-    p_reference_id,
-    COALESCE(p_metadata, '{}'::jsonb)
-  )
-  RETURNING id INTO v_transaction_id;
-
-  RETURN v_transaction_id;
 END;
 $$;
 

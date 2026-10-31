@@ -2,13 +2,12 @@ import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 import { isValidUUID } from '@/lib/validation';
-import { getUserAuthInfo } from '@/lib/user/credits';
 import { checkRateLimit } from '@/lib/rate-limit';
 import {
   IMAGE_GENERATION_RATE_LIMIT,
   ImageGenerationError,
   generateImages,
-  imageModelCreditCost,
+  imagePriceMicros,
   resolveImageModel,
 } from '@/lib/ai/image-generation.server';
 import { GENERATED_IMAGE_MAX_COUNT, isGeneratedImageSize } from '@/lib/images/generated';
@@ -47,8 +46,7 @@ export async function POST(request: NextRequest) {
     return jsonError('对话 ID 无效', 400);
   }
 
-  const account = await getUserAuthInfo(auth.user.id, { db: auth.db, user: auth.user });
-  const model = await resolveImageModel(account.effectiveMembership);
+  const model = await resolveImageModel();
   if (!model) return jsonError('当前没有可用的生图模型', 403);
 
   if (conversationId) {
@@ -69,12 +67,12 @@ export async function POST(request: NextRequest) {
     });
     return jsonOk({
       images: result.images,
-      model: { id: model.id, name: model.name, creditCost: imageModelCreditCost(model) },
-      remaining: result.remaining,
+      model: { id: model.id, name: model.name, priceMicros: imagePriceMicros(model) },
+      costMicros: result.costMicros,
     });
   } catch (error) {
     if (error instanceof ImageGenerationError) {
-      if (error.code === 'INSUFFICIENT_CREDITS') return jsonError(error.message, 402, { code: 'INSUFFICIENT_CREDITS' });
+      if (error.code === 'INSUFFICIENT_BALANCE') return jsonError(error.message, 402, { code: 'INSUFFICIENT_BALANCE' });
       return jsonError(error.message, error.code === 'FAILED' ? 502 : 400);
     }
     console.error('[images/generate]', error instanceof Error ? error.message : error);

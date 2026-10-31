@@ -8,11 +8,9 @@ import { mockAIRateLimit, mockAIFeatureState } from './helpers/route-mock';
 
 test('knowledge-base POST should create through transactional rpc', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
-  const membershipModule = require('../lib/user/membership-server') as any;
   const featureGateModule = require('../lib/feature-gate-utils') as any;
   const routePath = require.resolve('../app/api/knowledge-base/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalGetEffectiveMembershipType = membershipModule.getEffectiveMembershipType;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
   const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
@@ -27,13 +25,11 @@ test('knowledge-base POST should create through transactional rpc', async (t) =>
     },
   });
   apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
-  membershipModule.getEffectiveMembershipType = async () => 'plus';
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   delete require.cache[routePath];
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    membershipModule.getEffectiveMembershipType = originalGetEffectiveMembershipType;
     featureGateModule.ensureFeatureRouteEnabled = originalEnsureFeatureRouteEnabled;
     delete require.cache[routePath];
   });
@@ -61,28 +57,24 @@ test('knowledge-base POST should create through transactional rpc', async (t) =>
     p_name: 'My KB',
     p_description: 'test',
     p_weight: 'high',
-    p_limit: 3,
+    p_limit: 10,
   });
 });
 
 test('knowledge-base POST should return 403 when transactional limit is reached', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
-  const membershipModule = require('../lib/user/membership-server') as any;
   const featureGateModule = require('../lib/feature-gate-utils') as any;
   const routePath = require.resolve('../app/api/knowledge-base/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalGetEffectiveMembershipType = membershipModule.getEffectiveMembershipType;
   const originalEnsureFeatureRouteEnabled = featureGateModule.ensureFeatureRouteEnabled;
 
   const scoped = createMockScopedDb({ rpc: async () => ({ status: 'limit_reached' }) });
   apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' }, db: scoped });
-  membershipModule.getEffectiveMembershipType = async () => 'plus';
   featureGateModule.ensureFeatureRouteEnabled = async () => null;
   delete require.cache[routePath];
 
   t.after(() => {
     apiUtilsModule.requireUserContext = originalRequireUserContext;
-    membershipModule.getEffectiveMembershipType = originalGetEffectiveMembershipType;
     featureGateModule.ensureFeatureRouteEnabled = originalEnsureFeatureRouteEnabled;
     delete require.cache[routePath];
   });
@@ -536,279 +528,6 @@ test('records import POST should return 500 when transactional RPC fails', async
   assert.equal(response.status, 500);
   assert.equal(body.error, '导入数据失败');
 });
-
-test('performCheckin should use transactional rpc result', async (t) => {
-  const contextModule = require('../lib/db/context.server') as any;
-  const originalSystemDb = contextModule.systemDb;
-
-  const rpcCalls: { fn: string; args: Record<string, unknown> }[] = [];
-
-  contextModule.systemDb = () => createMockScopedDb({
-    rpc: async (fn: string, args: Record<string, unknown>) => {
-      rpcCalls.push({ fn, args });
-      return {
-        status: 'ok',
-        reward_credits: 2,
-        credits: 11,
-        credit_limit: 20,
-      };
-    },
-  });
-
-  t.after(() => {
-    contextModule.systemDb = originalSystemDb;
-  });
-
-  const { performCheckin } = require('../lib/user/checkin') as typeof import('../lib/user/checkin');
-  const result = await performCheckin('user-1');
-
-  assert.equal(rpcCalls.length, 1);
-  const [rpcCall] = rpcCalls;
-  assert.ok(rpcCall);
-  assert.equal(rpcCall.fn, 'perform_daily_checkin_as_service');
-  assert.deepEqual(rpcCall.args, { p_user_id: 'user-1' });
-  assert.deepEqual(result, {
-    success: true,
-    rewardCredits: 2,
-    credits: 11,
-    creditLimit: 20,
-  });
-});
-
-test('checkin route should return structured status when the user already checked in', async (t) => {
-  mockAIFeatureState(t);
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const checkinModule = require('../lib/user/checkin') as any;
-  const routePath = require.resolve('../app/api/checkin/route');
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalPerformCheckin = checkinModule.performCheckin;
-
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' } });
-  checkinModule.performCheckin = async () => ({
-    success: false,
-    rewardCredits: 0,
-    blockedReason: 'already_checked_in',
-    error: '今日已签到',
-  });
-  delete require.cache[routePath];
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    checkinModule.performCheckin = originalPerformCheckin;
-    delete require.cache[routePath];
-  });
-
-  const { POST } = await import('../app/api/checkin/route');
-  const response = await POST(new NextRequest('http://localhost/api/checkin', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer token',
-    },
-  }));
-  const payload = await response.json();
-
-  assert.equal(response.status, 400);
-  assert.equal(payload.error, '今日已签到');
-  assert.equal(payload.data.result.blockedReason, 'already_checked_in');
-});
-
-test('checkin route should not forward the user-scoped db client into the service rpc helper', async (t) => {
-  mockAIFeatureState(t);
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const checkinModule = require('../lib/user/checkin') as any;
-  const routePath = require.resolve('../app/api/checkin/route');
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalPerformCheckin = checkinModule.performCheckin;
-
-  const authDbSentinel = { tag: 'user-db-client' };
-  let performCheckinArgs: unknown[] | null = null;
-
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    db: authDbSentinel,
-  });
-  checkinModule.performCheckin = async (...args: unknown[]) => {
-    performCheckinArgs = args;
-    return {
-      success: true,
-      rewardCredits: 2,
-      credits: 11,
-      creditLimit: 20,
-    };
-  };
-  delete require.cache[routePath];
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    checkinModule.performCheckin = originalPerformCheckin;
-    delete require.cache[routePath];
-  });
-
-  const { POST } = await import('../app/api/checkin/route');
-  const response = await POST(new NextRequest('http://localhost/api/checkin', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer token',
-    },
-  }));
-  const payload = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.deepEqual(performCheckinArgs, ['user-1']);
-  assert.equal(payload.data.result.rewardCredits, 2);
-});
-
-test('checkin route should return structured cap details when credits are full', async (t) => {
-  mockAIFeatureState(t);
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const checkinModule = require('../lib/user/checkin') as any;
-  const routePath = require.resolve('../app/api/checkin/route');
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalPerformCheckin = checkinModule.performCheckin;
-
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' } });
-  checkinModule.performCheckin = async () => ({
-    success: false,
-    rewardCredits: 0,
-    blockedReason: 'credit_cap_reached',
-    credits: 20,
-    creditLimit: 20,
-    error: '当前积分已达上限，消耗后再来签到',
-  });
-  delete require.cache[routePath];
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    checkinModule.performCheckin = originalPerformCheckin;
-    delete require.cache[routePath];
-  });
-
-  const { POST } = await import('../app/api/checkin/route');
-  const response = await POST(new NextRequest('http://localhost/api/checkin', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer token',
-    },
-  }));
-  const payload = await response.json();
-
-  assert.equal(response.status, 400);
-  assert.equal(payload.data.result.blockedReason, 'credit_cap_reached');
-  assert.equal(payload.data.result.credits, 20);
-  assert.equal(payload.data.result.creditLimit, 20);
-});
-
-test('checkin route should return 500 when performCheckin reports a system failure', async (t) => {
-  mockAIFeatureState(t);
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const checkinModule = require('../lib/user/checkin') as any;
-  const routePath = require.resolve('../app/api/checkin/route');
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-  const originalPerformCheckin = checkinModule.performCheckin;
-
-  apiUtilsModule.requireUserContext = async () => ({ user: { id: 'user-1' } });
-  checkinModule.performCheckin = async () => ({
-    success: false,
-    rewardCredits: 0,
-    errorType: 'system',
-    error: '签到失败，请稍后重试',
-  });
-  delete require.cache[routePath];
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    checkinModule.performCheckin = originalPerformCheckin;
-    delete require.cache[routePath];
-  });
-
-  const { POST } = await import('../app/api/checkin/route');
-  const response = await POST(new NextRequest('http://localhost/api/checkin', {
-    method: 'POST',
-    headers: {
-      Authorization: 'Bearer token',
-    },
-  }));
-  const payload = await response.json();
-
-  assert.equal(response.status, 500);
-  assert.equal(payload.error, '签到失败，请稍后重试');
-});
-
-test('credits transactions GET should use user context and preserve today spend summary', async (t) => {
-  const apiUtilsModule = require('../lib/api-utils') as any;
-  const routePath = require.resolve('../app/api/credits/transactions/route');
-  const originalRequireUserContext = apiUtilsModule.requireUserContext;
-
-  apiUtilsModule.requireUserContext = async () => ({
-    user: { id: 'user-1' },
-    db: createMockScopedDb({
-      tx: async () => [[
-        {
-          id: 'txn-1',
-          amount: -2,
-          type: 'spend',
-          source: 'ai_usage',
-          description: 'AI 消费',
-          balance_after: 8,
-          reference_type: null,
-          reference_id: null,
-          metadata: null,
-          created_at: '2026-04-11T00:00:00.000Z',
-        },
-      ], [{ amount: -2 }, { amount: -3 }]],
-    }),
-  });
-  delete require.cache[routePath];
-
-  t.after(() => {
-    apiUtilsModule.requireUserContext = originalRequireUserContext;
-    delete require.cache[routePath];
-  });
-
-  const { GET } = await import('../app/api/credits/transactions/route');
-  const response = await GET(new NextRequest('http://localhost/api/credits/transactions?limit=5'));
-  const payload = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.equal(Array.isArray(payload.items), true);
-  assert.equal(payload.items.length, 1);
-  assert.equal(payload.summary.todaySpent, 5);
-});
-
-test('getCheckinStatus should keep the full reward range while the user is still below the cap', async (t) => {
-  const contextModule = require('../lib/db/context.server') as any;
-  const creditsModule = require('../lib/user/credits') as any;
-  const checkinPath = require.resolve('../lib/user/checkin');
-  const originalSystemDb = contextModule.systemDb;
-  const originalGetUserCreditInfo = creditsModule.getUserCreditInfo;
-
-  contextModule.systemDb = () => createMockScopedDb({
-    tx: async () => [undefined, undefined],
-  });
-  creditsModule.getUserCreditInfo = async () => ({
-    credits: 19,
-    membership: 'plus',
-    expiresAt: null,
-  });
-
-  delete require.cache[checkinPath];
-
-  t.after(() => {
-    contextModule.systemDb = originalSystemDb;
-    creditsModule.getUserCreditInfo = originalGetUserCreditInfo;
-    delete require.cache[checkinPath];
-  });
-
-  const { getCheckinStatus } = await import('../lib/user/checkin');
-  const status = await getCheckinStatus('user-1');
-
-  assert.equal(status.canCheckin, true);
-  assert.deepEqual(status.rewardRange, [2, 6]);
-  assert.equal(status.currentCredits, 19);
-  assert.equal(status.creditLimit, 20);
-  assert.equal(status.blockedReason, null);
-});
-
 
 test('checkRateLimit should fail open when Redis is unavailable', async (t) => {
   const redis = require('../lib/rate-limit-redis') as typeof import('../lib/rate-limit-redis');

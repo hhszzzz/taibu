@@ -40,7 +40,7 @@ const GRID_COLS_CLASS: Record<number, string> = {
     3: 'grid-cols-4',
 };
 
-function isMergedMembershipNavEnabled(id: string, isFeatureEnabled: (featureId: string) => boolean) {
+function isMobileNavItemEnabled(id: string, isFeatureEnabled: (featureId: string) => boolean) {
     if (id === 'settings-personalization') {
         return isFeatureEnabled('chat') && isFeatureEnabled('ai-personalization');
     }
@@ -49,7 +49,7 @@ function isMergedMembershipNavEnabled(id: string, isFeatureEnabled: (featureId: 
 
 function resolveEnabledItems(ids: readonly string[], isFeatureEnabled: (featureId: string) => boolean): NavItemDef[] {
     return ids
-        .filter(id => isMergedMembershipNavEnabled(id, isFeatureEnabled))
+        .filter(id => isMobileNavItemEnabled(id, isFeatureEnabled))
         .map(id => getNavItemById(id))
         .filter((item): item is NavItemDef => !!item);
 }
@@ -148,7 +148,7 @@ export function MobileNav() {
     const moreButtonRef = useRef<HTMLButtonElement>(null);
 
     const pinnedItem = useMemo(
-        () => resolveMobileNavPin(pins, id => isMergedMembershipNavEnabled(id, isFeatureEnabled)),
+        () => resolveMobileNavPin(pins, id => isMobileNavItemEnabled(id, isFeatureEnabled)),
         [pins, isFeatureEnabled],
     );
 

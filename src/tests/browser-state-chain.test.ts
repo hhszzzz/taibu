@@ -2,54 +2,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
 
-test('fetchCheckinStatus returns explicit error instead of null on request failure', async () => {
-    const browserApiModule = require('../lib/browser-api') as typeof import('../lib/browser-api');
-    const checkinPath = require.resolve('../components/checkin/checkin-client');
-    const originalRequestBrowserJson = browserApiModule.requestBrowserJson;
-
-    browserApiModule.requestBrowserJson = async () => ({
-        data: null,
-        error: { message: '认证失败' },
-    });
-
-    try {
-        delete require.cache[checkinPath];
-        const { fetchCheckinStatus } = require('../components/checkin/checkin-client') as typeof import('../components/checkin/checkin-client');
-        const result = await fetchCheckinStatus();
-        assert.deepEqual(result, {
-            ok: false,
-            error: { message: '认证失败' },
-        });
-    } finally {
-        browserApiModule.requestBrowserJson = originalRequestBrowserJson;
-        delete require.cache[checkinPath];
-    }
-});
-
-test('getMembershipInfo returns explicit error instead of null on request failure', async () => {
-    const browserApiModule = require('../lib/browser-api') as typeof import('../lib/browser-api');
-    const membershipPath = require.resolve('../lib/user/membership');
-    const originalRequestBrowserJson = browserApiModule.requestBrowserJson;
-
-    browserApiModule.requestBrowserJson = async () => ({
-        data: null,
-        error: { message: '获取会员状态失败' },
-    });
-
-    try {
-        delete require.cache[membershipPath];
-        const { getMembershipInfo } = require('../lib/user/membership') as typeof import('../lib/user/membership');
-        const result = await getMembershipInfo('user-1');
-        assert.deepEqual(result, {
-            ok: false,
-            error: { message: '获取会员状态失败' },
-        });
-    } finally {
-        browserApiModule.requestBrowserJson = originalRequestBrowserJson;
-        delete require.cache[membershipPath];
-    }
-});
-
 test('loadChatBootstrap throws instead of returning empty bootstrap on request failure', async () => {
     const browserApiModule = require('../lib/browser-api') as typeof import('../lib/browser-api');
     const bootstrapPath = require.resolve('../lib/chat/bootstrap');

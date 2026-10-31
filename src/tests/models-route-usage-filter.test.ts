@@ -3,17 +3,14 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
 
+const PRICED = { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null };
 
-test('/api/models should only expose chat models', async (t) => {
+test('/api/models exposes only offered chat models with their public capabilities', async (t) => {
   mockAIFeatureState(t);
   const aiConfigServerModule = require('../lib/server/ai-config') as any;
-  const membershipModule = require('../lib/user/membership-server') as any;
-  const aiAccessModule = require('../lib/ai/ai-access') as any;
   const apiUtilsModule = require('../lib/api-utils') as any;
 
   const originalGetModelsAsync = aiConfigServerModule.getModelsAsync;
-  const originalGetEffectiveMembershipType = membershipModule.getEffectiveMembershipType;
-  const originalGetModelAccessForMembershipAsync = aiAccessModule.getModelAccessForMembershipAsync;
   const originalGetAuthContext = apiUtilsModule.getAuthContext;
 
   aiConfigServerModule.getModelsAsync = async () => [
@@ -25,7 +22,7 @@ test('/api/models should only expose chat models', async (t) => {
       modelId: 'deepseek-v3.2',
       apiUrl: '',
       supportsReasoning: false,
-      requiredTier: 'free',
+      pricing: PRICED,
     },
     {
       id: 'qwen-vl-plus',
@@ -40,7 +37,16 @@ test('/api/models should only expose chat models', async (t) => {
       contextWindow: 131072,
       apiKeySecret: { version: 1, iv: 'iv', tag: 'tag', data: 'ciphertext' },
       supportsVision: true,
-      requiredTier: 'plus',
+      pricing: { ...PRICED, input: 3, output: 4 },
+    },
+    {
+      id: 'unpriced-chat',
+      name: 'Unpriced',
+      vendor: 'other',
+      usageType: 'chat',
+      modelId: 'unpriced-chat',
+      apiUrl: '',
+      supportsReasoning: false,
     },
     {
       id: 'text-embedding-v4',
@@ -50,6 +56,7 @@ test('/api/models should only expose chat models', async (t) => {
       modelId: 'text-embedding-v4',
       apiUrl: '',
       supportsReasoning: false,
+      pricing: PRICED,
     },
     {
       id: 'qwen3-rerank',
@@ -59,22 +66,15 @@ test('/api/models should only expose chat models', async (t) => {
       modelId: 'qwen3-rerank',
       apiUrl: '',
       supportsReasoning: false,
+      pricing: PRICED,
     },
   ];
-  membershipModule.getEffectiveMembershipType = async () => 'plus';
-  aiAccessModule.getModelAccessForMembershipAsync = async () => ({
-    allowed: true,
-    blockedReason: null,
-    reasoningAllowed: true,
-  });
-  apiUtilsModule.getAuthContext = async () => ({
-    user: { id: 'user-1' },
-  });
+  apiUtilsModule.getAuthContext = async () => {
+    throw new Error('the model catalog must not require a session');
+  };
 
   t.after(() => {
     aiConfigServerModule.getModelsAsync = originalGetModelsAsync;
-    membershipModule.getEffectiveMembershipType = originalGetEffectiveMembershipType;
-    aiAccessModule.getModelAccessForMembershipAsync = originalGetModelAccessForMembershipAsync;
     apiUtilsModule.getAuthContext = originalGetAuthContext;
   });
 
@@ -90,21 +90,22 @@ test('/api/models should only expose chat models', async (t) => {
   assert.deepEqual(
     body.models.map((model: { id: string }) => model.id),
     ['deepseek-v3.2', 'qwen-vl-plus'],
+    'unpriced and non-conversation models are not offered',
   );
-  // The model menu labels each model with the lowest membership that can use it.
-  assert.deepEqual(body.models.map((model: { tier: string | null }) => model.tier), ['free', 'plus']);
+  // Pricing is public so the composer can show what a call costs; tiers are no longer part of the catalog.
+  assert.deepEqual(body.models.map((model: { pricing: unknown }) => model.pricing), [
+    { input: 1, output: 2, cacheRead: null, cacheWrite: null },
+    { input: 3, output: 4, cacheRead: null, cacheWrite: null },
+  ]);
+  assert.equal('tier' in body.models[0], false);
 });
 
 test('/api/models?catalog=byok should expose chat models without membership filtering', async (t) => {
   mockAIFeatureState(t);
   const aiConfigServerModule = require('../lib/server/ai-config') as any;
-  const membershipModule = require('../lib/user/membership-server') as any;
-  const aiAccessModule = require('../lib/ai/ai-access') as any;
   const apiUtilsModule = require('../lib/api-utils') as any;
 
   const originalGetModelsAsync = aiConfigServerModule.getModelsAsync;
-  const originalGetEffectiveMembershipType = membershipModule.getEffectiveMembershipType;
-  const originalGetModelAccessForMembershipAsync = aiAccessModule.getModelAccessForMembershipAsync;
   const originalGetAuthContext = apiUtilsModule.getAuthContext;
 
   aiConfigServerModule.getModelsAsync = async () => [
@@ -129,6 +130,16 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       isReasoningDefault: false,
     },
     {
+      id: 'duplicate-deepseek',
+      name: 'DeepSeek duplicate source',
+      vendor: 'deepseek',
+      usageType: 'chat',
+      modelId: 'deepseek-chat',
+      apiUrl: '',
+      supportsReasoning: false,
+      isReasoningDefault: false,
+    },
+    {
       id: 'qwen-vl-plus',
       name: 'Qwen VL',
       vendor: 'qwen-vl',
@@ -139,20 +150,12 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       supportsVision: true,
     },
   ];
-  membershipModule.getEffectiveMembershipType = async () => {
-    throw new Error('membership should not be resolved for BYOK catalog');
-  };
-  aiAccessModule.getModelAccessForMembershipAsync = async () => {
-    throw new Error('membership access should not be checked for BYOK catalog');
-  };
   apiUtilsModule.getAuthContext = async () => {
     throw new Error('auth should not be required for BYOK catalog');
   };
 
   t.after(() => {
     aiConfigServerModule.getModelsAsync = originalGetModelsAsync;
-    membershipModule.getEffectiveMembershipType = originalGetEffectiveMembershipType;
-    aiAccessModule.getModelAccessForMembershipAsync = originalGetModelAccessForMembershipAsync;
     apiUtilsModule.getAuthContext = originalGetAuthContext;
   });
 

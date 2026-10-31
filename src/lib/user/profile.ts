@@ -1,4 +1,3 @@
-import type { MembershipType } from '@/lib/user/membership';
 import type { UserSettingsSnapshot } from '@/lib/user/settings';
 import { normalizeBrowserApiError, requestBrowserJson } from '@/lib/browser-api';
 
@@ -7,9 +6,6 @@ export type UserProfile = {
   nickname: string | null;
   avatar_url: string | null;
   is_admin: boolean;
-  membership: MembershipType | null;
-  membership_expires_at: string | null;
-  ai_chat_count: number | null;
 };
 
 export type LinuxDoBinding = {

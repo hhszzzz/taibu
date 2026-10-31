@@ -1,6 +1,7 @@
 /**
  * 右侧「会话详情」停靠栏（claude /code 会话栏）：模型 / 成果。
- * 常驻显示；打开工作区（artifacts）时整栏让位隐藏。
+ * 有内容才显示；没有协作者也没有成果时不占位，对话列自行居中。
+ * 打开工作区（artifacts）时整栏让位隐藏。
  * 上下文用量在聊天框下方的上下文环里，不占会话栏。
  *
  * 'use client' 标记说明：
@@ -37,6 +38,8 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
     }, [tools]);
     // 会话栏固定宽度（280px，见 .agent-session-rail）：不提供拖拽或顶部手柄。
     const [showAll, setShowAll] = useState(false);
+    // 两张卡都没有内容时不留空栏，让对话列占满并居中。
+    if ((run?.configuration?.collaborators.length ?? 0) === 0 && charts.length === 0) return null;
     return <aside id="agent-session-panel" className="agent-session-rail" aria-label="会话详情">
         <WorkspaceStatusCards data={data} run={run} results={charts.length > 0 ? (grip => <section className="agent-ws-status-card" aria-label="成果">
             <div className="agent-ws-status-head"><span>成果</span>{grip}</div>

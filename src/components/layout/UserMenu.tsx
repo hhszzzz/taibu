@@ -201,7 +201,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                           <span>用量</span>
                         </span>
                       </MenuSubTrigger>
-                      <MenuSubContent className="user-usage-menu">
+                      <MenuSubContent sideOffset={8} className="user-usage-menu">
                         <div className="px-1.5 py-1">
                           <div className="flex items-baseline justify-between gap-3 px-1.5 pt-1">
                             <strong className="text-[13px] font-medium leading-[1.4] text-foreground">积分</strong>
@@ -238,7 +238,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                     <span>帮助</span>
                   </span>
                 </MenuSubTrigger>
-                <MenuSubContent className="user-help-menu">
+                <MenuSubContent sideOffset={8} className="user-help-menu">
                   <MenuItem render={(
                     <SettingsCenterLink tab="help" onClick={() => setIsMenuOpen(false)} className={MENU_ITEM_CLASS}>
                       {createElement(SETTINGS_CENTER_TAB_ICONS.help, { size: 18, className: MENU_ICON_CLASS })}

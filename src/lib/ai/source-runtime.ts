@@ -1,19 +1,14 @@
 import type {
   AIModelConfig,
   AIModelSourceConfig,
-  AITransport,
   AIUsageType,
 } from '@/types';
 
-export const DEFAULT_AI_TRANSPORT: AITransport = 'openai_compatible';
 /** Gateway identifiers: lowercase, digits, `-` and `_`, as the database checks them. */
 export const GATEWAY_KEY_PATTERN = /^[a-z0-9][a-z0-9_-]{0,39}$/u;
 
-export function getModelUsageType(model: Pick<AIModelConfig, 'usageType' | 'supportsVision'>): AIUsageType {
-  if (model.usageType) {
-    return model.usageType;
-  }
-  return model.supportsVision ? 'vision' : 'chat';
+export function getModelUsageType(model: Pick<AIModelConfig, 'usageType'>): AIUsageType {
+  return model.usageType ?? 'chat';
 }
 
 export function trimTrailingSlash(value: string): string {
@@ -30,7 +25,6 @@ export function getManagedEndpointPath(usageType: AIUsageType): string {
     case 'image':
       return '/v1';
     case 'chat':
-    case 'vision':
     default:
       return '/v1/chat/completions';
   }
@@ -64,7 +58,7 @@ export function buildManagedApiUrl(baseUrl: string | null | undefined, usageType
 }
 
 export function isUserSelectableUsageType(usageType: AIUsageType): boolean {
-  return usageType === 'chat' || usageType === 'vision';
+  return usageType === 'chat';
 }
 
 export function sortModelSources<T extends AIModelSourceConfig>(sources: T[]): T[] {
@@ -93,11 +87,9 @@ export function applySourceToModel(
   return {
     ...model,
     modelId: source.modelIdOverride || model.modelId,
-    reasoningModelId: source.reasoningModelId || model.reasoningModelId,
     apiUrl: source.apiUrl,
     gatewayId: source.gatewayId,
     apiKeySecret: source.apiKeySecret,
     sourceKey: source.sourceKey,
-    transport: source.transport || model.transport || DEFAULT_AI_TRANSPORT,
   };
 }

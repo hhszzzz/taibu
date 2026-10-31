@@ -35,11 +35,11 @@ function hostOf(url: string) {
     try { return new URL(url).host; } catch { return url; }
 }
 
-type Draft = { gatewayKey: string; displayName: string; baseUrl: string; notes: string; isEnabled: boolean; apiKey: string; clearKey: boolean };
+type Draft = { gatewayKey: string; displayName: string; baseUrl: string; isEnabled: boolean; apiKey: string; clearKey: boolean };
 
 const draftOf = (gateway: AdminGateway | null): Draft => ({
     gatewayKey: gateway?.gatewayKey ?? '', displayName: gateway?.displayName ?? '', baseUrl: gateway?.baseUrl ?? '',
-    notes: gateway?.notes ?? '', isEnabled: gateway?.isEnabled ?? true, apiKey: '', clearKey: false,
+    isEnabled: gateway?.isEnabled ?? true, apiKey: '', clearKey: false,
 });
 
 function GatewayEditor({ gateway, onClose, onSaved }: { gateway: AdminGateway | null; onClose: () => void; onSaved: () => void }) {
@@ -59,7 +59,7 @@ function GatewayEditor({ gateway, onClose, onSaved }: { gateway: AdminGateway | 
     const hasKey = !!gateway?.apiKeyHint && !draft.clearKey;
 
     const payload = (): Record<string, unknown> => ({
-        gatewayKey: draft.gatewayKey, displayName: draft.displayName, baseUrl: draft.baseUrl, notes: draft.notes, isEnabled: draft.isEnabled,
+        gatewayKey: draft.gatewayKey, displayName: draft.displayName, baseUrl: draft.baseUrl, isEnabled: draft.isEnabled,
         ...(draft.apiKey.trim() ? { apiKey: draft.apiKey.trim() } : draft.clearKey ? { apiKey: null } : {}),
     });
     const save = async () => {
@@ -150,9 +150,6 @@ function GatewayEditor({ gateway, onClose, onSaved }: { gateway: AdminGateway | 
                 </div>
             </section>
             <section className="ai-catalog-section">
-                <label className="ai-catalog-field"><span>备注</span>
-                    <Input  value={draft.notes} maxLength={500} placeholder="可选" onChange={event => patch({ notes: event.target.value })} />
-                </label>
                 <div className="ai-catalog-toggle">
                     <span>启用<small>停用后，经这个网关的来源会被跳过</small></span>
                     <SettingsSwitch label="启用网关" checked={draft.isEnabled} onToggle={() => patch({ isEnabled: !draft.isEnabled })} />
@@ -213,7 +210,7 @@ export function AIGatewayPanel() {
         try {
             await requestBrowserData(`/api/admin/ai-gateways/${gateway.id}`, {
                 method: 'PUT', headers: JSON_HEADERS,
-                body: JSON.stringify({ gatewayKey: gateway.gatewayKey, displayName: gateway.displayName, baseUrl: gateway.baseUrl, notes: gateway.notes, isEnabled: !gateway.isEnabled }),
+                body: JSON.stringify({ gatewayKey: gateway.gatewayKey, displayName: gateway.displayName, baseUrl: gateway.baseUrl, isEnabled: !gateway.isEnabled }),
             }, { fallbackMessage: '更新网关失败' });
             setGateways(current => current?.map(item => item.id === gateway.id ? { ...item, isEnabled: !gateway.isEnabled } : item) ?? null);
         } catch (e) {

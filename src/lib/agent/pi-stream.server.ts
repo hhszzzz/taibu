@@ -118,9 +118,9 @@ export function agentModelSources(config: AIModelConfig, apiKey?: string) {
 const TRANSPORT_FIELDS = new Set(["model", "messages", "tools", "tool_choice", "stream", "stream_options", "max_tokens", "max_completion_tokens", PROMPT_CACHE_SWITCH, "__proto__", "constructor", "prototype"]);
 
 /**
- * How the gateway takes the thinking switch and level: the model's configured thinking format, with a level only for
- * a model that lists levels. Gateways are OpenAI-compatible proxies, so pi-ai's auto-detection by host does not apply:
- * system prompts stay `system`, the output limit is `max_tokens`, and `store` is not sent.
+ * How the gateway takes the thinking switch and level: OpenAI Chat Completions `reasoning_effort`, with a level only
+ * for a model that lists levels. Gateways are OpenAI-compatible proxies, so pi-ai's auto-detection by host does not
+ * apply: system prompts stay `system`, the output limit is `max_tokens`, and `store` is not sent.
  */
 export function agentCompletionsCompat(config: AIModelConfig): OpenAICompletionsCompat {
   return {
@@ -129,7 +129,7 @@ export function agentCompletionsCompat(config: AIModelConfig): OpenAICompletions
     supportsReasoningEffort: !!config.thinkingLevels?.length,
     supportsUsageInStreaming: true,
     maxTokensField: "max_tokens",
-    thinkingFormat: config.thinkingFormat ?? "openai",
+    thinkingFormat: "openai",
     supportsStrictMode: false,
   };
 }
@@ -263,7 +263,7 @@ export function createPiModelStream(config: AIModelConfig, settings: AgentModelS
           const source = sources[Math.min(failures, sources.length - 1)];
           const requestSignal = agentModelRequestSignal(options?.signal);
           const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined && limit > 0);
-          const upstream = (effort && source.reasoningModelId) || source.modelId;
+          const upstream = source.modelId;
           const body = extraBody(source);
           let apiKey = settings.apiKey;
           try { apiKey ??= resolveSourceApiKey(source); }

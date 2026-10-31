@@ -117,12 +117,12 @@ const TEST_GATEWAY = '99999999-7000-4000-8000-000000000000';
 // and vision. They attach to the newapi gateway; until an administrator saves a working address and key for it in the
 // settings center, the menu still shows them (and their levels) but sending reports the missing key.
 const TEST_MODELS = [
-  { id: '99999999-7000-4000-8000-000000000001', key: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', tier: 'free', reasoningTier: null, reasoning: false, format: 'openai', levels: [], effort: null, context: 131072, vision: false, reasoningDefault: false, sort: 10, description: '免费档；不思考，用于对照。' },
-  { id: '99999999-7000-4000-8000-000000000002', key: 'kimi-k2.5', name: 'Kimi K2.5', vendor: 'moonshot', tier: 'free', reasoningTier: 'free', reasoning: true, format: 'openai', levels: ['low', 'medium', 'high'], effort: 'medium', context: 262144, vision: false, reasoningDefault: true, sort: 20, description: '免费档的思考模型（reasoning_effort，低/中/高），选中即开启思考。' },
-  { id: '99999999-7000-4000-8000-000000000003', key: 'glm-4.7', name: 'GLM-4.7', vendor: 'glm', tier: 'free', reasoningTier: 'free', reasoning: true, format: 'zai', levels: [], effort: null, context: 204800, vision: false, reasoningDefault: false, sort: 30, description: '免费档的思考模型（thinking 开关，不分等级）。' },
-  { id: '99999999-7000-4000-8000-000000000004', key: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', vendor: 'anthropic', tier: 'plus', reasoningTier: 'plus', reasoning: true, format: 'openai', levels: ['low', 'medium', 'high'], effort: 'medium', context: 200000, vision: true, reasoningDefault: false, sort: 40, description: 'Plus 档；支持图片与思考等级，默认中等。' },
-  { id: '99999999-7000-4000-8000-000000000005', key: 'gemini-3', name: 'Gemini 3 Pro', vendor: 'google', tier: 'plus', reasoningTier: 'plus', reasoning: true, format: 'openai', levels: ['low', 'high'], effort: 'high', context: 1048576, vision: true, reasoningDefault: false, sort: 50, description: 'Plus 档；支持图片，思考只有低和高两档，默认高。' },
-  { id: '99999999-7000-4000-8000-000000000006', key: 'gpt-5.1', name: 'GPT-5.1', vendor: 'openai', tier: 'pro', reasoningTier: 'pro', reasoning: true, format: 'openrouter', levels: ['minimal', 'low', 'medium', 'high', 'xhigh'], effort: 'xhigh', context: 400000, vision: true, reasoningDefault: true, sort: 60, description: 'Pro 档；用于检查会员限制（reasoning 对象），默认超高。' },
+  { id: '99999999-7000-4000-8000-000000000001', key: 'deepseek-v3.2', name: 'DeepSeek V3.2', vendor: 'deepseek', tier: 'free', levels: [], effort: null, context: 131072, vision: false, reasoningDefault: false, sort: 10 },
+  { id: '99999999-7000-4000-8000-000000000002', key: 'kimi-k2.5', name: 'Kimi K2.5', vendor: 'moonshot', tier: 'free', levels: ['low', 'medium', 'high'], effort: 'medium', context: 262144, vision: false, reasoningDefault: true, sort: 20 },
+  { id: '99999999-7000-4000-8000-000000000003', key: 'glm-4.7', name: 'GLM-4.7', vendor: 'glm', tier: 'free', levels: ['low', 'medium', 'high'], effort: 'medium', context: 204800, vision: false, reasoningDefault: false, sort: 30 },
+  { id: '99999999-7000-4000-8000-000000000004', key: 'claude-sonnet-4-5', name: 'Claude Sonnet 4.5', vendor: 'anthropic', tier: 'plus', levels: ['low', 'medium', 'high'], effort: 'medium', context: 200000, vision: true, reasoningDefault: false, sort: 40 },
+  { id: '99999999-7000-4000-8000-000000000005', key: 'gemini-3', name: 'Gemini 3 Pro', vendor: 'google', tier: 'plus', levels: ['low', 'high'], effort: 'high', context: 1048576, vision: true, reasoningDefault: false, sort: 50 },
+  { id: '99999999-7000-4000-8000-000000000006', key: 'gpt-5.1', name: 'GPT-5.1', vendor: 'openai', tier: 'pro', levels: ['minimal', 'low', 'medium', 'high', 'xhigh'], effort: 'xhigh', context: 400000, vision: true, reasoningDefault: true, sort: 60 },
 ];
 const agentDemo = await buildAgentDemo({ root, baziChartId: BAZI_CHART, plainConversations, now });
 // Private attachments are stored as the upload route stores them: `agent-attachments/<user>/<id>` in the file volume.
@@ -198,18 +198,17 @@ for (const user of users) {
 }
 
 // Model menu entries. The test gateway is created once without a key; an existing newapi gateway is left as it is.
-statements.push(`insert into public.ai_gateways (id, gateway_key, display_name, base_url, transport, is_enabled, notes)
-  values (${q(TEST_GATEWAY)}, 'newapi', '本地测试网关', 'http://newapi.local', 'openai_compatible', true,
-    ${q('本地演示用：在设置中心「AI 服务 → 网关管理」把地址改成可用的网关并填写密钥后，测试模型即可真正调用。')})
+statements.push(`insert into public.ai_gateways (id, gateway_key, display_name, base_url, is_enabled)
+  values (${q(TEST_GATEWAY)}, 'newapi', '本地测试网关', 'http://newapi.local', true)
   on conflict do nothing;`);
 for (const model of TEST_MODELS) {
   statements.push(`insert into public.ai_models
-    (id, model_key, display_name, vendor, is_enabled, sort_order, required_tier, supports_reasoning, reasoning_required_tier,
-     is_reasoning_default, supports_vision, default_temperature, default_max_tokens, description, usage_type,
-     default_reasoning_effort, thinking_format, thinking_levels, context_window)
-    values (${q(model.id)}, ${q(model.key)}, ${q(model.name)}, ${q(model.vendor)}, true, ${model.sort}, ${q(model.tier)}, ${model.reasoning},
-      ${q(model.reasoningTier)}, ${model.reasoningDefault}, ${model.vision}, 0.7, null, ${q(`本地测试模型：${model.description}`)}, 'chat',
-      ${q(model.effort)}, ${q(model.format)}, ${q(`{${model.levels.join(',')}}`)}::text[], ${model.context});`);
+    (id, model_key, display_name, vendor, is_enabled, sort_order, required_tier,
+     is_reasoning_default, supports_vision, default_max_tokens, usage_type,
+     default_reasoning_effort, thinking_levels, context_window)
+    values (${q(model.id)}, ${q(model.key)}, ${q(model.name)}, ${q(model.vendor)}, true, ${model.sort}, ${q(model.tier)},
+      ${model.reasoningDefault}, ${model.vision}, null, 'chat',
+      ${q(model.effort)}, ${q(`{${model.levels.join(',')}}`)}::text[], ${model.context});`);
 }
 statements.push(`insert into public.ai_model_gateway_bindings (model_id, gateway_id, model_id_override, is_enabled, priority)
   select model.id, gateway.id, null, true, 0

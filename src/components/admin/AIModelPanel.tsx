@@ -4,7 +4,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Boxes, Eye, Plus, RefreshCw, Search } from 'lucide-react';
+import { Boxes, Eye, Plus, Search } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
 import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
@@ -23,11 +23,11 @@ function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyM
     const usage = USAGE_TYPES.find(item => item.value === model.usageType)?.label;
     return <span className="ai-catalog-row-meta">
         {model.usageType !== 'chat' && <span>{usage}</span>}
-        {(model.usageType === 'chat' || model.usageType === 'vision') && <span>
+        {(model.usageType === 'chat') && <span>
             {model.contextWindow ? `${formatTokenCount(model.contextWindow)} 上下文` : '未设上下文'} · {model.defaultMaxTokens ? `${formatTokenCount(model.defaultMaxTokens)} 输出` : '不限输出'}
         </span>}
         {model.usageType === 'image' && <span>{model.creditCost} 积分 / 张</span>}
-        {model.supportsReasoning && <span>思考 {model.thinkingLevels.length ? model.thinkingLevels.map(level => THINKING_LEVEL_LABELS[level]).join('/') : '开关'}</span>}
+        {model.thinkingLevels.length > 0 && <span>思考 {model.thinkingLevels.map(level => THINKING_LEVEL_LABELS[level]).join('/')}</span>}
         {model.supportsVision && <span><Eye size={12} aria-label="支持图片" style={{ display: 'inline', verticalAlign: '-1px' }} /></span>}
         <span data-tone={callable.length ? undefined : 'warning'}>{names.length ? names.join(' → ') : '没有来源'}{names.length && !callable.length ? '（不可用）' : ''}</span>
     </span>;
@@ -84,14 +84,6 @@ export function AIModelPanel() {
             setUpdating(null);
         }
     };
-    const clearCache = async () => {
-        try {
-            await requestBrowserData('/api/admin/ai-models/cache', { method: 'POST' }, { fallbackMessage: '清除缓存失败' });
-            showToast('success', '模型缓存已清除，修改会立即生效');
-        } catch (e) {
-            showToast('error', e instanceof Error ? e.message : '清除缓存失败');
-        }
-    };
 
     if (!models && !error) return <div className="flex min-h-[200px] items-center justify-center"><SoundWaveLoader variant="inline" /></div>;
     return <div className="ai-catalog">
@@ -99,9 +91,6 @@ export function AIModelPanel() {
             <Input className="ai-catalog-search"  type="search" aria-label="搜索模型" value={query}
                 placeholder={`搜索 ${models?.length ?? 0} 个模型`} onChange={event => setQuery(event.target.value)} />
             <span style={{ flex: 1 }} />
-            <Button variant="secondary" size="sm" onClick={() => void clearCache()} title="保存会自动生效；外部改了数据库时用这个">
-                <RefreshCw size={14} aria-hidden="true" />清除缓存
-            </Button>
             <Button size="sm" onClick={() => setEditing({ model: null })}>
                 <Plus size={14} aria-hidden="true" />添加模型
             </Button>

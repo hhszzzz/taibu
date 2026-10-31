@@ -11,9 +11,9 @@ const GATEWAY = '0b9d5a40-1f6c-4a8e-9d5c-6a2f1e3b4c5d';
 const OTHER_GATEWAY = '7c1e2d3f-4a5b-4c6d-8e7f-9a0b1c2d3e4f';
 const model = (overrides: Record<string, unknown> = {}) => ({
     modelKey: 'deepseek-v4', displayName: 'DeepSeek V4', vendor: 'deepseek', usageType: 'chat',
-    supportsReasoning: true, thinkingFormat: 'deepseek', thinkingLevels: ['max', 'low', 'high'], defaultReasoningEffort: 'high',
+    thinkingLevels: ['max', 'low', 'high'], defaultReasoningEffort: 'high',
     contextWindow: 1_000_000, defaultMaxTokens: 32_768,
-    sources: [{ gatewayId: GATEWAY, modelIdOverride: 'deepseek-v4', reasoningModelId: ' ', isEnabled: true }],
+    sources: [{ gatewayId: GATEWAY, modelIdOverride: 'deepseek-v4', isEnabled: true }],
     ...overrides,
 });
 
@@ -23,13 +23,12 @@ test('model input keeps the thinking ladder in order and only allows a listed de
     assert.deepEqual(parsed.value.thinkingLevels, ['low', 'high', 'max']);
     assert.equal(parsed.value.defaultReasoningEffort, 'high');
     assert.equal(parsed.value.contextWindow, 1_000_000);
-    // An override equal to the model ID inherits it; a blank reasoning model is none.
-    assert.deepEqual(parsed.value.sources, [{ gatewayId: GATEWAY, modelIdOverride: null, reasoningModelId: null, isEnabled: true }]);
+    // An override equal to the model ID inherits it.
+    assert.deepEqual(parsed.value.sources, [{ gatewayId: GATEWAY, modelIdOverride: null, isEnabled: true }]);
 
     assert.match((parseModelInput(model({ defaultReasoningEffort: 'medium' })) as { error: string }).error, /勾选的等级/u);
     assert.match((parseModelInput(model({ thinkingLevels: ['extreme'] })) as { error: string }).error, /思考等级/u);
-    assert.match((parseModelInput(model({ thinkingFormat: 'reasoning_object' })) as { error: string }).error, /参数格式/u);
-    assert.match((parseModelInput(model({ defaultMaxTokens: 2_000_000 })) as { error: string }).error, /小于上下文窗口|正整数/u);
+    assert.match((parseModelInput(model({ defaultMaxTokens: 2_000_000 })) as { error: string }).error, /输出上限|正整数/u);
     assert.match((parseModelInput(model({ contextWindow: 100 })) as { error: string }).error, /上下文窗口/u);
     assert.match((parseModelInput(model({ sources: [{ gatewayId: GATEWAY }, { gatewayId: GATEWAY }] })) as { error: string }).error, /只能添加一次/u);
     assert.match((parseModelInput(model({ customParameters: [1] })) as { error: string }).error, /JSON 对象/u);
@@ -38,15 +37,15 @@ test('model input keeps the thinking ladder in order and only allows a listed de
     assert.match((parseModelInput(model({ modelKey: 'has space' })) as { error: string }).error, /空格/u);
 
     // 生图模型按张扣积分：默认 1，可设 0 到 1000 的整数。
-    const image = parseModelInput(model({ usageType: 'image', creditCost: 5, supportsReasoning: false }));
+    const image = parseModelInput(model({ usageType: 'image', creditCost: 5 }));
     assert.ok('value' in image);
     assert.equal(image.value.creditCost, 5);
     assert.equal((parseModelInput(model()) as { value: { creditCost: number } }).value.creditCost, 1);
     assert.match((parseModelInput(model({ usageType: 'image', creditCost: -1 })) as { error: string }).error, /每张图积分/u);
     assert.match((parseModelInput(model({ usageType: 'image', creditCost: 1.5 })) as { error: string }).error, /每张图积分/u);
 
-    // A model without thinking stores no levels and no default.
-    const plain = parseModelInput(model({ supportsReasoning: false, isReasoningDefault: true }));
+    // A model without levels stores no default and never defaults to thinking.
+    const plain = parseModelInput(model({ thinkingLevels: [], isReasoningDefault: true }));
     assert.ok('value' in plain);
     assert.deepEqual([plain.value.thinkingLevels, plain.value.defaultReasoningEffort, plain.value.isReasoningDefault], [[], null, false]);
 });
@@ -79,7 +78,7 @@ test('a gateway key is sealed to its row: stored only as ciphertext with a hint,
     }) as never);
     t.mock.method(config, 'clearModelCache', () => {});
     const { createGateway } = await import('../lib/admin/ai-catalog.server');
-    const id = await createGateway({ gatewayKey: 'main', displayName: '主网关', baseUrl: 'https://api.example.com', notes: null, isEnabled: true, apiKey: 'sk-live-0123456789abcd' });
+    const id = await createGateway({ gatewayKey: 'main', displayName: '主网关', baseUrl: 'https://api.example.com', isEnabled: true, apiKey: 'sk-live-0123456789abcd' });
 
     const row = inserted as unknown as { id: string; api_key_secret: unknown; api_key_hint: string };
     assert.equal(row.id, id);
@@ -123,7 +122,7 @@ test('catalog routes write only validated input and refuse non-administrators be
     assert.equal((calls.at(-1)![1][1] as { apiKey?: unknown }).apiKey, undefined, 'a save without a key keeps the saved one');
 
     const writes = calls.length;
-    assert.equal((await models.POST(request('/api/admin/ai-models', 'POST', model({ thinkingFormat: 'reasoning_effort' })))).status, 400);
+    assert.equal((await models.POST(request('/api/admin/ai-models', 'POST', model({ thinkingLevels: ['extreme'] })))).status, 400);
     assert.equal((await modelDetail.PATCH(request('/api/admin/ai-models/m1', 'PATCH', { displayName: 'x' }), params('m1'))).status, 400);
     assert.equal((await gateways.POST(request('/api/admin/ai-gateways', 'POST', { gatewayKey: 'NEWAPI', displayName: '主', baseUrl: 'https://a.example' }))).status, 400);
     assert.equal((await models.POST(new NextRequest('http://localhost/api/admin/ai-models', { method: 'POST', body: '{' }))).status, 400);

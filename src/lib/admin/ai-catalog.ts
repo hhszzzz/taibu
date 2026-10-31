@@ -4,12 +4,11 @@
 import {
     AI_REASONING_EFFORTS,
     type AIReasoningEffort,
-    type AIThinkingFormat,
     type AIUsageType,
 } from '@/types';
 import { GATEWAY_KEY_PATTERN } from '@/lib/ai/source-runtime';
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
-import { isThinkingFormat, normalizeThinkingLevels } from '@/lib/ai/thinking';
+import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 
 export type CatalogTier = 'free' | 'plus' | 'pro';
 
@@ -19,7 +18,6 @@ export interface AdminGateway {
     displayName: string;
     baseUrl: string;
     isEnabled: boolean;
-    notes: string | null;
     /** 已保存密钥的提示（如 `sk-…a1b2`）；null 表示还没有密钥。 */
     apiKeyHint: string | null;
     modelCount: number;
@@ -30,7 +28,6 @@ export interface AdminGatewayInput {
     gatewayKey: string;
     displayName: string;
     baseUrl: string;
-    notes: string | null;
     isEnabled: boolean;
     apiKey?: string | null;
 }
@@ -40,8 +37,6 @@ export interface AdminModelSource {
     gatewayId: string;
     /** 上游模型 ID；null 表示与模型 ID 相同。 */
     modelIdOverride: string | null;
-    /** 开启思考时改用的上游模型 ID。 */
-    reasoningModelId: string | null;
     isEnabled: boolean;
 }
 
@@ -49,7 +44,6 @@ export interface AdminModelInput {
     modelKey: string;
     displayName: string;
     vendor: string;
-    description: string | null;
     usageType: AIUsageType;
     /** 生图模型每张图扣除的积分；仅生图用途使用。 */
     creditCost: number;
@@ -57,13 +51,12 @@ export interface AdminModelInput {
     sortOrder: number;
     requiredTier: CatalogTier;
     supportsVision: boolean;
-    supportsReasoning: boolean;
     isReasoningDefault: boolean;
-    reasoningRequiredTier: CatalogTier;
-    thinkingFormat: AIThinkingFormat;
+    /** 勾选的等级即表示支持思考；空数组不发送思考参数。 */
     thinkingLevels: AIReasoningEffort[];
     defaultReasoningEffort: AIReasoningEffort | null;
     contextWindow: number | null;
+    /** 模型目录给出的默认输出上限；没有时按上游模型默认处理。 */
     defaultMaxTokens: number | null;
     customParameters: Record<string, unknown> | null;
     sources: AdminModelSource[];
@@ -83,7 +76,6 @@ export interface GatewayProbeResult {
 
 export const USAGE_TYPES: ReadonlyArray<{ value: AIUsageType; label: string }> = [
     { value: 'chat', label: '对话' },
-    { value: 'vision', label: '视觉' },
     { value: 'embedding', label: '向量' },
     { value: 'rerank', label: '重排' },
     { value: 'image', label: '生图' },
@@ -99,24 +91,10 @@ export const THINKING_LEVEL_LABELS: Record<AIReasoningEffort, string> = {
     minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高',
 };
 
-/** 每种格式写进请求体的字段，与 Agent（pi-ai）发送的一致。 */
-export const THINKING_FORMAT_OPTIONS: ReadonlyArray<{ value: AIThinkingFormat; label: string; fields: string }> = [
-    { value: 'openai', label: 'OpenAI', fields: 'reasoning_effort' },
-    { value: 'deepseek', label: 'DeepSeek', fields: 'thinking.type + reasoning_effort' },
-    { value: 'openrouter', label: 'OpenRouter', fields: 'reasoning.effort' },
-    { value: 'qwen', label: '通义 / DashScope', fields: 'enable_thinking + reasoning_effort' },
-    { value: 'zai', label: '智谱 GLM', fields: 'thinking.type' },
-    { value: 'qwen-chat-template', label: 'vLLM / SGLang', fields: 'chat_template_kwargs.enable_thinking' },
-];
-
 export type LimitPreset = { label: string; tokens: number };
 export const CONTEXT_WINDOW_PRESETS: readonly LimitPreset[] = [
     { label: '32K', tokens: 32_000 }, { label: '128K', tokens: 128_000 }, { label: '200K', tokens: 200_000 },
     { label: '256K', tokens: 256_000 }, { label: '1M', tokens: 1_000_000 },
-];
-export const MAX_OUTPUT_PRESETS: readonly LimitPreset[] = [
-    { label: '4K', tokens: 4_096 }, { label: '8K', tokens: 8_192 }, { label: '16K', tokens: 16_384 },
-    { label: '32K', tokens: 32_768 }, { label: '64K', tokens: 65_536 },
 ];
 
 /** 1000000 → 1M，131072 → 128K，32768 → 32K。 */
@@ -164,14 +142,12 @@ export function parseGatewayInput(body: unknown, options: { creating: boolean })
     if (!displayName || displayName.length > 60) return { error: '请填写网关名称（不超过 60 个字符）' };
     const baseUrl = normalizeGatewayBaseUrl(text(body.baseUrl));
     if (!baseUrl) return { error: '网关地址需要是 http:// 或 https:// 开头的完整地址' };
-    const notes = optionalText(body.notes);
-    if (notes && notes.length > 500) return { error: '备注不能超过 500 个字符' };
     if (body.apiKey !== undefined && body.apiKey !== null && (typeof body.apiKey !== 'string' || !body.apiKey.trim() || body.apiKey.length > 512)) {
         return { error: '密钥格式错误' };
     }
     return {
         value: {
-            gatewayKey, displayName, baseUrl, notes,
+            gatewayKey, displayName, baseUrl,
             isEnabled: body.isEnabled !== false,
             ...(body.apiKey === undefined ? {} : { apiKey: typeof body.apiKey === 'string' ? body.apiKey.trim() : null }),
         },
@@ -185,12 +161,10 @@ function parseSources(value: unknown, modelKey: string): Parsed<AdminModelSource
         if (!isRecord(item) || typeof item.gatewayId !== 'string' || !/^[0-9a-f-]{36}$/iu.test(item.gatewayId)) return { error: '来源格式错误' };
         if (sources.some(source => source.gatewayId === item.gatewayId)) return { error: '同一个网关只能添加一次' };
         const override = optionalText(item.modelIdOverride);
-        const reasoning = optionalText(item.reasoningModelId);
-        if ((override?.length ?? 0) > 200 || (reasoning?.length ?? 0) > 200) return { error: '上游模型 ID 过长' };
+        if ((override?.length ?? 0) > 200) return { error: '上游模型 ID 过长' };
         sources.push({
             gatewayId: item.gatewayId,
             modelIdOverride: override === modelKey ? null : override,
-            reasoningModelId: reasoning,
             isEnabled: item.isEnabled !== false,
         });
     }
@@ -211,17 +185,13 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     const creditCost = optionalNumber(body.creditCost, 0, 1000, true);
     if (creditCost === undefined) return { error: '每张图积分需要是 0 到 1000 之间的整数' };
     const requiredTier = tier(body.requiredTier, 'free');
-    const reasoningRequiredTier = tier(body.reasoningRequiredTier, 'plus');
-    if (!requiredTier || !reasoningRequiredTier) return { error: '会员等级无效' };
-    const thinkingFormat = body.thinkingFormat ?? 'openai';
-    if (!isThinkingFormat(thinkingFormat)) return { error: '思考参数格式无效' };
+    if (!requiredTier) return { error: '会员等级无效' };
     if (body.thinkingLevels !== undefined && (!Array.isArray(body.thinkingLevels)
         || body.thinkingLevels.some(level => !(AI_REASONING_EFFORTS as readonly unknown[]).includes(level)))) {
         return { error: '思考等级无效' };
     }
-    const supportsReasoning = body.supportsReasoning === true;
-    const thinkingLevels = supportsReasoning ? normalizeThinkingLevels(body.thinkingLevels) : [];
-    const defaultReasoningEffort = supportsReasoning && body.defaultReasoningEffort ? body.defaultReasoningEffort : null;
+    const thinkingLevels = normalizeThinkingLevels(body.thinkingLevels);
+    const defaultReasoningEffort = thinkingLevels.length > 0 && body.defaultReasoningEffort ? body.defaultReasoningEffort : null;
     if (defaultReasoningEffort !== null && (!(AI_REASONING_EFFORTS as readonly unknown[]).includes(defaultReasoningEffort)
         || (thinkingLevels.length && !thinkingLevels.includes(defaultReasoningEffort as AIReasoningEffort)))) {
         return { error: '默认思考等级必须是勾选的等级之一' };
@@ -229,8 +199,8 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     const contextWindow = optionalNumber(body.contextWindow, 1024, 10_000_000, true);
     if (contextWindow === undefined) return { error: '上下文窗口需要是 1024 到 10000000 之间的整数' };
     const defaultMaxTokens = optionalNumber(body.defaultMaxTokens, 1, 1_000_000, true);
-    if (defaultMaxTokens === undefined) return { error: '最大输出需要是正整数' };
-    if (contextWindow && defaultMaxTokens && defaultMaxTokens >= contextWindow) return { error: '最大输出必须小于上下文窗口' };
+    if (defaultMaxTokens === undefined) return { error: '输出上限需要是正整数' };
+    if (contextWindow && defaultMaxTokens && defaultMaxTokens >= contextWindow) return { error: '输出上限必须小于上下文窗口' };
     const sortOrder = optionalNumber(body.sortOrder, -100_000, 100_000, true);
     if (sortOrder === undefined) return { error: '排序需要是整数' };
     const customParameters = body.customParameters ?? null;
@@ -240,23 +210,20 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     }
     const sources = parseSources(body.sources ?? [], modelKey);
     if ('error' in sources) return sources;
-    const description = optionalText(body.description);
-    if ((description?.length ?? 0) > 500) return { error: '描述不能超过 500 个字符' };
     return {
         value: {
-            modelKey, displayName, vendor, description,
+            modelKey, displayName, vendor,
             usageType: usageType as AIUsageType,
             creditCost: creditCost ?? 1,
             isEnabled: body.isEnabled !== false,
             sortOrder: sortOrder ?? 0,
-            requiredTier, reasoningRequiredTier,
-            supportsVision: body.supportsVision === true || usageType === 'vision',
-            supportsReasoning,
-            isReasoningDefault: supportsReasoning && body.isReasoningDefault === true,
-            thinkingFormat,
+            requiredTier,
+            supportsVision: body.supportsVision === true,
+            isReasoningDefault: thinkingLevels.length > 0 && body.isReasoningDefault === true,
             thinkingLevels,
             defaultReasoningEffort: defaultReasoningEffort as AIReasoningEffort | null,
-            contextWindow, defaultMaxTokens,
+            contextWindow,
+            defaultMaxTokens,
             customParameters: customParameters as Record<string, unknown> | null,
             sources: sources.value,
         },

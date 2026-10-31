@@ -37,12 +37,12 @@ test('resolveModelAccessAsync should use server-configured vision default when m
   const originalGetDefaultModelConfigAsync = serverConfigModule.getDefaultModelConfigAsync;
 
   serverConfigModule.getModelConfigAsync = async () => undefined;
-  serverConfigModule.getDefaultModelConfigAsync = async (usageType: string) => usageType === 'vision'
+  serverConfigModule.getDefaultModelConfigAsync = async (_usageType: string, options?: { requireVision?: boolean }) => options?.requireVision
     ? {
       id: 'vision-online-default',
       name: 'Vision Online Default',
       vendor: 'qwen-vl',
-      usageType: 'vision',
+      usageType: 'chat',
       modelId: 'vision-online-default',
       apiUrl: '',
       supportsReasoning: true,

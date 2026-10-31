@@ -62,11 +62,6 @@
 .ai-catalog-chip[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); color: var(--accent-strong); font-weight: 500; }
 .ai-catalog-chip:disabled { cursor: not-allowed; opacity: .45; }
 
-/* 思考设置在打开「支持思考」时展开。 */
-.ai-catalog-reveal { display: grid; grid-template-rows: 1fr; transition: grid-template-rows var(--duration-sheet) var(--ease-snap), opacity var(--duration-base) var(--ease-out); }
-.ai-catalog-reveal[data-open=false] { grid-template-rows: 0fr; opacity: 0; }
-.ai-catalog-reveal > div { display: flex; min-height: 0; flex-direction: column; gap: .875rem; overflow: hidden; }
-
 /* 来源：按顺序故障转移，可上下调整。 */
 .ai-catalog-sources { display: flex; flex-direction: column; gap: .5rem; }
 .ai-catalog-source { display: flex; flex-direction: column; gap: .625rem; padding: .75rem; border: 1px solid var(--border); border-radius: .625rem; background: var(--background);
@@ -109,7 +104,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .ai-catalog-section, .ai-catalog-advanced > div, .ai-catalog-probe { animation: none; }
-  .ai-catalog-reveal { transition: none; }
 }
 @media (max-width: 767px) {
   .ai-catalog-grid { grid-template-columns: minmax(0, 1fr); }

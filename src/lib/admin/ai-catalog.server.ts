@@ -21,14 +21,14 @@ export class CatalogError extends Error {
 export async function listGateways(): Promise<AdminGateway[]> {
     const rows = await systemDb().tx(trx => trx.selectFrom('ai_gateways as gateway')
         .select(['gateway.id', 'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url', 'gateway.is_enabled',
-            'gateway.notes', 'gateway.api_key_hint'])
+            'gateway.api_key_hint'])
         .select(eb => eb.selectFrom('ai_model_gateway_bindings as binding').whereRef('binding.gateway_id', '=', 'gateway.id')
             .select(eb.fn.countAll<string>().as('count')).as('model_count'))
         .orderBy('gateway.created_at', 'asc')
         .execute());
     return rows.map(row => ({
         id: row.id, gatewayKey: row.gateway_key, displayName: row.display_name, baseUrl: row.base_url,
-        isEnabled: row.is_enabled, notes: row.notes, apiKeyHint: row.api_key_hint, modelCount: Number(row.model_count ?? 0),
+        isEnabled: row.is_enabled, apiKeyHint: row.api_key_hint, modelCount: Number(row.model_count ?? 0),
     }));
 }
 
@@ -46,7 +46,7 @@ export async function createGateway(input: AdminGatewayInput): Promise<string> {
     try {
         await systemDb().tx(trx => trx.insertInto('ai_gateways').values({
             id, gateway_key: input.gatewayKey, display_name: input.displayName, base_url: input.baseUrl,
-            is_enabled: input.isEnabled, notes: input.notes, ...keyColumns(id, input.apiKey),
+            is_enabled: input.isEnabled, ...keyColumns(id, input.apiKey),
         }).execute());
     } catch (error) {
         if (isUniqueViolation(error)) throw new CatalogError('网关标识已存在', 409);
@@ -60,7 +60,7 @@ export async function updateGateway(id: string, input: AdminGatewayInput): Promi
     let updated;
     try {
         updated = await systemDb().tx(trx => trx.updateTable('ai_gateways').set({
-            display_name: input.displayName, base_url: input.baseUrl, is_enabled: input.isEnabled, notes: input.notes,
+            display_name: input.displayName, base_url: input.baseUrl, is_enabled: input.isEnabled,
             ...keyColumns(id, input.apiKey),
         }).where('id', '=', id).executeTakeFirst());
     } catch (error) {
@@ -122,7 +122,7 @@ export async function listModels(): Promise<AdminModel[]> {
     const { models, bindings } = await systemDb().tx(async trx => ({
         models: await trx.selectFrom('ai_models').selectAll().orderBy('sort_order', 'asc').orderBy('display_name', 'asc').execute(),
         bindings: await trx.selectFrom('ai_model_gateway_bindings')
-            .select(['model_id', 'gateway_id', 'model_id_override', 'reasoning_model_id', 'is_enabled', 'priority'])
+            .select(['model_id', 'gateway_id', 'model_id_override', 'is_enabled', 'priority'])
             .orderBy('priority', 'asc').execute(),
     }));
     return models.map(row => ({
@@ -130,36 +130,31 @@ export async function listModels(): Promise<AdminModel[]> {
         modelKey: row.model_key,
         displayName: row.display_name,
         vendor: row.vendor,
-        description: row.description,
         usageType: row.usage_type as AIUsageType,
         creditCost: row.credit_cost ?? 1,
         isEnabled: row.is_enabled !== false,
         sortOrder: row.sort_order ?? 0,
         requiredTier: row.required_tier as CatalogTier,
         supportsVision: row.supports_vision === true,
-        supportsReasoning: row.supports_reasoning === true,
         isReasoningDefault: row.is_reasoning_default === true,
-        reasoningRequiredTier: (row.reasoning_required_tier ?? 'plus') as CatalogTier,
-        thinkingFormat: row.thinking_format as AdminModel['thinkingFormat'],
         thinkingLevels: normalizeThinkingLevels(row.thinking_levels),
         defaultReasoningEffort: (row.default_reasoning_effort ?? null) as AdminModel['defaultReasoningEffort'],
         contextWindow: row.context_window,
         defaultMaxTokens: row.default_max_tokens,
         customParameters: (row.custom_parameters ?? null) as Record<string, unknown> | null,
         sources: bindings.filter(binding => binding.model_id === row.id).map(binding => ({
-            gatewayId: binding.gateway_id, modelIdOverride: binding.model_id_override,
-            reasoningModelId: binding.reasoning_model_id, isEnabled: binding.is_enabled,
+            gatewayId: binding.gateway_id, modelIdOverride: binding.model_id_override, isEnabled: binding.is_enabled,
         })),
     }));
 }
 
 function modelColumns(input: AdminModelInput) {
     return {
-        model_key: input.modelKey, display_name: input.displayName, vendor: input.vendor, description: input.description,
+        model_key: input.modelKey, display_name: input.displayName, vendor: input.vendor,
         usage_type: input.usageType, credit_cost: input.creditCost, is_enabled: input.isEnabled, sort_order: input.sortOrder,
-        required_tier: input.requiredTier, supports_vision: input.supportsVision, supports_reasoning: input.supportsReasoning,
-        is_reasoning_default: input.isReasoningDefault, reasoning_required_tier: input.reasoningRequiredTier,
-        thinking_format: input.thinkingFormat, thinking_levels: arrayValue(input.thinkingLevels),
+        required_tier: input.requiredTier, supports_vision: input.supportsVision,
+        is_reasoning_default: input.isReasoningDefault,
+        thinking_levels: arrayValue(input.thinkingLevels),
         default_reasoning_effort: input.defaultReasoningEffort, context_window: input.contextWindow,
         default_max_tokens: input.defaultMaxTokens,
         custom_parameters: input.customParameters as never,
@@ -186,7 +181,7 @@ async function saveModel(id: string | null, input: AdminModelInput): Promise<str
             if (input.sources.length) {
                 await trx.insertInto('ai_model_gateway_bindings').values(input.sources.map((source, priority) => ({
                     model_id: modelId!, gateway_id: source.gatewayId, model_id_override: source.modelIdOverride,
-                    reasoning_model_id: source.reasoningModelId, is_enabled: source.isEnabled, priority,
+                    is_enabled: source.isEnabled, priority,
                 }))).execute();
             }
             return modelId;

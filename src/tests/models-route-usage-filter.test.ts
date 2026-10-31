@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
 
 
-test('/api/models should only expose chat and vision models', async (t) => {
+test('/api/models should only expose chat models', async (t) => {
   mockAIFeatureState(t);
   const aiConfigServerModule = require('../lib/server/ai-config') as any;
   const membershipModule = require('../lib/user/membership-server') as any;
@@ -25,21 +25,22 @@ test('/api/models should only expose chat and vision models', async (t) => {
       modelId: 'deepseek-v3.2',
       apiUrl: '',
       supportsReasoning: false,
+      requiredTier: 'free',
     },
     {
       id: 'qwen-vl-plus',
       name: 'Qwen VL',
       vendor: 'qwen-vl',
-      usageType: 'vision',
+      usageType: 'chat',
       modelId: 'qwen-vl-plus',
       apiUrl: '',
       supportsReasoning: true,
-      thinkingFormat: 'qwen',
       thinkingLevels: ['low', 'high'],
       defaultReasoningEffort: 'high',
       contextWindow: 131072,
       apiKeySecret: { version: 1, iv: 'iv', tag: 'tag', data: 'ciphertext' },
       supportsVision: true,
+      requiredTier: 'plus',
     },
     {
       id: 'text-embedding-v4',
@@ -131,7 +132,7 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       id: 'qwen-vl-plus',
       name: 'Qwen VL',
       vendor: 'qwen-vl',
-      usageType: 'vision',
+      usageType: 'chat',
       modelId: 'qwen-vl-plus',
       apiUrl: '',
       supportsReasoning: true,
@@ -172,6 +173,13 @@ test('/api/models?catalog=byok should expose chat models without membership filt
       id: 'gemini-2.5-pro',
       name: 'Gemini 2.5 Pro',
       vendor: 'gemini',
+      supportsReasoning: true,
+      isReasoningDefault: false,
+    },
+    {
+      id: 'qwen-vl-plus',
+      name: 'Qwen VL',
+      vendor: 'qwen-vl',
       supportsReasoning: true,
       isReasoningDefault: false,
     },

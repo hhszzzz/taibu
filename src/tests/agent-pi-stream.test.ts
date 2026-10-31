@@ -159,29 +159,24 @@ test('reasoning streams as thinking and goes back with the assistant message, wh
   assert.equal(replayed?.content, '我先排出命盘。');
 });
 
-test('the thinking switch and level follow the model\'s thinking format, and an unlisted level moves to the nearest listed one', async () => {
+test('the thinking level follows the model ladder, and an unlisted level moves to the nearest listed one', async () => {
   const sent = async (model: AIModelConfig, settings: { reasoning?: boolean }, reasoning?: 'medium' | 'high' | 'max' | 'xhigh', native = piModel) => {
     const gw = gateway(reply('ok'));
     await createPiModelStream(model, { ...settings, fetch: gw.fetch })(native, context(), reasoning ? { reasoning } : undefined).result();
-    const { enable_thinking, reasoning_effort, reasoning: object, thinking, model: upstream } = gw.requests[0].body;
-    return { enable_thinking, reasoning_effort, reasoning: object, thinking, upstream };
+    const { reasoning_effort, model: upstream } = gw.requests[0].body;
+    return { reasoning_effort, upstream };
   };
-  const none = { enable_thinking: undefined, reasoning_effort: undefined, reasoning: undefined, thinking: undefined, upstream: 'fixture-upstream' };
-  // The test gateway's model: DeepSeek format with low / high / max.
-  const deepseek: AIModelConfig = { ...config, thinkingFormat: 'deepseek', thinkingLevels: ['low', 'high', 'max'] };
-  assert.deepEqual(await sent(deepseek, {}, 'high'), { ...none, thinking: { type: 'enabled' }, reasoning_effort: 'high' });
-  assert.deepEqual(await sent(deepseek, {}, 'medium'), { ...none, thinking: { type: 'enabled' }, reasoning_effort: 'high' });
-  assert.deepEqual(await sent(deepseek, {}, 'xhigh'), { ...none, thinking: { type: 'enabled' }, reasoning_effort: 'max' });
-  assert.deepEqual(await sent(deepseek, {}), { ...none, thinking: { type: 'disabled' } });
-  assert.deepEqual(await sent(deepseek, { reasoning: false }, 'high'), { ...none, thinking: { type: 'disabled' } });
-  // A model that lists no levels only switches thinking.
-  assert.deepEqual(await sent({ ...config, thinkingFormat: 'qwen' }, {}, 'high'), { ...none, enable_thinking: true });
-  assert.deepEqual(await sent({ ...config, thinkingFormat: 'qwen' }, {}), { ...none, enable_thinking: false });
-  assert.deepEqual(await sent({ ...config, thinkingLevels: ['low', 'medium', 'high', 'xhigh'] }, {}, 'xhigh'), { ...none, reasoning_effort: 'xhigh' });
-  assert.deepEqual(await sent({ ...config, thinkingFormat: 'openrouter', thinkingLevels: ['high'] }, {}, 'high'), { ...none, reasoning: { effort: 'high' } });
-  // A model that cannot think gets no thinking field at all; a separate reasoning model serves the thinking requests.
-  assert.deepEqual(await sent(deepseek, {}, 'high', { ...piModel, reasoning: false }), none);
-  assert.equal((await sent({ ...config, reasoningModelId: 'fixture-reasoner', sources: [{ ...config.sources![0], reasoningModelId: 'fixture-reasoner' }] }, {}, 'high')).upstream, 'fixture-reasoner');
+  const none = { reasoning_effort: undefined, upstream: 'fixture-upstream' };
+  const ladder: AIModelConfig = { ...config, thinkingLevels: ['low', 'high', 'max'] };
+  assert.deepEqual(await sent(ladder, {}, 'high'), { ...none, reasoning_effort: 'high' });
+  assert.deepEqual(await sent(ladder, {}, 'medium'), { ...none, reasoning_effort: 'high' });
+  assert.deepEqual(await sent(ladder, {}, 'xhigh'), { ...none, reasoning_effort: 'max' });
+  assert.deepEqual(await sent(ladder, {}), none);
+  assert.deepEqual(await sent(ladder, { reasoning: false }, 'high'), none);
+  // A model that lists no levels never sends a thinking field.
+  assert.deepEqual(await sent({ ...config, thinkingLevels: [] }, {}, 'high'), none);
+  // A model that cannot think gets no thinking field either.
+  assert.deepEqual(await sent(ladder, {}, 'high', { ...piModel, reasoning: false }), none);
 });
 
 test('a saved key that does not open moves to the next source, and with none left the task says to re-enter it', async () => {
@@ -199,10 +194,10 @@ test('a saved key that does not open moves to the next source, and with none lef
 
 test('custom parameters reach the body, but never replace transport or thinking fields', async () => {
   const gw = gateway(reply('ok'));
-  await createPiModelStream({ ...config, thinkingFormat: 'qwen', customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
+  await createPiModelStream({ ...config, thinkingLevels: ['low', 'high'], customParameters: { top_k: 20, enable_thinking: true, max_tokens: 1, model: 'other' } }, { fetch: gw.fetch })(piModel, context()).result();
   const { body } = gw.requests[0];
   assert.equal(body.top_k, 20);
-  assert.equal(body.enable_thinking, false);
+  assert.equal(body.enable_thinking, undefined);
   assert.equal(body.max_tokens, 4096);
   assert.equal(body.model, 'fixture-upstream');
   assert.equal(body.temperature, 0.7);

@@ -894,14 +894,13 @@ export async function build(outputDirectory) {
 
 function initialModel() {
   return {
-    id: 'model-1', modelKey: 'fixture-model', displayName: 'Fixture Model', vendor: 'deepseek', description: null,
+    id: 'model-1', modelKey: 'fixture-model', displayName: 'Fixture Model', vendor: 'deepseek',
     usageType: 'chat', isEnabled: true, sortOrder: 0, requiredTier: 'free',
-    supportsVision: false, supportsReasoning: true, isReasoningDefault: false, reasoningRequiredTier: 'plus',
-    thinkingFormat: 'deepseek', thinkingLevels: ['low', 'high', 'max'], defaultReasoningEffort: 'high',
+    supportsVision: false, isReasoningDefault: false,
+    thinkingLevels: ['low', 'high', 'max'], defaultReasoningEffort: 'high',
     contextWindow: 1000000, defaultMaxTokens: 32768,
-    defaultTemperature: 0.7, defaultTopP: null, defaultPresencePenalty: null, defaultFrequencyPenalty: null,
     customParameters: null,
-    sources: [{ gatewayId: '00000000-0000-4000-8000-0000000000a1', modelIdOverride: null, reasoningModelId: null, isEnabled: true }],
+    sources: [{ gatewayId: '00000000-0000-4000-8000-0000000000a1', modelIdOverride: null, isEnabled: true }],
   };
 }
 
@@ -1083,8 +1082,8 @@ export async function run(existingPage, bundlePath) {
   };
   let models = [initialModel()];
   const gateways = [
-    { id: '00000000-0000-4000-8000-0000000000a1', gatewayKey: 'newapi', displayName: 'NewAPI', baseUrl: 'https://unused.invalid', isEnabled: true, notes: null, apiKeyHint: 'sk-…abcd', modelCount: 1 },
-    { id: '00000000-0000-4000-8000-0000000000a2', gatewayKey: 'octopus', displayName: 'Octopus', baseUrl: 'https://unused-2.invalid', isEnabled: true, notes: null, apiKeyHint: 'sk-…wxyz', modelCount: 0 },
+    { id: '00000000-0000-4000-8000-0000000000a1', gatewayKey: 'newapi', displayName: 'NewAPI', baseUrl: 'https://unused.invalid', isEnabled: true, apiKeyHint: 'sk-…abcd', modelCount: 1 },
+    { id: '00000000-0000-4000-8000-0000000000a2', gatewayKey: 'octopus', displayName: 'Octopus', baseUrl: 'https://unused-2.invalid', isEnabled: true, apiKeyHint: 'sk-…wxyz', modelCount: 0 },
   ];
   let announcements = [];
   let failAnnouncementWrite = false;
@@ -1466,7 +1465,6 @@ export async function run(existingPage, bundlePath) {
       ],
       startedAt: '2026-10-27T02:59:56Z', endedAt: '2026-10-27T03:00:00Z',
     } }, true);
-    if (url.pathname === '/api/admin/ai-models/cache') return ok({ cleared: true });
     if (url.pathname === '/api/admin/models-dev') return ok({ models: [] });
     if (url.pathname === '/api/admin/ai-gateways' && method === 'GET') return ok({ gateways });
     if (url.pathname === '/api/admin/ai-gateways/probe' && method === 'POST') return ok({ ok: true, models: ['fixture-model', 'upstream-fixture'], latencyMs: 12 });
@@ -1722,32 +1720,33 @@ export async function run(existingPage, bundlePath) {
     await editor.getByLabel('显示名称', { exact: true }).fill('Created Fixture');
     await editor.getByLabel('模型 ID', { exact: true }).fill('  created-fixture  ');
     check('The model ID drops surrounding spaces as it is typed', await editor.getByLabel('模型 ID', { exact: true }).inputValue() === 'created-fixture');
-    await editor.getByRole('group', { name: '上下文窗口', exact: true }).getByRole('button', { name: '1M', exact: true }).click();
-    await editor.getByRole('group', { name: '最大输出', exact: true }).getByRole('button', { name: '32K', exact: true }).click();
-    check('A window preset writes its number and reads as pressed', await editor.getByRole('spinbutton', { name: /^上下文窗口/ }).inputValue() === '1000000'
-      && await editor.getByRole('group', { name: '上下文窗口', exact: true }).getByRole('button', { name: '1M', exact: true }).getAttribute('aria-pressed') === 'true');
-    await editor.getByRole('switch', { name: '支持思考', exact: true }).click();
+    check('A new model starts with a 1M context window', (await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).textContent()) === '1M');
+    await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: '1M', exact: true }).click({ force: true });
+    check('The context window preset writes its number', (await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).textContent()) === '1M');
     const levels = editor.getByRole('group', { name: '可选思考等级', exact: true });
     for (const level of ['最高', '低', '高']) await levels.getByRole('button', { name: level, exact: true }).click();
-    await editor.getByRole('combobox', { name: /^参数格式/ }).click();
-    await page.getByRole('listbox').waitFor();
-    await page.getByRole('option', { name: 'DeepSeek', exact: true }).click({ force: true });
-    await editor.getByRole('combobox', { name: /^参数格式/ }).filter({ hasText: 'DeepSeek' }).waitFor();
-    check('The thinking format names the request fields it writes', await editor.getByText('thinking.type + reasoning_effort', { exact: true }).isVisible());
     await editor.getByRole('combobox', { name: /^默认等级/ }).click();
     await page.getByRole('listbox').waitFor();
     await page.getByRole('option', { name: '最高', exact: true }).click({ force: true });
     check('The default level offers only the ticked levels', (await editor.getByRole('combobox', { name: /^默认等级/ }).textContent()) === '最高');
+    await editor.getByRole('button', { name: '读取网关的模型列表', exact: true }).click();
+    await editor.getByRole('combobox', { name: '从网关列表选择', exact: true }).waitFor();
+    await editor.getByRole('combobox', { name: '从网关列表选择', exact: true }).click();
+    await page.getByRole('listbox').waitFor();
+    await page.getByRole('option', { name: 'upstream-fixture', exact: true }).click({ force: true });
+    check('A fetched gateway model can be selected for the source', await editor.locator('.ai-catalog-source').getByLabel('上游模型 ID', { exact: true }).inputValue() === 'upstream-fixture');
     await editor.getByRole('combobox', { name: '添加来源', exact: true }).click();
     await page.getByRole('listbox').waitFor();
     await page.getByRole('option', { name: 'Octopus', exact: true }).click({ force: true });
     await editor.getByRole('button', { name: '添加模型', exact: true }).click();
     await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Created Fixture' }).waitFor();
     const created = requests.find(item => item.pathname === '/api/admin/ai-models' && item.method === 'POST');
-    check('Creating a model submits the identity and limits', created?.body.modelKey === 'created-fixture'
-      && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === 32768);
+    check('Creating a model submits the identity, window and trusted output default', created?.body.modelKey === 'created-fixture'
+      && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === null);
     check('Creating a model submits the thinking ladder in order with a listed default', JSON.stringify(created?.body.thinkingLevels) === '["low","high","max"]'
-      && created.body.defaultReasoningEffort === 'max' && created.body.thinkingFormat === 'deepseek' && created.body.supportsReasoning === true);
+      && created.body.defaultReasoningEffort === 'max');
     check('A new model starts on the first gateway and keeps the added backup in order', created?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a1,00000000-0000-4000-8000-0000000000a2');
 
     await fixtureRow.getByRole('button', { name: '编辑 Fixture Model', exact: true }).click();

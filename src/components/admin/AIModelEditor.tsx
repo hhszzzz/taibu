@@ -19,19 +19,20 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { getVendorName, VENDOR_PRESETS } from '@/lib/ai/vendor-labels';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import {
-    CONTEXT_WINDOW_PRESETS, MAX_OUTPUT_PRESETS, THINKING_FORMAT_OPTIONS, THINKING_LEVEL_LABELS, TIERS, USAGE_TYPES,
+    CONTEXT_WINDOW_PRESETS, THINKING_LEVEL_LABELS, TIERS, USAGE_TYPES,
     formatTokenCount, parseModelInput,
-    type AdminGateway, type AdminModel, type AdminModelInput, type AdminModelSource, type LimitPreset,
+    type AdminGateway, type AdminModel, type AdminModelInput, type AdminModelSource,
 } from '@/lib/admin/ai-catalog';
 import { probeGateway, probeSummary } from './AIGatewayPanel';
 import type { ModelsDevSuggestion } from '@/lib/admin/models-dev';
 
 const JSON_HEADERS = { 'Content-Type': 'application/json' };
 const CUSTOM_VENDOR = '__custom__';
+const CUSTOM_WINDOW = '__custom__';
 
 /** Form state: numbers and JSON stay text until saved, so a half-typed value is never lost. */
-type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'customParameters' | 'sortOrder' | 'description'> & {
-    description: string; sortOrder: string; contextWindow: string; defaultMaxTokens: string; customParameters: string;
+type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'customParameters' | 'sortOrder'> & {
+    sortOrder: string; contextWindow: string; defaultMaxTokens: string; customParameters: string;
 };
 
 const text = (value: number | null | undefined) => (value === null || value === undefined ? '' : String(value));
@@ -39,17 +40,19 @@ const text = (value: number | null | undefined) => (value === null || value === 
 function draftOf(model: AdminModel | null, gateways: readonly AdminGateway[]): Draft {
     return {
         modelKey: model?.modelKey ?? '', displayName: model?.displayName ?? '', vendor: model?.vendor ?? 'openai',
-        description: model?.description ?? '', usageType: model?.usageType ?? 'chat', creditCost: model?.creditCost ?? 1, isEnabled: model?.isEnabled ?? true,
+        usageType: model?.usageType ?? 'chat', creditCost: model?.creditCost ?? 1, isEnabled: model?.isEnabled ?? true,
         sortOrder: text(model?.sortOrder ?? 0), requiredTier: model?.requiredTier ?? 'free',
-        supportsVision: model?.supportsVision ?? false, supportsReasoning: model?.supportsReasoning ?? false,
-        isReasoningDefault: model?.isReasoningDefault ?? false, reasoningRequiredTier: model?.reasoningRequiredTier ?? 'free',
-        thinkingFormat: model?.thinkingFormat ?? 'openai', thinkingLevels: model?.thinkingLevels ?? [],
+        supportsVision: model?.supportsVision ?? false,
+        isReasoningDefault: model?.isReasoningDefault ?? false,
+        thinkingLevels: model?.thinkingLevels ?? [],
         defaultReasoningEffort: model?.defaultReasoningEffort ?? null,
-        contextWindow: text(model?.contextWindow), defaultMaxTokens: text(model?.defaultMaxTokens),
+        // A new model starts at 1M; an existing one keeps whatever was saved.
+        contextWindow: model ? text(model.contextWindow) : '1000000',
+        defaultMaxTokens: text(model?.defaultMaxTokens),
         customParameters: model?.customParameters ? JSON.stringify(model.customParameters, null, 2) : '',
         // A new model starts on the first enabled gateway; it can be removed before saving.
         sources: model?.sources ?? gateways.filter(gateway => gateway.isEnabled).slice(0, 1)
-            .map(gateway => ({ gatewayId: gateway.id, modelIdOverride: null, reasoningModelId: null, isEnabled: true })),
+            .map(gateway => ({ gatewayId: gateway.id, modelIdOverride: null, isEnabled: true })),
     };
 }
 
@@ -62,28 +65,33 @@ function payloadOf(draft: Draft): Record<string, unknown> | { error: string } {
     return { ...draft, customParameters, sortOrder: draft.sortOrder.trim() || 0 };
 }
 
-/** A token limit: a preset ladder that writes the number, and the number itself. */
-function LimitField({ label, hint, value, presets, placeholder, onChange }: {
-    label: string; hint: string; value: string; presets: readonly LimitPreset[]; placeholder?: string; onChange: (value: string) => void;
-}) {
-    const id = useId();
+/** The context window: a preset ladder plus a free number, defaulting new models to 1M. */
+function ContextWindowField({ value, onChange }: { value: string; onChange: (value: string) => void }) {
+    const customValue = value !== '' && !CONTEXT_WINDOW_PRESETS.some(preset => String(preset.tokens) === value);
+    const [customMode, setCustomMode] = useState(customValue);
+    const custom = customMode || customValue;
     return <div className="ai-catalog-field">
-        <label htmlFor={id}>{label}{value ? <span className="ai-catalog-hint"> · {formatTokenCount(Number(value))}</span> : null}</label>
-        <div className="ai-catalog-limit" role="group" aria-label={label}>
-            {presets.map(preset => <FilterChip key={preset.label} className="ai-catalog-chip" pressed={Number(value) === preset.tokens}
-                onClick={() => onChange(String(preset.tokens))}>{preset.label}</FilterChip>)}
-            <Input id={id} type="number" inputMode="numeric" min={1} value={value} placeholder={placeholder}
-                onChange={event => onChange(event.target.value)} />
+        <span>上下文窗口{value ? <span className="ai-catalog-hint"> · {formatTokenCount(Number(value))}</span> : null}</span>
+        <div className="ai-catalog-limit" role="group" aria-label="上下文窗口">
+            <Select ariaLabel="上下文窗口" value={custom ? CUSTOM_WINDOW : value} onChange={next => {
+                setCustomMode(next === CUSTOM_WINDOW);
+                if (next !== CUSTOM_WINDOW) onChange(next);
+            }} options={[
+                { value: '', label: '未设置' },
+                ...CONTEXT_WINDOW_PRESETS.map(preset => ({ value: String(preset.tokens), label: preset.label })),
+                { value: CUSTOM_WINDOW, label: '自定义…' },
+            ]} className="w-36" />
+            {custom && <Input type="number" inputMode="numeric" min={1024} aria-label="自定义上下文窗口" value={value}
+                placeholder="例如 131072" onChange={event => onChange(event.target.value)} />}
         </div>
-        <span className="ai-catalog-hint">{hint}</span>
+        <span className="ai-catalog-hint">Agent 按上下文窗口决定何时压缩对话；新建模型默认 1M。</span>
     </div>;
 }
 
-function SourceRow({ source, index, count, gateway, modelKey, supportsReasoning, onChange, onMove, onRemove }: {
-    source: AdminModelSource; index: number; count: number; gateway: AdminGateway | undefined; modelKey: string; supportsReasoning: boolean;
+function SourceRow({ source, index, count, gateway, modelKey, onChange, onMove, onRemove }: {
+    source: AdminModelSource; index: number; count: number; gateway: AdminGateway | undefined; modelKey: string;
     onChange: (change: Partial<AdminModelSource>) => void; onMove: (offset: number) => void; onRemove: () => void;
 }) {
-    const listId = useId();
     const [probe, setProbe] = useState<{ busy: boolean; models: string[]; message?: string }>({ busy: false, models: [] });
     const load = async () => {
         if (!gateway) return;
@@ -96,6 +104,9 @@ function SourceRow({ source, index, count, gateway, modelKey, supportsReasoning,
         }
     };
     const warning = !gateway ? '网关已删除' : !gateway.apiKeyHint ? '网关未设置密钥' : !gateway.isEnabled ? '网关已停用' : null;
+    const models = source.modelIdOverride && !probe.models.includes(source.modelIdOverride)
+        ? [...probe.models, source.modelIdOverride]
+        : probe.models;
     return <div className="ai-catalog-source" data-disabled={!source.isEnabled || undefined}>
         <div className="ai-catalog-source-head">
             <span className="ai-catalog-source-order" aria-hidden="true">{index + 1}</span>
@@ -106,17 +117,18 @@ function SourceRow({ source, index, count, gateway, modelKey, supportsReasoning,
             <SettingsSwitch label={`启用来源 ${gateway?.displayName ?? ''}`} checked={source.isEnabled} onToggle={() => onChange({ isEnabled: !source.isEnabled })} />
             <IconButton label="移除来源" tone="danger" size="xs" onClick={onRemove}><Trash2 size={14} aria-hidden="true" /></IconButton>
         </div>
-        <div className="ai-catalog-grid">
-            <label className="ai-catalog-field"><span>上游模型 ID</span>
-                <Input className="ai-catalog-mono" list={listId} spellCheck={false} value={source.modelIdOverride ?? ''} placeholder={modelKey || '与模型 ID 相同'}
-                    onChange={event => onChange({ modelIdOverride: event.target.value || null })} />
-            </label>
-            {supportsReasoning && <label className="ai-catalog-field"><span>思考时改用（可选）</span>
-                <Input className="ai-catalog-mono" list={listId} spellCheck={false} value={source.reasoningModelId ?? ''} placeholder="同上游模型"
-                    onChange={event => onChange({ reasoningModelId: event.target.value || null })} />
-            </label>}
-        </div>
-        <datalist id={listId}>{probe.models.map(model => <option key={model} value={model} />)}</datalist>
+        <label className="ai-catalog-field"><span>上游模型 ID</span>
+            <Input className="ai-catalog-mono" spellCheck={false} value={source.modelIdOverride ?? ''} placeholder={modelKey || '与模型 ID 相同'}
+                onChange={event => onChange({ modelIdOverride: event.target.value || null })} />
+        </label>
+        {probe.models.length > 0 && <label className="ai-catalog-field"><span>从网关列表选择</span>
+            <Select ariaLabel="从网关列表选择" value={source.modelIdOverride ?? ''}
+                onChange={value => onChange({ modelIdOverride: value || null })}
+                options={[
+                    { value: '', label: `与模型 ID 相同${modelKey ? `（${modelKey}）` : ''}` },
+                    ...models.map(model => ({ value: model, label: model })),
+                ]} />
+        </label>}
         {gateway?.apiKeyHint && <div className="ai-catalog-limit">
             <Button variant="ghost" size="sm" loading={probe.busy} loadingText={<><RefreshCw size={13} aria-hidden="true" />读取网关的模型列表</>} disabled={probe.busy} onClick={() => void load()}>
                 {!probe.busy && <RefreshCw size={13} aria-hidden="true" />}读取网关的模型列表
@@ -146,8 +158,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     const patch = (change: Partial<Draft>) => { setDraft(current => ({ ...current, ...change })); setError(null); };
     const gatewayById = useMemo(() => new Map(gateways.map(gateway => [gateway.id, gateway])), [gateways]);
     const unused = gateways.filter(gateway => !draft.sources.some(source => source.gatewayId === gateway.id));
-    const format = THINKING_FORMAT_OPTIONS.find(option => option.value === draft.thinkingFormat);
-    const chat = draft.usageType === 'chat' || draft.usageType === 'vision';
+    const chat = draft.usageType === 'chat';
     const image = draft.usageType === 'image';
 
     const lookupModelsDev = useCallback(async (query: string) => {
@@ -162,6 +173,24 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                 `/api/admin/models-dev?q=${encodeURIComponent(query)}`, undefined, { fallbackMessage: '查询 models.dev 失败' });
             if (seq !== lookupSeq.current) return;
             setLookup({ busy: false, error: null, searched: true, models: result.models ?? [] });
+            // 模型 ID 精确命中目录时，自动带出不可直填的默认值：输出上限与思考等级。
+            const exact = result.models?.find(suggestion => suggestion.id.toLowerCase() === query.trim().toLowerCase());
+            if (exact) {
+                setDraft(current => {
+                    let next = current;
+                    if (!current.defaultMaxTokens && exact.maxTokens) {
+                        next = { ...next, defaultMaxTokens: String(exact.maxTokens) };
+                    }
+                    if (!current.thinkingLevels.length && exact.thinkingLevels.length) {
+                        next = {
+                            ...next,
+                            thinkingLevels: exact.thinkingLevels,
+                            defaultReasoningEffort: exact.thinkingLevels.includes('medium') ? 'medium' : exact.thinkingLevels.at(-1) ?? null,
+                        };
+                    }
+                    return next;
+                });
+            }
         } catch (e) {
             if (seq !== lookupSeq.current) return;
             setLookup({ busy: false, error: e instanceof Error ? e.message : '查询 models.dev 失败', searched: true, models: [] });
@@ -181,10 +210,10 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             ...(suggestion.contextWindow ? { contextWindow: String(suggestion.contextWindow) } : {}),
             ...(suggestion.maxTokens ? { defaultMaxTokens: String(suggestion.maxTokens) } : {}),
             ...(draft.displayName ? {} : { displayName: suggestion.name }),
-            supportsReasoning: suggestion.reasoning,
             thinkingLevels: levels,
             defaultReasoningEffort: levels.includes('medium') ? 'medium' : levels.at(-1) ?? null,
-            supportsVision: suggestion.vision || draft.usageType === 'vision',
+            isReasoningDefault: levels.length > 0 && draft.isReasoningDefault,
+            supportsVision: suggestion.vision || draft.supportsVision,
         });
         showToast('success', `已填入 ${suggestion.name} 的目录值`);
     };
@@ -194,7 +223,11 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
         const ordered = AI_REASONING_EFFORTS.filter(item => levels.includes(item));
         // The default stays one of the listed levels.
         const fallback = ordered.includes('medium') ? 'medium' : ordered.at(-1) ?? null;
-        patch({ thinkingLevels: ordered, defaultReasoningEffort: draft.defaultReasoningEffort && ordered.includes(draft.defaultReasoningEffort) ? draft.defaultReasoningEffort : ordered.length ? fallback : null });
+        patch({
+            thinkingLevels: ordered,
+            defaultReasoningEffort: draft.defaultReasoningEffort && ordered.includes(draft.defaultReasoningEffort) ? draft.defaultReasoningEffort : ordered.length ? fallback : null,
+            ...(ordered.length ? {} : { isReasoningDefault: false }),
+        });
     };
     const setSource = (index: number, change: Partial<AdminModelSource>) =>
         patch({ sources: draft.sources.map((source, position) => (position === index ? { ...source, ...change } : source)) });
@@ -268,23 +301,17 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                             { value: CUSTOM_VENDOR, label: '其他…' },
                         ]} />
                     </label>
-                    {vendorMode === CUSTOM_VENDOR ? <label className="ai-catalog-field"><span>供应商标识</span>
-                        <Input className="ai-catalog-mono" value={draft.vendor} maxLength={40} placeholder="mistral" onChange={event => patch({ vendor: event.target.value.trim() })} />
-                    </label> : <div className="ai-catalog-field"><span>用途</span>
-                        <SegmentedChoice ariaLabel="模型用途" value={draft.usageType} options={USAGE_TYPES} maxWidth={320}
-                            onChange={usageType => patch({ usageType, supportsVision: usageType === 'vision' || draft.supportsVision })} />
-                    </div>}
                 </div>
-                {vendorMode === CUSTOM_VENDOR && <div className="ai-catalog-field"><span>用途</span>
+                {vendorMode === CUSTOM_VENDOR && <label className="ai-catalog-field"><span>供应商标识</span>
+                    <Input className="ai-catalog-mono" value={draft.vendor} maxLength={40} placeholder="mistral" onChange={event => patch({ vendor: event.target.value.trim() })} />
+                </label>}
+                <div className="ai-catalog-field"><span>用途</span>
                     <SegmentedChoice ariaLabel="模型用途" value={draft.usageType} options={USAGE_TYPES} maxWidth={320}
-                        onChange={usageType => patch({ usageType, supportsVision: usageType === 'vision' || draft.supportsVision })} />
-                </div>}
-                <label className="ai-catalog-field"><span>描述（可选）</span>
-                    <Input value={draft.description} maxLength={500} onChange={event => patch({ description: event.target.value })} />
-                </label>
+                        onChange={usageType => patch({ usageType })} />
+                </div>
                 {chat && <div className="ai-catalog-lookup">
                     <div className="ai-catalog-lookup-head">
-                        <span>模型目录<small>models.dev 公开的上下文与输出上限，可一键填入</small></span>
+                        <span>模型目录<small>models.dev 公开的上下文与思考能力，可一键填入</small></span>
                         <Button variant="ghost" size="sm" loading={lookup.busy} loadingText="查询中…"
                             disabled={draft.modelKey.trim().length < 2}
                             onClick={() => void lookupModelsDev(draft.modelKey.trim())}>
@@ -318,11 +345,13 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             </section>}
 
             {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-limits`}>
-                <header><h3 id={`${titleId}-limits`}>上下文与输出</h3><p>Agent 按上下文窗口决定何时压缩对话；最大输出是单次回复（含思考）的上限。</p></header>
-                <LimitField label="上下文窗口" value={draft.contextWindow} presets={CONTEXT_WINDOW_PRESETS} placeholder="未知"
-                    hint="留空时按已知模型的应用上限；都不知道时 Agent 不按阈值压缩。" onChange={contextWindow => patch({ contextWindow })} />
-                <LimitField label="最大输出" value={draft.defaultMaxTokens} presets={MAX_OUTPUT_PRESETS} placeholder="不限"
-                    hint="留空表示不限：请求不带 max_tokens，由上游按模型默认处理。思考也计入输出，思考等级越高越需要留足。" onChange={defaultMaxTokens => patch({ defaultMaxTokens })} />
+                <header><h3 id={`${titleId}-limits`}>上下文与输出</h3><p>Agent 按上下文窗口决定何时压缩对话；输出上限取自模型目录，取不到时按模型默认。</p></header>
+                <ContextWindowField value={draft.contextWindow} onChange={contextWindow => patch({ contextWindow })} />
+                <div className="ai-catalog-field"><span>输出上限</span>
+                    <span className="ai-catalog-hint">{draft.defaultMaxTokens
+                        ? `当前上限 ${formatTokenCount(Number(draft.defaultMaxTokens))}`
+                        : '未设 · 按模型默认'}</span>
+                </div>
                 <div className="ai-catalog-toggle">
                     <span>支持图片输入<small>Agent 会把图片附件随消息发给模型</small></span>
                     <SettingsSwitch label="支持图片输入" checked={draft.supportsVision} onToggle={() => patch({ supportsVision: !draft.supportsVision })} />
@@ -330,53 +359,35 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             </section>}
 
             {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-thinking`}>
-                <header><h3 id={`${titleId}-thinking`}>思考</h3></header>
-                <div className="ai-catalog-toggle">
-                    <span>支持思考<small>模型会先推理再回答；推理内容在工具调用之间延续</small></span>
-                    <SettingsSwitch label="支持思考" checked={draft.supportsReasoning}
-                        onToggle={() => patch({ supportsReasoning: !draft.supportsReasoning, ...(draft.supportsReasoning ? { isReasoningDefault: false } : {}) })} />
-                </div>
-                <div className="ai-catalog-reveal" data-open={draft.supportsReasoning} inert={!draft.supportsReasoning || undefined}>
-                    <div>
-                        <div className="ai-catalog-field">
-                            <span>可选等级</span>
-                            <div className="ai-catalog-limit" role="group" aria-label="可选思考等级">
-                                {AI_REASONING_EFFORTS.map(level => <FilterChip key={level} className="ai-catalog-chip"
-                                    pressed={draft.thinkingLevels.includes(level)} onClick={() => toggleLevel(level)}>{THINKING_LEVEL_LABELS[level]}</FilterChip>)}
-                            </div>
-                            <span className="ai-catalog-hint">输入框的「努力程度」只列出这里勾选的等级；都不勾选时只能开关思考。</span>
-                        </div>
-                        <div className="ai-catalog-grid">
-                            <label className="ai-catalog-field"><span>参数格式</span>
-                                <Select ariaLabel="参数格式" value={draft.thinkingFormat}
-                                    onChange={thinkingFormat => patch({ thinkingFormat })}
-                                    options={THINKING_FORMAT_OPTIONS.map(option => ({ value: option.value, label: option.label }))} />
-                                {format && <span className="ai-catalog-hint ai-catalog-mono">{format.fields}</span>}
-                            </label>
-                            <label className="ai-catalog-field"><span>默认等级</span>
-                                <Select ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''} disabled={!draft.thinkingLevels.length}
-                                    onChange={value => patch({ defaultReasoningEffort: (value || null) as AIReasoningEffort | null })}
-                                    options={draft.thinkingLevels.length
-                                        ? draft.thinkingLevels.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] }))
-                                        : [{ value: '', label: '—' }]} />
-                            </label>
-                        </div>
-                        <div className="ai-catalog-toggle">
-                            <span>默认开启思考</span>
-                            <SettingsSwitch label="默认开启思考" checked={draft.isReasoningDefault} onToggle={() => patch({ isReasoningDefault: !draft.isReasoningDefault })} />
-                        </div>
-                        <div className="ai-catalog-field"><span>思考所需会员</span>
-                            <SegmentedChoice ariaLabel="思考所需会员" value={draft.reasoningRequiredTier} options={TIERS} onChange={reasoningRequiredTier => patch({ reasoningRequiredTier })} />
-                        </div>
+                <header><h3 id={`${titleId}-thinking`}>思考</h3><p>勾选模型支持的等级即表示支持思考；不勾选时不会发送思考参数。</p></header>
+                <div className="ai-catalog-field">
+                    <span>可选等级</span>
+                    <div className="ai-catalog-limit" role="group" aria-label="可选思考等级">
+                        {AI_REASONING_EFFORTS.map(level => <FilterChip key={level} className="ai-catalog-chip"
+                            pressed={draft.thinkingLevels.includes(level)} onClick={() => toggleLevel(level)}>{THINKING_LEVEL_LABELS[level]}</FilterChip>)}
                     </div>
+                    <span className="ai-catalog-hint">输入框的「努力程度」只列出这里勾选的等级。</span>
                 </div>
+                {draft.thinkingLevels.length > 0 && <>
+                    <div className="ai-catalog-grid">
+                        <label className="ai-catalog-field"><span>默认等级</span>
+                            <Select ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''}
+                                onChange={value => patch({ defaultReasoningEffort: (value || null) as AIReasoningEffort | null })}
+                                options={draft.thinkingLevels.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] }))} />
+                        </label>
+                    </div>
+                    <div className="ai-catalog-toggle">
+                        <span>默认开启思考</span>
+                        <SettingsSwitch label="默认开启思考" checked={draft.isReasoningDefault} onToggle={() => patch({ isReasoningDefault: !draft.isReasoningDefault })} />
+                    </div>
+                </>}
             </section>}
 
             <section className="ai-catalog-section" aria-labelledby={`${titleId}-sources`}>
-                <header><h3 id={`${titleId}-sources`}>来源与故障转移</h3><p>按顺序请求；前一个来源在回复出现前失败时，换下一个。</p></header>
+                <header><h3 id={`${titleId}-sources`}>来源与故障转移</h3><p>按顺序请求；前一个来源在回复出现前失败时，换下一个。每个来源只需选择网关和上游模型 ID。</p></header>
                 {draft.sources.length ? <div className="ai-catalog-sources">
                     {draft.sources.map((source, index) => <SourceRow key={source.gatewayId} source={source} index={index} count={draft.sources.length}
-                        gateway={gatewayById.get(source.gatewayId)} modelKey={draft.modelKey} supportsReasoning={draft.supportsReasoning}
+                        gateway={gatewayById.get(source.gatewayId)} modelKey={draft.modelKey}
                         onChange={change => setSource(index, change)} onMove={offset => moveSource(index, offset)}
                         onRemove={() => patch({ sources: draft.sources.filter((_, position) => position !== index) })} />)}
                 </div> : <p className="ai-catalog-hint">没有来源的模型不会出现在用户的模型菜单里。</p>}
@@ -385,7 +396,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                     placeholder="添加来源网关…"
                     ariaLabel="添加来源"
                     options={unused.map(gateway => ({ value: gateway.id, label: gateway.displayName }))}
-                    onChange={gatewayId => patch({ sources: [...draft.sources, { gatewayId, modelIdOverride: null, reasoningModelId: null, isEnabled: true }] })}
+                    onChange={gatewayId => patch({ sources: [...draft.sources, { gatewayId, modelIdOverride: null, isEnabled: true }] })}
                     className="w-auto min-w-40"
                 />}
             </section>
@@ -409,7 +420,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                     <label className="ai-catalog-field"><span>自定义请求参数（JSON）</span>
                         <Textarea className="ai-catalog-mono" rows={4} spellCheck={false} value={draft.customParameters} placeholder={'{\n  "top_k": 40\n}'}
                             onChange={event => patch({ customParameters: event.target.value })} />
-                        <span className="ai-catalog-hint">合并进请求体；消息、工具、输出上限和思考参数由系统写入，这里不能覆盖。提示缓存亲和默认开启；网关不接受 prompt_cache_key 时，设为 <code>{'{"promptCacheKey": false}'}</code> 关闭。</span>
+                        <span className="ai-catalog-hint">合并进请求体；消息、工具和思考参数由系统写入，这里不能覆盖。提示缓存亲和默认开启；网关不接受 prompt_cache_key 时，设为 <code>{'{"promptCacheKey": false}'}</code> 关闭。</span>
                     </label>
                 </div>
             </details>

@@ -290,22 +290,11 @@ export type KnownAIVendor =
 export type AIVendor = KnownAIVendor | (string & {});
 
 /** AI 模型用途 */
-export type AIUsageType = 'chat' | 'vision' | 'embedding' | 'rerank' | 'image';
-
-/** AI 来源传输协议 */
-export type AITransport = 'openai_compatible';
+export type AIUsageType = 'chat' | 'embedding' | 'rerank' | 'image';
 
 /** AI 推理努力等级 */
 export const AI_REASONING_EFFORTS = ['minimal', 'low', 'medium', 'high', 'xhigh', 'max'] as const;
 export type AIReasoningEffort = typeof AI_REASONING_EFFORTS[number];
-
-/**
- * 思考参数在请求体里的写法（与 pi-ai 的 thinkingFormat 同名）：
- * openai = `reasoning_effort`；deepseek = `thinking: {type}` 加 `reasoning_effort`；openrouter = `reasoning: {effort}`；
- * qwen = `enable_thinking` 加 `reasoning_effort`；zai = `thinking: {type}`（智谱）；qwen-chat-template = `chat_template_kwargs.enable_thinking`（vLLM / SGLang 部署）。
- */
-export const AI_THINKING_FORMATS = ['openai', 'deepseek', 'openrouter', 'qwen', 'zai', 'qwen-chat-template'] as const;
-export type AIThinkingFormat = typeof AI_THINKING_FORMATS[number];
 
 /** 网关密钥的密文（AES-256-GCM），只在服务端请求时解开。 */
 export interface AISealedSecret {
@@ -324,8 +313,6 @@ export interface AIModelSourceConfig {
     apiUrl: string;
     apiKeySecret?: AISealedSecret | null;
     modelIdOverride?: string | null;
-    reasoningModelId?: string | null;
-    transport?: AITransport;
     priority?: number;
     isActive?: boolean;
     isEnabled?: boolean;
@@ -344,12 +331,10 @@ export interface AIModelConfig {
     gatewayId?: string;          // 当前来源的网关行 ID
     apiKeySecret?: AISealedSecret | null; // 当前来源的网关密钥密文
     // 推理模式支持
-    supportsReasoning: boolean;  // 是否支持推理模式
-    reasoningModelId?: string;   // 推理模式的模型 ID（如果不同）
-    isReasoningDefault?: boolean; // 是否默认开启推理（DeepAI）
-    /** 可选的思考等级（按 AI_REASONING_EFFORTS 顺序）；为空表示只能开关思考，不能调档。 */
+    supportsReasoning: boolean;  // 是否支持思考（由 thinkingLevels 推导）
+    isReasoningDefault?: boolean; // 是否默认开启推理
+    /** 可选的思考等级（按 AI_REASONING_EFFORTS 顺序）；为空表示不发送思考参数。 */
     thinkingLevels?: AIReasoningEffort[];
-    thinkingFormat?: AIThinkingFormat;
     /** 上下文窗口（token）；未填时按已知模型的应用上限处理。 */
     contextWindow?: number;
     // 视觉模型支持
@@ -359,11 +344,9 @@ export interface AIModelConfig {
     defaultReasoningEffort?: AIReasoningEffort;
     customParameters?: Record<string, unknown> | null;
     // 访问控制（从数据库获取）
-    requiredTier?: 'free' | 'plus' | 'pro';  // 基础访问所需等级
-    reasoningRequiredTier?: 'free' | 'plus' | 'pro';  // 推理模式所需等级
+    requiredTier?: 'free' | 'plus' | 'pro';  // 访问所需等级
     // 来源信息（用于统计）
     sourceKey?: string;  // 当前活跃来源 key
-    transport?: AITransport; // 来源传输协议
     sources?: AIModelSourceConfig[]; // 非空来源清单为权威配置，可含禁用项；空清单兼容旧顶层配置
 }
 

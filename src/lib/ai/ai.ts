@@ -246,13 +246,13 @@ function buildSystemPrompt(
 
 async function resolveModelConfigForCall(
     modelId: string | undefined,
-    usageType: 'chat' | 'vision'
+    options?: { requireVision?: boolean }
 ): Promise<AIModelConfig | undefined> {
     const requestedModelId = modelId?.trim() || '';
     if (requestedModelId) {
         return await getModelConfigAsync(requestedModelId);
     }
-    return await getDefaultModelConfigAsync(usageType);
+    return await getDefaultModelConfigAsync('chat', options);
 }
 
 /**
@@ -265,7 +265,7 @@ export async function callAI(
     chartContext: string = '',
     options?: AICallOptions
 ): Promise<string> {
-    const config = await resolveModelConfigForCall(modelId, 'chat');
+    const config = await resolveModelConfigForCall(modelId);
     if (!config) {
         throw new Error(`Unknown model: ${modelId}`);
     }
@@ -299,7 +299,7 @@ export async function callAIStream(
     modelId: string = DEFAULT_MODEL_ID,
     options?: AICallOptions
 ): Promise<ReadableStream<Uint8Array>> {
-    const config = await resolveModelConfigForCall(modelId, 'chat');
+    const config = await resolveModelConfigForCall(modelId);
     if (!config) {
         throw new Error(`Unknown model: ${modelId}`);
     }
@@ -329,7 +329,7 @@ export async function callAIUIMessageResult(
     modelId: string = DEFAULT_MODEL_ID,
     options?: AICallOptions
 ): Promise<Awaited<ReturnType<typeof streamWithAISDK>>> {
-    const config = await resolveModelConfigForCall(modelId, 'chat');
+    const config = await resolveModelConfigForCall(modelId);
     if (!config) {
         throw new Error(`Unknown model: ${modelId}`);
     }
@@ -356,7 +356,7 @@ export async function callAIVision(
     chartContext: string = '',
     options?: AICallOptions
 ): Promise<string> {
-    const config = await resolveModelConfigForCall(modelId, 'vision');
+    const config = await resolveModelConfigForCall(modelId, { requireVision: true });
     if (!config) {
         throw new Error(`Unknown model: ${modelId}`);
     }
@@ -429,7 +429,7 @@ export async function callAIWithReasoning(
     chartContext: string = '',
     options?: AICallOptions
 ): Promise<AICallResult> {
-    const config = await resolveModelConfigForCall(modelId, 'chat');
+    const config = await resolveModelConfigForCall(modelId);
     if (!config) {
         throw new Error(`Unknown model: ${modelId}`);
     }

@@ -10,12 +10,11 @@ import { createSharedCache } from '@/lib/cache/shared.server';
 import {
   applySourceToModel,
   buildManagedApiUrl,
-  DEFAULT_AI_TRANSPORT,
   getModelUsageType,
   getOrderedModelSources,
   sortModelSources,
 } from '@/lib/ai/source-runtime';
-import { isThinkingFormat, normalizeThinkingLevels } from '@/lib/ai/thinking';
+import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 import { systemDb } from '@/lib/db/context.server';
 
 interface DBGatewayRow {
@@ -24,14 +23,12 @@ interface DBGatewayRow {
   display_name: string | null;
   base_url: string | null;
   api_key_secret: AISealedSecret | null;
-  transport?: string | null;
   is_enabled?: boolean | null;
 }
 
 interface DBModelGatewayBindingRow {
   id?: string;
   model_id_override: string | null;
-  reasoning_model_id: string | null;
   is_enabled: boolean;
   priority?: number | null;
   gateway: DBGatewayRow;
@@ -44,17 +41,14 @@ interface DBModelRow {
   vendor: string;
   usage_type?: string;
   credit_cost?: number | null;
-  supports_reasoning: boolean;
   is_reasoning_default: boolean;
   supports_vision: boolean;
   default_max_tokens: number | null;
   default_reasoning_effort?: AIModelConfig['defaultReasoningEffort'] | null;
-  thinking_format: string;
   thinking_levels: string[] | null;
   context_window: number | null;
   custom_parameters?: Record<string, unknown> | null;
   required_tier?: string;
-  reasoning_required_tier?: string | null;
   bindings?: DBModelGatewayBindingRow[];
 }
 
@@ -68,7 +62,6 @@ const dbModelsCache = createSharedCache<AIModelConfig[]>({
 function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
   const usageType = getModelUsageType({
     usageType: row.usage_type as AIModelConfig['usageType'],
-    supportsVision: row.supports_vision ?? false,
   });
 
   const sources = (row.bindings || []).map((binding): AIModelSourceConfig => ({
@@ -78,8 +71,6 @@ function buildSourcesForModel(row: DBModelRow): AIModelSourceConfig[] {
     apiUrl: buildManagedApiUrl(binding.gateway.base_url, usageType),
     apiKeySecret: binding.gateway.api_key_secret,
     modelIdOverride: binding.model_id_override || row.model_key,
-    reasoningModelId: binding.reasoning_model_id || undefined,
-    transport: (binding.gateway.transport as AIModelConfig['transport']) || DEFAULT_AI_TRANSPORT,
     priority: binding.priority ?? undefined,
     isEnabled: binding.is_enabled !== false && binding.gateway.is_enabled !== false,
   }));
@@ -103,18 +94,15 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       creditCost: row.credit_cost == null ? undefined : Number(row.credit_cost),
       modelId: row.model_key,
       apiUrl: '',
-      supportsReasoning: row.supports_reasoning,
+      supportsReasoning: thinkingLevels.length > 0,
       isReasoningDefault: row.is_reasoning_default,
       supportsVision: row.supports_vision,
-      thinkingFormat: isThinkingFormat(row.thinking_format) ? row.thinking_format : 'openai',
       thinkingLevels,
       ...(row.context_window ? { contextWindow: row.context_window } : {}),
       defaultMaxTokens: row.default_max_tokens ?? undefined,
       defaultReasoningEffort: row.default_reasoning_effort ?? undefined,
       customParameters: (row.custom_parameters as Record<string, unknown> | null) ?? null,
       requiredTier: row.required_tier as AIModelConfig['requiredTier'],
-      reasoningRequiredTier: row.reasoning_required_tier as AIModelConfig['reasoningRequiredTier'],
-      transport: DEFAULT_AI_TRANSPORT,
       sources,
     };
 
@@ -133,10 +121,9 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
         .selectFrom('ai_models')
         .select([
           'id', 'model_key', 'display_name', 'vendor', 'usage_type', 'credit_cost',
-          'supports_reasoning', 'is_reasoning_default', 'supports_vision',
+          'is_reasoning_default', 'supports_vision',
           'default_max_tokens', 'default_reasoning_effort',
-          'thinking_format', 'thinking_levels', 'context_window', 'custom_parameters', 'required_tier',
-          'reasoning_required_tier',
+          'thinking_levels', 'context_window', 'custom_parameters', 'required_tier',
         ])
         .where('is_enabled', '=', true)
         .orderBy('sort_order', 'asc')
@@ -146,10 +133,10 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
         .selectFrom('ai_model_gateway_bindings as binding')
         .innerJoin('ai_gateways as gateway', 'gateway.id', 'binding.gateway_id')
         .select([
-          'binding.model_id', 'binding.model_id_override', 'binding.reasoning_model_id',
+          'binding.model_id', 'binding.model_id_override',
           'binding.is_enabled', 'binding.priority', 'binding.id',
           'gateway.id as gateway_id', 'gateway.gateway_key', 'gateway.display_name', 'gateway.base_url',
-          'gateway.api_key_secret', 'gateway.transport', 'gateway.is_enabled as gateway_enabled',
+          'gateway.api_key_secret', 'gateway.is_enabled as gateway_enabled',
         ])
         .where('binding.model_id', 'in', models.map((model) => model.id))
         .orderBy('binding.priority', 'asc')
@@ -160,7 +147,6 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
         list.push({
           id: binding.id,
           model_id_override: binding.model_id_override,
-          reasoning_model_id: binding.reasoning_model_id,
           is_enabled: binding.is_enabled,
           priority: binding.priority,
           gateway: {
@@ -169,7 +155,6 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
             display_name: binding.display_name,
             base_url: binding.base_url,
             api_key_secret: binding.api_key_secret as AISealedSecret | null,
-            transport: binding.transport,
             is_enabled: binding.gateway_enabled,
           },
         });
@@ -194,10 +179,11 @@ export async function getModelsByUsageTypeAsync(
 }
 
 export async function getDefaultModelConfigAsync(
-  usageType: NonNullable<AIModelConfig['usageType']> = 'chat'
+  usageType: NonNullable<AIModelConfig['usageType']> = 'chat',
+  options?: { requireVision?: boolean },
 ): Promise<AIModelConfig | undefined> {
   const models = await getModelsByUsageTypeAsync(usageType);
-  return models.find((model) => getOrderedModelSources(model).length > 0);
+  return models.find((model) => getOrderedModelSources(model).length > 0 && (!options?.requireVision || model.supportsVision));
 }
 
 export async function getModelConfigAsync(

@@ -479,16 +479,13 @@ CREATE TABLE public.ai_gateways (
     gateway_key text NOT NULL,
     display_name text NOT NULL,
     base_url text DEFAULT ''::text NOT NULL,
-    transport text DEFAULT 'openai_compatible'::text NOT NULL,
     is_enabled boolean DEFAULT true NOT NULL,
-    notes text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     api_key_secret jsonb,
     api_key_hint text,
     CONSTRAINT ai_gateways_api_key_check CHECK ((((api_key_secret IS NULL) = (api_key_hint IS NULL)) AND ((api_key_secret IS NULL) OR (jsonb_typeof(api_key_secret) = 'object'::text)) AND ((api_key_hint IS NULL) OR (length(api_key_hint) <= 16)))),
-    CONSTRAINT ai_gateways_gateway_key_check CHECK ((gateway_key ~ '^[a-z0-9][a-z0-9_-]{0,39}$'::text)),
-    CONSTRAINT ai_gateways_transport_check CHECK ((transport = 'openai_compatible'::text))
+    CONSTRAINT ai_gateways_gateway_key_check CHECK ((gateway_key ~ '^[a-z0-9][a-z0-9_-]{0,39}$'::text))
 );
 
 CREATE TABLE public.ai_model_gateway_bindings (
@@ -496,10 +493,8 @@ CREATE TABLE public.ai_model_gateway_bindings (
     model_id uuid NOT NULL,
     gateway_id uuid NOT NULL,
     model_id_override text,
-    reasoning_model_id text,
     is_enabled boolean DEFAULT true NOT NULL,
     priority integer DEFAULT 0 NOT NULL,
-    notes text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL
 );
@@ -512,34 +507,24 @@ CREATE TABLE public.ai_models (
     is_enabled boolean DEFAULT true,
     sort_order integer DEFAULT 0,
     required_tier text DEFAULT 'free'::text NOT NULL,
-    supports_reasoning boolean DEFAULT false,
-    reasoning_required_tier text DEFAULT 'plus'::text,
     is_reasoning_default boolean DEFAULT false,
     supports_vision boolean DEFAULT false,
-    default_temperature numeric DEFAULT 0.7,
     default_max_tokens integer DEFAULT 4000,
-    description text,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
     usage_type text DEFAULT 'chat'::text NOT NULL,
     credit_cost integer DEFAULT 1 NOT NULL,
-    default_top_p numeric DEFAULT 1,
-    default_presence_penalty numeric DEFAULT 0,
-    default_frequency_penalty numeric DEFAULT 0,
     default_reasoning_effort text,
     custom_parameters jsonb,
     context_window integer,
-    thinking_format text DEFAULT 'openai'::text NOT NULL,
     thinking_levels text[] DEFAULT '{}'::text[] NOT NULL,
     CONSTRAINT ai_models_context_window_check CHECK (((context_window IS NULL) OR ((context_window >= 1024) AND (context_window <= 10000000)))),
     CONSTRAINT ai_models_credit_cost_check CHECK (((credit_cost >= 0) AND (credit_cost <= 1000))),
     CONSTRAINT ai_models_default_reasoning_effort_check CHECK (((default_reasoning_effort IS NULL) OR (default_reasoning_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])))),
     CONSTRAINT ai_models_default_thinking_level_check CHECK (((default_reasoning_effort IS NULL) OR (cardinality(thinking_levels) = 0) OR (default_reasoning_effort = ANY (thinking_levels)))),
-    CONSTRAINT ai_models_reasoning_required_tier_check CHECK ((reasoning_required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
     CONSTRAINT ai_models_required_tier_check CHECK ((required_tier = ANY (ARRAY['free'::text, 'plus'::text, 'pro'::text]))),
-    CONSTRAINT ai_models_thinking_format_check CHECK ((thinking_format = ANY (ARRAY['openai'::text, 'deepseek'::text, 'openrouter'::text, 'qwen'::text, 'zai'::text, 'qwen-chat-template'::text]))),
     CONSTRAINT ai_models_thinking_levels_check CHECK ((thinking_levels <@ ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])),
-    CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'vision'::text, 'embedding'::text, 'rerank'::text, 'image'::text])))
+    CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'embedding'::text, 'rerank'::text, 'image'::text])))
 );
 
 CREATE TABLE public.announcements (

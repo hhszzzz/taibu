@@ -5,64 +5,9 @@ import { getModelUsageType, isUserSelectableUsageType } from "@/lib/ai/source-ru
 
 type ModelTier = "free" | "plus" | "pro" | "none";
 
-/** 默认 vendor -> tier 映射（当数据库未配置 requiredTier 时的回退） */
-const VENDOR_DEFAULT_TIER: Record<string, ModelTier> = {
-    deepai: "pro",
-    gemini: "plus",
-    qwen: "plus",
-    moonshot: "free",
-    "qwen-vl": "plus",
-    "gemini-vl": "plus",
-};
-
-/** DeepSeek 模型 ID -> tier 映射 */
-const DEEPSEEK_MODEL_TIER: Record<string, ModelTier> = {
-    "deepseek-v3.2": "free",
-    "deepseek-pro": "plus",
-};
-
-/** GLM 模型 ID -> tier 映射 */
-const GLM_MODEL_TIER: Record<string, ModelTier> = {
-    "glm-4.6": "free",
-};
-
-/**
- * 获取模型所需等级（优先使用数据库配置）
- */
+/** The catalog tier is authoritative; a model without one is unavailable. */
 function getModelTier(model: AIModelConfig): ModelTier {
-    // 优先使用数据库配置的 requiredTier
-    if (model.requiredTier) {
-        return model.requiredTier;
-    }
-
-    // 回退到集中配置的 vendor 映射
-    if (model.vendor === "deepseek") {
-        return DEEPSEEK_MODEL_TIER[model.id] ?? "none";
-    }
-
-    if (model.vendor === "glm") {
-        return GLM_MODEL_TIER[model.id] ?? "plus";
-    }
-
-    return VENDOR_DEFAULT_TIER[model.vendor] ?? "none";
-}
-
-/**
- * 获取推理模式所需等级（优先使用数据库配置）
- */
-function getReasoningTier(model: AIModelConfig): ModelTier {
-    // 优先使用数据库配置的 reasoningRequiredTier
-    if (model.reasoningRequiredTier) {
-        return model.reasoningRequiredTier;
-    }
-
-    // 回退到硬编码逻辑
-    if (model.vendor === "deepai") {
-        return "pro";
-    }
-
-    // 默认 plus 可用
-    return "plus";
+    return model.requiredTier ?? "none";
 }
 
 /** Lowest membership that can use a model, shown beside it in the model menu; null when no tier can. */
@@ -87,14 +32,7 @@ export function isReasoningAllowedForMembership(
     model: AIModelConfig,
     membership: MembershipType
 ): boolean {
-    if (!model.supportsReasoning) return false;
-
-    // 使用数据库配置的 reasoningRequiredTier
-    const reasoningTier = getReasoningTier(model);
-
-    if (membership === "pro") return true;
-    if (membership === "plus") return reasoningTier === "free" || reasoningTier === "plus";
-    return reasoningTier === "free";
+    return model.supportsReasoning && isModelAllowedForMembership(model, membership);
 }
 
 export function getModelAccessForMembership(
@@ -149,10 +87,9 @@ export async function resolveModelAccessAsync(
     | { error: string; status: number }
 > {
     const requestedModelId = modelId?.trim() || defaultModelId?.trim() || '';
-    const fallbackUsageType = options?.requireVision ? 'vision' : 'chat';
     const modelConfig = requestedModelId
         ? await getModelConfigAsync(requestedModelId)
-        : await getDefaultModelConfigAsync(fallbackUsageType);
+        : await getDefaultModelConfigAsync('chat', { requireVision: options?.requireVision });
     if (!modelConfig) {
         return { error: options?.invalidModelMessage ?? "模型不可用", status: 400 };
     }

@@ -298,9 +298,7 @@ export interface AiGateways {
   gateway_key: ColumnType<string, string, string>;
   display_name: ColumnType<string, string, string>;
   base_url: Generated<string>;
-  transport: Generated<string>;
   is_enabled: Generated<boolean>;
-  notes: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string>;
   updated_at: Generated<string>;
   api_key_secret: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
@@ -312,10 +310,8 @@ export interface AiModelGatewayBindings {
   model_id: ColumnType<string, string, string>;
   gateway_id: ColumnType<string, string, string>;
   model_id_override: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  reasoning_model_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   is_enabled: Generated<boolean>;
   priority: Generated<number>;
-  notes: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string>;
   updated_at: Generated<string>;
 }
@@ -328,24 +324,16 @@ export interface AiModels {
   is_enabled: Generated<boolean | null>;
   sort_order: Generated<number | null>;
   required_tier: Generated<string>;
-  supports_reasoning: Generated<boolean | null>;
-  reasoning_required_tier: Generated<string | null>;
   is_reasoning_default: Generated<boolean | null>;
   supports_vision: Generated<boolean | null>;
-  default_temperature: Generated<number | null>;
   default_max_tokens: Generated<number | null>;
-  description: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
   usage_type: Generated<string>;
   credit_cost: Generated<number>;
-  default_top_p: Generated<number | null>;
-  default_presence_penalty: Generated<number | null>;
-  default_frequency_penalty: Generated<number | null>;
   default_reasoning_effort: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   custom_parameters: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
   context_window: ColumnType<number | null, number | null | undefined, number | null | undefined>;
-  thinking_format: Generated<string>;
   thinking_levels: Generated<unknown>;
 }
 

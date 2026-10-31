@@ -37,8 +37,6 @@ export interface AIProviderOptions {
 /**
  * 根据 AIModelConfig 动态创建 AI SDK provider 实例和模型
  *
- * 当 reasoning 为 true 且 config.reasoningModelId 存在时，
- * 使用 reasoningModelId 替代 modelId，确保推理请求命中正确的后端模型。
  * 没有传入 apiKey 时，使用当前来源网关保存的密钥（请求时才解开）。
  */
 export function createModelFromConfig(
@@ -64,13 +62,8 @@ export function createModelFromConfig(
         } : baseFetch,
     });
 
-    // 推理模式下使用 reasoningModelId（如 deepseek-pro 的独立推理模型）
-    const modelId = (options?.reasoning && config.reasoningModelId)
-        ? config.reasoningModelId
-        : config.modelId;
-
     // For OpenAI-compatible gateways (NewAPI/Octopus), use chat-completions mode.
-    return provider.chat(modelId);
+    return provider.chat(config.modelId);
 }
 
 /**

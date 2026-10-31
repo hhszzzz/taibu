@@ -242,19 +242,19 @@ RESET ROLE;`);
 
   await t.test('thinking ladders, context windows and sealed gateway keys are checked by the schema', async () => {
     const stored = JSON.parse(await sql(`BEGIN; SET LOCAL ROLE taibu_owner;
-      INSERT INTO public.ai_models(model_key, display_name, vendor, thinking_format, thinking_levels, default_reasoning_effort, context_window)
-        VALUES ('ladder', 'Ladder fixture', 'other', 'deepseek', ARRAY['low', 'high', 'max'], 'max', 1000000),
-               ('plain', 'Plain fixture', 'other', DEFAULT, DEFAULT, NULL, NULL);
+      INSERT INTO public.ai_models(model_key, display_name, vendor, thinking_levels, default_reasoning_effort, context_window)
+        VALUES ('ladder', 'Ladder fixture', 'other', ARRAY['low', 'high', 'max'], 'max', 1000000),
+               ('plain', 'Plain fixture', 'other', DEFAULT, NULL, NULL);
       INSERT INTO public.ai_gateways(gateway_key, display_name, base_url, api_key_secret, api_key_hint)
         VALUES ('sealed', 'Sealed fixture', 'https://gateway.example', '{"version":1,"iv":"i","tag":"t","data":"d"}', 'sk-…abcd');
       SELECT json_build_object(
-        'models', (SELECT json_agg(json_build_object('format', thinking_format, 'levels', thinking_levels, 'window', context_window) ORDER BY model_key)
+        'models', (SELECT json_agg(json_build_object('levels', thinking_levels, 'window', context_window) ORDER BY model_key)
           FROM public.ai_models WHERE model_key IN ('ladder', 'plain')),
         'hint', (SELECT api_key_hint FROM public.ai_gateways WHERE gateway_key = 'sealed'));
       ROLLBACK;`));
     assert.deepEqual(stored.models, [
-      { format: 'deepseek', levels: ['low', 'high', 'max'], window: 1000000 },
-      { format: 'openai', levels: [], window: null },
+      { levels: ['low', 'high', 'max'], window: 1000000 },
+      { levels: [], window: null },
     ]);
     assert.equal(stored.hint, 'sk-…abcd');
     const model = (columns, values) => asOwner(`INSERT INTO public.ai_models(model_key, display_name, vendor, ${columns})
@@ -262,8 +262,8 @@ RESET ROLE;`);
     for (const [columns, values] of [
       ['thinking_levels', `ARRAY['low', 'extreme']`],
       ['thinking_levels, default_reasoning_effort', `ARRAY['low'], 'high'`],
-      ['thinking_format', `'reasoning_object'`],
       ['context_window', '100'],
+      ['usage_type', `'vision'`],
     ]) await assert.rejects(model(columns, values), /23514/);
     const gateway = (key, secret, hint) => asOwner(`INSERT INTO public.ai_gateways(gateway_key, display_name, api_key_secret, api_key_hint)
       VALUES (${quote(key)}, 'Invalid fixture', ${secret}, ${hint});`);

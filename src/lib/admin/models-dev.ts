@@ -2,7 +2,7 @@
  * models.dev 目录的纯函数部分（浏览器与服务端共用）：
  * 把 api.json 的一个模型记录整理成可填入模型编辑器的建议，并按模型 ID 排序匹配。
  *
- * 目录本身由 models.dev 社区维护；这里只取上下文窗口、最大输出、思考等级与图片能力，
+ * 目录本身由 models.dev 社区维护；这里只取上下文窗口、默认输出上限、思考等级与图片能力，
  * 不覆盖管理端手填的来源网关、密钥或自定义参数。
  */
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';

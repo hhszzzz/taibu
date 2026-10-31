@@ -5,59 +5,41 @@ import { X } from 'lucide-react';
 import { IconButton } from '@/components/ui/IconButton';
 import { Modal } from '@/components/ui/Modal';
 
-export interface DialogProps {
+interface DialogBaseProps {
     open: boolean;
     onOpenChange?: (open: boolean) => void;
-    /** Bare mode keeps a caller's measured shell; structured mode uses the shared header. */
     onClose?: () => void;
-    bare?: boolean;
-    labelledBy?: string;
     describedBy?: string;
     keepMounted?: boolean;
     id?: string;
     role?: 'dialog' | 'alertdialog';
-    title?: ReactNode;
-    description?: ReactNode;
     children?: ReactNode;
-    footer?: ReactNode;
     busy?: boolean;
-    showClose?: boolean;
     className?: string;
     initialFocusRef?: RefObject<HTMLElement | null>;
     returnFocusRef?: RefObject<HTMLElement | null>;
 }
 
+/** Bare mode keeps a caller's measured shell and must name it; structured mode renders the shared header. */
+export type DialogProps = DialogBaseProps & (
+    | { bare: true; labelledBy: string; title?: never; description?: never; footer?: never; showClose?: never }
+    | { bare?: false; labelledBy?: string; title: ReactNode; description?: ReactNode; footer?: ReactNode; showClose?: boolean }
+);
+
 /**
  * 语义对话框 = 原生 top-layer 的 Modal + 固定标题/说明/页脚。
  * 应用内所有对话框共用这一条实现，业务只描述内容。
  */
-export function Dialog({
-    open,
-    onOpenChange,
-    onClose,
-    bare = false,
-    labelledBy,
-    describedBy: describedByProp,
-    keepMounted = false,
-    id,
-    role,
-    title,
-    description,
-    children,
-    footer,
-    busy = false,
-    showClose = true,
-    className,
-    initialFocusRef,
-    returnFocusRef,
-}: DialogProps) {
+export function Dialog(props: DialogProps) {
+    const { open, onOpenChange, onClose, describedBy: describedByProp, keepMounted = false, id, role, children, busy = false,
+        className, initialFocusRef, returnFocusRef } = props;
     const titleId = useId();
     const descriptionId = useId();
     const close = onClose ?? (() => onOpenChange?.(false));
 
-    if (bare) {
+    if (props.bare) {
         return (
-            <Modal open={open} onClose={close} labelledBy={labelledBy ?? titleId} describedBy={describedByProp}
+            <Modal open={open} onClose={close} labelledBy={props.labelledBy} describedBy={describedByProp}
                 busy={busy} initialFocusRef={initialFocusRef} returnFocusRef={returnFocusRef}
                 keepMounted={keepMounted} id={id} role={role} className={className}>
                 {children}
@@ -65,6 +47,7 @@ export function Dialog({
         );
     }
 
+    const { labelledBy, title, description, footer, showClose = true } = props;
     return (
         <Modal
             open={open}
@@ -79,10 +62,10 @@ export function Dialog({
             role={role}
             className={className}
         >
-            <div className="flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden rounded-[14px] bg-surface text-foreground shadow-[var(--shadow-panel-lg)]">
+            <div className="flex max-h-[calc(100dvh-2rem)] w-full flex-col overflow-hidden text-foreground">
                 <div className="flex shrink-0 items-start justify-between gap-4 px-6 pt-6">
                     <div className="min-w-0">
-                        {title ? <h2 id={titleId} className="text-lg font-medium leading-snug text-foreground">{title}</h2> : null}
+                        <h2 id={titleId} className="text-lg font-medium leading-snug text-foreground">{title}</h2>
                         {description ? (
                             <p id={descriptionId} className="mt-2 text-sm leading-relaxed text-foreground-secondary">{description}</p>
                         ) : null}

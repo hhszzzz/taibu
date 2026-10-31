@@ -4,6 +4,7 @@ import { isValidElement, useState, type ReactNode } from 'react';
 import { Tooltip as TooltipPrimitive } from '@base-ui/react/tooltip';
 import { cn } from '@/lib/utils';
 
+/** One provider at the app root: after one tooltip shows, neighbouring ones open without the delay. */
 export function TooltipProvider({ delay = 400, ...props }: TooltipPrimitive.Provider.Props) {
     return <TooltipPrimitive.Provider delay={delay} {...props} />;
 }
@@ -18,7 +19,6 @@ export function Tooltip({ label, children, side = 'top' }: {
     const [container, setContainer] = useState<HTMLElement | null>(null);
 
     return (
-        <TooltipPrimitive.Provider delay={400}>
         <TooltipPrimitive.Root>
             <TooltipPrimitive.Trigger
                 ref={(node: HTMLElement | null) => {
@@ -33,7 +33,7 @@ export function Tooltip({ label, children, side = 'top' }: {
                     <TooltipPrimitive.Popup
                         role="tooltip"
                         className={cn(
-                            'pointer-events-none max-w-[calc(100vw-16px)] origin-[var(--transform-origin)] overflow-hidden text-ellipsis whitespace-nowrap rounded-md border-[0.5px] border-border bg-surface px-2 py-[3px] text-center text-[13px] font-normal leading-[18px] text-foreground-secondary shadow-[var(--shadow-raised)] transition-[opacity,transform] duration-120 data-ending-style:opacity-0 data-ending-style:scale-[0.96] data-starting-style:opacity-0 data-starting-style:scale-[0.96]',
+                            'pointer-events-none max-w-[calc(100vw-16px)] origin-[var(--transform-origin)] overflow-hidden text-ellipsis whitespace-nowrap rounded-md bg-surface px-2 py-[3px] text-center text-[13px] font-normal leading-[18px] text-foreground-secondary shadow-[var(--shadow-raised)] transition-[opacity,scale] duration-[var(--duration-snap)] ease-[var(--ease-out)] data-ending-style:opacity-0 data-ending-style:scale-[0.96] data-starting-style:opacity-0 data-starting-style:scale-[0.96]',
                         )}
                     >
                         {label}
@@ -41,6 +41,5 @@ export function Tooltip({ label, children, side = 'top' }: {
                 </TooltipPrimitive.Positioner>
             </TooltipPrimitive.Portal>
         </TooltipPrimitive.Root>
-        </TooltipPrimitive.Provider>
     );
 }

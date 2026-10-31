@@ -10,13 +10,14 @@ export const buttonVariants = cva(
         variants: {
             variant: {
                 primary: 'bg-accent text-on-accent hover:bg-accent-hover',
-                secondary: 'border-[0.5px] border-border bg-surface text-foreground hover:border-border-hover hover:bg-background-secondary',
-                ghost: 'bg-transparent text-foreground-secondary hover:bg-fill-ghost-hover hover:text-foreground',
-                danger: 'bg-danger text-background hover:bg-danger/90',
+                secondary: 'border-[0.5px] border-border bg-surface text-foreground hover:border-border-hover hover:bg-fill-ghost-hover data-popup-open:border-border-hover data-popup-open:bg-fill-ghost-hover',
+                // An open menu keeps its trigger lit; a toggled-on button turns clay.
+                ghost: 'bg-transparent text-foreground-secondary hover:bg-fill-ghost-hover hover:text-foreground data-popup-open:bg-fill-ghost-hover data-popup-open:text-foreground aria-pressed:bg-accent-soft aria-pressed:text-accent',
+                danger: 'bg-danger-fill text-on-danger hover:bg-danger-fill/90',
             },
             size: {
                 xs: 'h-6 rounded-md px-2 text-xs',
-                sm: 'h-7 rounded-md px-2.5 text-[13px]',
+                sm: 'h-7 rounded-sm px-2.5 text-[13px]',
                 md: 'h-8 rounded-lg px-3 text-sm',
                 lg: 'h-[2.375rem] rounded-xl px-3.5 text-sm',
             },
@@ -59,7 +60,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
             onClick={loading ? event => event.preventDefault() : onClick}
             {...props}
         >
-            {loading ? <SoundWaveLoader variant="inline" /> : null}
+            {loading ? <SoundWaveLoader variant="inline" tone="current" /> : null}
             {loading && loadingText !== undefined ? loadingText : children}
         </BaseButton>
     );

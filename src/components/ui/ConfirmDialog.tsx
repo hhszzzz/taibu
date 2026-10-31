@@ -9,19 +9,21 @@ import { useCallback, useId, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from './Modal';
 
-interface ConfirmDialogProps {
+type ConfirmDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     onConfirm: () => void | Promise<void>;
     title: string;
     description: string;
     children?: ReactNode;
-    showActions?: boolean;
-    confirmText?: string;
     cancelText?: string;
-    variant?: 'danger' | 'warning' | 'default';
+    variant?: 'danger' | 'default';
     loading?: boolean;
-}
+} & (
+    /** The confirm button names the action ("删除记录"), never a bare "确认". */
+    | { showActions?: true; confirmText: string }
+    | { showActions: false; confirmText?: never }
+);
 
 export function ConfirmDialog({
     isOpen,
@@ -31,7 +33,7 @@ export function ConfirmDialog({
     description,
     children,
     showActions = true,
-    confirmText = '确认',
+    confirmText,
     cancelText = '取消',
     variant = 'danger',
     loading = false,
@@ -44,7 +46,8 @@ export function ConfirmDialog({
     }, [onConfirm]);
 
     return (
-        <Modal open={isOpen} onClose={onClose} busy={loading} labelledBy={`${id}-title`} describedBy={`${id}-description`} className="max-w-sm">
+        <Modal open={isOpen} onClose={onClose} busy={loading} labelledBy={`${id}-title`} describedBy={`${id}-description`} className="max-w-sm"
+            role={showActions ? 'alertdialog' : undefined}>
             <div className="p-6">
                 <h2 id={`${id}-title`} className="font-display text-xl leading-snug text-foreground">
                     {title}
@@ -63,7 +66,6 @@ export function ConfirmDialog({
                         <Button
                             size="lg"
                             variant={variant === 'danger' ? 'danger' : 'primary'}
-                            className={variant === 'warning' ? 'bg-warning text-background hover:bg-warning/90' : undefined}
                             onClick={handleConfirm}
                             loading={loading}
                         >

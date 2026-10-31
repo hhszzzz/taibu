@@ -1,4 +1,5 @@
 import { forwardRef } from 'react';
+import { fieldClass } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 
 export type TextareaProps = React.ComponentProps<'textarea'>;
@@ -8,7 +9,8 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(function 
         <textarea
             ref={ref}
             className={cn(
-                'flex min-h-24 w-full min-w-0 resize-y rounded-xl border-[0.5px] border-border bg-surface px-3 py-2.5 text-sm leading-relaxed text-foreground transition-colors placeholder:text-foreground-tertiary focus-visible:border-[var(--control-focus,var(--accent))] focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60 aria-invalid:border-danger',
+                'flex min-h-24 w-full min-w-0 resize-y rounded-xl px-3 py-2.5 text-sm leading-relaxed placeholder:text-foreground-tertiary',
+                fieldClass,
                 className,
             )}
             {...props}

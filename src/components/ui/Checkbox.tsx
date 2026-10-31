@@ -17,7 +17,7 @@ export const Checkbox = forwardRef<HTMLElement, CheckboxProps>(function Checkbox
             nativeButton={nativeButton ?? true}
             indeterminate={indeterminate}
             className={cn(
-                'inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] border-[0.5px] border-border-hover bg-surface text-on-accent transition-colors data-checked:border-accent data-checked:bg-accent data-indeterminate:border-accent data-indeterminate:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-50',
+                'relative inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-[4px] after:absolute after:-inset-1 after:content-[""] border-[0.5px] border-border-hover bg-surface text-on-accent transition-colors data-checked:border-accent data-checked:bg-accent data-indeterminate:border-accent data-indeterminate:bg-accent data-disabled:cursor-not-allowed data-disabled:opacity-50',
                 className,
             )}
             {...props}

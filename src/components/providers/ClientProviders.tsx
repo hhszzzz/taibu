@@ -9,6 +9,7 @@ import { ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { QueryClientProvider } from '@tanstack/react-query';
 import { SessionContext, type SessionState } from '@/lib/hooks/session-context';
 import { ToastProvider, useToast } from '@/components/ui/Toast';
+import { TooltipProvider } from '@/components/ui/Tooltip';
 import { ChatTaskToastBridge } from '@/components/providers/ChatTaskToastBridge';
 import { AnnouncementPopupHost } from '@/components/providers/AnnouncementPopupHost';
 import { authSessionCacheConstants, getSessionSnapshot, revalidateBrowserSession, subscribeToAuth } from '@/lib/auth';
@@ -147,19 +148,21 @@ export function ClientProviders({ children }: ClientProvidersProps) {
 
     return (
         <ToastProvider>
-            <QueryClientProvider client={queryClient}>
-                <AuthCallbackFeedback />
-                <ChatTaskToastBridge />
-                <SessionContext.Provider value={state}>
-                    <ConversationSearchHost userId={state.user?.id ?? null} />
-                    <AgentNotificationBridge userId={state.user?.id ?? null} />
-                    <AgentActivityProvider userId={state.user?.id ?? null}>
-                        <AnnouncementPopupHost userId={state.user?.id ?? null} authLoading={state.loading}>
-                            {children}
-                        </AnnouncementPopupHost>
-                    </AgentActivityProvider>
-                </SessionContext.Provider>
-            </QueryClientProvider>
+            <TooltipProvider>
+                <QueryClientProvider client={queryClient}>
+                    <AuthCallbackFeedback />
+                    <ChatTaskToastBridge />
+                    <SessionContext.Provider value={state}>
+                        <ConversationSearchHost userId={state.user?.id ?? null} />
+                        <AgentNotificationBridge userId={state.user?.id ?? null} />
+                        <AgentActivityProvider userId={state.user?.id ?? null}>
+                            <AnnouncementPopupHost userId={state.user?.id ?? null} authLoading={state.loading}>
+                                {children}
+                            </AnnouncementPopupHost>
+                        </AgentActivityProvider>
+                    </SessionContext.Provider>
+                </QueryClientProvider>
+            </TooltipProvider>
         </ToastProvider>
     );
 }

@@ -5,11 +5,12 @@
  * 视觉与画布 States 看板一致：虚线框 + 圆形图标 + 衬线标题 + 说明 + 操作。
  */
 import type { ComponentType, ReactNode } from 'react';
+import { buttonVariants } from '@/components/ui/Button';
 
 /** 状态面板里的主操作按钮（登录、开始占测等）。 */
-export const STATE_PRIMARY_ACTION_CLASS = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-md bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent/90 disabled:opacity-50';
+export const STATE_PRIMARY_ACTION_CLASS = buttonVariants({ variant: 'primary', size: 'md', className: 'px-4' });
 /** 状态面板里的次操作按钮（重试、清除搜索、返回首页等）。 */
-export const STATE_SECONDARY_ACTION_CLASS = 'inline-flex h-8 items-center justify-center gap-1.5 rounded-md border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
+export const STATE_SECONDARY_ACTION_CLASS = buttonVariants({ variant: 'secondary', size: 'md', className: 'px-4' });
 
 type StateTone = 'neutral' | 'accent' | 'danger';
 

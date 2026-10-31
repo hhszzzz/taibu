@@ -67,7 +67,7 @@ export function PopoverContent({
             >
                 <PopoverPrimitive.Popup
                     className={cn(
-                        'max-h-[var(--available-height)] max-w-[calc(100vw-1rem)] origin-[var(--transform-origin)] overflow-y-auto rounded-xl border-[0.5px] border-border bg-surface p-3 text-foreground shadow-[var(--shadow-panel-popover)] outline-none transition-[opacity,transform] duration-150 data-ending-style:opacity-0 data-ending-style:scale-[0.98] data-starting-style:opacity-0 data-starting-style:scale-[0.98]',
+                        'max-h-[var(--available-height)] max-w-[calc(100vw-1rem)] origin-[var(--transform-origin)] overflow-y-auto rounded-xl bg-surface p-3 text-foreground shadow-[var(--shadow-panel-popover)] outline-none transition-[opacity,scale] duration-[var(--duration-snap)] ease-[var(--ease-out)] data-ending-style:opacity-0 data-ending-style:scale-[0.98] data-starting-style:opacity-0 data-starting-style:scale-[0.98]',
                         className,
                     )}
                     {...props}

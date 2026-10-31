@@ -48,6 +48,9 @@
   --success: #44663a;
   --warning: #85602a;
   --danger: #a63d2c;
+  /* 危险实色按钮：明暗同值（深色主题的 --danger 是浅粉文字色，不适合作底） */
+  --danger-fill: #a63d2c;
+  --on-danger: #ffffff;
 
   /* 五行与四化：命盘着色统一从这里取值 */
   --wx-wood: #44663a;
@@ -151,6 +154,8 @@
 
   /* 浮起的输入框与问题面板（= cds shadow-composer：发丝环 + 0 .25rem 1.25rem 3.5% 投影） */
   --shadow-raised: inset 0 0 0 var(--ring-inner) var(--ring-color), 0 0 0 var(--ring-outer) var(--ring-color), 0 .25rem 1.25rem color-mix(in srgb, #000 3.5%, transparent);
+  /* 分段控件与标签栏的滑块：发丝内描边 + 1px 投影（明暗通用） */
+  --shadow-thumb: inset 0 0 0 1px var(--border), 0 1px 2px color-mix(in srgb, #000 5%, transparent);
   --scrim: rgba(0, 0, 0, .45);
   --chat-background: var(--background);
   --chat-secondary: var(--background-secondary);
@@ -277,6 +282,8 @@
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-danger: var(--danger);
+  --color-danger-fill: var(--danger-fill);
+  --color-on-danger: var(--on-danger);
   --color-sidebar: var(--sidebar);
   --color-panel: var(--panel);
   --color-clay: var(--clay);

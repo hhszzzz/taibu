@@ -851,6 +851,7 @@ mustNotMatchInTree(
 );
 const PORTAL_ALLOWED = new Set([
   'src/components/ui/Modal.tsx',
+  'src/components/ui/Toast.tsx',
   'src/components/chat/QuoteSelection.tsx',
 ]);
 mustNotMatchInTree(

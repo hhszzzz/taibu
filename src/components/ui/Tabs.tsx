@@ -15,7 +15,7 @@ export function TabsList({ className, children, activateOnFocus = true, indicato
             className={cn('relative inline-flex h-8 items-center gap-1 self-start rounded-lg bg-fill-field p-0.5', className)}
             {...props}
         >
-            {indicator ? <TabsPrimitive.Indicator className="pointer-events-none absolute left-0 top-0 h-full w-[var(--active-tab-width)] translate-x-[var(--active-tab-left)] rounded-md bg-surface shadow-sm transition-[translate,width] duration-200" /> : null}
+            {indicator ? <TabsPrimitive.Indicator className="pointer-events-none absolute left-0 top-0 h-full w-[var(--active-tab-width)] translate-x-[var(--active-tab-left)] rounded-md bg-segmented-control-thumb shadow-[var(--shadow-thumb)] transition-[translate,width] duration-[var(--duration-base)] ease-[var(--ease-snap)]" /> : null}
             {children}
         </TabsPrimitive.List>
     );
@@ -25,7 +25,7 @@ export function TabsTrigger({ className, ...props }: TabsPrimitive.Tab.Props) {
     return (
         <TabsPrimitive.Tab
             className={cn(
-                'relative z-10 flex h-7 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm text-foreground-secondary transition-colors hover:text-foreground data-active:text-foreground data-disabled:cursor-not-allowed data-disabled:opacity-50',
+                'relative z-10 flex h-7 items-center justify-center gap-1.5 whitespace-nowrap rounded-md px-3 text-sm text-foreground-secondary transition-colors duration-[var(--duration-snap)] hover:text-foreground focus-visible:outline-offset-0 data-active:text-foreground data-disabled:cursor-not-allowed data-disabled:opacity-50',
                 className,
             )}
             {...props}

@@ -5,10 +5,12 @@
  */
 'use client';
 
-import { useState, createContext, useContext, useCallback, useLayoutEffect, useRef, ReactNode } from 'react';
+import { useState, createContext, useContext, useCallback, useEffect, useLayoutEffect, useRef, ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { CheckCircle2, AlertCircle, Info, X, BotMessageSquare, TriangleAlert } from 'lucide-react';
 import { Button } from './Button';
 import { IconButton } from './IconButton';
+import { useTopModal } from './Modal';
 import { prefersReducedMotion } from '@/lib/motion/entrance';
 import { slide } from '@/lib/motion/list';
 
@@ -86,11 +88,9 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         const id = `${Date.now()}-${Math.random()}`;
         // 同屏最多保留 4 条：新提示从底部进入，旧提示按各自真实高度依次上移。
         setToasts(prev => [...prev, { id, type, message, duration, action: normalized.action }].slice(-4));
-
-        if (duration > 0) {
-            setTimeout(() => removeToast(id), duration);
-        }
-    }, [removeToast]);
+    }, []);
+    // 打开的模态框之外全部 inert：提示挂进最上层对话框，才能被看见、被关闭。
+    const host = useTopModal();
 
     // 堆叠变化时（新提示进入、旧提示离开）其余提示从原位置滑到新位置，而不是直接跳过去。
     useLayoutEffect(() => {
@@ -110,22 +110,25 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         positions.current = next;
     }, [toasts]);
 
+    /* Toast 容器：claude 同款右下堆叠（360px 宽、底部 1rem）；新提示依次向上堆。
+       常驻的 live region 让读屏软件播报新提示；错误提示单独用 role="alert" 立即打断。 */
+    const stack = (
+        <div
+            ref={stackRef}
+            aria-live="polite"
+            style={{ bottom: 'calc(1rem + var(--sab))' }}
+            className="app-toast-stack fixed right-4 z-[var(--z-toast)] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col items-stretch gap-2 pointer-events-none"
+        >
+            {toasts.map(toast => (
+                <ToastItem key={toast.id} toast={toast} onRemove={removeToast} onLeft={dropToast} />
+            ))}
+        </div>
+    );
+
     return (
         <ToastContext.Provider value={{ showToast }}>
             {children}
-
-            {/* Toast 容器：claude 同款右下堆叠（360px 宽、底部 1rem）；新提示依次向上堆。
-                常驻的 live region 让读屏软件播报新提示；错误提示单独用 role="alert" 立即打断。 */}
-            <div
-                ref={stackRef}
-                aria-live="polite"
-                style={{ bottom: 'calc(1rem + var(--sab))' }}
-                className="app-toast-stack fixed right-4 z-[var(--z-toast)] flex w-[360px] max-w-[calc(100vw-2rem)] flex-col items-stretch gap-2 pointer-events-none"
-            >
-                {toasts.map(toast => (
-                    <ToastItem key={toast.id} toast={toast} onRemove={removeToast} onLeft={dropToast} />
-                ))}
-            </div>
+            {host ? createPortal(stack, host) : stack}
         </ToastContext.Provider>
     );
 }
@@ -140,19 +143,37 @@ const TOAST_ICONS: Record<ToastType, { icon: typeof CheckCircle2; className: str
 
 function ToastItem({ toast, onRemove, onLeft }: { toast: Toast; onRemove: (id: string) => void; onLeft: (id: string) => void }) {
     const { icon: Icon, className: iconClassName } = TOAST_ICONS[toast.type];
+    // 悬停或焦点在提示内时暂停倒计时，离开后按剩余时间继续。
+    const [hovered, setHovered] = useState(false);
+    const [focused, setFocused] = useState(false);
+    const remaining = useRef(toast.duration ?? 0);
+    const paused = hovered || focused;
+    useEffect(() => {
+        if (remaining.current <= 0 || paused || toast.leaving) return;
+        const started = Date.now();
+        const timer = setTimeout(() => onRemove(toast.id), remaining.current);
+        return () => {
+            clearTimeout(timer);
+            remaining.current = Math.max(1, remaining.current - (Date.now() - started));
+        };
+    }, [paused, toast.leaving, toast.id, onRemove]);
 
     return (
         <div
             role={toast.type === 'error' ? 'alert' : undefined}
             data-toast-id={toast.id}
             data-leaving={toast.leaving ? '' : undefined}
+            onPointerEnter={() => setHovered(true)}
+            onPointerLeave={() => setHovered(false)}
+            onFocus={() => setFocused(true)}
+            onBlur={event => { if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false); }}
             onAnimationEnd={event => { if (toast.leaving && event.target === event.currentTarget) onLeft(toast.id); }}
-            className="toast-item pointer-events-auto flex w-full min-h-11 items-start gap-2.5 rounded-xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-3.5 shadow-[var(--shadow-panel-popover)]"
+            className="toast-item pointer-events-auto flex w-full min-h-11 items-start gap-2.5 rounded-xl bg-surface py-2 pr-2 pl-3.5 shadow-[var(--shadow-panel-popover)]"
         >
-            <Icon className={`mt-px h-[18px] w-[18px] shrink-0 ${iconClassName}`} aria-hidden="true" />
-            <span className="min-w-0 flex-1 break-words text-sm leading-snug text-foreground">{toast.message}</span>
+            <Icon className={`mt-[5px] h-[18px] w-[18px] shrink-0 ${iconClassName}`} aria-hidden="true" />
+            <span className="min-w-0 flex-1 break-words py-1 text-sm leading-snug text-foreground">{toast.message}</span>
             {toast.action && (
-                <Button variant="ghost" size="sm" className="mt-px ml-1 text-accent hover:bg-accent-soft hover:text-accent"
+                <Button variant="ghost" size="sm" className="ml-1 text-accent hover:bg-accent-soft hover:text-accent"
                     onClick={() => {
                         toast.action?.onClick();
                         onRemove(toast.id);
@@ -160,7 +181,7 @@ function ToastItem({ toast, onRemove, onLeft }: { toast: Toast; onRemove: (id: s
                     {toast.action.label}
                 </Button>
             )}
-            <IconButton label="关闭提示" size="sm" expand="none" className="-mt-px text-foreground-tertiary"
+            <IconButton label="关闭提示" size="sm" expand="none" className="text-foreground-tertiary"
                 onClick={() => onRemove(toast.id)}>
                 <X aria-hidden="true" />
             </IconButton>

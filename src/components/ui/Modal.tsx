@@ -1,8 +1,20 @@
 'use client';
 
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from 'react';
 import { createPortal } from 'react-dom';
 import './overlays.css';
+
+// Everything outside an open modal is inert; app-level surfaces (Toast) portal into the topmost one instead.
+const openModals: HTMLDialogElement[] = [];
+const modalListeners = new Set<() => void>();
+const notifyModals = () => { for (const listener of modalListeners) listener(); };
+const subscribeModals = (listener: () => void) => { modalListeners.add(listener); return () => { modalListeners.delete(listener); }; };
+const getTopModal = () => openModals.at(-1) ?? null;
+
+/** The topmost open modal dialog, or null when none is open. */
+export function useTopModal(): HTMLDialogElement | null {
+    return useSyncExternalStore(subscribeModals, getTopModal, () => null);
+}
 
 /**
  * Native top-layer modal: focus containment, backdrop, Escape and focus return.
@@ -61,6 +73,17 @@ export function Modal({ open, onClose, children, labelledBy, describedBy, classN
             if (target?.isConnected) target.focus();
         };
     }, [present, initialFocusRef, returnFocusRef]);
+    // Leaves the stack as soon as closing starts, so a toast does not ride along with the exit animation.
+    useEffect(() => {
+        const dialog = ref.current;
+        if (!open || !present || !dialog) return;
+        openModals.push(dialog);
+        notifyModals();
+        return () => {
+            openModals.splice(openModals.indexOf(dialog), 1);
+            notifyModals();
+        };
+    }, [open, present]);
     if ((!present && !keepMounted) || typeof document === 'undefined') return null;
     return createPortal(<dialog ref={ref} id={id} role={role} tabIndex={-1} aria-labelledby={labelledBy} aria-describedby={describedBy}
         aria-busy={busy || undefined} className={`app-modal ${className}`} inert={!open || undefined}

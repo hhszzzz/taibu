@@ -8,10 +8,13 @@
  *
  * 骨架屏（Skeleton）保持各页面自行实现，不在此统一。
  */
+import { cn } from '@/lib/utils';
 
 interface SoundWaveProps {
     /** 使用场景 */
     variant?: 'inline' | 'block' | 'fullscreen';
+    /** 音浪颜色：accent 为陶土色；current 跟随文字色，放在实色按钮里用 */
+    tone?: 'accent' | 'current';
     /** 加载提示文字，仅 block / fullscreen 生效 */
     text?: string;
     /** 自定义 className */
@@ -26,17 +29,18 @@ const barConfigs = {
 
 export function SoundWaveLoader({
     variant = 'block',
+    tone = 'accent',
     text,
-    className = '',
+    className,
 }: SoundWaveProps) {
     const config = barConfigs[variant];
 
     const bars = (
-        <div className={`flex items-center ${config.gap} ${config.height}`}>
+        <div className={cn('flex items-center', config.gap, config.height)}>
             {Array.from({ length: config.count }, (_, i) => (
                 <span
                     key={i}
-                    className={`sound-wave-bar ${config.width} rounded-full bg-accent`}
+                    className={cn('sound-wave-bar rounded-full', config.width, tone === 'current' ? 'bg-current' : 'bg-accent')}
                     style={{ animationDelay: `${i * 0.12}s` }}
                 />
             ))}
@@ -44,12 +48,12 @@ export function SoundWaveLoader({
     );
 
     if (variant === 'inline') {
-        return <span className={`inline-flex items-center ${className}`}>{bars}</span>;
+        return <span className={cn('inline-flex items-center', className)}>{bars}</span>;
     }
 
     if (variant === 'fullscreen') {
         return (
-            <div className={`fixed inset-0 z-50 flex flex-col items-center justify-center bg-background ${className}`}>
+            <div className={cn('fixed inset-0 z-50 flex flex-col items-center justify-center bg-background', className)}>
                 {bars}
                 {text && (
                     <span className="mt-4 text-foreground-secondary text-xs tracking-widest">
@@ -62,7 +66,7 @@ export function SoundWaveLoader({
 
     // block
     return (
-        <div className={`flex flex-col items-center justify-center py-12 ${className}`}>
+        <div className={cn('flex flex-col items-center justify-center py-12', className)}>
             {bars}
             {text && (
                 <p className="mt-3 text-foreground-secondary text-sm">{text}</p>

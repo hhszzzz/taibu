@@ -91,7 +91,7 @@ export function MenuContent({
                         item.click();
                     }}
                     className={cn(
-                        'max-h-[var(--available-height)] min-w-32 max-w-[min(20rem,calc(100vw-1rem))] origin-[var(--transform-origin)] overflow-y-auto overscroll-contain rounded-xl border-[0.5px] border-border bg-surface p-1 text-foreground shadow-[var(--shadow-panel-popover)] outline-none transition-[opacity,transform] duration-150 data-ending-style:opacity-0 data-ending-style:scale-[0.98] data-starting-style:opacity-0 data-starting-style:scale-[0.98]',
+                        'max-h-[var(--available-height)] min-w-32 max-w-[min(20rem,calc(100vw-1rem))] origin-[var(--transform-origin)] overflow-y-auto overscroll-contain rounded-xl bg-surface p-1 text-foreground shadow-[var(--shadow-panel-popover)] outline-none transition-[opacity,scale] duration-[var(--duration-snap)] ease-[var(--ease-out)] data-ending-style:opacity-0 data-ending-style:scale-[0.98] data-starting-style:opacity-0 data-starting-style:scale-[0.98]',
                         className,
                     )}
                     {...props}
@@ -101,12 +101,18 @@ export function MenuContent({
     );
 }
 
-export function MenuGroup(props: MenuPrimitive.Group.Props) {
-    return <MenuPrimitive.Group {...props} />;
+/** A group label only exists inside its group (Base UI throws otherwise), so pass it as `label`. */
+export function MenuGroup({ label, children, ...props }: MenuPrimitive.Group.Props & { label?: React.ReactNode }) {
+    return (
+        <MenuPrimitive.Group {...props}>
+            {label ? <MenuLabel>{label}</MenuLabel> : null}
+            {children}
+        </MenuPrimitive.Group>
+    );
 }
 
 export function MenuLabel({ className, ...props }: MenuPrimitive.GroupLabel.Props) {
-    return <MenuPrimitive.GroupLabel className={cn('px-2.5 py-1.5 text-xs text-foreground-tertiary', className)} {...props} />;
+    return <MenuPrimitive.GroupLabel className={cn('px-2.5 pb-1 pt-1.5 text-xs font-medium text-foreground-tertiary', className)} {...props} />;
 }
 
 export function MenuItem({ className, tone = 'default', ...props }: MenuPrimitive.Item.Props & { tone?: 'default' | 'danger' }) {

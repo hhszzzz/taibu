@@ -1,5 +1,3 @@
-/* 弹层自身被 showModal 聚焦时不画全局焦点框（claude 弹层没有外框）。 */
-.app-modal :where(button, textarea, input, a, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .app-modal {
     position: fixed;
     inset: 0;
@@ -68,9 +66,6 @@
 .app-modal:has(#search-title) > div > div > button:hover { background: var(--fill-field); }
 .app-modal:has(#search-title) > div > div > button > strong { font-size: calc(14 / 16 * 1rem); font-weight: 500; }
 .app-modal:has(#search-title) > div > div > button > span { margin-top: 2px; font-size: calc(12 / 16 * 1rem); line-height: calc(17 / 16 * 1rem); }
-/* 大弹层 = cds Dialog(size lg)：上限 1024×800、圆角 12、四周 16px 边距（实测 settings_modal）*/
-.settings-center-dialog { width: min(1024px, calc(100vw - 32px)); height: min(800px, calc(100dvh - 32px)); border-radius: 12px; overflow: hidden; }
-@media (max-width: 767px) { .settings-center-dialog { width: 100vw; height: 100dvh; max-height: 100dvh; border: 0; border-radius: 0; } }
 .app-modal, .chat-header-menu, .chat-plus-menu, .chat-model-menu, .conversation-menu, .chat-recents-menu, .chat-context-panel {
     --background: var(--chat-background);
     --background-secondary: var(--chat-secondary);
@@ -101,43 +96,9 @@
 .all-divinations-item:hover { background: var(--df-hover); color: var(--foreground); }
 .all-divinations-item[aria-current=page] { background: var(--df-selected); color: var(--foreground); }
 .all-divinations-icon { display: flex; width: 28px; flex-shrink: 0; align-items: center; justify-content: center; }
-.all-divinations-pin { position: absolute; top: 50%; right: 4px; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-tertiary); opacity: 0; transform: translateY(-50%); transition: opacity .12s, background-color .12s; }
+.all-divinations-pin { position: absolute; top: 50%; right: 4px; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; background: transparent; color: var(--foreground-tertiary); opacity: 0; transform: translateY(-50%); transition: opacity .12s, background-color .12s; }
 .all-divinations-row:hover .all-divinations-pin, .all-divinations-pin:focus-visible, .all-divinations-pin[data-pinned] { opacity: 1; }
 .all-divinations-pin:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .all-divinations-pin[data-pinned] { color: var(--accent); }
 @media (hover: none) { .all-divinations-pin { opacity: .7; } }
 .all-divinations-fortune { display: flex; flex-direction: column; gap: 1px; padding: 4px; border-top: 1px solid var(--fill-field); }
-
-.ui-tip { display: contents; }
-
-/* ===== Tooltip（浅色表面 + 发丝描边；不再使用黑色提示条） ===== */
-.ui-tip-bubble {
-    position: fixed;
-    z-index: 130;
-    max-width: calc(100vw - 16px);
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-    padding: 3px 8px;
-    border: var(--hairline) solid var(--border);
-    border-radius: 6px;
-    background: var(--surface);
-    box-shadow: var(--shadow-raised);
-    color: var(--foreground-secondary);
-    font-family: var(--font-sans);
-    font-size: calc(13 / 16 * 1rem);
-    font-weight: 400;
-    line-height: calc(18 / 16 * 1rem);
-    text-align: center;
-    pointer-events: none;
-    transform: translate(-50%, -100%);
-    transform-origin: center bottom;
-    animation: ui-tip-in var(--duration-snap) var(--ease-snap) both;
-}
-.ui-tip-bubble[data-side="bottom"] { transform: translate(-50%, 0); transform-origin: center top; }
-@media (hover: none) { .ui-tip-bubble { display: none; } }
-@keyframes ui-tip-in {
-    from { opacity: 0; scale: 0.94; }
-    to { opacity: 1; scale: 1; }
-}
-@media (prefers-reduced-motion: reduce) { .ui-tip-bubble { animation: none; } }

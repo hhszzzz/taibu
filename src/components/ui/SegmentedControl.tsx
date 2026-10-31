@@ -54,18 +54,23 @@ export function SegmentedControl<T extends string>({
         width: `calc((100% - 0.5rem - ${lastIndex} * ${gap * 0.25}rem) / ${options.length})`,
         transform: `translateX(calc(${Math.max(activeIndex, 0)} * (100% + ${gap * 0.25}rem)))`,
     };
+    // A value outside the options (or a disabled one) still leaves one segment reachable by Tab.
+    const tabStop = activeIndex >= 0 && !options[activeIndex]?.disabled ? activeIndex : options.findIndex(option => !option.disabled);
     const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>) => {
         if (!KEYS.includes(event.key as (typeof KEYS)[number])) return;
-        const current = options.findIndex(option => option.value === value);
-        const nextIndex = event.key === 'Home' ? 0
-            : event.key === 'End' ? lastIndex
-                : event.key === 'ArrowRight' || event.key === 'ArrowDown' ? (current + 1) % options.length
-                    : (current + lastIndex) % options.length;
-        const next = options[nextIndex];
+        const buttons = [...(listRef.current?.querySelectorAll<HTMLButtonElement>(':scope > button') ?? [])];
+        const forward = event.key === 'ArrowRight' || event.key === 'ArrowDown' || event.key === 'Home';
+        let index = event.key === 'Home' ? -1 : event.key === 'End' ? options.length : buttons.indexOf(event.currentTarget);
+        // Disabled segments are skipped, wrapping around like the arrow keys do.
+        for (let step = 0; step < options.length; step += 1) {
+            index = (index + (forward ? 1 : -1) + options.length) % options.length;
+            if (!options[index]?.disabled) break;
+        }
+        const next = options[index];
         if (!next || next.disabled) return;
         event.preventDefault();
         onChange(next.value);
-        listRef.current?.querySelectorAll<HTMLButtonElement>('[role=radio], [role=tab]')[nextIndex]?.focus();
+        buttons[index]?.focus();
     };
 
     return (
@@ -74,7 +79,7 @@ export function SegmentedControl<T extends string>({
             role={mode === 'tabs' ? 'tablist' : mode === 'radio' ? 'radiogroup' : 'group'}
             aria-label={ariaLabel}
             className={cn(
-                'relative grid rounded-xl bg-background-secondary p-1',
+                'relative grid rounded-xl bg-fill-field p-1',
                 gap === 0 ? 'gap-0' : 'gap-1',
                 GRID_COLS_CLASS[options.length] ?? 'grid-flow-col auto-cols-fr',
                 TRACK_SIZE_CLASS[size],
@@ -84,10 +89,10 @@ export function SegmentedControl<T extends string>({
         >
             {indicator && activeIndex >= 0 ? <span
                 aria-hidden="true"
-                className={cn('pointer-events-none absolute inset-y-1 left-1 rounded-[7px] bg-surface shadow-sm transition-transform duration-200 ease-[cubic-bezier(.32,.72,0,1)] motion-reduce:transition-none', indicatorClassName)}
+                className={cn('pointer-events-none absolute inset-y-1 left-1 rounded-md bg-segmented-control-thumb shadow-[var(--shadow-thumb)] transition-transform duration-[var(--duration-base)] ease-[var(--ease-snap)] motion-reduce:transition-none', indicatorClassName)}
                 style={thumbStyle}
             /> : null}
-            {options.map(option => {
+            {options.map((option, index) => {
                 const active = option.value === value;
                 const Icon = option.icon;
                 return (
@@ -98,14 +103,14 @@ export function SegmentedControl<T extends string>({
                         aria-selected={mode === 'tabs' ? active : undefined}
                         aria-checked={mode === 'radio' ? active : undefined}
                         aria-pressed={mode === 'toggle' ? active : undefined}
-                        tabIndex={mode === 'toggle' ? undefined : active ? 0 : -1}
+                        tabIndex={mode === 'toggle' ? undefined : index === tabStop ? 0 : -1}
                         disabled={option.disabled}
                         title={option.title}
                         onClick={() => onChange(option.value)}
                         onKeyDown={handleKeyDown}
                         className={cn(
-                            'relative z-10 flex min-w-0 items-center justify-center gap-1.5 truncate rounded-[7px] px-2 text-sm transition-colors duration-150',
-                            active ? 'font-medium text-foreground' : 'text-foreground-secondary hover:text-foreground',
+                            'relative z-10 flex min-w-0 items-center justify-center gap-1.5 truncate rounded-md px-2 text-sm transition-colors duration-[var(--duration-snap)] focus-visible:outline-offset-0 disabled:cursor-not-allowed disabled:opacity-50',
+                            active ? 'font-medium text-foreground' : 'text-foreground-secondary enabled:hover:text-foreground',
                             optionClassName,
                             active && 'is-active',
                         )}

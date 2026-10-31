@@ -443,6 +443,13 @@ function StructuredQuestionProbe() {
     ]} disabled={false} attachmentState={attachments} onAttachmentChange={setAttachments} onStop={() => window.fixture.mount.question(false)}
     onAnswer={async (text, answers) => { window.fixture.structuredAnswers = { text, answers }; window.fixture.mount.question(false); }} />;
 }
+const agentContextData = {
+  version: 1, runId: 'fixture-context', status: 'completed', parts: [],
+  runtime: {
+    model: { id: 'fixture-main', name: '主模型', contextWindow: 100_000, limitSource: 'configured' },
+    context: { tokens: 8_000, measuredTokens: 8_000, estimatedTokens: 0, source: 'usage', compactions: 0 },
+  },
+};
 function AgentChatProbe() {
   const { user } = useSessionSafe();
   const router = useMemo(() => ({ replace() {}, push() {} }), []);
@@ -458,7 +465,7 @@ function AgentChatProbe() {
       selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
       planMode={planMode} onPlanModeChange={setPlanMode} codeMode={codeMode} onCodeModeChange={setCodeMode}
-      usage={{ credits: 20, membershipType: 'plus' }} customProviderActive={false} customProviderLabel={null} />
+      contextData={agentContextData} customProviderActive={false} customProviderLabel={null} />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
 }
@@ -2656,14 +2663,14 @@ export async function run(existingPage, bundlePath) {
       const { collaborators } = window.fixture.agentChat.state;
       return collaborators[0].model === 'fixture-analysis' && collaborators[0].reasoningEffort === 'high' && collaborators[1].model === 'fixture-review' && collaborators[1].reasoningEffort === 'xhigh';
     }));
-    const usageRing = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: /^用量：剩余 / });
-    await usageRing.click();
-    const usagePanel = page.getByRole('dialog', { name: '用量', exact: true });
-    check('The usage ring opens the remaining platform credits', await usageRing.getAttribute('aria-expanded') === 'true' &&
-      await usagePanel.innerText().then(text => text.includes('剩余积分') && text.includes('20 / 20') && text.includes('每次平台模型对话消耗 1 积分')));
+    const contextRing = page.locator('[data-testid="agent-chat"]').getByRole('button', { name: /^上下文：8\.0k \/ 100\.0k$/ });
+    await contextRing.click();
+    const contextPanel = page.getByRole('dialog', { name: '上下文', exact: true });
+    check('The context ring opens the token breakdown', await contextRing.getAttribute('aria-expanded') === 'true' &&
+      await contextPanel.innerText().then(text => text.includes('8.0k / 100.0k') && text.includes('消息') && text.includes('系统提示') && text.includes('空闲空间')));
     await page.keyboard.press('Escape');
-    await usagePanel.waitFor({ state: 'hidden' });
-    check('Closing the usage panel restores the ring focus', await usagePanel.count() === 0 && await usageRing.evaluate(button => button === document.activeElement));
+    await contextPanel.waitFor({ state: 'hidden' });
+    check('Closing the context panel restores the ring focus', await contextPanel.count() === 0 && await contextRing.evaluate(button => button === document.activeElement));
     await until(() => window.fixture.agentChat.state.collaborators[1]?.reasoningEffort === 'xhigh');
     assert.ok((await settingsSaved).ok());
     // Switching away and back reloads the saved whole configuration, rather than sharing a mutable running-task config.

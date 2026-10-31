@@ -70,7 +70,7 @@ const seedContext = { tokens: 18_400, measuredTokens: 17_200, estimatedTokens: 1
 test('the measured total is split into messages, tools and a visible system prompt', () => {
   const segments = buildContextSegments(runtimeWith({ models: {}, tools: {}, totalTokens: 0 }), seedContext);
   const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
-  assert.deepEqual(tokens, { messages: 15_088, tools: 2_208, mcp: 0, system: 1_104, skills: 0, memory: 0, 'mcp-instructions': 0, buffer: 0, free: 181_600 },
+  assert.deepEqual(tokens, { messages: 15_088, tools: 2_208, mcp: 0, system: 1_104, skills: 0, memory: 0, buffer: 0, free: 181_600 },
     'messages + tools + system partition the measured context instead of leaving the system prompt at zero');
   assert.equal(tokens.messages + tokens.tools + tokens.system, seedContext.tokens);
 });
@@ -113,16 +113,16 @@ test('skill tokens are counted under 技能 and taken out of messages and the sy
   assert.deepEqual(segments.find(segment => segment.key === 'skills')?.meta, '1 个方法');
 });
 
-test('MCP tool definitions and the servers section are rows of their own, and unreachable servers are counted', () => {
+test('MCP tool definitions and server instructions share one context row', () => {
   const runtime = { ...runtimeWith(undefined), mcp: { servers: 1, skipped: 1, direct: 1, deferred: 2, codemode: 0, toolsTokens: 900, sectionTokens: 300 } };
   const segments = buildContextSegments(runtime, seedContext);
   const tokens = Object.fromEntries(segments.map(segment => [segment.key, segment.tokens]));
-  assert.deepEqual([tokens.mcp, tokens['mcp-instructions'], tokens.system, tokens.messages], [900, 300, 1_104 - 300, 18_400 - 2_208 - 804 - 300 - 900]);
-  assert.equal(tokens.messages + tokens.tools + tokens.mcp + tokens.system + tokens['mcp-instructions'], seedContext.tokens);
+  assert.deepEqual([tokens.mcp, tokens.system, tokens.messages], [1_200, 1_104 - 300, 18_400 - 2_208 - 804 - 1_200]);
+  assert.equal(segments.some(segment => segment.key === 'mcp-instructions'), false, 'server instructions do not get a second MCP row');
+  assert.equal(tokens.messages + tokens.tools + tokens.mcp + tokens.system, seedContext.tokens);
   const row = (list: typeof segments, key: string) => list.find(segment => segment.key === key)!;
-  assert.deepEqual([row(segments, 'mcp').count, row(segments, 'mcp').meta], [3, '1 个常驻 · 2 个按需']);
-  assert.equal(row(segments, 'mcp-instructions').meta, '1 个服务 · 1 个未连上');
+  assert.equal(row(segments, 'mcp').label, 'MCP');
   const missed = buildContextSegments({ ...runtime, mcp: { ...runtime.mcp, servers: 0, direct: 0, deferred: 0, toolsTokens: 0 } }, seedContext);
-  assert.equal(row(missed, 'mcp').deferred, true);
-  assert.equal(row(missed, 'mcp-instructions').meta, '1 个未连上', 'a task whose servers all failed still says so');
+  assert.equal(row(missed, 'mcp').tokens, 300, 'a task whose servers all failed still counts their instruction section');
+  assert.equal(row(missed, 'mcp').deferred, undefined);
 });

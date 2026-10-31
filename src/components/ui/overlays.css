@@ -31,8 +31,6 @@
 /* claude ⌘K 弹层实测（B11）：672×≤582 / r20 / 0.5px 20% 描边 / shadow-2xl；
    头部 20px 图标 + 无边框输入；结果项 r8 gap 12；底部快捷键提示行（keycap h18 r4） */
 .app-modal.search-palette { display: flex; width: min(672px, calc(100vw - 32px)); height: min(582px, calc(100dvh - 32px)); max-height: min(582px, calc(100dvh - 32px)); flex-direction: column; padding: 0; overflow: hidden; border: .5px solid var(--border-hover); border-radius: 20px; background: var(--surface); box-shadow: 0 25px 50px -12px rgb(0 0 0 / .25); }
-/* 用量弹窗（账户菜单 → 用量）：claude 账户菜单实测 360px r10 白底 */
-.app-modal.usage-dialog { width: min(360px, calc(100vw - 32px)); border-radius: 10px; }
 .search-palette-head { display: flex; flex-shrink: 0; align-items: center; gap: 8px; height: 60px; padding: 0 16px 0 24px; color: var(--foreground-secondary); }
 .search-palette-head input { flex: 1; min-width: 0; border: 0; background: transparent; font-size: calc(18 / 16 * 1rem); line-height: calc(26 / 16 * 1rem); color: var(--foreground); outline: none; }
 .search-palette-head input:focus-visible { outline: none; }
@@ -79,6 +77,8 @@
 .all-divinations-panel { display: flex; flex-direction: column; padding: 0; max-height: min(720px, var(--available-height, calc(100dvh - 16px))); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
 /* 账户菜单「帮助」二级：与一级菜单保持间距的独立浮层。 */
 .user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }
+/* 账户菜单「用量」二级：积分余额、套餐上限与已用占比。 */
+.user-usage-menu { width: min(16rem, calc(100vw - 2rem)); }
 .all-divinations-panel input:focus-visible { outline: none; }
 /* 全部占术 = claude 菜单族：32px 行 / 28px 前导槽 / 13px 分组标签 / 搜索行白 50% */
 .all-divinations { display: flex; width: min(20rem, calc(100vw - 2rem)); min-height: 0; flex: 1; flex-direction: column; }

@@ -1,6 +1,6 @@
 /**
- * Composer 框外状态行（claude chin 行）：会话内左端是工具簇（+ / 知识库 / 联网等），右端是上下文度量与模型·档位；
- * 首屏（hero）无工具簇，只有右端。
+ * Composer 框外状态行（claude chin 行）：会话内左端是工具簇（+ / 知识库 / 联网等），右端是上下文环与模型·档位；
+ * 首屏（hero）无工具簇，只有右端。用量已移到账户菜单「用量」二级。
  *
  * 「对话方式」已移到侧栏品牌行（components/chat/ModeSwitch.tsx）。
  *
@@ -16,43 +16,10 @@ import { Button } from '@/components/ui/Button';
 import { AgentModeMenu } from '@/components/chat/composer/AgentModeMenu';
 import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
 import { Dialog } from '@/components/ui/Dialog';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
-import { ContextRing } from '@/components/chat/agent/AgentContextUsage';
-import { pricingPlans } from '@/lib/user/membership';
+import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
+import type { AgentMessageData } from '@/lib/agent/types';
 import type { MembershipType } from '@/lib/user/membership';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
-
-export interface ComposerUsage {
-    credits: number;
-    membershipType: MembershipType;
-}
-
-/** claude /code 实测：chin 行尾 = 模型键 + 24px 用量环；环打开 312px 用量浮层。 */
-function UsageRing({ usage }: { usage: ComposerUsage }) {
-    const [open, setOpen] = useState(false);
-    const planLimit = pricingPlans.find(plan => plan.id === usage.membershipType)?.creditLimit ?? 10;
-    // 奖励积分可以超过套餐上限；分母取两者较大值，避免出现 52 / 10 这类读数。
-    const limit = Math.max(planLimit, usage.credits);
-    // 环显示「已用额度」占比（claude 用量环同义）；剩余值写在 aria-label 与浮层里。
-    const used = Math.max(0, limit - usage.credits);
-    const percent = limit > 0 ? Math.min(100, Math.round(used / limit * 100)) : 0;
-    return (
-        <Popover open={open} onOpenChange={setOpen}>
-            <PopoverTrigger className="chat-context-meter" aria-label={`用量：剩余 ${usage.credits} / ${limit} 积分`}>
-                <ContextRing percent={percent} size={18} />
-            </PopoverTrigger>
-            <PopoverContent side="top" align="end" sideOffset={6} className="chat-context-panel" aria-label="用量">
-                <header className="chat-context-head"><strong>用量</strong><span>积分 · {usage.membershipType === 'free' ? 'Free' : usage.membershipType === 'plus' ? 'Plus' : 'Pro'}</span></header>
-                <div className="chat-context-divider" />
-                <dl className="chat-context-section">
-                    <div className="chat-context-row"><dt>剩余积分</dt><dd>{usage.credits} / {limit}</dd></div>
-                </dl>
-                <div className="chat-context-bar" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div>
-                <p className="chat-model-note">每次平台模型对话消耗 1 积分；签到与升级可补充。</p>
-            </PopoverContent>
-        </Popover>
-    );
-}
 
 export interface ComposerStatusBarProps extends ModelSettingsProps {
     agentMode: boolean;
@@ -63,8 +30,10 @@ export interface ComposerStatusBarProps extends ModelSettingsProps {
     onModelChange?: (modelId: string) => void;
     reasoningEnabled: boolean;
     onReasoningChange?: (enabled: boolean) => void;
-    /** 平台积分用量环（claude chin 行尾的用量圈）。 */
-    usage?: ComposerUsage;
+    /** 本对话最近的 Agent 消息：chin 行尾的上下文环与弹层由它驱动。 */
+    contextData?: AgentMessageData;
+    /** 点开上下文弹层里的技能或方法卡。 */
+    onOpenContextResource?: (id: string) => void;
     customProviderActive: boolean;
     customProviderLabel: string | null;
     /** 关闭自定义模型弹窗后的焦点落点（`+` 菜单按钮）。 */
@@ -107,8 +76,8 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
                     onCustomProvider={() => setProviderOpen(true)}
                     userId={userId} membershipType={props.membershipType} disabled={disabled} toolbarStyle />
             )}
-            {/* 用量环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
-            {props.usage && <UsageRing usage={props.usage} />}
+            {/* 上下文环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
+            <AgentContextMeter data={props.contextData} onOpen={props.onOpenContextResource} />
 
             <Dialog bare open={providerOpen} onClose={() => setProviderOpen(false)} returnFocusRef={props.customProviderActive ? providerReturnRef : (props.providerReturnRef ?? undefined)} labelledBy="custom-provider-panel-title" className="chat-provider-dialog">
                 <Button unstyled type="button" onClick={() => setProviderOpen(false)} aria-label="关闭自定义模型" className="agent-icon-button absolute right-3 top-3 z-10"><X size={17} /></Button>

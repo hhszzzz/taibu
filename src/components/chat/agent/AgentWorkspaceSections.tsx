@@ -11,7 +11,6 @@ import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
 import type { NavIcon } from '@/lib/navigation/registry';
-import { AgentContextOverview, type ContextSkills } from './AgentContextUsage';
 import { ChartThumb } from './chart-preview';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartKindMeta } from './chart-registry';
@@ -151,26 +150,23 @@ function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: Worksp
     </section>;
 }
 
-type RailCardKind = 'models' | 'context' | 'results';
-const RAIL_CARD_LABELS: Record<RailCardKind, string> = { models: '多模型协作', context: '上下文', results: '成果' };
+type RailCardKind = 'models' | 'results';
+const RAIL_CARD_LABELS: Record<RailCardKind, string> = { models: '多模型协作', results: '成果' };
 
 type CardDrag = { kind: RailCardKind; pointer: number; startY: number; dy: number; from: number; to: number; tops: number[]; heights: number[] };
 
 /**
- * 会话状态卡：模型（仅协作时）/ 上下文 / 成果；按住手柄拖动排序，整张卡跟着指针走，
- * 其余卡片实时让位，松手落位；Alt+↑↓ 同效。
+ * 会话状态卡：模型（仅协作时）/ 成果；按住手柄拖动排序，整张卡跟着指针走，
+ * 其余卡片实时让位，松手落位；Alt+↑↓ 同效。上下文用量在聊天框下方的上下文环里。
  */
-export function WorkspaceStatusCards({ data, run, afterContext, skills, onOpen }: {
-    data?: AgentMessageData; run?: WorkspaceRunInfo; afterContext?: (grip: ReactNode) => ReactNode;
-    /** 本任务用过的方法，列在上下文卡的「技能」一行下。 */
-    skills?: ContextSkills;
-    onOpen?: (id: string) => void;
+export function WorkspaceStatusCards({ data, run, results }: {
+    data?: AgentMessageData; run?: WorkspaceRunInfo; results?: (grip: ReactNode) => ReactNode;
 }) {
-    const [order, setOrder] = useState<RailCardKind[]>(['models', 'context', 'results']);
+    const [order, setOrder] = useState<RailCardKind[]>(['models', 'results']);
     const [drag, setDrag] = useState<CardDrag | null>(null);
     const cards = useRef(new Map<RailCardKind, HTMLDivElement>());
     if (!data) return null;
-    const shown = (kind: RailCardKind) => kind === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : kind === 'results' ? afterContext !== undefined : true;
+    const shown = (kind: RailCardKind) => kind === 'models' ? (run?.configuration?.collaborators.length ?? 0) > 0 : results !== undefined;
     const available = order.filter(shown);
     const nudge = (kind: RailCardKind, delta: number) => setOrder(current => {
         const visible = current.filter(shown);
@@ -227,8 +223,7 @@ export function WorkspaceStatusCards({ data, run, afterContext, skills, onOpen }
             className="agent-rail-card" data-dragged={drag?.kind === kind || undefined}
             style={drag ? { transform: `translateY(${drag.kind === kind ? drag.dy : shift(index)}px)` } : undefined}>
             {kind === 'models' ? <ModelsCard data={data} run={run} grip={grip(kind)} />
-                : kind === 'context' ? <AgentContextOverview runtime={data.runtime} working={data.status === 'running'} grip={grip(kind)} skills={skills} onOpen={onOpen} />
-                : afterContext?.(grip(kind))}
+                : results?.(grip(kind))}
         </div>)}
     </div>;
 }

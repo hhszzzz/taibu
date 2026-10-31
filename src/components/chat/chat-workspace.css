@@ -27,6 +27,8 @@
 .markdown-table-container:hover .markdown-table-toolbar, .markdown-table-toolbar:focus-within { opacity: 1; }
 @media (hover: none) { .markdown-table-toolbar { opacity: 1; } }
 .markdown-table-toolbar button { display: flex; align-items: center; gap: .3rem; }
+/* 表格操作图标跟工具行一致（14px）；lucide 默认 24px 会压过 12px 文字。 */
+.markdown-table-toolbar button > svg { width: 14px; height: 14px; flex-shrink: 0; }
 .markdown-table-dialog { width: min(95vw, 75rem); max-height: 90dvh; border: 1px solid var(--border); border-radius: .75rem; background: var(--background); color: var(--foreground); }
 .chat-workspace {
     position: relative;
@@ -568,11 +570,6 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .agent-session-rail .agent-rail-result-text > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
 .agent-session-rail .agent-rail-result-text > small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12 / 16 * 1rem); line-height: 1.35; color: var(--foreground-tertiary); }
 .agent-session-rail .agent-rail-note { margin: 0; padding: 2px 0; font-size: calc(12 / 16 * 1rem); line-height: 1.4; color: var(--foreground-secondary); }
-.agent-session-rail .agent-context-body { padding: 0; }
-.agent-session-rail .agent-context-used { margin-bottom: 6px; font-size: calc(12 / 16 * 1rem); }
-.agent-session-rail .agent-context-legend { gap: 4px; margin-top: 8px; }
-.agent-session-rail .agent-context-legend-row { font-size: calc(12 / 16 * 1rem); }
-.agent-session-rail .agent-context-foot { font-size: calc(11 / 16 * 1rem); }
 .agent-session-rail .agent-ws-model-list li { font-size: calc(12 / 16 * 1rem); }
 @media (max-width: 1023px) { .agent-session-rail { display: none; } }
 /* 最大化 = 会话让位，工作区在页内居中放大，上下留白；恢复后回到停靠宽度。 */

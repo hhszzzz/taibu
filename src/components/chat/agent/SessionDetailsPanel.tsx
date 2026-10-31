@@ -1,6 +1,7 @@
 /**
- * 右侧「会话详情」停靠栏（claude /code 会话栏）：模型 / 上下文 / 成果 / 计费。
+ * 右侧「会话详情」停靠栏（claude /code 会话栏）：模型 / 成果。
  * 常驻显示；打开工作区（artifacts）时整栏让位隐藏。
+ * 上下文用量在聊天框下方的上下文环里，不占会话栏。
  *
  * 'use client' 标记说明：
  * - 子卡内含展开/收起状态，随客户端会话运行数据更新
@@ -11,7 +12,7 @@ import { useMemo, useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import { ChevronDown, ChevronUp } from 'lucide-react';
 import { WorkspaceStatusCards, type WorkspaceRunInfo } from './AgentWorkspaceSections';
-import { getAgentChart, getAgentSkills } from '@/lib/agent/tool-presentation';
+import { getAgentChart } from '@/lib/agent/tool-presentation';
 import { getAgentChartReference } from '@/lib/agent/chart-interaction';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { getChartKindMeta } from './chart-registry';
@@ -34,13 +35,10 @@ export function SessionDetailsPanel({ data, run, onOpen }: {
             return [{ id: tool.id, chart }];
         });
     }, [tools]);
-    // 技能 = 本任务用过的方法，列在上下文卡里，点开就是它的页。
-    const model = data?.runtime?.model.id;
-    const skills = useMemo(() => getAgentSkills(tools, model), [tools, model]);
     // 会话栏固定宽度（280px，见 .agent-session-rail）：不提供拖拽或顶部手柄。
     const [showAll, setShowAll] = useState(false);
     return <aside id="agent-session-panel" className="agent-session-rail" aria-label="会话详情">
-        <WorkspaceStatusCards data={data} run={run} skills={skills} onOpen={onOpen} afterContext={charts.length > 0 ? (grip => <section className="agent-ws-status-card" aria-label="成果">
+        <WorkspaceStatusCards data={data} run={run} results={charts.length > 0 ? (grip => <section className="agent-ws-status-card" aria-label="成果">
             <div className="agent-ws-status-head"><span>成果</span>{grip}</div>
             <div className="agent-rail-body">
                 {(showAll ? charts : charts.slice(0, 4)).map(({ id, chart }) => {

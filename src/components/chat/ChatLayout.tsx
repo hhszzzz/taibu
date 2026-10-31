@@ -126,8 +126,6 @@ interface ChatLayoutProps extends ModelSettingsProps {
 
     // Credit lock
     isCreditLocked: boolean;
-    /** Remaining platform credits for the composer usage ring. */
-    credits?: number | null;
     onAuthRequired?: () => void;
 
     // Modals (rendered by parent)
@@ -151,7 +149,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
         isCreditLocked,
-        credits,
         onAuthRequired,
         children,
     } = props;
@@ -485,7 +482,8 @@ export function ChatLayout(props: ChatLayoutProps) {
             // 新会话没有可跟随的会话方式：地址同步成 Agent，刷新后不会掉回对话。
             if (!conversationMode && searchParams.get('mode') !== 'agent') router.replace('/chat?mode=agent');
         },
-        credits,
+        contextData: latestAgentData,
+        onOpenContextResource: openResource,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',
         allowDuringRun: props.agent?.active,
         onQueueMessage: props.onQueueMessage,

@@ -114,7 +114,6 @@ export default function ChatPage() {
                 inputValue={state.inputValue}
                 onInputChange={state.setInputValue}
                 disabled={isCreditLocked || bootstrapLocked}
-                credits={credits}
                 chatMode={state.chatMode}
                 onChatModeChange={state.setChatMode}
                 selectedModel={state.selectedModel}

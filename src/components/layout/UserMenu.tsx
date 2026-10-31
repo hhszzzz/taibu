@@ -1,14 +1,12 @@
 'use client';
 
-import { createElement, Fragment, useId, useState } from 'react';
+import { createElement, Fragment, useState } from 'react';
 import { ChevronRight, ChevronsUpDown } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { Button } from '@/components/ui/Button';
 import { BustIcon, FeedbackIcon, GaugeIcon, GithubIcon, LogoutIcon } from '@/lib/navigation/nav-icons';
-import { Dialog } from '@/components/ui/Dialog';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
 import { signOut } from '@/lib/auth';
-import { buildMembershipInfo } from '@/lib/user/membership';
+import { buildMembershipInfo, pricingPlans } from '@/lib/user/membership';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import type { AuthUser } from '@/lib/auth';
 import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
@@ -100,9 +98,7 @@ function UserMenuShortcutLink({
 
 export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }: SidebarUserCardProps) {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [isUsageOpen, setIsUsageOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
-  const usageTitleId = useId();
   const isDesktopSidebar = useIsDesktopLayout();
   const { isFeatureEnabled } = useFeatureToggles();
   const { profile, loading: profileLoading, resolved: profileResolved, error: profileError } = useCurrentUserProfile({ enabled: isDesktopSidebar });
@@ -118,6 +114,15 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
     : profileError
       ? '加载失败'
       : membershipLabels[membership?.type || 'free'];
+
+  // 「用量」二级菜单：与 composer 上下文环同源的积分读数（余额 / 套餐上限 / 已用占比）。
+  const planLabel = membership ? membershipLabels[membership.type] : '—';
+  const planLimit = pricingPlans.find(plan => plan.id === (membership?.type ?? 'free'))?.creditLimit ?? 10;
+  const creditBalance = membership?.aiChatCount;
+  const creditLimit = typeof creditBalance === 'number' ? Math.max(planLimit, creditBalance) : planLimit;
+  const usedPercent = typeof creditBalance === 'number' && creditLimit > 0
+    ? Math.min(100, Math.round(Math.max(0, creditLimit - creditBalance) / creditLimit * 100))
+    : 0;
 
   const handleSignOut = async () => {
     if (signingOut) return;
@@ -189,10 +194,35 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 <Fragment key={item.tab}>
                   <UserMenuShortcutLink {...item} onClick={() => setIsMenuOpen(false)} />
                   {index === 0 ? (
-                    <MenuItem className={`${MENU_ITEM_CLASS} w-full`} onClick={() => { setIsMenuOpen(false); setIsUsageOpen(true); }}>
-                      {createElement(GaugeIcon, { size: 18, className: MENU_ICON_CLASS })}
-                      <span>用量</span>
-                    </MenuItem>
+                    <MenuSub>
+                      <MenuSubTrigger className={`${MENU_ITEM_CLASS} justify-between`}>
+                        <span className="flex items-center gap-2.5">
+                          {createElement(GaugeIcon, { size: 18, className: MENU_ICON_CLASS })}
+                          <span>用量</span>
+                        </span>
+                      </MenuSubTrigger>
+                      <MenuSubContent className="user-usage-menu">
+                        <div className="px-1.5 py-1">
+                          <div className="flex items-baseline justify-between gap-3 px-1.5 pt-1">
+                            <strong className="text-[13px] font-medium leading-[1.4] text-foreground">积分</strong>
+                            <span className="text-xs leading-[1.4] text-foreground-tertiary">{planLabel}</span>
+                          </div>
+                          <div className="flex items-center justify-between gap-3 px-1.5 py-1.5 text-xs leading-[1.4]">
+                            <span className="text-foreground">剩余积分</span>
+                            <span className="tabular-nums text-foreground-tertiary">{typeof creditBalance === 'number' ? `${creditBalance} / ${creditLimit}` : '—'}</span>
+                          </div>
+                          <div className="mx-1.5 my-1 h-1 overflow-hidden rounded-full bg-fill-field" aria-hidden="true">
+                            <span className="block h-full rounded-full bg-accent" style={{ width: `${usedPercent}%` }} />
+                          </div>
+                          <p className="px-1.5 pb-1 pt-2 text-[11px] leading-[1.5] text-foreground-tertiary">每次平台模型对话消耗 1 积分；签到与升级可补充。</p>
+                          <div className="mx-1.5 my-1 h-px bg-border" />
+                          <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
+                            onClick={() => { setIsMenuOpen(false); openSettingsCenter('upgrade'); }}>
+                            <span>查看订阅与积分</span><ChevronRight size={14} aria-hidden="true" />
+                          </MenuItem>
+                        </div>
+                      </MenuSubContent>
+                    </MenuSub>
                   ) : null}
                 </Fragment>
               ))}
@@ -248,27 +278,6 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
           </div>
         </MenuContent>
       </Menu>
-
-      {/* 用量弹窗 = claude 账户菜单「用量」的解剖：13px 标题 + 12px 副题、label+value 行、发丝分隔、底部链接行 */}
-      <Dialog bare open={isUsageOpen} onClose={() => setIsUsageOpen(false)} labelledBy={usageTitleId} className="usage-dialog">
-        <div className="px-1.5 py-1">
-          <div className="px-2.5 pt-2">
-            <h3 id={usageTitleId} className="text-[13px] font-medium leading-[1.4] text-foreground">用量</h3>
-            <p className="mt-0.5 text-xs leading-[1.4] text-foreground-tertiary">套餐使用限额 · {membershipLabel}</p>
-          </div>
-          <div className="mx-2.5 my-2 h-px bg-border" />
-          <div className="flex items-center justify-between gap-3 px-2.5 py-1.5 text-xs leading-[1.4]">
-            <span className="text-foreground">积分余额</span>
-            <span className="tabular-nums text-foreground-tertiary">{membership ? membership.aiChatCount : '—'}</span>
-          </div>
-          <div className="mx-2.5 my-2 h-px bg-border" />
-          <Button unstyled type="button" onClick={() => { setIsUsageOpen(false); openSettingsCenter('upgrade'); }}
-            className="flex w-full items-center justify-between gap-3 rounded-lg px-2.5 py-1.5 text-xs text-foreground-secondary transition-colors hover:bg-fill-ghost-hover">
-            <span>查看订阅与积分</span><ChevronRight size={14} aria-hidden="true" />
-          </Button>
-          <p className="px-2.5 pb-2 pt-1 text-[11px] leading-[1.5] text-foreground-tertiary">签到、激活码或会员权益可获得积分。</p>
-        </div>
-      </Dialog>
     </div>
   );
 }

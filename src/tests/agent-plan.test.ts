@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentPlanView } from '../components/chat/agent/AgentPlanView';
-import { AgentContextOverview } from '../components/chat/agent/AgentContextUsage';
+import { AgentContextBreakdown } from '../components/chat/agent/AgentContextUsage';
 import { getAgentPlan, getAgentSkills, type AgentToolPart } from '../lib/agent/tool-presentation';
 import { estimateTokens } from '../lib/agent/token-estimate';
 import { getAgentSteps, summarizeAgentActivity } from '../components/chat/agent/presentation';
@@ -87,27 +87,28 @@ test('the skills are the methods and skills this task loaded, listed once each',
   assert.deepEqual(getAgentSkills([]), { cards: [] });
 });
 
-test('the context card reports skills instead of leaving the row as a placeholder', () => {
+test('the context breakdown shows skill tokens without a method count', () => {
   const runtime: AgentRuntimeInfo = {
     model: { id: 'main', name: '主模型', contextWindow: 100_000, limitSource: 'configured' },
     context: { tokens: 8000, measuredTokens: 8000, estimatedTokens: 0, source: 'usage', compactions: 0 },
   };
-  const render = (props: Parameters<typeof AgentContextOverview>[0]) =>
-    renderToStaticMarkup(createElement(AgentContextOverview, props)).replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ');
+  const render = (props: Parameters<typeof AgentContextBreakdown>[0]) =>
+    renderToStaticMarkup(createElement(AgentContextBreakdown, props)).replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ');
   const withSkills = render({ runtime, skills: { cards: [{ id: 'method:bazi', title: '子平八字', version: '2.1.0', tokens: 1_200 }] } });
-  assert.match(withSkills, /技能 1 个方法 · 1\.2k/u, 'the row states the method count and the tokens it occupies');
+  assert.match(withSkills, /技能 1\.2k/u, 'the row states only the tokens it occupies');
+  assert.ok(!withSkills.includes('个方法'), 'the row does not repeat how many methods were loaded');
   assert.ok(!withSkills.includes('技能 未启用'), 'a used skill row is not a placeholder');
   const unusedSkills = render({ runtime, skills: { cards: [] } });
-  assert.match(unusedSkills, /技能 技能目录 · /u, 'the injected directory is counted as skills, not «未加载»');
+  assert.match(unusedSkills, /技能 0/u, 'the injected directory is counted as skills, not «未加载»');
   assert.ok(!unusedSkills.includes('未加载'));
-  assert.match(render({ runtime }), /技能 0 项 未启用/u, 'without skill data the row stays as it was');
-  // 目录整段记在 runtime.skills 上；读进上下文的方法另计，方法与技能分开命名。
+  assert.match(render({ runtime }), /技能 未启用/u, 'without skill data the row stays as it was');
+  // 目录整段记在 runtime.skills 上；读进上下文的方法另计。
   const listed = { ...runtime, skills: { listed: 2, sectionTokens: 300 } };
-  assert.match(render({ runtime: listed, skills: { cards: [] } }), /技能 技能目录 · 300/u);
+  assert.match(render({ runtime: listed, skills: { cards: [] } }), /技能 300/u);
   assert.match(render({ runtime: listed, skills: { cards: [
     { id: 'method:bazi', kind: 'method', title: '子平八字', version: '2.1.0', tokens: 200 },
     { id: 'tool:s1', kind: 'skill', title: 'case-review', version: 'v2', tokens: 100 },
-  ] } }), /技能 1 个方法 · 1 个技能 · 600/u);
+  ] } }), /技能 600/u);
 });
 
 test('a plan is a process step; the task list stays a progress bar', () => {

@@ -33,6 +33,7 @@ import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar'
 import { QuoteBar } from '@/components/chat/composer/QuoteBar';
 import type { MessageQuote } from '@/lib/chat/quotes';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
+import type { AgentMessageData } from '@/lib/agent/types';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { COMPOSER_FILES_EVENT, documentFileProblem, pickPlainAttachment } from '@/lib/chat/composer-files';
@@ -118,8 +119,10 @@ interface ChatComposerProps extends ModelSettingsProps {
     dreamContext?: { baziChartName?: string; dailyFortune?: string };
     dreamContextLoading?: boolean;
     knowledgeBaseEnabled?: boolean;
-    /** 平台剩余积分（用量环）。 */
-    credits?: number | null;
+    /** 本对话最近的 Agent 消息（上下文环的数据源）。 */
+    contextData?: AgentMessageData;
+    /** 点开上下文弹层里的技能或方法卡。 */
+    onOpenContextResource?: (id: string) => void;
 }
 
 export function ChatComposer({
@@ -170,7 +173,8 @@ export function ChatComposer({
     dreamContext,
     dreamContextLoading = false,
     knowledgeBaseEnabled = true,
-    credits,
+    contextData,
+    onOpenContextResource,
 }: ChatComposerProps) {
     const { showToast } = useToast();
     const { isFeatureEnabled } = useFeatureToggles();
@@ -734,7 +738,7 @@ export function ChatComposer({
                                 }
                             }}
                             placeholder=""
-                            className="chat-composer-input chat-composer-textarea"
+                            className="chat-composer-input chat-composer-textarea min-h-0"
                             disabled={disabled}
                             // claude 的 composer 空态只有一行：rows=1 + field-sizing 随内容长高（hero 首屏给两行起步）
                             rows={hero ? 2 : 1}
@@ -791,7 +795,8 @@ export function ChatComposer({
                     onPlanModeChange={onPlanModeChange}
                     customProviderActive={customProviderActive}
                     customProviderLabel={customProviderLabel}
-                    usage={typeof credits === 'number' ? { credits, membershipType } : undefined}
+                    contextData={contextData}
+                    onOpenContextResource={onOpenContextResource}
                     providerReturnRef={addMenuRef}
                 />
 

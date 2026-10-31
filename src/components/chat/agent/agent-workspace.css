@@ -475,32 +475,6 @@ button.agent-ws-status-head:disabled { cursor: default; }
 .agent-ws-model-list > li > span:first-child { color: var(--foreground); }
 .agent-ws-model-list > li > span:last-child { color: var(--foreground-tertiary); }
 
-/* 上下文卡：24px 分段条 + 分类图例（claude /code 实测口径） */
-.agent-context-body { padding: 0 12px 12px; }
-.agent-context-used { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 8px; font-size: calc(14 / 16 * 1rem); color: var(--foreground); }
-.agent-context-used > span:last-child { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
-.agent-context-bar-stack { display: flex; width: 100%; height: 6px; gap: 2px; overflow: hidden; border-radius: 3px; background: var(--fill-field); }
-.agent-context-bar-stack > span { display: block; height: 100%; border-radius: 1.5px; }
-.agent-context-card [data-tone="messages"] { background: var(--accent); }
-.agent-context-card [data-tone="tools"] { background: var(--chat-warning); }
-.agent-context-card [data-tone="system"] { background: var(--chat-success); }
-.agent-context-card [data-tone="memory"] { background: color-mix(in srgb, var(--chat-warning) 70%, var(--foreground-tertiary)); }
-.agent-context-card [data-tone="mcp"] { background: color-mix(in srgb, var(--accent) 55%, var(--foreground-tertiary)); }
-.agent-context-card [data-tone="skills"] { background: color-mix(in srgb, var(--chat-success) 60%, var(--foreground-tertiary)); }
-.agent-context-card [data-tone="buffer"] { background: var(--foreground-tertiary); }
-.agent-context-card [data-tone="free"] { background: color-mix(in srgb, var(--neutral-900) 12%, transparent); }
-.agent-context-legend { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 0; }
-.agent-context-legend-row { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); }
-.agent-context-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 2px; }
-.agent-context-legend dt { flex: 1; min-width: 0; color: var(--foreground); }
-.agent-context-legend dt small { margin-left: 6px; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }
-.agent-context-legend-row[data-deferred] dt { color: var(--foreground-tertiary); }
-.agent-context-legend-row[data-deferred] .agent-context-dot { opacity: .35; }
-.agent-context-legend-row.is-free { margin-top: 2px; padding-top: 8px; border-top: var(--hairline) solid var(--border); }
-.agent-context-legend dd { display: flex; gap: 10px; margin: 0; color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
-.agent-context-legend dd em { min-width: 38px; font-style: normal; text-align: right; }
-.agent-context-foot { margin: 8px 0 0; font-size: calc(12 / 16 * 1rem); line-height: 1.6; color: var(--foreground-tertiary); }
-
 /* 代码模式「运行脚本」页：脚本与输出等宽限高；调用逐行可点，打开该次调用所在的页面。 */
 .agent-ws-script { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
 .agent-ws-script > h3 { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: calc(13.5 / 16 * 1rem); font-weight: 600; }
@@ -603,8 +577,6 @@ button.agent-ws-row:hover { translate: 0 -1px; box-shadow: 0 4px 14px rgb(0 0 0 
 .agent-todo-segments > span { transition: background-color var(--duration-sheet) var(--ease-out); }
 .agent-todo-segments > span[data-state="in_progress"] { animation: agent-live-breathe 1.6s var(--ease-out) infinite; }
 .agent-todo-progress { animation: motion-fade-up var(--duration-base) var(--ease-out) backwards; }
-/* 上下文分段条：各段宽度随用量平滑变化。 */
-.agent-context-bar-stack > span { transition: flex-basis var(--duration-slow) var(--ease-out), width var(--duration-slow) var(--ease-out); }
 /* 协作成员仍在分析：卡片外圈的强调环缓慢呼吸。
    呼吸的是叠在卡片外的一圈 ::after 的透明度，而不是卡片自身的 box-shadow：
    只动合成层的 opacity，不逐帧重绘卡片；伪元素不吃点击。 */

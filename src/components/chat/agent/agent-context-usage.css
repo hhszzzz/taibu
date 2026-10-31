@@ -1,7 +1,31 @@
-/* 上下文卡「技能」一行：可展开，展开后以横线分隔列注入的方法目录与已读方法。 */
-.agent-context-legend-toggle { display: inline-flex; align-items: center; gap: 4px; color: var(--foreground); font: inherit; text-align: left; }
+/* 聊天框下方的上下文弹层：24px 分段条 + 分类图例 + 可展开的技能行（原会话栏上下文卡）。 */
+.agent-context-body { padding: 2px 10px 8px; }
+.agent-context-bar-stack { display: flex; width: 100%; height: 6px; gap: 2px; overflow: hidden; border-radius: 3px; background: var(--fill-field); }
+.agent-context-bar-stack > span { display: block; height: 100%; border-radius: 1.5px; transition: flex-basis var(--duration-slow) var(--ease-out), width var(--duration-slow) var(--ease-out); }
+.agent-context-body [data-tone="messages"] { background: var(--accent); }
+.agent-context-body [data-tone="tools"] { background: var(--chat-warning); }
+.agent-context-body [data-tone="system"] { background: var(--chat-success); }
+.agent-context-body [data-tone="memory"] { background: color-mix(in srgb, var(--chat-warning) 70%, var(--foreground-tertiary)); }
+.agent-context-body [data-tone="mcp"] { background: color-mix(in srgb, var(--accent) 55%, var(--foreground-tertiary)); }
+.agent-context-body [data-tone="skills"] { background: color-mix(in srgb, var(--chat-success) 60%, var(--foreground-tertiary)); }
+.agent-context-body [data-tone="buffer"] { background: var(--foreground-tertiary); }
+.agent-context-body [data-tone="free"] { background: color-mix(in srgb, var(--neutral-900) 12%, transparent); }
+.agent-context-legend { display: flex; flex-direction: column; gap: 6px; margin: 10px 0 0; }
+.agent-context-legend-row { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); }
+.agent-context-dot { width: 8px; height: 8px; flex-shrink: 0; border-radius: 2px; }
+.agent-context-legend-label { flex: 1; min-width: 0; color: var(--foreground); }
+.agent-context-legend-row[data-deferred] .agent-context-legend-label { color: var(--foreground-tertiary); }
+.agent-context-legend-row[data-deferred] .agent-context-dot { opacity: .35; }
+.agent-context-legend-row.is-free { margin-top: 2px; padding-top: 8px; border-top: var(--hairline) solid var(--border); }
+.agent-context-legend-value { color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
+/* 技能行：可展开，展开后每行一项，名称与 token 同排。 */
+.agent-context-legend-toggle { display: inline-flex; align-items: center; color: var(--foreground); font: inherit; text-align: left; }
 .agent-context-legend-toggle:hover { color: var(--accent-hover); }
-.agent-context-legend-toggle svg { color: var(--foreground-tertiary); transition: transform .15s; }
-.agent-context-legend-toggle svg.is-open { transform: rotate(180deg); }
-.agent-context-skills { display: flex; flex-direction: column; gap: 2px; margin-top: 8px; padding-top: 8px; border-top: var(--hairline) solid var(--border); }
-.agent-context-skills .agent-rail-result-text small { color: var(--foreground-tertiary); }
+/* 有明细的模块：技能文字下方始终是一条虚线，展开时内容直接接在下面。 */
+.agent-context-legend-toggle-label { text-decoration: underline dashed; text-decoration-thickness: 1px; text-underline-offset: 3px; text-decoration-color: var(--foreground-tertiary); }
+.agent-context-skills { display: flex; flex-direction: column; gap: 6px; margin-top: 2px; padding-top: 6px; border-top: var(--hairline) solid var(--border); }
+/* 与图例行共用同一缩进（圆点 + 间距）与行距，token 与上方数值右对齐。 */
+.agent-context-skill { display: flex; width: 100%; align-items: baseline; justify-content: space-between; gap: 12px; padding: 0 0 0 16px; font-size: calc(13 / 16 * 1rem); text-align: left; }
+.agent-context-skill > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); }
+.agent-context-skill > small { flex-shrink: 0; font-size: inherit; color: var(--foreground-tertiary); font-variant-numeric: tabular-nums; }
+.agent-context-skill:hover > span { color: var(--accent-hover); }

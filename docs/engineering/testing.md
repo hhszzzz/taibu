@@ -93,13 +93,15 @@ Route mock 只替换外部边界，保留真实鉴权分支、参数解析与用
 
 ### 7.1 基础组件最低用例
 
-- Button：Enter/Space、submit、disabled、loading 防重复。
+- Button：Enter/Space、submit、disabled、loading 防重复（含 Enter 触发的隐式表单提交）。
 - Field：label/描述/错误关联，输入与校验反馈不清空。
-- Select/Menu：打开、方向键、Home/End、typeahead、禁用项、选择、Escape、Tab、焦点返回。
-- Tabs/Radio：roving tabindex、方向键、选中状态和 panel 关联。
-- Dialog：初始焦点、Tab 圈定、Escape/遮罩、busy、退出、嵌套浮层与焦点返回。
-- Tooltip：hover/focus/Escape 与触屏策略。
-- Toast：通知内容、动作、连续通知、退场与清理。
+- Select/Menu：打开、方向键、Home/End、typeahead、禁用项、选择、Escape、Tab、焦点返回；字母快捷键只作用于本层面板，禁用项不响应。
+- Tabs/Radio/SegmentedControl：roving tabindex、方向键（跳过禁用项）、选中状态和 panel 关联；值不在选项内时仍保留一个 Tab 入口。
+- Dialog：初始焦点、Tab 圈定、Escape/遮罩、busy、退出、嵌套浮层与焦点返回；确认框为 `alertdialog`。
+- Tooltip：hover/focus/Escape 与触屏策略；同组提示在第一个出现后立即显示。
+- Toast：通知内容、动作、连续通知、退场与清理；悬停/聚焦暂停倒计时，错误不自动消失，模态框打开时仍可见、可关闭。
+
+颜色、外圈、圆角这类视觉契约离线夹具测不到（不加载应用 CSS），由 §8 的真实页面走查覆盖。
 
 ### 7.2 业务交互重点
 
@@ -154,6 +156,7 @@ Route mock 只替换外部边界，保留真实鉴权分支、参数解析与用
 
 - 修复 bug 优先添加能在修复前失败的回归；验证它确实能捕获问题。
 - 不通过删除断言、放宽到无意义比较、增加任意 sleep 或重试来让测试变绿。
+- 等待 UI 状态用明确条件（`waitFor`、轮询断言），不要写 `.catch(() => {})` 吞掉等待失败：条件从未成立时后续断言照样会跑，测试可能在被测行为失效后依旧通过。
 - 不稳定测试先定位竞态、时间、顺序、共享状态和资源问题；不能默认“框架偶发”。
 - 必须跳过时注明具体原因、影响、跟踪条件和未覆盖风险；环境不满足与业务不支持分开表述。
 - 测试失败时保留真实输出，修复后重跑相关测试和必要的上层验证。

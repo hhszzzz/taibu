@@ -1,6 +1,6 @@
 # 基础组件设计规格与线框
 
-> 状态：组件设计稿 v1，基础实现已建立；设置中心、后台管理、通用业务页、聊天与浮层已迁移到共享组件。`src/components/ui` 之外不再有原生 `<button>`、原生 `select`、文本 `input` 或 `textarea`，领域控件只保留测量过的视觉类。组件的实际可用 API 以 `src/components/ui` 当前源码为准。
+> 状态：组件设计稿 v1，基础实现已建立；设置中心、后台管理、通用业务页、聊天与浮层已迁移到共享组件。`src/components/ui` 之外不再有原生 `<button>`、原生 `select`、文本 `input` 或 `textarea`，领域控件只保留测量过的视觉类。组件的实际可用 API 以 `src/components/ui` 当前源码为准；规格与实现尚未一致、需要设计裁决的项集中在 [§21](#21-已知缺口与待决事项)。
 >
 > 视觉约束：保留太卜当前 claude.ai 对齐风格、中文内容、明暗主题、发丝边界和陶土强调色。基础行为可采用 shadcn 源码组合与 Base UI，但不得带入默认皮肤。
 
@@ -39,7 +39,7 @@
 
 - 浮层：原 `FloatingPanel` 已删除；聊天标题菜单、会话行菜单、筛选菜单、`+` 菜单及其子菜单、运行模式、模型/努力程度/协作、分享、用量、全部占术、视图选项全部改用共享 `Menu`/`Popover`，并保留 claude 字母快捷键（`letterShortcuts`）与对话框内 portal。
 - 表单：全站不再有原生 `<select>`、文本 `<input>` 或 `<textarea>`；设置/后台/表单统一 `Field + Input/Textarea/Select`，复选/单选使用共享控件。
-- 对话框：业务只通过 `Dialog` 打开；结构化模式统一标题、说明、关闭键、页脚与 busy，`bare` 模式保留工作区/编辑器实测外壳。`Modal` 仅作为 `Dialog` 内部的 top-layer 表面，不再由业务直接导入。
+- 对话框：业务只通过 `Dialog` 打开，`Modal` 仅作为其内部的 top-layer 表面，不再由业务直接导入。结构化模式统一标题、说明、关闭键、页脚与 busy；`bare` 模式保留工作区/编辑器实测外壳，类型上必须传 `labelledBy`。现状是业务里的对话框全部使用 `bare`，结构化模式只有组件测试在用，`ConfirmDialog` 也仍是自有外壳——收敛方向见 §21。
 - 按钮：`src/components/ui` 之外不再有原生 `<button>`；通用动作、图标动作、菜单项进入 `Button`/`IconButton`/`MenuItem`，测量过的聊天几何与领域卡片使用 `Button unstyled` 保留专用样式类。
 - 定时任务：关闭、取消、保存、运行开关、模板与频率选择均已进入 `IconButton`/`Button`/`Switch`/`SegmentedControl`；星期和变量 chip 保留领域样式但使用共享按钮语义。
 - 反馈色：侧栏、签到、历史、分享卡入口等警告/错误条统一改用 `warning`/`danger` 令牌，不再写死暖黄或红色十六进制。
@@ -49,9 +49,13 @@
 
 `pnpm lint` 的架构守卫会拒绝在 `src/components/ui` 之外直接导入 `@base-ui/*`、导入 shadcn 默认主题、重新引入原生 `<button>`/`<select>`、恢复旧 `settings-button*` class、在共享浮层之外直接 `createPortal`，以及通用 TSX 中的 Tailwind palette、字面 hex、rgb/rgba 阴影色（图表、分享卡、品牌图标和浏览器主题色按文件豁免，例外在守卫脚本中逐个列出）。新增基础行为先扩展共享组件。
 
-浮层嵌套：`Select`、`Menu`、`Popover`、`Tooltip` 的弹层会检测最近的 `dialog` 或 `role="dialog"` 容器并挂到其中，避免被原生 top-layer 或 Base UI 对话框遮挡；分离触发器（`createMenuHandle`）也会在打开事件里从触发元素解析容器。在对话框里新增浮层时不需要再手写 portal 容器。claude 字母快捷键传 `MenuContent letterShortcuts`。
+浮层嵌套：`Select`、`Menu`、`Popover`、`Tooltip` 的弹层会检测最近的 `dialog` 或 `role="dialog"` 容器并挂到其中，避免被原生 top-layer 或 Base UI 对话框遮挡；分离触发器（`createMenuHandle`）也会在打开事件里从触发元素解析容器。在对话框里新增浮层时不需要再手写 portal 容器。claude 字母快捷键传 `MenuContent letterShortcuts`，只在本层面板生效，禁用项不响应。
 
-按钮与链接：导航使用 `Link`/`<a>`，复用 `buttonVariants()`/`iconButtonVariants()` 得到按钮外观，不要用 `Button render={<Link/>}` 代替链接（会失去链接语义）。`Button` 的 `loading` 不设置原生 disabled，表单提交按钮要同时传 `disabled={saving || …}` 以阻止 Enter 重复提交。`IconButton` 的默认 8px 触控扩展会覆盖相邻图标按钮，整行可点等场景传 `expand="none"` 自行定义伪元素。
+原生模态框打开后，它之外的整个文档都是 inert 且被遮罩压在下面，提高 z-index 也没用。`Toast` 因此在有模态框打开时挂进最上层对话框（`Modal` 导出的 `useTopModal`）；新增任何全局浮层都要同样处理。Tooltip 的分组延迟依赖应用根部唯一的 `TooltipProvider`（已挂在 `ClientProviders`），组件内部不要再包 Provider，否则每个提示各成一组、相邻提示无法立即显示。
+
+按钮与链接：导航使用 `Link`/`<a>`，复用 `buttonVariants()`/`iconButtonVariants()` 得到按钮外观，不要用 `Button render={<Link/>}` 代替链接（会失去链接语义）。`Button` 的 `loading` 拦截 click——这同时取消了 Enter 触发的隐式表单提交——并暴露 `aria-busy`，但不设原生 disabled，焦点留在按钮上；不要为 loading 再传 `disabled`，那会把焦点丢到 body。`disabled` 只表达「当前不可用」。`IconButton` 的默认 8px 触控扩展会覆盖相邻图标按钮，整行可点等场景传 `expand="none"` 自行定义伪元素。
+
+类名合并统一用 `src/lib/utils.ts` 的 `cn()`（clsx + tailwind-merge）。模板字符串拼接无法去掉冲突的 Tailwind 类，调用方传入的覆盖不可靠。
 
 ## 1. 设计意图
 
@@ -91,7 +95,7 @@
 | 表单控件 | 38px | 设置页输入、Select、主要按钮 |
 | 大字段 | 42px | 登录、独立表单的大输入框 |
 
-不为单个页面增加 34、36、40、44px 等相邻尺寸。当前 40px 对话框按钮在实现迁移时收敛到 38px；这项是明确的尺寸统一，不是视觉重写。
+不为单个页面增加 34、36、40、44px 等相邻尺寸。当前 40px 对话框按钮在实现迁移时收敛到 38px；这项是明确的尺寸统一，不是视觉重写。`SegmentedControl` 的轨道目前是 40/44px（含 4px 内衬，段高 32/36），与本表不一致，见 §21。
 
 ### 2.2 形状与文字
 
@@ -105,23 +109,26 @@
 
 焦点颜色由上下文令牌控制，不为每个页面新增组件变体：
 
-- 默认：`--accent`，2px outline，offset 3px。
-- 设置中心：使用 `--foreground-secondary`，延续当前中性焦点。
-- 输入框：默认保留自身边界，不重复叠加第二圈；若边界变化不足以达到 3:1，必须使用外圈。
-- 浮层容器本身获得程序焦点时不画外框，容器内可操作项仍必须有清晰焦点。
+- 默认：`--accent`，2px outline，offset 3px（`globals.css` base 层）。对话框里不再另设焦点规则：原 `.app-modal :where(...)` 的 2px outline 是未分层 CSS，会压过组件自己的焦点样式，已删除。
+- 设置中心：使用 `--foreground-secondary`，延续当前中性焦点。现状只改了 outline 颜色；共享字段的焦点色取 `--control-focus`，要中性就在容器上设 `--control-focus: var(--foreground-secondary)`，见 §21。
+- 字段（`Input`/`Textarea`/`Select` 触发器）：聚焦时 0.5px 边框与 1px 外圈 outline 同为 `--control-focus`（默认 `--accent`），合计约 1.5px，对比明显强于未聚焦的 10% 发丝线；`aria-invalid` 时边框与聚焦外圈都换成 `--danger`。外圈用 outline 而不是 box-shadow：嵌在行内或壳内、已写 `outline-none` 或领域 `outline: none` 的输入会自动不画外圈。
+- 分段与标签（`SegmentedControl`/`Tabs`）：沿用全局 outline，但 offset 为 0，焦点框落在轨道内衬里，不溢出轨道。
+- 浮层容器本身获得程序焦点时不画外框，容器内可操作项仍必须有清晰焦点；Menu/Select 的当前项用高亮底色表示，不画 outline。
 
 ### 2.4 状态表达
 
 | 状态 | 表达 | 禁止 |
 | --- | --- | --- |
 | hover | `--fill-ghost-hover` 或语义 hover 色 | 同时位移、缩放、加阴影 |
-| pressed | 稍深填色，60–120ms | 大幅缩小按钮 |
+| pressed | 稍深填色，60–120ms（共享按钮尚未实现，见 §21） | 大幅缩小按钮 |
+| 展开 | 菜单/弹层打开期间触发器保持 hover 外观（Base UI 的 `data-popup-open`） | 菜单还开着触发器已恢复常态 |
+| 开启（`aria-pressed`） | ghost 按钮为 `--accent-soft` 底 + 陶土字 | 只换图标不换底 |
 | selected | `--fill-ghost-selected` + 勾选/状态属性 | 只改变文字颜色 |
-| disabled | 降低不透明度、禁止操作、保留可读标签 | 仅用灰色且无原因 |
-| loading | 保留宽度、内联 loader、状态文案 | 用 spinner 替换整个按钮导致跳动 |
+| disabled | 按钮、开关、选项 50% 不透明；字段改为禁用底色与弱文字，不靠透明度 | 仅用灰色且无原因 |
+| loading | 高度不变、内联 loader、状态文案 | 用 spinner 替换整个按钮导致跳动 |
 | invalid | danger 边界 + 字段错误说明 | 只把边框变红 |
 
-原生 disabled 用于不可用状态；异步提交中的 loading 可使用 `aria-disabled` + `aria-busy` 并拦截重复激活，让焦点留在原按钮上。
+原生 disabled 用于不可用状态；异步提交中的 loading 可使用 `aria-disabled` + `aria-busy` 并拦截重复激活，让焦点留在原按钮上。loading 时 loader 加在文字前，`loadingText` 也可能与原文字不等长，所以按钮宽度会变；按钮位于底栏这类会推动相邻控件的位置时，由调用方给它固定 `min-w`。
 
 ## 3. Button
 
@@ -133,7 +140,7 @@ Primary       Secondary       Ghost          Danger
 │ 保存更改 │  │ 取消     │    返回设置       │ 删除命盘 │
 ╰──────────╯  ╰──────────╯                   ╰──────────╯
 
-Loading（宽度不变）
+Loading（高度不变；宽度会变，底栏里由 min-w 兜住）
 ╭──────────────╮
 │ ))) 保存中…  │
 ╰──────────────╯
@@ -144,11 +151,13 @@ Loading（宽度不变）
 | variant | 表面 | 用途 |
 | --- | --- | --- |
 | primary | `bg-accent / text-on-accent`，hover 用 `--accent-hover` | 一个操作区唯一主行动 |
-| secondary | `--surface` + hairline，hover 用次级背景 | 取消、返回、普通操作 |
-| ghost | 透明，文字次级，hover 填色 | 工具栏与低频操作 |
-| danger | `--danger` 实色或 danger 文字 ghost | 删除、重置等破坏性操作 |
+| secondary | `--surface` + hairline，hover 边框加深并叠 `--fill-ghost-hover` | 取消、返回、普通操作 |
+| ghost | 透明，文字次级，hover 填色；`aria-pressed` 为陶土淡底 + 陶土字 | 工具栏与低频操作 |
+| danger | `--danger-fill` 实色 + `--on-danger` 文字（明暗同值）；danger 文字的图标动作用 `IconButton tone="danger"` | 删除、重置等破坏性操作 |
 
 不增加 outline、soft、link、gradient 等重复变体。导航使用 Link，样式可复用 Button 外观，但保留链接语义。
+
+尺寸阶梯 xs 24 / sm 28 / md 32 / lg 38px，圆角依次 6 / 7 / 8 / 10px（cds Button 实测阶梯，lg 取表单控件圆角）。loading 的音浪跟随按钮文字色（`SoundWaveLoader tone="current"`），实色按钮上也看得见。`--danger` 在暗色主题是浅粉文字色，不能直接作按钮底，所以实色另设 `--danger-fill`。
 
 ### 3.3 逻辑接口
 
@@ -176,7 +185,8 @@ Loading（宽度不变）
 - 必须提供 `aria-label`；Tooltip 只重复或补充名称，不能成为名称唯一来源。
 - 只有 `ghost` 与 `secondary` 两种表面；danger 通过 tone 表达，不另造红色背景变体。
 - 图标居中，不用字体符号代替 SVG；同一行不出现不同线宽/网格的图标。
-- 菜单打开时触发器保持 `aria-expanded` 与可见 active 状态，关闭后恢复。
+- 圆角随尺寸为 6 / 7 / 8px；菜单或弹层打开时（Base UI 写入 `data-popup-open`）保持 hover 外观，关闭后恢复。Tooltip 打开同样会写这个属性，所以键盘聚焦带 Tooltip 的按钮时也会出现 hover 底色，属于预期。
+- `aria-pressed` 切换按钮在 ghost 下显示陶土淡底 + 陶土图标。领域样式类只覆盖了颜色、没覆盖底色时会出现这层底，不需要时在领域类里写明 `background`。
 - 验收：无可见文字时名称完整、键盘焦点不偏移、触屏点击区不互相覆盖。
 
 ## 5. Field / Input / Textarea
@@ -207,10 +217,14 @@ Field 顺序固定为 `label → control → description/error`。错误出现�
 | 表面 | `--surface` + hairline | 同左 |
 | 文字 | 14px；大字段 15px | 14px，line-height 1.6 |
 | placeholder | `--foreground-tertiary` | 同左，不代替 label |
-| 错误 | danger 边界 + `aria-invalid` + 错误文本 | 同左 |
-| 禁用 | 保留值、不可编辑、说明原因 | 同左 |
+| 悬停 | 边框加深到 `--border-hover` | 同左 |
+| 焦点 | 边框 + 1px 外圈 outline，颜色 `--control-focus`（见 §2.3） | 同左 |
+| 错误 | danger 边界 + `aria-invalid` + 错误文本；聚焦外圈也为 danger | 同左 |
+| 禁用 | 保留值、不可编辑、说明原因；`--cds-fill-disabled` 底 + `--cds-text-disabled` 字 | 同左 |
 
-Field 提供 `label`、`description`、`error`、`required`、`htmlFor`、`controlId`。Input/Textarea 透传原生属性，不封装一套表单状态库。
+`Input`、`Textarea` 与 `Select` 触发器共用 `Input.tsx` 导出的 `fieldClass`（发丝边框、悬停、焦点外圈、invalid、disabled），字段状态只在这一处维护。
+
+Field 提供 `label`、`description`、`error`、`required`、`controlId`、`className`。子元素可以是单个控件，Field 会注入 `id`、`required`、`aria-describedby`、`aria-invalid`；也可以是接收这几项的函数，用于要转发 ref 或组合多个元素的场景。`Select` 接受同名属性，可以直接放进 Field。Input/Textarea 透传原生属性，不封装一套表单状态库。
 
 ### 5.3 规则
 
@@ -241,15 +255,15 @@ Field 提供 `label`、`description`、`error`、`required`、`htmlFor`、`contr
 
 ### 6.2 结构
 
-- Trigger：38px、radius 10、左右 12px，值单行省略；chevron 15px，展开时旋转，但 reduced motion 下直接切换。
-- Popup：与 trigger 间隔 4px；宽度至少等于 trigger，默认最小 176px；视口左右留 8px。
-- 列表：最大高度 `min(288px, 50dvh)`，内部滚动；选项最小 36px、radius 8、文字 13–14px。
+- Trigger：38px、radius 10、左右 12px，值单行省略；外观与焦点同 `fieldClass`；chevron 16px，展开时旋转 180°，reduced motion 下由全局规则直接切换。
+- Popup：与 trigger 间隔 4px；宽度不小于 trigger 和 176px 中的较大者，随最长选项变宽，上限 `min(24rem, 100vw - 1rem)`；贴近视口时按 Base UI 默认 5px 碰撞边距翻转或平移。
+- 列表：最大高度 `min(18rem, 可用高度)`，内部滚动；选项单行 32px（带说明时上下 6px 随内容增高）、radius 8、文字 14px；高亮用 `--fill-ghost-hover`，与菜单项一致。
 - Option：标签 + 可选说明 + 末尾 check；disabled 项不可选但可被发现并读出原因。
 - 空值：显示 placeholder，不伪造一个实际值为空的 option。
 
 ### 6.3 逻辑接口
 
-`value`、`onChange`、`options`、`placeholder`、`disabled`、`ariaLabel/labelledBy`、`describedBy`。Option 使用 `value`、`label`、`description`、`disabled`；复杂自定义内容走 Combobox/领域选择器，不把任意 JSX 塞进基础 Option 后丢失 typeahead 文本。
+`value`（可为 `null`，显示 placeholder）、`onChange`（只在用户选中时调用，不会传 `null`）、`options`、`placeholder`（默认「请选择」）、`disabled`、`required`、`name`/`form`（参与原生表单提交）、`id`、`ariaLabel`、`aria-describedby`、`aria-invalid`、`title`、`hideIcon`、`className`/`popupClassName`。没有 `labelledBy`：可见标签用 Field 或 `id` + `<label htmlFor>`，无可见标签时传 `ariaLabel`。Option 使用 `value`、`label`、`description`、`disabled`；复杂自定义内容走 Combobox/领域选择器，不把任意 JSX 塞进基础 Option 后丢失 typeahead 文本。
 
 ### 6.4 行为
 
@@ -270,7 +284,7 @@ Field 提供 `label`、`description`、`error`、`required`、`htmlFor`、`contr
                                          ╰──────╯
 ```
 
-- 轨道 36×20px、圆形 thumb 16px；off 用 control fill，on 用 accent；不增加文字“开/关”在轨道内。
+- 轨道 36×20px、圆形 thumb 16px；off 用 `--cds-switch-track`（明 20% / 暗 10%），悬停加深到 `--cds-switch-track-hover`；on 用 accent、悬停 `--accent-hover`；thumb 明暗都是白色（`--cds-switch-knob`）。不在轨道内加“开/关”文字。
 - 用于立即生效的二元设置；保存后才生效的表单项使用 Checkbox。
 - 可访问名称为“任务助手记忆”，状态由 `aria-checked` 表达，说明文字不重复进名称。
 - Space 切换；button 的 Enter 行为保持可预测。点击整行文字可聚焦/切换时，必须使用真实 label 关联，不能设置整行任意区域都触发。
@@ -303,7 +317,7 @@ Field 提供 `label`、`description`、`error`、`required`、`htmlFor`、`contr
 ╰──────────────────────────────────────╯
 ```
 
-- 容器使用 `--fill-field`，选中项使用 `--surface` 与轻微 shadow；未选中项透明。
+- 容器使用 `--fill-field`；选中块用 `bg-segmented-control-thumb`（明：白；暗：10% 白，比轨道亮，不会像凹进去）+ `--shadow-thumb`（发丝内描边 + 1px 投影）；未选中项透明。`SegmentedControl` 用同一组轨道与滑块令牌，禁用段 50% 不透明，方向键跳过。
 - 高度 32px，项 padding 0 12px，radius 6–8px；选中indicator 使用已有 tab motion，不新增下划线样式。
 - 只用于同一上下文的面板切换；页面主导航使用导航链接，不伪装 Tabs。
 - `tab`、`tabpanel` 有正确 id/aria 关联；非选中 tab 不进入 Tab 顺序。
@@ -329,6 +343,8 @@ Badge 分两种，不再扩张：
 - soft 必须有文字，不只有彩点；success/warning/danger 不只靠颜色区分。
 - Badge 不可点击。可点击过滤条件使用 FilterChip/Button，不伪装 Badge。
 
+现状：`Badge` 实现为 `quiet` 加五个 soft 色（`neutral`/`accent`/`success`/`warning`/`danger`），业务里还没有调用方；beta 标记仍是独立的 `BetaBadge` + 全局 `.beta-badge`，见 §21。
+
 ## 10. Dialog
 
 ### 10.1 标准编辑器线框
@@ -353,12 +369,12 @@ Badge 分两种，不再扩张：
 
 ### 10.2 规格
 
-- 默认宽 512px；确认类 384–400px；编辑器可 560/640px；搜索和整盘查看是独立领域形态，不无限增加通用 size。
-- 桌面 radius 14、`--surface`、`--shadow-panel-lg`；遮罩使用 `--scrim`，不做背景模糊。
+- 宽度：默认 512px，`dialog-sm` 384px（确认类），`dialog-md` 448px，`dialog-lg` 672px（编辑器）；搜索和整盘查看是独立领域形态，不无限增加通用 size。
+- 桌面 radius 14、`--surface`、`--shadow-panel-lg`；遮罩为 40% 黑、不做背景模糊。现状：遮罩写在 `overlays.css` 的字面 `rgba(0, 0, 0, .4)`（cds 实测值），`--scrim` 令牌没人用，见 §21。
 - 页面边距至少 16px，最大高度 `calc(100dvh - 32px)`；头/正文/底部在内容超高时只有正文滚动。
 - 标题使用 18–20px，普通编辑 Dialog 不套大型 serif hero；关闭按钮属于 header，不与内容按钮混排。
 - 底部动作右对齐；窄屏可换行但主按钮保持在最后/最容易确认的位置。
-- `bare` 保留调用方外壳但仍共享焦点圈定、Escape、遮挡点击与 busy；透明外壳加 `dialog-plain`，窄确认用 `dialog-sm`、常规用 `dialog-md`、编辑器用 `dialog-lg`，移动端贴底加 `dialog-sheet`。纯提示型警告传 `role="alertdialog"`。
+- `bare` 保留调用方外壳但仍共享焦点圈定、Escape、遮挡点击与 busy，类型上必须传 `labelledBy`；透明外壳加 `dialog-plain`，窄确认用 `dialog-sm`、常规用 `dialog-md`、编辑器用 `dialog-lg`，移动端贴底加 `dialog-sheet`。需要用户确认后果的警告传 `role="alertdialog"`。
 
 ### 10.3 焦点与关闭
 
@@ -387,6 +403,8 @@ Badge 分两种，不再扩张：
 - 默认 initialFocus 在“取消”，危险动作不能因连续 Enter 被误触。
 - 确认按钮写具体动作“删除命盘”；loading 时显示“删除中…”，取消与关闭按 busy 契约处理。
 - 对可轻松撤销的低风险操作优先 Undo Toast，不滥用确认弹窗。
+
+实现现状：带操作按钮时是 `role="alertdialog"`（`showActions={false}` 时退回普通 dialog）；`confirmText` 在类型上必填，不再默认“确认”；`variant` 只有 `danger`/`default`；loading 时取消键禁用、确认键显示音浪并拦截重复点击。没有关闭键；打开后焦点落在第一个可聚焦元素（`showModal` 默认行为，没有 children 时就是“取消”）。
 
 ## 12. Popover
 
@@ -421,7 +439,7 @@ Badge 分两种，不再扩张：
 
 - 只包含命令、导航或单/多选项；含输入和自由内容时改用 Popover。
 - 默认最小 128px，内容最大 320px；item 高 32px、radius 6–8px、padding 0 10px。
-- 分组 label 为弱文字且不可聚焦；分隔线只用于真实语义分组，危险操作单独置底。
+- 分组 label 为弱文字且不可聚焦，用 `MenuGroup label` 传入（Base UI 的 GroupLabel 离开 Group 会直接抛错）；分隔线只用于真实语义分组，危险操作单独置底。
 - 支持方向键、Home/End、typeahead、Escape； submenu 有独立打开/关闭与碰撞规则。
 - 选择后通常关闭并还焦触发器；多选菜单可保持打开，但行为必须一致。
 - 菜单打开时 trigger 有 expanded 状态；菜单消失后不遗留 `aria-controls` 指向不存在节点。
@@ -436,8 +454,8 @@ Badge 分两种，不再扩张：
                       [ ⧉ ]
 ```
 
-- 单行、无箭头，padding 3px 8px、radius 6、13px/18px；表面与发丝边界沿用当前 Tooltip。
-- 默认延迟 400ms，间距 6px；连续在同组工具间移动时可缩短后续延迟，避免每次等待。
+- 单行、无箭头，padding 3px 8px、radius 6、13px/18px；`--surface` + `--shadow-raised`（阴影自带发丝环，不再另加 border）。
+- 默认延迟 400ms，间距 6px；应用根部唯一的 `TooltipProvider` 让相邻提示在第一个出现后立即显示。
 - hover 与 focus 显示，Escape 关闭；滚动/尺寸变化时重新定位或关闭。
 - 触屏不依赖 Tooltip；不承载链接、按钮、长说明和完成任务所必需的信息。
 - 长文本省略不利于理解时应改用 Popover，不允许多行 Tooltip 变成小卡片。
@@ -458,13 +476,13 @@ Badge 分两种，不再扩张：
 
 ### 15.2 规格与行为
 
-- 单条最小 44px，icon 18px、正文 14px；surface + hairline，最多四行，过长内容应进入页面错误区。
+- 单条最小 44px，icon 18px、正文 14px；`--surface` + `--shadow-panel-popover`（自带发丝环），图标、首行文字、操作与关闭键中线对齐；过长内容应进入页面错误区。
 - 新提示从底部进入，其余按真实高度平滑移动；reduced motion 下直接更新位置。
-- 成功/信息默认 3 秒，警告默认 5 秒；**目标规范中错误默认不自动消失**，由用户关闭或在对应状态恢复后清除。带 action 的提示不得只给 3 秒操作窗口。
+- 成功/信息默认 3 秒，警告 5 秒，带 action 6 秒；错误不自动消失，由用户关闭或在状态恢复后清除。指针悬停或焦点在提示内时暂停倒计时，离开后按剩余时间继续。
 - polite live region 用于普通反馈，error 使用 alert；流式进度不逐条触发 Toast。
 - 关闭按钮名称“关闭提示”；action 使用明确动词，例如“撤销删除”。
 - 关键失败同时保留字段/页面错误，Toast 只负责补充通知。
-- 移动端左右各 16px，宽度自适应；尊重 safe-area，不遮挡底部主导航和 composer。
+- 位置：右下，宽 360px（窄屏 `100vw - 2rem`），底部 `1rem + safe-area`；小于 1024px 时上移到 `5rem + safe-area`，让出底部导航。有模态框打开时挂进最上层对话框（`useTopModal`），否则会被 inert 和遮罩压住。
 
 ## 16. StatePanel
 
@@ -542,13 +560,13 @@ Badge 分两种，不再扩张：
 | 普通原生 select | Select | 已全部替换；保留值类型和键盘行为 |
 | `SettingsSwitch` | Switch | 保留即时设置语义与行布局 |
 | `SettingsTabs` | Tabs | 设置页保留薄封装：滑动指示器与外部 tabpanel id 契约；新页面直接用 Tabs |
-| `BetaBadge` | Badge quiet | 不改变入口可访问名称 |
-| `Modal` | Dialog | 重写焦点/嵌套/top-layer 行为需回归 |
-| `ConfirmDialog` | ConfirmDialog 通用模式 | 保留业务封装，调整默认焦点和具体文案 |
+| `BetaBadge` | Badge quiet | 未迁移：仍是独立组件 + 全局 `.beta-badge`，见 §21 |
+| `Modal` | Dialog | 已完成：业务只经 `Dialog`；`Modal` 内部负责 top-layer 与 `useTopModal` |
+| `ConfirmDialog` | ConfirmDialog 通用模式 | 已改为 alertdialog、`confirmText` 必填；外壳仍自写，见 §21 |
 | 旧自绘菜单 | `Menu` | 菜单项、字母快捷键、子菜单、模型列表（已全部替换） |
 | 旧自绘面板 | `Popover` 或 `Dialog` | 自由内容用 Popover；模态内容用 Dialog（已全部替换） |
-| `Tooltip` | Tooltip | 保留轻量外观，统一延迟与焦点行为 |
-| `Toast/useToast` | Toast 通用模式 | 可重写实现，所有调用点同步迁移 |
+| `Tooltip` | Tooltip | 已完成：根部唯一 Provider 统一分组延迟 |
+| `Toast/useToast` | Toast 通用模式 | 已完成：调用方式不变；错误不自动消失、悬停暂停、挂进最上层模态框 |
 | `StatePanel` | StatePanel | 保留并收敛 empty/error/page 用法 |
 
 迁移时同步删除旧 class 和死 CSS；不保留 `NewButton`、`ButtonV2` 或永久兼容转发。
@@ -571,3 +589,33 @@ Badge 分两种，不再扩张：
 - [ ] 没有引入 shadcn 默认主题、第二套图标或重复底层。
 - [ ] 领域组件仍保持业务结构，Agent 定位和当前查看内容未受影响。
 - [ ] 旧实现、死 CSS、重复 class 常量和临时适配已删除。
+
+## 21. 已知缺口与待决事项
+
+组件侧已经就绪、但需要设计裁决或调用方配合的项集中在这里。处理完一项就删一项，不在别处重复记录。
+
+### 21.1 待设计裁决
+
+- **SegmentedControl 尺寸**：轨道 40/44px（4px 内衬 + 段高 32/36px），不在 §2.1 刻度内；claude 实测为高 32px、1px 内衬、radius 8、段 radius 6。收敛到 32/38px 会改动八字/合盘表单与设置页布局，需要一次性决定，并同步 `SegmentedChoice`、通知页与解读模式切换。`mode="tabs"` 目前没有调用方。
+- **确认框标题字体**：`ConfirmDialog` 标题是 `font-display` 20px，结构化 `Dialog` 是 18px/500 无衬线；§3.3 只允许 display 字体用于 h1、品牌和状态标题。二选一后统一。
+- **ConfirmDialog 外壳与命名**：仍自写外壳（未复用结构化 Dialog），受控属性叫 `isOpen`/`onClose`，与 `Dialog` 的 `open`/`onOpenChange` 不一致。
+- **结构化 Dialog 的去留**：39 处业务对话框全是 `bare`，结构化模式只有组件测试在用。要么把标准编辑器类对话框逐步迁过去，要么承认 bare 是主路径并精简结构化 API。
+- **Badge**：quiet + 五个 soft 色都没有业务调用；beta 标记仍是 `BetaBadge` + 全局 `.beta-badge`。并入 `Badge quiet` 时注意 `chat-sidebar.css` 用 `transform: none` 覆盖它，而 Tailwind v4 的 `translate-*` 走独立的 `translate` 属性，那条覆盖不会生效。
+- **遮罩令牌**：`--scrim`（45% / 60%）无人使用，对话框遮罩是 `overlays.css` 的字面 `rgba(0, 0, 0, .4)`。保留一个来源。
+- **z-index 顺序**：`--z-toast` 100 < `--z-tooltip` 130 < `--z-popup` 1100，打开的菜单会盖住提示；`--z-dialog` 1200 无人使用（对话框走原生 top layer）。建议 popup < tooltip < toast，并删除 `--z-dialog`。
+- **`--focus-ring-clay`**：未被使用，而且定义在 `:root`，其中的 `var(--focus-ring-bg, var(--background))` 在根元素就已求值，注释所说「可用 `--focus-ring-bg` 覆盖」在子元素上不生效。要用就移进 `@theme inline`，否则删除。
+- **按下态**：§2.4 要求 pressed 稍深填色，共享 `Button`/`IconButton` 尚未实现。
+
+### 21.2 待调用方跟进
+
+- **设置中心**：`settings-page.css` 的 `.settings-segmented*` 覆盖已与共享默认等价，而且暗色滑块用 `--background-tertiary`，比轨道还暗，看起来像凹进去；删掉这组规则和 `SegmentedChoice` 的 `indicatorClassName`。`.app-modal.collab-dialog :where(input, textarea, .settings-combobox):focus-visible { outline: none; }` 是给已删除的对话框焦点规则打的补丁，也可删除。要中性焦点就在 `.collab-dialog` 上设 `--control-focus: var(--foreground-secondary)`，字段边框与外圈会一起变。
+- **自绘分段控件**：通知页与 `InterpretationModeToggle` 紧凑模式用 `indicator={false}` + 自有类重画轨道和选中态，但没覆盖高度，轨道仍被默认的 `h-11` 撑到 44px：通知页 32px 的选项贴顶、下方空出 8px，解读模式的小号选项上下各空约 10px。定时任务的 `.sched-segmented` 同样自绘。改用默认外观，或至少修正高度。
+- **音浪补丁**：`SanshiFormControls` 用 `[&_.sound-wave-bar]:bg-on-accent` 修补实色按钮里的音浪，改为 `SoundWaveLoader tone="current"`。
+- **CopyTextModal**：用 `ConfirmDialog showActions={false}` 承载非确认内容，应改用 `Dialog`。
+- **工作区最大化键**：`.agent-icon-button` 带 `aria-pressed`，最大化时会显示陶土淡底；不需要就在领域类里写明 `background`。
+- **overlays.css**：仍混有全部占术、搜索面板、用量等领域样式，应迁回各自组件目录；其中 `.all-divinations-pin` 已显式 `background: transparent`，避免共享 IconButton 的开启底色。
+
+### 21.3 测试跟进
+
+- 已覆盖：确认框的 `alertdialog` 定位、`SegmentedControl` 跳过禁用段、子菜单字母快捷键不与父菜单串扰、对话框内 Toast 的 portal 与关闭。
+- 仍缺自动化覆盖：字段聚焦外圈与 invalid 换色、对话框内输入不再叠加 2px outline、菜单/弹层打开时触发器保持 hover 外观、`aria-pressed` 开启态、Toast 悬停暂停、实色按钮里的音浪颜色。

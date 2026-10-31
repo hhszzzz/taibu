@@ -42,11 +42,11 @@
 目前仓库已有：
 
 - Tailwind v4、语义令牌、明暗主题、字体档位与减少动画支持；
-- `Modal`、`Dialog`、`Toast`、`Tooltip`、`Select`、`Menu`、`Popover`、`StatePanel` 等共享实现；
+- `Dialog`（`Modal` 只是其内部的 top-layer 表面）、`Toast`、`Tooltip`、`Select`、`Menu`、`Popover`、`StatePanel` 等共享实现；
 - TypeScript strict、ESLint、架构守卫和分层测试；
 - Better Auth、ScopedDb、PostgreSQL RLS、Redis/BullMQ 与 Worker 边界。
 
-shadcn registry + Base UI 已用于基础组件建设：设置中心、后台管理、通用业务页、聊天菜单/浮层与表单控件已迁移；`src/components/ui` 之外不再有原生按钮、文本输入或 textarea。聊天 composer 与 Agent 工作区的实测几何、盘面与占术专用控件保留领域样式，但交互统一走共享组件。可用组件、覆盖范围与例外以 `components.md` 与 `src/components/ui` 当前源码为准；必须保留太卜视觉令牌，不能导入 shadcn 默认主题把全站换成另一套皮肤。
+Base UI + 太卜令牌已用于基础组件建设（`components.json` 保留了 shadcn CLI 配置，组件源码均已按太卜令牌改写）：设置中心、后台管理、通用业务页、聊天菜单/浮层与表单控件已迁移；`src/components/ui` 之外不再有原生按钮、文本输入或 textarea。聊天 composer 与 Agent 工作区的实测几何、盘面与占术专用控件保留领域样式，但交互统一走共享组件。可用组件、覆盖范围与例外以 `components.md` 与 `src/components/ui` 当前源码为准；必须保留太卜视觉令牌，不能导入 shadcn 默认主题把全站换成另一套皮肤。
 
 ## 5. 变更的基本工作流
 
@@ -81,7 +81,7 @@ shadcn registry + Base UI 已用于基础组件建设：设置中心、后台管
 | --- | --- |
 | 文档 | 检查链接、事实与当前代码一致；目标方案明确标注 |
 | 纯文案/局部样式 | 相关页面手动验证，覆盖明暗主题与受影响视口 |
-| 共享 UI/交互 | 浏览器行为回归 + 真实页面键盘/响应式/视觉走查 |
+| 共享 UI/交互 | 浏览器行为回归 + 真实页面键盘/响应式/视觉走查（范围以 [测试与验收 §3](testing.md#3-变更测试矩阵) 为准） |
 | `src/lib/*` 业务逻辑 | 新增或更新单元/契约测试 |
 | `src/app/api/*` | 路由测试，成功、失败、权限边界至少覆盖两类；鉴权/积分/会员/限流需专项回归 |
 | 数据库/RLS | 隔离 PostgreSQL 契约、备份/升级验证、当前 SQL 与生成类型同步 |

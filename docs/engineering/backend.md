@@ -54,6 +54,13 @@
 
 用户提供的 `userId`、`conversationId`、`chartId`、`runId`、文件 id 都只是待验证输入，不是授权依据。禁止以“id 不可猜”替代归属校验。
 
+### 3.3 请求来源
+
+Better Auth 的会话 Cookie 是 `SameSite=Lax`，跨站的顶层 GET 导航仍会带上它。因此：
+
+- GET/HEAD 必须无副作用；写入、扣费、发任务、发邮件只接受 POST/PUT/PATCH/DELETE。
+- 目前只有 Better Auth 自己的端点校验 `trustedOrigins`，应用 API 没有来源检查。Cookie 鉴权的写接口应该补 `Origin`（或 `Sec-Fetch-Site`）校验，防同站子域和不遵守 SameSite 的客户端。
+
 ## 4. 输入、请求体与输出
 
 ### 4.1 输入校验
@@ -63,6 +70,7 @@
 - 对未知 action、枚举和模式明确拒绝，不静默落到高权限或高成本默认分支。
 - 数值先处理 `NaN`、Infinity、小数、负数和上限，字符串先明确是否 trim、是否允许空串。
 - 批量接口限制数量，文本/向量/搜索限制长度与复杂度，上传使用现有流式字节限制。
+- JSON 请求体同样要限字节：`request.json()` 不设上限，目前只有反向代理的 12MB（`deploy/Caddyfile*` 的 `request_body max_size`）兜底。新写或触碰的路由先用 `src/lib/api-utils.ts` 的 `readRequestBytes(request, maxBytes)` 按接口合理上限读取再解析，超限返回 413。
 - 日期时间保留时区和 DST 语义；不能用服务器本地时区隐式解释用户出生时间。
 - 不把整个 request body 直接 spread 到 DB、模型工具参数或命令执行参数。
 
@@ -70,6 +78,7 @@
 
 - 成功响应使用 `jsonOk` 或现有流式响应，错误使用 `jsonError`；同一路由的成功/失败形状保持稳定。
 - 只返回客户端需要的字段，密钥、内部配置、其他用户字段和调试信息不得进入响应。
+- 含用户私有数据的响应不得进入共享缓存：显式设置 `Cache-Control: private, no-store`（或等价头），不依赖框架或代理的默认值；`jsonOk` 目前不加任何缓存头。
 - 列表明确分页、排序和空结果语义；时间格式、id 类型、可空字段和数值单位保持一致。
 - 修改公共响应时同步类型、调用方和路由测试。新增字段也应评估旧调用方是否把它误当完整对象。
 - 不通过 HTTP 200 + 隐晦错误文本代替明确失败，除非既有流式协议已定义错误事件且有测试覆盖。

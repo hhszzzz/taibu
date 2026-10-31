@@ -39,6 +39,8 @@ Base UI 的当前包名与 API 以实施时官方文档为准。React Aria Compo
 
 目标迁移完成的标准不是“目录里出现 shadcn 文件”，而是：公共交互契约一致、业务调用完成迁移、旧实现和死样式删除、回归验证通过。
 
+现状：`src/components/ui` 的组件是按太卜令牌在 Base UI 上实现的，没有原样保留 registry 皮肤。`components.json` 的 `tailwind.css` 指向 `src/app/globals.css` 且 `cssVariables: true`，`shadcn add` 可能往 `globals.css` 写入 shadcn 默认变量（`--primary` 等）；每次 add 后都要审查并回退这类改动，只保留组件源码。
+
 ## 3. 设计令牌
 
 ### 3.1 事实来源
@@ -62,6 +64,8 @@ Base UI 的当前包名与 API 以实施时官方文档为准。React Aria Compo
 | 状态 | `--success`、`--warning`、`--danger` | 必须同时有文字/图标，不只靠颜色 |
 | 五行/四化 | `--wx-*`、`--element-*`、`--hua-*` | 仅使用既定语义，不在领域组件另配色 |
 
+危险实色（按钮底）用 `--danger-fill` + `--on-danger`，明暗同值；`--danger` 在暗色主题是浅粉文字色，只用于文字、描边与淡底。
+
 通用 TSX/CSS 不写新的十六进制、RGB/HSL 字面色。图表渐变、SVG 和品牌资源确有特殊颜色时，使用明确的领域令牌或资源规范，并在评审中说明；不能用“图表例外”绕过普通界面按钮、文字的语义色要求。
 
 ### 3.3 排印
@@ -77,8 +81,8 @@ Base UI 的当前包名与 API 以实施时官方文档为准。React Aria Compo
 - 常规控件高度沿用 `--control-h`（当前 32px）；紧凑菜单行沿用 `--row-h`，抽屉行沿用 `--row-h-drawer`。
 - 圆角使用 Tailwind 映射的 `--radius-*`，区分 chip、控件、行、卡片和 composer；不随机增加相邻近似值。
 - 描边使用 `--hairline` / `--hairline-color`。当前 0.5px 发丝线是产品设计的一部分，不应被 shadcn 默认 1px border 全面替换。
-- 阴影使用 `--shadow-panel-*`、`--shadow-raised` 等语义。普通内容区不随意浮起，浮层阴影不能与页面卡片混用。
-- 浮层层级使用 `--z-toast`、`--z-tooltip`、`--z-popup`、`--z-dialog`；不同时靠更大的任意 z-index 解决嵌套。
+- 阴影使用 `--shadow-panel-*`、`--shadow-raised`、`--shadow-thumb`（分段/标签滑块）等语义。普通内容区不随意浮起，浮层阴影不能与页面卡片混用。`--shadow-panel-*` 与 `--shadow-raised` 已自带发丝环，用它们的表面不再另加 border，否则边缘会叠成双线。
+- 浮层层级使用 `--z-toast`、`--z-tooltip`、`--z-popup`；不同时靠更大的任意 z-index 解决嵌套。原生 `<dialog>` 的 `showModal()` 处于 top layer，任何 z-index 都盖不过它，而且它之外的文档全部 inert：对话框内的浮层与全局提示必须挂进对话框（`Select`/`Menu`/`Popover`/`Tooltip` 自动处理，全局浮层用 `useTopModal`）。现有顺序与无人使用的 `--z-dialog` 见 [组件 §21](components.md#21-已知缺口与待决事项)。
 - 间距优先使用既有 Tailwind 刻度，形成 4/8px 等稳定节奏；避免连续出现 13、17、19px 等无体系偏移。
 
 ### 3.5 动效
@@ -124,7 +128,7 @@ Base UI 的当前包名与 API 以实施时官方文档为准。React Aria Compo
 - 普通动作用 `<button type="button">` 语义；表单提交显式 `type="submit"`，不依赖浏览器默认推断。
 - 主按钮每个操作区原则上最多一个；危险按钮只用于真正破坏性或高成本动作。
 - 图标按钮必须有可访问名称；Tooltip 不能代替 `aria-label`。
-- loading 时保留原宽度，避免布局跳动；不得只显示无名称 spinner。
+- loading 时高度不变；loader 加在文字前、`loadingText` 也可能不等长，宽度会变，会推动相邻控件时由调用方给 `min-w`。不得只显示无名称 spinner；loader 颜色跟随按钮文字色。
 - Enter/Space 激活，禁用态不进入 Tab 顺序；链接导航使用 Link/`a`，不要伪装成按钮。
 
 ### 5.2 Input、Textarea 与 Field
@@ -163,7 +167,7 @@ Base UI 的当前包名与 API 以实施时官方文档为准。React Aria Compo
 - 有明确标题，必要时有关联描述；打开后焦点进入合理位置，Tab 不逃出模态区域，关闭后返回触发元素或合理后继元素。
 - Escape、遮罩点击和关闭按钮行为一致；busy/危险提交中是否禁止关闭必须明确，不能误关后仍产生不可见写入。
 - 内容可滚动，标题/操作区在窄屏可达；软键盘和安全区域不能遮挡主操作。
-- ConfirmDialog 只用于不可逆、破坏性、高成本或用户可能误解后果的动作。说明具体对象与后果，主按钮写“删除记录”等动作，不写笼统“确定”。
+- ConfirmDialog 只用于不可逆、破坏性、高成本或用户可能误解后果的动作。说明具体对象与后果，主按钮写“删除记录”等动作，不写笼统“确定”（`confirmText` 在类型上必填）。带确认按钮时为 `role="alertdialog"`。
 - 不用 Dialog 展示普通页面导航或可内联完成的简单说明。
 
 ### 5.7 Tooltip 与 Toast
@@ -171,7 +175,7 @@ Base UI 的当前包名与 API 以实施时官方文档为准。React Aria Compo
 - Tooltip 只放简短补充说明，不放交互控件或完成任务所必需的信息；hover 与 focus 都可触发，Escape 可关闭，触屏不能依赖 hover。
 - Toast 用于低风险、短反馈，不承载必须阅读的长错误、表单校验或需要用户决定的关键流程。
 - 成功、失败、警告样式与可访问通知语义一致；连续事件不无限堆叠或遮挡主操作。
-- 关键错误必须同时留在对应页面/字段附近，不能几秒后完全消失。
+- 关键错误必须同时留在对应页面/字段附近，不能几秒后完全消失。`Toast` 的错误提示默认不自动消失，悬停或聚焦时暂停倒计时；有模态框打开时提示挂进最上层对话框，否则会被遮罩压住且无法关闭。
 
 ### 5.8 StatePanel 与 Loading
 

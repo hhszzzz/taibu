@@ -16,6 +16,7 @@
 
 | 文件/区域 | 职责 |
 | --- | --- |
+| `bootstrap/00-roles.sql` | 超级用户执行的引导：角色、schema、扩展与库级默认值；幂等，可在每次部署前重跑。密码不在这里设置，由 `scripts/db/bootstrap.mjs` 从环境变量写入 |
 | `schema.sql` | 新库的表、列与约束定义，不是任意已有库的自动升级脚本 |
 | `functions.sql` | 函数与视图当前定义 |
 | `triggers.sql` | 触发器 |

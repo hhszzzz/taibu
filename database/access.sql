@@ -652,6 +652,7 @@ GRANT ALL ON FUNCTION public.import_ming_records_and_notes(p_records jsonb, p_no
 
 GRANT ALL ON FUNCTION public.increment_ai_chat_count(user_id uuid, amount integer) TO authenticated;
 
+GRANT ALL ON FUNCTION public.is_admin_user() TO anon;
 GRANT ALL ON FUNCTION public.is_admin_user() TO authenticated;
 
 GRANT ALL ON FUNCTION public.kb_replace_source_entries(p_kb_id uuid, p_source_type text, p_source_id text, p_entries jsonb, p_archive boolean) TO authenticated;

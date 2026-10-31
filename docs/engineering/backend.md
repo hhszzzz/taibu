@@ -61,6 +61,14 @@ Better Auth 的会话 Cookie 是 `SameSite=Lax`，跨站的顶层 GET 导航仍�
 - GET/HEAD 必须无副作用；写入、扣费、发任务、发邮件只接受 POST/PUT/PATCH/DELETE。
 - 目前只有 Better Auth 自己的端点校验 `trustedOrigins`，应用 API 没有来源检查。Cookie 鉴权的写接口应该补 `Origin`（或 `Sec-Fetch-Site`）校验，防同站子域和不遵守 SameSite 的客户端。
 
+### 3.4 功能开关
+
+用户可见模块由管理员开关控制，id 定义在 `src/lib/app-settings.ts` 的 `FEATURE_MODULE_IDS`，状态以 `feature_disabled:<id>` 存在 `app_settings`；没有记录表示开启。
+
+- 服务端：用户接口入口用 `src/lib/feature-gate-utils.ts` 的 `ensureFeatureEnabledFresh(id)` 拦截。它走 `readFeatureModuleStateFresh`（不带宽松缓存），关闭返回 `403 FEATURE_DISABLED`，开关读不出来返回 `503 FEATURE_STATE_UNAVAILABLE`（fail closed）。Agent 侧在提交、工具调用、技能/连接器/定时任务写入与执行前分别检查；只检查页面入口不够，开关不能靠隐藏按钮实现。
+- 前端：`FeatureGate` / `useFeatureToggles` 读应用 bootstrap；导航项 `featureId` 决定隐藏，设置页 `SettingsCenterFlags` 决定禁用。新增开关时两侧一起接，缺一侧即为只藏 UI。
+- 新增开关的步骤：`FEATURE_MODULE_IDS` 加 id、`getFeatureModules` 的管理标签、拦截对应 API、前端入口/页面、路由测试用 `mockAIFeatureState(t)` 放行，最后在设置中心「功能开关」确认可拨动。
+
 ## 4. 输入、请求体与输出
 
 ### 4.1 输入校验

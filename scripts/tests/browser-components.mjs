@@ -98,8 +98,9 @@ import { Switch } from '@/components/ui/Switch';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
-import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuShortcut, MenuTrigger } from '@/components/ui/Menu';
+import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { useToast } from '@/components/ui/Toast';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { QuoteSelection } from '@/components/chat/QuoteSelection';
@@ -521,6 +522,9 @@ function UiPrimitivesProbe() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [clicks, setClicks] = useState(0);
+  const [period, setPeriod] = useState('day');
+  const [shortcutAction, setShortcutAction] = useState('');
+  const { showToast } = useToast();
   const nameRef = useRef(null);
   const options = [{ value: 'brief', label: '简洁' }, { value: 'standard', label: '标准' }, { value: 'full', label: '完整' }];
   return <section data-testid="ui-primitives" aria-label="共享组件探针">
@@ -531,6 +535,9 @@ function UiPrimitivesProbe() {
     <SegmentedControl ariaLabel="分段探针" value={segment} onChange={setSegment}
       options={[{ value: 'brief', label: '简洁' }, { value: 'standard', label: '标准' }, { value: 'full', label: '完整' }]} />
     <output data-testid="ui-segment">{segment}</output>
+    <SegmentedControl ariaLabel="禁用项探针" value={period} onChange={setPeriod}
+      options={[{ value: 'day', label: '日' }, { value: 'week', label: '周', disabled: true }, { value: 'month', label: '月' }]} />
+    <output data-testid="ui-period">{period}</output>
     <Checkbox aria-label="订阅提醒" checked={subscribed} onCheckedChange={setSubscribed} />
     <Switch aria-label="任务助手记忆" checked={enabled} onCheckedChange={setEnabled} />
     <Tabs value={tab} onValueChange={setTab}>
@@ -543,6 +550,13 @@ function UiPrimitivesProbe() {
       <MenuItem onClick={() => setMenuAction('renamed')}>重命名</MenuItem><MenuItem onClick={() => setMenuAction('shared')}>分享</MenuItem>
     </MenuContent></Menu>
     <output data-testid="ui-menu-action">{menuAction}</output>
+    <Menu><MenuTrigger render={<Button variant="secondary">打开快捷键菜单</Button>} /><MenuContent letterShortcuts>
+      <MenuItem onClick={() => setShortcutAction('renamed')}>重命名<MenuShortcut>R</MenuShortcut></MenuItem>
+      <MenuSub><MenuSubTrigger>更多操作</MenuSubTrigger><MenuSubContent>
+        <MenuItem onClick={() => setShortcutAction('reported')}>举报</MenuItem>
+      </MenuSubContent></MenuSub>
+    </MenuContent></Menu>
+    <output data-testid="ui-shortcut-action">{shortcutAction}</output>
     <Tooltip label="复制回答"><button type="button" aria-label="复制回答">复制</button></Tooltip>
     <Button variant="secondary" onClick={() => setDialogOpen(true)}>打开组件对话框</Button>
     <Dialog open={dialogOpen} onOpenChange={setDialogOpen} title="编辑技能" description="修改共享组件的嵌套行为" busy={busy}
@@ -556,6 +570,7 @@ function UiPrimitivesProbe() {
       <Menu><MenuTrigger render={<Button variant="secondary" size="sm">弹层内菜单</Button>} /><MenuContent>
         <MenuItem>内层项</MenuItem>
       </MenuContent></Menu>
+      <Button variant="secondary" size="sm" onClick={() => showToast('error', '弹层内保存失败')}>弹层内报错</Button>
     </Dialog>
   </section>;
 }
@@ -1794,7 +1809,7 @@ export async function run(existingPage, bundlePath) {
       check(`Announcement ${button} invalidates once (observed ${effects.length})`, JSON.stringify(effects) === JSON.stringify([{ queryKey: ['announcements'] }]));
     }
     await announcementPanel.getByRole('button', { name: '返回历史', exact: true }).click();
-    const deleteDialog = page.getByRole('dialog');
+    const deleteDialog = page.getByRole('alertdialog');
     await announcementPanel.getByTitle('删除', { exact: true }).click();
     await deleteDialog.getByRole('button', { name: '取消', exact: true }).click();
     check('Announcement deletion waits for confirmation', !requests.some(item => item.pathname === '/api/admin/announcements/announcement-fixture' && item.method === 'DELETE'));
@@ -1839,7 +1854,7 @@ export async function run(existingPage, bundlePath) {
       && item.body.count === 2 && item.body.keyType === 'credits' && item.body.creditsAmount === 30) && await keyPanel.getByText('已生成 2 个激活码', { exact: true }).isVisible()
       && await keyPanel.getByRole('button', { name: '全部 4', exact: true }).getAttribute('aria-pressed') === 'true');
     await keyPanel.getByRole('button', { name: '删除激活码 sk-fixtureused00002', exact: true }).click();
-    await page.getByRole('dialog').getByRole('button', { name: '确认删除', exact: true }).click();
+    await page.getByRole('alertdialog').getByRole('button', { name: '确认删除', exact: true }).click();
     await until(() => !document.querySelector('[data-testid="activation-keys"] table')?.textContent.includes('sk-fixtureused00002'));
     check('Activation key deletion confirms first and removes only that key', requests.some(item => item.pathname === '/api/activation-keys' && item.method === 'DELETE' && item.search === '?id=key-used')
       && await keyPanel.getByText('sk-fixtureunused001', { exact: true }).isVisible());
@@ -1934,7 +1949,7 @@ export async function run(existingPage, bundlePath) {
         ['archivist', { inherit: false, allow: ['data', 'mcp:notes'], deny: ['web', 'read_attachment'] }, ['case-review'], 'fixture-analysis', ['parallel']]));
     await roleList.getByText('仅协作成员', { exact: true }).waitFor();
     await rolePanel.getByRole('button', { name: '删除「档案员」' }).click();
-    await page.getByRole('dialog', { name: '删除角色' }).getByRole('button', { name: '删除', exact: true }).click();
+    await page.getByRole('alertdialog', { name: '删除角色' }).getByRole('button', { name: '删除', exact: true }).click();
     await until(() => !document.querySelector('[data-testid="agent-profiles"]')?.textContent.includes('档案员'));
     check('Deleting a custom role confirms first', requests.some(entry => entry.pathname === '/api/admin/agent-profiles/archivist' && entry.method === 'DELETE'));
     // Explicitly remount while a real loadModels receipt is held. React's
@@ -2409,7 +2424,7 @@ export async function run(existingPage, bundlePath) {
     check('History deletion event fences an already captured initial refresh snapshot',
       await historyPage.locator('[data-history-id="alice-history-3"]').count() === 0);
     await historyPage.getByRole('button', { name: 'Delete history alice-history-2', exact: true }).click();
-    await page.getByRole('dialog', { name: '删除这条记录？', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
+    await page.getByRole('alertdialog', { name: '删除这条记录？', exact: true }).getByRole('button', { name: '删除', exact: true }).click();
     await historyPage.locator('[data-history-id="alice-history-2"]').waitFor({ state: 'detached' });
     check('Real history card action and confirmation still delete through the production facade',
       requests.some(item => item.pathname === '/api/history-summaries' && item.method === 'DELETE' && new URLSearchParams(item.search).get('id') === 'alice-history-2'));
@@ -4013,12 +4028,32 @@ export async function run(existingPage, bundlePath) {
       await segmentGroup.getByRole('radio', { name: '标准', exact: true }).getAttribute('aria-checked') === 'true'
       && await segmentGroup.getByRole('radio', { name: '标准', exact: true }).evaluate(element => element === document.activeElement)
       && await primitives.getByTestId('ui-segment').textContent() === 'standard');
+    const periodGroup = primitives.getByRole('radiogroup', { name: '禁用项探针', exact: true });
+    await periodGroup.getByRole('radio', { name: '日', exact: true }).focus();
+    await page.keyboard.press('ArrowRight');
+    check('SegmentedControl skips a disabled segment with the arrow keys',
+      await primitives.getByTestId('ui-period').textContent() === 'month'
+      && await periodGroup.getByRole('radio', { name: '月', exact: true }).evaluate(element => element === document.activeElement));
     const subscribeBox = primitives.getByRole('checkbox', { name: '订阅提醒', exact: true });
     await subscribeBox.click();
     check('Checkbox toggles through its shared role', await subscribeBox.getAttribute('aria-checked') === 'true');
     await primitives.getByRole('button', { name: '打开组件菜单', exact: true }).click();
     await page.getByRole('menu').waitFor(); await page.keyboard.press('ArrowDown'); await page.keyboard.press('Enter');
     check('Menu commands work from the keyboard', await primitives.getByTestId('ui-menu-action').textContent() === 'renamed');
+    await primitives.getByRole('button', { name: '打开快捷键菜单', exact: true }).click();
+    await page.getByRole('menu').waitFor();
+    await page.getByRole('menuitem', { name: '更多操作' }).focus();
+    await page.keyboard.press('ArrowRight');
+    const reportItem = page.getByRole('menuitem', { name: '举报', exact: true });
+    await reportItem.waitFor();
+    await until(() => document.activeElement?.closest('[role="menu"]')?.textContent === '举报');
+    await page.keyboard.press('r');
+    check('A letter pressed inside a submenu does not trigger the parent menu shortcut', await primitives.getByTestId('ui-shortcut-action').textContent() === '');
+    await page.keyboard.press('ArrowLeft');
+    await reportItem.waitFor({ state: 'detached' });
+    await page.keyboard.press('r');
+    await until(() => document.querySelector('[data-testid="ui-shortcut-action"]')?.textContent === 'renamed');
+    check('The parent menu letter shortcut still works in its own panel', await primitives.getByTestId('ui-shortcut-action').textContent() === 'renamed');
     await primitives.getByRole('button', { name: '复制回答', exact: true }).focus();
     await page.getByRole('tooltip').filter({ hasText: '复制回答' }).waitFor();
     await page.keyboard.press('Escape');
@@ -4053,6 +4088,14 @@ export async function run(existingPage, bundlePath) {
     await page.keyboard.press('Escape');
     await nestedMenu.waitFor({ state: 'detached' });
     check('Escape closes only the nested menu', await componentDialog.isVisible());
+    await componentDialog.getByRole('button', { name: '弹层内报错', exact: true }).click();
+    const dialogToast = page.getByRole('alert').filter({ hasText: '弹层内保存失败' });
+    await dialogToast.waitFor();
+    check('A toast raised inside a dialog renders in it instead of behind the inert top layer',
+      await dialogToast.evaluate(element => element.closest('dialog') !== null));
+    await dialogToast.getByRole('button', { name: '关闭提示', exact: true }).click();
+    await dialogToast.waitFor({ state: 'detached' });
+    check('A toast inside a dialog can be dismissed without closing the dialog', await componentDialog.isVisible());
     await componentDialog.getByRole('button', { name: '开始保存', exact: true }).click();
     await page.keyboard.press('Escape');
     check('Dialog remains open while a busy operation is pending', await componentDialog.isVisible());

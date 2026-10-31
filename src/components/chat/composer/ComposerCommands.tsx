@@ -24,7 +24,8 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
     const [preview, setPreview] = useState<{ owner: string; draftKey?: string; before: string; after: string } | null>(null);
     const [polishing, setPolishing] = useState(false);
     const [undo, setUndo] = useState<{ owner: string; draftKey?: string; before: string; after: string } | null>(null);
-    const scope = useRef({ userId, draftKey, text }); scope.current = { userId, draftKey, text };
+    const scope = useRef({ userId, draftKey, text });
+    useEffect(() => { scope.current = { userId, draftKey, text }; });
     const history = () => { try { const value = JSON.parse(localStorage.getItem(`taibu.input-history:${userId ?? 'visitor'}`) ?? '[]'); return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string').slice(0, 50) : []; } catch { return []; } };
     const remember = () => {
         if (!text.trim() || /^[\/、]/u.test(text)) return;
@@ -95,7 +96,13 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         }
         return false;
     };
-    useEffect(() => { historyCursor.current = -1; setPreview(null); setUndo(null); }, [userId, draftKey]);
+    const [prevScopeKey, setPrevScopeKey] = useState({ userId, draftKey });
+    if (prevScopeKey.userId !== userId || prevScopeKey.draftKey !== draftKey) {
+        setPrevScopeKey({ userId, draftKey });
+        setPreview(null);
+        setUndo(null);
+    }
+    useEffect(() => { historyCursor.current = -1; }, [userId, draftKey]);
     const ui = <>
         {open && <ul aria-label="输入命令" className="composer-commands">{matches.map((command, index) => <li key={command.id}><Button unstyled type="button" data-selected={selected === index || undefined} onMouseDown={event => event.preventDefault()} onClick={() => execute(command)}><code>/{command.id}</code><span>{command.label}</span></Button></li>)}</ul>}
         <Dialog bare open={Boolean(preview && preview.owner === userId && preview.draftKey === draftKey)} onClose={() => setPreview(null)} labelledBy="polish-title" className="agent-question-dialog"><div className="flex justify-between"><h2 id="polish-title">润色预览</h2><Button unstyled type="button" aria-label="关闭润色预览" onClick={() => setPreview(null)}><X size={18} /></Button></div><div className="my-4 max-h-[50dvh] overflow-auto"><MarkdownContent content={preview?.after ?? ''} /></div><Button unstyled type="button" className="agent-answer-button" disabled={preview?.before !== text} onClick={() => { if (!preview || preview.before !== text) return; change(preview.after); setUndo({ owner: preview.owner, draftKey: preview.draftKey, before: preview.before, after: preview.after }); setPreview(null); }}>替换输入</Button>{preview?.before !== text && <p className="text-sm">草稿已改变，请重新润色。</p>}</Dialog>

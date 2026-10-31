@@ -48,6 +48,17 @@ const eslintConfig = defineConfig([
     },
   },
   {
+    // Underscore marks a parameter or binding kept for its position or destructuring-only use.
+    rules: {
+      "@typescript-eslint/no-unused-vars": ["warn", {
+        argsIgnorePattern: "^_",
+        varsIgnorePattern: "^_",
+        caughtErrorsIgnorePattern: "^_",
+        destructuredArrayIgnorePattern: "^_",
+      }],
+    },
+  },
+  {
     // eslint-config-next 16.4 enables the React Compiler lint rules as errors.
     // The existing codebase trips them (mostly setState-in-effect); keep them
     // visible as warnings so the framework patch upgrade stays behaviour-neutral.

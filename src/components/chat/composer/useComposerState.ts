@@ -144,44 +144,50 @@ export function useComposerState(opts: UseComposerStateOptions) {
     // --- Effects ---
     // Identity changes invalidate requests before paint; cached values are only placeholders.
     useLayoutEffect(() => {
-        const previousUserId = mentionLifecycle.current?.userId;
-        if (previousUserId && previousUserId !== userId) {
-            try {
-                for (const key of Object.values(getMentionCacheKeys(previousUserId))) removeLocalCache(key);
-            } catch {
-                // Cache availability cannot prevent account isolation in memory.
-            }
-        }
-        const scope = { identity: mentionIdentity, userId: userId ?? null, controller: new AbortController() };
-        mentionLifecycle.current = scope;
-        setMentionOwnerIdentity(mentionIdentity);
-        setMentionDataSources([]);
-        setMentionKnowledgeBases([]);
-        setMentionDataSourceErrors([]);
-        setMentionLoadError(null);
-        setMentionLoading(false);
-
-        if (userId) {
-            const { dataKey, kbKey, legacyDataKey, legacyKbKey } = getMentionCacheKeys(userId);
-            removeLocalCache(legacyDataKey);
-            removeLocalCache(legacyKbKey);
-            // Hydrate synchronously, before starting this scope's authoritative request.
-            // No queued cache microtask may outlive a refresh or restore a previous account.
-            const cachedDs = canMentionDataSources
-                ? readMentionCache<{ items: DataSourceSummary[]; errors?: DataSourceLoadError[] }>(dataKey) : null;
-            const cachedKb = canUseKnowledgeBase ? readMentionCache<KnowledgeBaseSummary[]>(kbKey) : null;
-            if (cachedDs?.items) {
-                setMentionDataSources(cachedDs.items);
-                setMentionDataSourceErrors(cachedDs.errors || []);
-            }
-            if (cachedKb) setMentionKnowledgeBases(cachedKb);
-            void refreshMentionData(true);
-        }
-
+        let mounted = true;
+        let scope: { controller: AbortController } | null = null;
         const onInvalidate = () => { void refreshMentionData(true); };
         window.addEventListener(DATA_INDEX_INVALIDATED_EVENT, onInvalidate);
+        void Promise.resolve().then(() => {
+            if (!mounted) return;
+            const previousUserId = mentionLifecycle.current?.userId;
+            if (previousUserId && previousUserId !== userId) {
+                try {
+                    for (const key of Object.values(getMentionCacheKeys(previousUserId))) removeLocalCache(key);
+                } catch {
+                    // Cache availability cannot prevent account isolation in memory.
+                }
+            }
+            const nextScope = { identity: mentionIdentity, userId: userId ?? null, controller: new AbortController() };
+            scope = nextScope;
+            mentionLifecycle.current = nextScope;
+            setMentionOwnerIdentity(mentionIdentity);
+            setMentionDataSources([]);
+            setMentionKnowledgeBases([]);
+            setMentionDataSourceErrors([]);
+            setMentionLoadError(null);
+            setMentionLoading(false);
+
+            if (userId) {
+                const { dataKey, kbKey, legacyDataKey, legacyKbKey } = getMentionCacheKeys(userId);
+                removeLocalCache(legacyDataKey);
+                removeLocalCache(legacyKbKey);
+                // Hydrate synchronously, before starting this scope's authoritative request.
+                // No queued cache microtask may outlive a refresh or restore a previous account.
+                const cachedDs = canMentionDataSources
+                    ? readMentionCache<{ items: DataSourceSummary[]; errors?: DataSourceLoadError[] }>(dataKey) : null;
+                const cachedKb = canUseKnowledgeBase ? readMentionCache<KnowledgeBaseSummary[]>(kbKey) : null;
+                if (cachedDs?.items) {
+                    setMentionDataSources(cachedDs.items);
+                    setMentionDataSourceErrors(cachedDs.errors || []);
+                }
+                if (cachedKb) setMentionKnowledgeBases(cachedKb);
+                void refreshMentionData(true);
+            }
+        });
         return () => {
-            scope.controller.abort();
+            mounted = false;
+            scope?.controller.abort();
             mentionRequest.current?.abort();
             window.removeEventListener(DATA_INDEX_INVALIDATED_EVENT, onInvalidate);
         };

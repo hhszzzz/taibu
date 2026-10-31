@@ -100,7 +100,7 @@ export function CreditTransactionsPanel({ pageSize = 5, refreshKey = 0 }: Credit
 
   useEffect(() => {
     if (sessionLoading) return;
-    void fetchTransactions(visibleCount);
+    void Promise.resolve().then(() => fetchTransactions(visibleCount));
   }, [fetchTransactions, refreshKey, sessionLoading, visibleCount]);
 
   const formatDate = (dateStr: string) => new Date(dateStr).toLocaleString('zh-CN', {

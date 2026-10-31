@@ -8,7 +8,7 @@
  */
 'use client';
 
-import { useState, useEffect, useCallback, useLayoutEffect, useMemo, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ChevronRight, Search, MessageSquare, SearchX } from 'lucide-react';
@@ -96,6 +96,11 @@ function defaultHistoryFilter(item: HistorySummaryItem, query: string) {
 }
 
 /* ---------- 主组件 ---------- */
+/** One rendered row; kept out of the page's render body so the list does not call a ref-closing renderer inline. */
+function HistoryItem({ item, render }: { item: HistorySummaryItem; render: (item: HistorySummaryItem) => ReactNode }) {
+    return <li>{render(item)}</li>;
+}
+
 export function HistoryPageTemplate(config: HistoryPageConfig) {
     const {
         sourceType, title, subtitle,
@@ -128,13 +133,15 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     const navItem = getNavItemById(sourceType);
     const resolvedActionHref = actionHref || navItem?.href || basePath;
 
-    useLayoutEffect(() => {
+    const [prevResetKey, setPrevResetKey] = useState({ sourceType, userId: user?.id });
+    if (prevResetKey.sourceType !== sourceType || prevResetKey.userId !== user?.id) {
+        setPrevResetKey({ sourceType, userId: user?.id });
         setDeleteConfirmId(null);
         setKbModalOpen(false);
         setKbTarget(null);
         setViewingId(null);
         setSearchQuery('');
-    }, [sourceType, user?.id]);
+    }
 
     useEffect(() => {
         if (!sessionLoading && !user?.id) router.push(basePath);
@@ -362,11 +369,11 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                         )
                     ) : layout === 'grid' ? (
                         <ul className="grid grid-cols-[repeat(auto-fill,minmax(17.5rem,1fr))] gap-3 md:gap-4">
-                            {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
+                            {filteredItems.map(item => <HistoryItem key={item.id} item={item} render={renderItem} />)}
                         </ul>
                     ) : (
                         <ul className={renderCard ? 'flex flex-col gap-3' : 'divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface'}>
-                            {filteredItems.map(item => <li key={item.id}>{renderItem(item)}</li>)}
+                            {filteredItems.map(item => <HistoryItem key={item.id} item={item} render={renderItem} />)}
                         </ul>
                     )}
                 </div>

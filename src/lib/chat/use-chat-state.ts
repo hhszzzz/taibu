@@ -54,6 +54,7 @@ export interface ChatStateReturn {
     conversationSelectRequestRef: React.MutableRefObject<number>;
     // Selection lifetime; reloading the same conversation does not invalidate it.
     conversationEpochRef: React.MutableRefObject<number>;
+    bumpConversationEpoch: () => void;
     hasLoadedConversationsRef: React.MutableRefObject<boolean>;
     manualRenamedConversationIdsRef: React.MutableRefObject<Set<string>>;
     conversationsRef: React.MutableRefObject<ConversationListItem[]>;
@@ -167,6 +168,7 @@ export function useChatState({
     // Active conversation state (local to chat page)
     const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
     const conversationEpochRef = useRef(0);
+    const bumpConversationEpoch = useCallback(() => { conversationEpochRef.current += 1; }, []);
     const [conversationLoading, setConversationLoading] = useState(false);
     const [conversationError, setConversationError] = useState<string | null>(null);
     const [showCreditsModal, setShowCreditsModal] = useState(false);
@@ -501,7 +503,7 @@ export function useChatState({
         pendingSidebarTitle, setPendingSidebarTitle,
         activeConversationId, setActiveConversationId,
         activeConversationIdRef, conversationValidatedRef,
-        conversationSelectRequestRef, conversationEpochRef, hasLoadedConversationsRef,
+        conversationSelectRequestRef, conversationEpochRef, bumpConversationEpoch, hasLoadedConversationsRef,
         manualRenamedConversationIdsRef, conversationsRef,
         messages, setMessages,
         inputValue, setInputValue,

@@ -48,20 +48,21 @@ export function useAgentChat(
   const [run, setRun] = useState<AgentRunView | null>(null);
   const [reconnecting, setReconnecting] = useState(false);
   const [restoring, setRestoring] = useState(false);
-  const [syncingRunId, setSyncingRunId] = useState<string | null>(null);
+  const [syncingRun, setSyncingRun] = useState<{ runId: string; conversationId: string } | null>(null);
   const [webEnabled, setWebEnabled] = useState(true);
   const [codeMode, setCodeMode] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode, planMode }, value => {
     state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode);
   });
-  const identity = useRef({ userId, epoch: 0 });
-  if (identity.current.userId !== userId) {
-    identity.current = { userId, epoch: identity.current.epoch + 1 };
-  }
-  const ownerEpoch = identity.current.epoch;
+  // React's documented "adjust state during render" for a value that must change with the account.
+  const [identity, setIdentity] = useState({ userId, epoch: 0 });
+  if (identity.userId !== userId) setIdentity({ userId, epoch: identity.epoch + 1 });
+  const identityRef = useRef(identity);
+  const ownerEpoch = identity.epoch;
   const latest = useRef({ state, refreshViewer, userId });
-  latest.current = { state, refreshViewer, userId };
+  useEffect(() => { identityRef.current = identity; }, [identity]);
+  useEffect(() => { latest.current = { state, refreshViewer, userId }; });
   const completed = useRef(new Set<string>());
   const receivedCursors = useRef(new Map<string, number>());
   const latestRuns = useRef(new Map<string, AgentRunView>());
@@ -71,9 +72,9 @@ export function useAgentChat(
   const pendingCommands = useRef(new Map<string, AgentCommandRequest>());
   const captureConversation = useCallback((conversationId = latest.current.state.activeConversationIdRef.current) => {
     const owner = latest.current.userId;
-    const epoch = identity.current.epoch;
+    const epoch = identityRef.current.epoch;
     const selection = latest.current.state.conversationEpochRef.current;
-    return () => owner !== null && latest.current.userId === owner && identity.current.epoch === epoch &&
+    return () => owner !== null && latest.current.userId === owner && identityRef.current.epoch === epoch &&
       latest.current.state.activeConversationIdRef.current === conversationId &&
       latest.current.state.conversationEpochRef.current === selection;
   }, []);
@@ -98,13 +99,13 @@ export function useAgentChat(
     if (isAgentRunTerminal(view.status)) clearAgentTail(view.id);
     if (isAgentRunTerminal(view.status) && !completed.current.has(view.id)) {
       completed.current.add(view.id);
-      setSyncingRunId(view.id);
+      setSyncingRun({ runId: view.id, conversationId: view.conversationId });
       void latest.current.refreshViewer();
       void latest.current.state.refreshConversationList();
       void latest.current.state
         .retryConversationLoad()
         .finally(() =>
-          setSyncingRunId((current) => (current === view.id ? null : current)),
+          setSyncingRun((current) => (current?.runId === view.id ? null : current)),
         )
         .catch(() => {});
     }
@@ -148,25 +149,28 @@ export function useAgentChat(
     };
   }, [userId]);
   useEffect(() => {
-    setRun(null);
-    if (!userId || !state.activeConversationId || state.conversationLoading) {
-      setRestoring(false);
-      return;
-    }
-    setRestoring(true);
     const isCurrent = captureConversation();
     const controller = new AbortController();
-    void agentJson<AgentRunView | null>(
-      `/api/agent/runs?conversationId=${encodeURIComponent(state.activeConversationId)}`,
-      { signal: controller.signal },
-    )
-      .then((view) => {
-        if (view && !controller.signal.aborted && isCurrent()) adopt(view);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!controller.signal.aborted && isCurrent()) setRestoring(false);
-      });
+    void Promise.resolve().then(() => {
+      if (controller.signal.aborted) return;
+      setRun(null);
+      if (!userId || !state.activeConversationId || state.conversationLoading) {
+        setRestoring(false);
+        return;
+      }
+      setRestoring(true);
+      void agentJson<AgentRunView | null>(
+        `/api/agent/runs?conversationId=${encodeURIComponent(state.activeConversationId)}`,
+        { signal: controller.signal },
+      )
+        .then((view) => {
+          if (view && !controller.signal.aborted && isCurrent()) adopt(view);
+        })
+        .catch(() => {})
+        .finally(() => {
+          if (!controller.signal.aborted && isCurrent()) setRestoring(false);
+        });
+    });
     return () => controller.abort();
   }, [adopt, captureConversation, userId, state.activeConversationId, state.conversationLoading]);
   const runId = run?.id;
@@ -236,7 +240,7 @@ export function useAgentChat(
       replaceFromMessageId?: string;
     },
   ) => {
-    const isOwner = () => latest.current.userId === userId && identity.current.epoch === ownerEpoch;
+    const isOwner = () => latest.current.userId === userId && identityRef.current.epoch === ownerEpoch;
     if (!userId || !isOwner()) throw new Error("登录状态已变更，请重新发送");
     const isCurrent = captureConversation(conversationId);
     if (options.provider && !capabilities.customAvailable)
@@ -329,7 +333,7 @@ export function useAgentChat(
   const sendCommand = async (content: string, queue = false, structured?: { questionId: string; answers: import('./questions').AgentAnswers }) => {
     if (!run || !active) throw new Error("任务已结束");
     const isCurrent = captureConversation(run.conversationId);
-    if (!userId || identity.current.epoch !== ownerEpoch || !isCurrent())
+    if (!userId || identityRef.current.epoch !== ownerEpoch || !isCurrent())
       throw new Error("对话或登录状态已变更，请重新发送");
     // The task can resume while a reply's HTTP receipt is lost. Retain its
     // original mode as well as its ID, even if the observed status has changed.
@@ -361,7 +365,7 @@ export function useAgentChat(
   };
   const stop = () => {
     const isCurrent = captureConversation(run?.conversationId);
-    if (run && identity.current.epoch === ownerEpoch && isCurrent())
+    if (run && identityRef.current.epoch === ownerEpoch && isCurrent())
       void agentJson<AgentRunView>(`/api/agent/runs/${run.id}/cancel`, {
         method: "POST",
       })
@@ -378,10 +382,7 @@ export function useAgentChat(
     active,
     reconnecting,
     restoring,
-    syncing:
-      !!syncingRunId &&
-      latestRuns.current.get(state.activeConversationId ?? "")?.id ===
-        syncingRunId,
+    syncing: !!syncingRun && syncingRun.conversationId === state.activeConversationId,
     start,
     sendCommand,
     captureConversation,

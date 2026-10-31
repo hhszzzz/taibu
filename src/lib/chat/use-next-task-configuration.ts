@@ -5,7 +5,8 @@ import { freshTaskConfiguration, parseNextTaskConfiguration, type NextTaskConfig
 export function useNextTaskConfiguration(userId: string | null, conversationId: string | null, configuration: Configuration, apply: (value: Configuration) => void) {
     const key = `${userId ?? 'visitor'}:${conversationId ?? 'new'}`;
     const [loaded, setLoaded] = useState<string | null>(null);
-    const latest = useRef({ key, userId, conversationId, configuration, apply, loaded }); latest.current = { key, userId, conversationId, configuration, apply, loaded };
+    const latest = useRef({ key, userId, conversationId, configuration, apply, loaded });
+    useEffect(() => { latest.current = { key, userId, conversationId, configuration, apply, loaded }; });
     const saved = useRef(new Map<string, string>());
     const saving = useRef(false);
     const value = JSON.stringify(configuration);

@@ -92,7 +92,7 @@ function AccountGeneralSettingsPanel() {
 
   // 浏览器能力/授权只在客户端可读；设置面板挂载后同步一次。
   useEffect(() => {
-    setBrowserNotificationAvailability(readBrowserNotificationAvailability());
+    void Promise.resolve().then(() => setBrowserNotificationAvailability(readBrowserNotificationAvailability()));
   }, [userId]);
 
   const load = useCallback(async () => {
@@ -174,8 +174,10 @@ function AccountGeneralSettingsPanel() {
     if (sessionLoading) return;
     if (initializedForUserId === userId) return;
 
-    setInitializedForUserId(userId);
-    void load();
+    void Promise.resolve().then(() => {
+      setInitializedForUserId(userId);
+      void load();
+    });
   }, [initializedForUserId, load, sessionLoading, userId]);
 
   useEffect(() => () => lifecycle.current?.abort(), []);

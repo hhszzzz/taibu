@@ -49,8 +49,10 @@ export function CheckinModal({
 
   useEffect(() => {
     if (!isOpen) return;
-    setLoading(true);
-    void loadStatus();
+    void Promise.resolve().then(() => {
+      setLoading(true);
+      return loadStatus();
+    });
   }, [isOpen, loadStatus]);
 
   const rewardRangeText = status ? `${status.rewardRange[0]}-${status.rewardRange[1]} 积分` : '--';

@@ -68,7 +68,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
     }, [selectedYear, enabled]);
 
     useEffect(() => {
-        fetchReport();
+        void Promise.resolve().then(() => fetchReport());
         return () => pending.current?.abort();
     }, [fetchReport]);
 

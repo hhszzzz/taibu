@@ -354,7 +354,7 @@ export function useChatMessaging({
         });
         if (!newId) { setPendingSidebarTitle(null); return null; }
         if (!isCurrent()) return null;
-        state.conversationEpochRef.current += 1;
+        state.bumpConversationEpoch();
         activeConversationIdRef.current = newId;
         conversationValidatedRef.current = true;
         state.moveDraft(newId);

@@ -393,12 +393,19 @@ export function CaseNotesSection({ chartId }: { chartId?: string | null }) {
     const [loading, setLoading] = useState(false);
     const [saving, setSaving] = useState(false);
 
+    const [prevChartId, setPrevChartId] = useState(chartId);
+    if (prevChartId !== chartId) {
+        setPrevChartId(chartId);
+        if (!chartId) setProfile(createEmptyBaziCaseProfile());
+    }
     useEffect(() => {
-        if (!chartId) { setProfile(createEmptyBaziCaseProfile()); return; }
-        setLoading(true);
-        loadBaziCaseProfile(chartId)
-            .then((p) => setProfile(p || { ...createEmptyBaziCaseProfile(), chartId }))
-            .finally(() => setLoading(false));
+        if (!chartId) return;
+        void Promise.resolve().then(() => {
+            setLoading(true);
+            return loadBaziCaseProfile(chartId)
+                .then((p) => setProfile(p || { ...createEmptyBaziCaseProfile(), chartId }))
+                .finally(() => setLoading(false));
+        });
     }, [chartId]);
 
     const handleSave = async () => {

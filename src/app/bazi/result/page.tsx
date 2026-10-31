@@ -96,7 +96,9 @@ function BaziResultContent() {
     const [hasMountedNotes, setHasMountedNotes] = useState(false);
 
     // 编辑模式：优先使用 URL 参数，避免覆盖为数据库旧数据
-    useEffect(() => {
+    const [prevHasFormParams, setPrevHasFormParams] = useState(hasFormParams);
+    if (prevHasFormParams !== hasFormParams) {
+        setPrevHasFormParams(hasFormParams);
         if (hasFormParams) {
             setChartFromDb(null);
             setSaved(false);
@@ -104,12 +106,14 @@ function BaziResultContent() {
             setLoadError(null);
             setLoading(false);
         }
-    }, [hasFormParams]);
+    }
 
-    useEffect(() => {
+    const [prevUserId, setPrevUserId] = useState(userId);
+    if (prevUserId !== userId) {
+        setPrevUserId(userId);
         setSaved(false);
         setChartFromDb(null);
-    }, [userId]);
+    }
 
     // 从数据库加载命盘（仅查看已保存命盘时）
     useEffect(() => {
@@ -236,18 +240,16 @@ function BaziResultContent() {
     const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalBazi);
 
     // 初始化选中的大运和流年
-    useEffect(() => {
+    const [prevProData, setPrevProData] = useState<typeof proData | undefined>(undefined);
+    if (prevProData !== proData) {
+        setPrevProData(proData);
         if (proData) {
             setSelectedDaYunIndex(proData.currentDaYunIndex);
             setSelectedLiuNianYear(currentYear);
         }
-    }, [proData, currentYear]);
+    }
 
-    useEffect(() => {
-        if (activeTab === 'notes' && !hasMountedNotes) {
-            setHasMountedNotes(true);
-        }
-    }, [activeTab, hasMountedNotes]);
+    if (activeTab === 'notes' && !hasMountedNotes) setHasMountedNotes(true);
 
     // 当前选中大运的流年列表
     const currentLiuNian = useMemo(() => {
@@ -268,13 +270,12 @@ function BaziResultContent() {
         }
     }, [formData, selectedLiuNianYear]);
 
-    useEffect(() => {
-        if (liuYue.length === 0) {
-            setSelectedLiuYueMonth(-1);
-            return;
-        }
-        // 不再自动选择流月，保持未选中状态
-    }, [liuYue]);
+    // 不再自动选择流月，保持未选中状态；没有流月时清空选择。
+    const [prevLiuYue, setPrevLiuYue] = useState(liuYue);
+    if (prevLiuYue !== liuYue) {
+        setPrevLiuYue(liuYue);
+        if (liuYue.length === 0) setSelectedLiuYueMonth(-1);
+    }
 
     const activeLiuYue = useMemo(
         () => liuYue.find((item) => item.month === selectedLiuYueMonth) || null,
@@ -291,13 +292,12 @@ function BaziResultContent() {
         }
     }, [activeLiuYue, formData]);
 
-    useEffect(() => {
-        if (!activeLiuYue) {
-            setSelectedLiuRiDate('');
-            return;
-        }
-        // 不再自动选择流日，保持未选中状态
-    }, [activeLiuYue]);
+    // 不再自动选择流日，保持未选中状态；没有流月时清空选择。
+    const [prevActiveLiuYue, setPrevActiveLiuYue] = useState(activeLiuYue);
+    if (prevActiveLiuYue !== activeLiuYue) {
+        setPrevActiveLiuYue(activeLiuYue);
+        if (!activeLiuYue) setSelectedLiuRiDate('');
+    }
 
     // 保存命盘
     const handleSave = async () => {

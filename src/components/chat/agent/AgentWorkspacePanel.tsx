@@ -218,7 +218,11 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     // 用户一旦手动调宽，就以手动值为准。
     const [customWidth, setCustomWidth] = useState<number | null>(null);
     // 每个会话回到内容默认宽：上一会话手动拖宽的宽度不带到下一会话。
-    useEffect(() => { setCustomWidth(null); }, [workspaceKey]);
+    const [prevWorkspaceKey, setPrevWorkspaceKey] = useState(workspaceKey);
+    if (prevWorkspaceKey !== workspaceKey) {
+        setPrevWorkspaceKey(workspaceKey);
+        setCustomWidth(null);
+    }
     const width = customWidth ?? DEFAULT_WIDTH;
     const questionIds = useMemo(() => getAgentToolQuestionIds(parts), [parts]);
     const numbers = useMemo(() => getAgentStepNumbers(data?.parts ?? []), [data]);
@@ -335,6 +339,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
         const startWidth = panelRef.current?.getBoundingClientRect().width ?? FALLBACK_WIDTH;
         dragRef.current = { startX: event.clientX, startWidth };
         widthRef.current = Math.round(startWidth);
+        panelRef.current?.style.setProperty('--agent-drag-width', `${Math.round(startWidth)}px`);
+        if (panelRef.current) panelRef.current.style.width = `${Math.round(startWidth)}px`;
         // 拖拽期间锁住文本选择与光标，整块面板随指针实时改变宽度。
         document.body.style.userSelect = 'none';
         document.body.style.cursor = 'col-resize';
@@ -347,7 +353,10 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
         const next = clampWidth(drag.startWidth + drag.startX - event.clientX);
         widthRef.current = next;
         // 直接改 DOM：聊天列由 flex 自动回流，工作区子树不重渲染，拖动更跟手。
-        if (panelRef.current) panelRef.current.style.width = `${next}px`;
+        if (panelRef.current) {
+            panelRef.current.style.setProperty('--agent-drag-width', `${next}px`);
+            panelRef.current.style.width = `${next}px`;
+        }
     };
     const endResize = (event: ReactPointerEvent<HTMLDivElement>) => {
         if (!dragRef.current) return;
@@ -512,7 +521,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
                     : <WorkspaceOverview model={model} artifacts={artifacts} saved={saved} onOpen={open} />}
             </div>}
     </div>;
-    return desktop ? <aside ref={panelRef} id="agent-workspace-panel" className={`agent-workspace-panel${maximized ? ' is-maximized' : ''}`} style={{ width: maximized ? undefined : widthRef.current ?? width }} aria-labelledby="agent-workspace-heading"
+    return desktop ? <aside ref={panelRef} id="agent-workspace-panel" className={`agent-workspace-panel${maximized ? ' is-maximized' : ''}`} style={{ width: maximized ? undefined : width }} aria-labelledby="agent-workspace-heading"
         data-entering={enterOnMount || undefined} data-leaving={leaving || undefined} inert={leaving || undefined}>
         <div ref={resizerRef} className="agent-panel-resizer" role="separator" tabIndex={0} aria-label="调整工作区宽度" title="拖动调整宽度，双击恢复默认" aria-orientation="vertical" aria-valuemin={MIN_WIDTH} aria-valuemax={MAX_WIDTH}
             onDoubleClick={() => setCustomWidth(null)} onPointerDown={startResize} onPointerMove={moveResize} onPointerUp={endResize} onPointerCancel={endResize} onLostPointerCapture={endResize}

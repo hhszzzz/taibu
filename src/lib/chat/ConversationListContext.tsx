@@ -68,6 +68,9 @@ interface ConversationListContextType {
 
 const ConversationListContext = createContext<ConversationListContextType | undefined>(undefined);
 
+// Latest account scope per query client, so an old cache instance turns inert after an account switch.
+const latestAccountScopes = new WeakMap<object, object>();
+
 function mergeConversations(current: ConversationListItem[], incoming: ConversationListItem[]) {
   if (incoming.length === 0) {
     return current;
@@ -134,12 +137,11 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
 
   const queryClient = useQueryClient();
   const accountScope = useMemo(() => ({ userId }), [userId]);
-  const accountScopeRef = useRef<typeof accountScope | null>(accountScope);
-  useLayoutEffect(() => { accountScopeRef.current = accountScope; }, [accountScope]);
+  useLayoutEffect(() => { latestAccountScopes.set(queryClient, accountScope); }, [accountScope, queryClient]);
   const conversationCache = useMemo(() => createConversationListCache(
     queryClient,
     userId,
-    () => accountScopeRef.current === accountScope,
+    () => latestAccountScopes.get(queryClient) === accountScope,
   ), [accountScope, queryClient, userId]);
   // Deliberately disabled: existing idle/window/stream triggers own fetching.
   const { data } = useQuery<ConversationListItem[]>({
@@ -149,15 +151,8 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
   });
   const conversations = userId ? data ?? EMPTY_CONVERSATIONS : EMPTY_CONVERSATIONS;
   const setConversations = conversationCache.update;
-  const conversationsRef = conversationCache.ref;
-  useEffect(() => () => {
-    if (conversationCache.isCurrent()) {
-      accountScopeRef.current = null;
-      activeRequestIdRef.current += 1;
-      requestControllerRef.current?.abort();
-    }
-    conversationCache.clear();
-  }, [conversationCache]);
+  const conversationsRef = useRef<ConversationListItem[]>(conversations);
+  useEffect(() => { conversationsRef.current = conversations; }, [conversations]);
   const [conversationsLoading, setConversationsLoading] = useState(false);
   const [refreshingConversations, setRefreshingConversations] = useState(false);
   const [loadingMoreConversations, setLoadingMoreConversations] = useState(false);
@@ -236,6 +231,15 @@ export function ConversationListProvider({ children }: { children: ReactNode }) 
     setPendingSidebarTitle(null);
     manualRenamedConversationIdsRef.current.clear();
   }, [setConversations, setRequestLoading]);
+
+  useEffect(() => () => {
+    if (conversationCache.isCurrent()) {
+      latestAccountScopes.delete(queryClient);
+      activeRequestIdRef.current += 1;
+      requestControllerRef.current?.abort();
+    }
+    conversationCache.clear();
+  }, [conversationCache, queryClient]);
 
   const requestConversationPage = useCallback(async ({
     targetUserId,

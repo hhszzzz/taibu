@@ -69,11 +69,10 @@ export function useAnalysisSnapshot({
         callbacksRef.current = callbacks;
     });
 
+    if ((skip || hasExistingAnalysis) && loading) setLoading(false);
+
     useEffect(() => {
-        if (skip || hasExistingAnalysis) {
-            setLoading(false);
-            return;
-        }
+        if (skip || hasExistingAnalysis) return;
 
         let cancelled = false;
         const controller = new AbortController();
@@ -125,7 +124,7 @@ export function useAnalysisSnapshot({
             }
         };
 
-        void loadAnalysis();
+        void Promise.resolve().then(loadAnalysis);
         return () => {
             cancelled = true;
             controller.abort();

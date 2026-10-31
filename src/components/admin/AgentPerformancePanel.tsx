@@ -166,11 +166,11 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
     }, []);
 
     useEffect(() => {
-        if (active) void loadReport();
+        if (active) void Promise.resolve().then(loadReport);
     }, [active, loadReport]);
 
     useEffect(() => {
-        if (active && selectedId) void loadMetrics(selectedId);
+        if (active && selectedId) void Promise.resolve().then(() => loadMetrics(selectedId));
     }, [active, selectedId, loadMetrics]);
 
     const select = (id: string | null) => {

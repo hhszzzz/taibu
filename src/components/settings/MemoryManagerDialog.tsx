@@ -78,7 +78,7 @@ export function MemoryManagerDialog({
   useEffect(() => {
     if (!open) return;
     const controller = new AbortController();
-    void load(controller.signal);
+    void Promise.resolve().then(() => load(controller.signal));
     return () => controller.abort();
   }, [load, open]);
 

@@ -328,11 +328,11 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
     const tasksActive = active && view === 'tasks';
 
     useEffect(() => {
-        if (tasksActive) void loadRuns();
+        if (tasksActive) void Promise.resolve().then(loadRuns);
     }, [tasksActive, loadRuns]);
 
     useEffect(() => {
-        if (tasksActive && selectedId) void loadDetail(selectedId);
+        if (tasksActive && selectedId) void Promise.resolve().then(() => loadDetail(selectedId));
     }, [tasksActive, selectedId, loadDetail]);
 
     // 面板不可见（切到其他子页或浏览器标签页隐藏）时不轮询。

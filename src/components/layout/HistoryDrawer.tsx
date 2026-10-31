@@ -56,9 +56,11 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
 
     const handleToggle = useCallback(() => setIsOpen(open => !open), []);
 
-    useEffect(() => {
+    const [prevResetKey, setPrevResetKey] = useState({ isOpen, type, userId: user?.id });
+    if (prevResetKey.isOpen !== isOpen || prevResetKey.type !== type || prevResetKey.userId !== user?.id) {
+        setPrevResetKey({ isOpen, type, userId: user?.id });
         setNavigating(null);
-    }, [isOpen, type, user?.id]);
+    }
 
     useEffect(() => {
         if (

@@ -87,15 +87,18 @@ function RecordsContent() {
     useEffect(() => {
         if (sessionLoading || !userId) return;
         if (!recordId) return;
-        setEditingRecord(null);
-        setShowRecordForm(false);
         const controller = new AbortController();
-        void getRecord(recordId, { signal: controller.signal }).then(record => {
+        void Promise.resolve().then(() => {
             if (controller.signal.aborted) return;
-            setEditingRecord(record);
-            setShowRecordForm(true);
-        }).catch(error => {
-            if (!controller.signal.aborted) showToast('error', error instanceof Error ? error.message : '获取记录失败');
+            setEditingRecord(null);
+            setShowRecordForm(false);
+            return getRecord(recordId, { signal: controller.signal }).then(record => {
+                if (controller.signal.aborted) return;
+                setEditingRecord(record);
+                setShowRecordForm(true);
+            }).catch(error => {
+                if (!controller.signal.aborted) showToast('error', error instanceof Error ? error.message : '获取记录失败');
+            });
         });
         return () => controller.abort();
     }, [recordId, sessionLoading, showToast, userId]);
@@ -215,36 +218,48 @@ function RecordsContent() {
     }, [accountIdentity, closeKbModal]);
 
     useLayoutEffect(() => {
-        const scope: ReadScope = { identity: recordsIdentity, controller: new AbortController(), request: null };
-        recordsLifecycle.current = scope;
-        reloadRecordsRef.current = () => loadRecords({ quiet: true });
-        setRecords([]);
-        setTotal(0);
-        setRecordsError(null);
-        setLoading(true);
-        void loadRecords();
+        let mounted = true;
+        let scope: ReadScope | null = null;
+        void Promise.resolve().then(() => {
+            if (!mounted) return;
+            scope = { identity: recordsIdentity, controller: new AbortController(), request: null };
+            recordsLifecycle.current = scope;
+            reloadRecordsRef.current = () => loadRecords({ quiet: true });
+            setRecords([]);
+            setTotal(0);
+            setRecordsError(null);
+            setLoading(true);
+            void loadRecords();
+        });
         return () => {
-            scope.controller.abort();
-            scope.request?.abort();
+            mounted = false;
+            scope?.controller.abort();
+            scope?.request?.abort();
         };
     }, [loadRecords, recordsIdentity]);
 
     // Notes are independent of search/category/page changes in the records list.
     useLayoutEffect(() => {
-        const scope: ReadScope = { identity: accountIdentity, controller: new AbortController(), request: null };
-        notesLifecycle.current = scope;
-        setNotes([]);
-        setNotesError(null);
-        setNotesLoading(true);
-        setShowRecordForm(false);
-        setEditingRecord(null);
-        setShowImportExport(false);
-        setKbTargetRecord(null);
-        setDeleteRecordId(null);
-        void loadNotes();
+        let mounted = true;
+        let scope: ReadScope | null = null;
+        void Promise.resolve().then(() => {
+            if (!mounted) return;
+            scope = { identity: accountIdentity, controller: new AbortController(), request: null };
+            notesLifecycle.current = scope;
+            setNotes([]);
+            setNotesError(null);
+            setNotesLoading(true);
+            setShowRecordForm(false);
+            setEditingRecord(null);
+            setShowImportExport(false);
+            setKbTargetRecord(null);
+            setDeleteRecordId(null);
+            void loadNotes();
+        });
         return () => {
-            scope.controller.abort();
-            scope.request?.abort();
+            mounted = false;
+            scope?.controller.abort();
+            scope?.request?.abort();
         };
     }, [accountIdentity, loadNotes]);
 

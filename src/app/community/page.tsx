@@ -153,7 +153,7 @@ export default function CommunityPage() {
 
     useEffect(() => {
         const controller = new AbortController();
-        void loadPosts(controller.signal);
+        void Promise.resolve().then(() => loadPosts(controller.signal));
         return () => controller.abort();
     }, [loadPosts]);
 

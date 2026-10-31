@@ -94,9 +94,11 @@ function TarotResultContent() {
     const captureIdentity = useIdentityGuard(userId);
     const [resultOwnerId, setResultOwnerId] = useState<string | null | undefined>(undefined);
     const readingId = resultOwnerId === userId ? storedReadingId : null;
-    useEffect(() => {
+    const [prevSavingUserId, setPrevSavingUserId] = useState(userId);
+    if (prevSavingUserId !== userId) {
+        setPrevSavingUserId(userId);
         setSaving(false);
-    }, [userId]);
+    }
 
     const canonicalReading = useMemo(() => {
         if (!selectedSpread || drawnCards.length === 0) return null;
@@ -146,20 +148,22 @@ function TarotResultContent() {
         if (spreadId || sessionLoading) return;
         // 本页刚抽的牌已在屏幕上，按会话重置会把未翻开的牌全部翻开；历史记录跳转（带 t）仍照常恢复
         if (drawnInPageRef.current && !historyTimestamp && resultOwnerId === userId) return;
-        const stored = readSessionJSON<TarotResultSession>('tarot_result');
-        const parsed = stored ? scopeResultSession(stored, userId) : null;
-        if (parsed?.cards) {
-            const spread = TAROT_SPREADS.find(s => s.id === (parsed.spreadId || parsed.spread?.id)) || null;
-            if (spread) {
-                setSelectedSpread(spread); setDrawnCards(parsed.cards); setQuestion(parsed.question || ''); setBirthDate(parsed.birthDate || '');
-                setNumerology(parsed.numerology || null); setSeed(parsed.seed || null); setRevealedCards(parsed.cards.map((_: DrawnCard, i: number) => i));
-                setReadingId(parsed.readingId || null);
-                setResultOwnerId(userId);
-                setIsLoading(false); return;
+        void Promise.resolve().then(() => {
+            const stored = readSessionJSON<TarotResultSession>('tarot_result');
+            const parsed = stored ? scopeResultSession(stored, userId) : null;
+            if (parsed?.cards) {
+                const spread = TAROT_SPREADS.find(s => s.id === (parsed.spreadId || parsed.spread?.id)) || null;
+                if (spread) {
+                    setSelectedSpread(spread); setDrawnCards(parsed.cards); setQuestion(parsed.question || ''); setBirthDate(parsed.birthDate || '');
+                    setNumerology(parsed.numerology || null); setSeed(parsed.seed || null); setRevealedCards(parsed.cards.map((_: DrawnCard, i: number) => i));
+                    setReadingId(parsed.readingId || null);
+                    setResultOwnerId(userId);
+                    setIsLoading(false); return;
+                }
             }
-        }
-        if (historyTimestamp) { setHistoryMissing(true); setIsLoading(false); return; }
-        router.push('/tarot');
+            if (historyTimestamp) { setHistoryMissing(true); setIsLoading(false); return; }
+            router.push('/tarot');
+        });
     }, [historyTimestamp, router, spreadId, sessionLoading, userId, resultOwnerId]);
 
     useEffect(() => {

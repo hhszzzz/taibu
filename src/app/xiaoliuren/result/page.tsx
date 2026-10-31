@@ -86,6 +86,7 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
   const { userId, sessionLoading } = useSessionMembership();
   const session = scopeResultSession(storedSession, userId);
   const bundle = session.resultData;
+  const result = bundle.result;
   const [divinationId, setDivinationId] = useState(session.divinationId);
   const [saving, setSaving] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -200,7 +201,6 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     </div>
   );
 
-  const result = bundle.result;
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="mx-auto flex w-full max-w-[1024px] motion-stagger flex-col gap-3 px-4 pt-4 pb-28 sm:px-8 lg:gap-7 lg:pt-12 lg:pb-16">

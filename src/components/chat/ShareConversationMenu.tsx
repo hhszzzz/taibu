@@ -56,7 +56,7 @@ export function ShareConversationMenu({ conversationId, taskActive, shareLinksEn
 
     useEffect(() => {
         if (!conversationId || !shareLinksEnabled) return;
-        void load(conversationId);
+        void Promise.resolve().then(() => load(conversationId));
         return () => { requestSequence.current += 1; };
     }, [conversationId, load, shareLinksEnabled]);
 

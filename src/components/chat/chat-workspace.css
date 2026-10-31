@@ -528,7 +528,7 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 @keyframes agent-panel-flash { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); } to { box-shadow: 0 0 0 6px transparent; } }
 .agent-workspace-panel[data-flash]:not([data-leaving]) { animation: agent-panel-flash .7s var(--ease-out); }
 /* 拖动中：整块面板宽度实时跟随指针，内容不参与 hover/选择，避免图表区域抢事件。 */
-.agent-workspace-panel[data-resizing] { cursor: col-resize; transition: none; }
+.agent-workspace-panel[data-resizing] { width: var(--agent-drag-width, auto) !important; cursor: col-resize; transition: none; }
 .agent-workspace-panel[data-resizing] .agent-panel-content { pointer-events: none; }
 /* 会话详情停靠栏 = 克隆站 SessionRail：固定 280px、右留 12px、卡片间隔 8px；不参与拖拽。 */
 .agent-session-rail { position: relative; z-index: 40; display: flex; flex-shrink: 0; flex-direction: column; width: 280px; min-height: 0; margin-top: 51px; margin-right: 12px; padding: 0 1px 8px; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none; }

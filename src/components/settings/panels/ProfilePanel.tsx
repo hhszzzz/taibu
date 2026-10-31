@@ -50,38 +50,40 @@ export default function ProfilePanel() {
   useUnsavedSettingsGuard(!loading && !!user && nickname !== originalNickname);
 
   useEffect(() => {
-    if (sessionLoading) return;
-    if (!user) {
-      setLoading(false);
-      return;
-    }
-    if (profileLoading) {
-      return;
-    }
+    void Promise.resolve().then(() => {
+      if (sessionLoading) return;
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+      if (profileLoading) {
+        return;
+      }
 
-    if (profile) {
-      ensuredUserIdRef.current = null;
-      setNickname(profile.nickname || '');
-      setOriginalNickname(profile.nickname || '');
-      setAvatarUrl(profile.avatar_url || null);
-      setError('');
-      setLoading(false);
-      return;
-    }
+      if (profile) {
+        ensuredUserIdRef.current = null;
+        setNickname(profile.nickname || '');
+        setOriginalNickname(profile.nickname || '');
+        setAvatarUrl(profile.avatar_url || null);
+        setError('');
+        setLoading(false);
+        return;
+      }
 
-    setLoading(false);
-    if (profileError) {
-      setError(profileError.message || '加载账户失败');
-      return;
-    }
-    if (!profileResolved) {
-      return;
-    }
-    if (ensuredUserIdRef.current === user.id) {
-      return;
-    }
-    ensuredUserIdRef.current = user.id;
-    void ensureUserRecord().then(() => refreshProfile());
+      setLoading(false);
+      if (profileError) {
+        setError(profileError.message || '加载账户失败');
+        return;
+      }
+      if (!profileResolved) {
+        return;
+      }
+      if (ensuredUserIdRef.current === user.id) {
+        return;
+      }
+      ensuredUserIdRef.current = user.id;
+      void ensureUserRecord().then(() => refreshProfile());
+    });
   }, [profile, profileError, profileLoading, profileResolved, refreshProfile, sessionLoading, user]);
 
   const handleSave = async () => {

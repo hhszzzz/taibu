@@ -8,8 +8,12 @@ import { useTheme } from '@/components/ui/ThemeProvider';
 export function useReadingPreferences(userId: string | null) {
     const [preferences, setPreferences] = useState(DEFAULT_CHAT_PREFERENCES);
     const { setFontScale } = useTheme();
-    useEffect(() => {
+    const [prevUserId, setPrevUserId] = useState(userId);
+    if (prevUserId !== userId) {
+        setPrevUserId(userId);
         setPreferences(DEFAULT_CHAT_PREFERENCES);
+    }
+    useEffect(() => {
         if (!userId) return;
         const controller = new AbortController();
         void getCurrentUserSettings({ expectedUserId: userId, signal: controller.signal }).then(result => {

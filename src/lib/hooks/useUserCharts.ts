@@ -50,10 +50,15 @@ export function useChartMutation(userId?: string | null) {
   const lifecycle = useRef<{ userId: string; controller: AbortController; pending: boolean } | null>(null);
   const [pending, setPending] = useState(false);
 
+  const [prevUserId, setPrevUserId] = useState(userId);
+  if (prevUserId !== userId) {
+    setPrevUserId(userId);
+    setPending(false);
+  }
+
   useLayoutEffect(() => {
     const current = userId ? { userId, controller: new AbortController(), pending: false } : null;
     lifecycle.current = current;
-    setPending(false);
     return () => {
       current?.controller.abort();
       lifecycle.current = null;

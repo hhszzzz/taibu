@@ -140,9 +140,11 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     const [pinnedIds, setPinnedIds] = useState<string[]>([]);
     // 组头的「最近使用」菜单写在全局侧栏里（Sidebar.tsx），这里只订阅同一份偏好。
     const listPreferences = useConversationListPreferences(userId);
-    useEffect(() => {
+    const [prevPinnedUserId, setPrevPinnedUserId] = useState<string | null | undefined>(undefined);
+    if (prevPinnedUserId !== userId) {
+        setPrevPinnedUserId(userId);
         setPinnedIds(loadPinnedConversations(userId));
-    }, [userId]);
+    }
     const togglePin = useCallback((conv: ConversationListItem) => {
         if (!userId) return;
         setPinnedIds(current => togglePinnedConversation(userId, conv.id, current));

@@ -105,9 +105,11 @@ export default function QimenResultPage() {
     const { user, userId, sessionLoading } = useSessionMembership();
     const captureIdentity = useIdentityGuard(userId);
     const result = storedResult?.recordOwnerId === userId ? storedResult : null;
-    useEffect(() => {
+    const [prevQimenUserId, setPrevQimenUserId] = useState(userId);
+    if (prevQimenUserId !== userId) {
+        setPrevQimenUserId(userId);
         setIsSaving(false);
-    }, [userId]);
+    }
     const currentUser = useMemo(() => (user ? { id: user.id } : null), [user]);
     const qimenOutput = result?.output ?? null;
     const canonicalResult = useMemo(

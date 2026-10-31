@@ -239,15 +239,15 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
 
     useEffect(() => {
         if (!active) return;
-        void loadOverview();
-        void loadCases();
+        void Promise.resolve().then(() => Promise.all([loadOverview(), loadCases()]));
     }, [active, loadCases, loadOverview]);
 
     useEffect(() => {
         if (!active || !selectedRunId) return;
-        void loadRun(selectedRunId);
-        void loadResults(selectedRunId);
-        setRunError(null);
+        void Promise.resolve().then(() => {
+            setRunError(null);
+            return Promise.all([loadRun(selectedRunId), loadResults(selectedRunId)]);
+        });
     }, [active, loadResults, loadRun, selectedRunId]);
 
     useEffect(() => {
@@ -262,12 +262,15 @@ export function AgentEvalPanel({ active = true }: { active?: boolean }) {
         return () => window.clearInterval(timer);
     }, [active, loadOverview, loadResults, loadRun, run, selectedRunId]);
 
-    useEffect(() => {
-        if (!run) return;
-        setCompareCase(current => current && run.caseIds.includes(current) ? current : (run.caseIds[0] ?? ''));
-        setLeftModel(current => current && run.models.includes(current) ? current : (run.models[0] ?? ''));
-        setRightModel(current => current && run.models.includes(current) ? current : (run.models[1] ?? run.models[0] ?? ''));
-    }, [run]);
+    const [prevCompareRun, setPrevCompareRun] = useState<typeof run | undefined>(undefined);
+    if (prevCompareRun !== run) {
+        setPrevCompareRun(run);
+        if (run) {
+            setCompareCase(current => current && run.caseIds.includes(current) ? current : (run.caseIds[0] ?? ''));
+            setLeftModel(current => current && run.models.includes(current) ? current : (run.models[0] ?? ''));
+            setRightModel(current => current && run.models.includes(current) ? current : (run.models[1] ?? run.models[0] ?? ''));
+        }
+    }
 
     const calls = selectedCases.length * selectedModels.length * repeats;
     const tooMany = calls > AGENT_EVAL_CALL_LIMIT;

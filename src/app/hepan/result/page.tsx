@@ -39,19 +39,21 @@ export default function HepanResultPage() {
             createdAt: string;
             chartId?: string;
         };
-        const parsed = readSessionJSON<HepanSession>('hepan_result');
-        if (parsed) {
-            try {
-                setResult({
-                    ...parsed,
-                    createdAt: new Date(parsed.createdAt),
-                });
-            } catch {
+        void Promise.resolve().then(() => {
+            const parsed = readSessionJSON<HepanSession>('hepan_result');
+            if (parsed) {
+                try {
+                    setResult({
+                        ...parsed,
+                        createdAt: new Date(parsed.createdAt),
+                    });
+                } catch {
+                    router.push('/hepan');
+                }
+            } else {
                 router.push('/hepan');
             }
-        } else {
-            router.push('/hepan');
-        }
+        });
     }, [router]);
 
     // 计算走势数据（保存原始数据以便复用）

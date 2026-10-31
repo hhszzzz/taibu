@@ -70,7 +70,7 @@ export function AddToKnowledgeBaseModal({
 
     useEffect(() => {
         if (!open || !knowledgeBaseEnabled) return;
-        void loadKnowledgeBases();
+        void Promise.resolve().then(loadKnowledgeBases);
     }, [knowledgeBaseEnabled, loadKnowledgeBases, open]);
 
     const handleCreateKnowledgeBase = useCallback(async () => {

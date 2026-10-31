@@ -34,14 +34,16 @@ function MBTIResultContent() {
     const [kbModalOpen, setKbModalOpen] = useState(false);
 
     useEffect(() => {
-        const stored = readSessionJSON<MBTIResultSession>('mbti_result');
-        if (stored) {
-            setResult(stored);
-        } else if (isViewMode && viewType) {
-            const viewResult = buildViewResult(viewType.toUpperCase());
-            if (viewResult) setResult(viewResult);
-            else router.push('/mbti');
-        } else router.push('/mbti');
+        void Promise.resolve().then(() => {
+            const stored = readSessionJSON<MBTIResultSession>('mbti_result');
+            if (stored) {
+                setResult(stored);
+            } else if (isViewMode && viewType) {
+                const viewResult = buildViewResult(viewType.toUpperCase());
+                if (viewResult) setResult(viewResult);
+                else router.push('/mbti');
+            } else router.push('/mbti');
+        });
     }, [router, isViewMode, viewType]);
 
     const isTestMode = result ? (!isViewMode && result.scores && result.percentages) : false;

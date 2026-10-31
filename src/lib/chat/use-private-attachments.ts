@@ -1,5 +1,5 @@
 'use client';
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { AttachmentState, PrivateAttachment } from '@/types';
 import { documentFileProblem } from '@/lib/chat/composer-files';
 
@@ -25,7 +25,7 @@ export function usePrivateAttachments({ scopeKey, state, change, onError }: {
     scopeKey: string; state: AttachmentState; change: (state: AttachmentState) => void; onError: (message: string) => void;
 }) {
     const latest = useRef({ scopeKey, state, change, onError });
-    latest.current = { scopeKey, state, change, onError };
+    useEffect(() => { latest.current = { scopeKey, state, change, onError }; });
     const busyRef = useRef(false);
     const [uploadingScope, setUploadingScope] = useState<string | null>(null);
     async function upload(files: File[]) {

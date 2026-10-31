@@ -118,17 +118,23 @@ export function useHistoryList({
     }, [batchSize, identity, onError, type]);
 
     useLayoutEffect(() => {
-        const scope: ListScope = {
-            identity, controller: new AbortController(), request: null,
-            deletedIds: new Set(), state: emptyState(identity),
-        };
-        lifecycle.current = scope;
-        setState(scope.state);
-        if (enabled && userId) void loadItems();
-        else scope.controller.abort();
+        let mounted = true;
+        let scope: ListScope | null = null;
+        void Promise.resolve().then(() => {
+            if (!mounted) return;
+            scope = {
+                identity, controller: new AbortController(), request: null,
+                deletedIds: new Set(), state: emptyState(identity),
+            };
+            lifecycle.current = scope;
+            setState(scope.state);
+            if (enabled && userId) void loadItems();
+            else scope.controller.abort();
+        });
         return () => {
-            scope.controller.abort();
-            scope.request?.abort();
+            mounted = false;
+            scope?.controller.abort();
+            scope?.request?.abort();
         };
     }, [enabled, identity, loadItems, userId]);
 

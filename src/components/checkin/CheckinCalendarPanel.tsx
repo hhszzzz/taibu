@@ -55,7 +55,7 @@ export function CheckinCalendarPanel({ active = true }: CheckinCalendarPanelProp
 
   useEffect(() => {
     if (!active) return;
-    void fetchCalendar();
+    void Promise.resolve().then(fetchCalendar);
   }, [active, fetchCalendar]);
 
   const prevMonth = useCallback(() => {

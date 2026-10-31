@@ -136,7 +136,7 @@ function PostDetailContent({ postId }: { postId: string }) {
     }, [postId]);
 
     useEffect(() => {
-        void loadPost();
+        void Promise.resolve().then(loadPost);
     }, [loadPost]);
 
     // 投票

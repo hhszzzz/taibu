@@ -1,11 +1,13 @@
 'use client';
 // Needs browser timers, visibility events and state for the sidebar's task markers.
-import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, createElement, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { markSelectedAsRead } from '@/lib/notification';
 import { getAgentActivityPollDelay, getConversationAgentMarkers, getConversationNoticeIds, parseAgentActivity, type AgentActivity, type ConversationAgentMarker } from './activity';
 
 const AGENT_ACTIVITY_EVENT = 'taibu:agent-activity';
+// In-flight notice acknowledgements, keyed `userId:id`, shared by every mounted list.
+const pendingReads = new Set<string>();
 const ActivityContext = createContext<{
     userId: string | null;
     activity: AgentActivity | null;
@@ -28,9 +30,6 @@ export function AgentActivityProvider({ userId, children }: { userId: string | n
     const [state, setState] = useState<{ userId: string; activity: AgentActivity } | null>(null);
     const [subscribers, setSubscribers] = useState(0);
     const active = subscribers > 0;
-    const owner = useRef(userId);
-    owner.current = userId;
-    const pendingReads = useRef(new Set<string>());
     const subscribe = useCallback(() => {
         setSubscribers(count => count + 1);
         return () => setSubscribers(count => count - 1);
@@ -73,16 +72,16 @@ export function AgentActivityProvider({ userId, children }: { userId: string | n
     const activity = state && state.userId === userId ? state.activity : null;
     const readNotices = useCallback((requested: string[]) => {
         if (!userId || document.visibilityState !== 'visible') return;
-        const ids = requested.filter(id => !pendingReads.current.has(`${userId}:${id}`));
+        const ids = requested.filter(id => !pendingReads.has(`${userId}:${id}`));
         if (!ids.length) return;
-        for (const id of ids) pendingReads.current.add(`${userId}:${id}`);
+        for (const id of ids) pendingReads.add(`${userId}:${id}`);
         void markSelectedAsRead(ids).then(read => {
-            if (!read || owner.current !== userId) return;
+            if (!read) return;
             setState(previous => previous && previous.userId === userId
                 ? { userId, activity: { ...previous.activity, notices: previous.activity.notices.filter(notice => !ids.includes(notice.id)) } }
                 : previous);
         }).catch(() => {}).finally(() => {
-            for (const id of ids) pendingReads.current.delete(`${userId}:${id}`);
+            for (const id of ids) pendingReads.delete(`${userId}:${id}`);
         });
     }, [userId]);
     const value = useMemo(() => ({ userId, activity, subscribe, readNotices }), [userId, activity, subscribe, readNotices]);

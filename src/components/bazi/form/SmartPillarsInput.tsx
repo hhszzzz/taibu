@@ -77,6 +77,75 @@ const EMPTY_PILLARS: {
     hour: { stem: '', branch: '' },
 };
 
+const renderStemButtons = (onSelect: (stem: HeavenlyStem) => void) => (
+    <div className="grid grid-cols-5 gap-2">
+        {HEAVENLY_STEMS.map((stem) => (
+            <Button unstyled
+                key={stem}
+                type="button"
+                onClick={() => onSelect(stem)}
+                className={`
+                    h-10 rounded-xl font-display text-lg
+                    transition-colors duration-150
+                    ${ganZhiSoftClass(stem)}
+                    ring-inset hover:ring-1 hover:ring-accent/50
+                `}
+            >
+                {stem}
+            </Button>
+        ))}
+    </div>
+);
+
+// 渲染地支选择按钮
+const StemButtons = ({ onSelect }: { onSelect: (stem: HeavenlyStem) => void }) => renderStemButtons(onSelect);
+const BranchButtons = ({ branches, onSelect }: { branches: EarthlyBranch[]; onSelect: (branch: EarthlyBranch) => void }) => renderBranchButtons(branches, onSelect);
+const PillarButtons = ({ options, onSelect }: { options: { stem: HeavenlyStem; branch: EarthlyBranch }[]; onSelect: (p: { stem: HeavenlyStem; branch: EarthlyBranch }) => void }) => renderPillarButtons(options, onSelect);
+
+const renderBranchButtons = (branches: EarthlyBranch[], onSelect: (branch: EarthlyBranch) => void) => (
+    <div className="grid grid-cols-6 gap-2">
+        {branches.map((branch) => (
+            <Button unstyled
+                key={branch}
+                type="button"
+                onClick={() => onSelect(branch)}
+                className={`
+                    h-10 rounded-xl font-display text-lg
+                    transition-colors duration-150
+                    ${ganZhiSoftClass(branch)}
+                    ring-inset hover:ring-1 hover:ring-accent/50
+                `}
+            >
+                {branch}
+            </Button>
+        ))}
+    </div>
+);
+
+// 渲染完整柱选择按钮
+const renderPillarButtons = (
+    options: { stem: HeavenlyStem; branch: EarthlyBranch }[],
+    onSelect: (p: { stem: HeavenlyStem; branch: EarthlyBranch }) => void
+) => (
+    <div className="grid grid-cols-4 gap-2">
+        {options.map((p, index) => (
+            <Button unstyled
+                key={`${p.stem}${p.branch}-${index}`}
+                type="button"
+                onClick={() => onSelect(p)}
+                className={`
+                    h-10 px-1 rounded-xl font-display text-base
+                    transition-colors duration-150
+                    ${ganZhiSoftClass(p.stem)}
+                    ring-inset hover:ring-1 hover:ring-accent/50
+                `}
+            >
+                {p.stem}{p.branch}
+            </Button>
+        ))}
+    </div>
+);
+
 export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions }: SmartPillarsInputProps) {
     const dateSelectorTitleId = useId();
     const [possibleDates, setPossibleDates] = useState<ReversedDateTime[]>([]);
@@ -85,13 +154,29 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
     const requestId = useRef(0);
     const { showToast } = useToast();
 
+    const [prevTimeOptionsKey, setPrevTimeOptionsKey] = useState({
+        timezone: timeOptions?.timezone,
+        disambiguation: timeOptions?.disambiguation,
+        longitude: timeOptions?.longitude,
+    });
+    if (
+        prevTimeOptionsKey.timezone !== timeOptions?.timezone
+        || prevTimeOptionsKey.disambiguation !== timeOptions?.disambiguation
+        || prevTimeOptionsKey.longitude !== timeOptions?.longitude
+    ) {
+        setPrevTimeOptionsKey({
+            timezone: timeOptions?.timezone,
+            disambiguation: timeOptions?.disambiguation,
+            longitude: timeOptions?.longitude,
+        });
+        setSearching(false);
+        setShowDateSelector(false);
+        setPossibleDates([]);
+    }
     useEffect(() => {
         // 递增请求计数使在途反推失效；只写不读，卸载时同样处理。
         const counter = requestId;
         counter.current++;
-        setSearching(false);
-        setShowDateSelector(false);
-        setPossibleDates([]);
         return () => { counter.current++; };
     }, [timeOptions?.timezone, timeOptions?.disambiguation, timeOptions?.longitude]);
 
@@ -310,71 +395,6 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
     };
 
     // 渲染天干选择按钮
-    const renderStemButtons = (onSelect: (stem: HeavenlyStem) => void) => (
-        <div className="grid grid-cols-5 gap-2">
-            {HEAVENLY_STEMS.map((stem) => (
-                <Button unstyled
-                    key={stem}
-                    type="button"
-                    onClick={() => onSelect(stem)}
-                    className={`
-                        h-10 rounded-xl font-display text-lg
-                        transition-colors duration-150
-                        ${ganZhiSoftClass(stem)}
-                        ring-inset hover:ring-1 hover:ring-accent/50
-                    `}
-                >
-                    {stem}
-                </Button>
-            ))}
-        </div>
-    );
-
-    // 渲染地支选择按钮
-    const renderBranchButtons = (branches: EarthlyBranch[], onSelect: (branch: EarthlyBranch) => void) => (
-        <div className="grid grid-cols-6 gap-2">
-            {branches.map((branch) => (
-                <Button unstyled
-                    key={branch}
-                    type="button"
-                    onClick={() => onSelect(branch)}
-                    className={`
-                        h-10 rounded-xl font-display text-lg
-                        transition-colors duration-150
-                        ${ganZhiSoftClass(branch)}
-                        ring-inset hover:ring-1 hover:ring-accent/50
-                    `}
-                >
-                    {branch}
-                </Button>
-            ))}
-        </div>
-    );
-
-    // 渲染完整柱选择按钮
-    const renderPillarButtons = (
-        options: { stem: HeavenlyStem; branch: EarthlyBranch }[],
-        onSelect: (p: { stem: HeavenlyStem; branch: EarthlyBranch }) => void
-    ) => (
-        <div className="grid grid-cols-4 gap-2">
-            {options.map((p, index) => (
-                <Button unstyled
-                    key={`${p.stem}${p.branch}-${index}`}
-                    type="button"
-                    onClick={() => onSelect(p)}
-                    className={`
-                        h-10 px-1 rounded-xl font-display text-base
-                        transition-colors duration-150
-                        ${ganZhiSoftClass(p.stem)}
-                        ring-inset hover:ring-1 hover:ring-accent/50
-                    `}
-                >
-                    {p.stem}{p.branch}
-                </Button>
-            ))}
-        </div>
-    );
-
     return (
         <>
             <div className="space-y-4" aria-busy={searching}>
@@ -468,22 +488,22 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                         </div>
 
                         {/* 年柱天干选择 */}
-                        {currentStep === 'year_stem' && renderStemButtons(handleSelectYearStem)}
+                        {currentStep === 'year_stem' && <StemButtons onSelect={handleSelectYearStem} />}
 
                         {/* 年柱地支选择 */}
-                        {currentStep === 'year_branch' && renderBranchButtons(yearBranchOptions, handleSelectYearBranch)}
+                        {currentStep === 'year_branch' && <BranchButtons branches={yearBranchOptions} onSelect={handleSelectYearBranch} />}
 
                         {/* 月柱选择 */}
-                        {currentStep === 'month' && renderPillarButtons(monthOptions, handleSelectMonth)}
+                        {currentStep === 'month' && <PillarButtons options={monthOptions} onSelect={handleSelectMonth} />}
 
                         {/* 日柱天干选择 */}
-                        {currentStep === 'day_stem' && renderStemButtons(handleSelectDayStem)}
+                        {currentStep === 'day_stem' && <StemButtons onSelect={handleSelectDayStem} />}
 
                         {/* 日柱地支选择 */}
-                        {currentStep === 'day_branch' && renderBranchButtons(dayBranchOptions, handleSelectDayBranch)}
+                        {currentStep === 'day_branch' && <BranchButtons branches={dayBranchOptions} onSelect={handleSelectDayBranch} />}
 
                         {/* 时柱选择 */}
-                        {currentStep === 'hour' && renderPillarButtons(hourOptions, handleSelectHour)}
+                        {currentStep === 'hour' && <PillarButtons options={hourOptions} onSelect={handleSelectHour} />}
                     </div>
                 )}
 

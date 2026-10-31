@@ -112,9 +112,7 @@ export function createPool(): pg.Pool {
 }
 
 declare global {
-  // eslint-disable-next-line no-var
   var __taibuDbPool: pg.Pool | undefined;
-  // eslint-disable-next-line no-var
   var __taibuKysely: Kysely<DB> | undefined;
 }
 

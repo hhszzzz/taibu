@@ -111,7 +111,7 @@ export function AnnouncementManagementPanel() {
   }, [resetToHistory]);
 
   useEffect(() => {
-    void loadAnnouncements();
+    void Promise.resolve().then(() => loadAnnouncements());
   }, [loadAnnouncements]);
 
   const selectedAnnouncement = useMemo(

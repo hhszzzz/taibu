@@ -33,6 +33,7 @@ import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getSettingsCenterRouteTargetForPath } from '@/lib/settings-center';
 import { describePricingPlan, getMembershipInfo, pricingPlans, type MembershipInfo } from '@/lib/user/membership';
 import { getCurrentUserProfileBundle } from '@/lib/user/profile';
+import { useNow } from '@/lib/hooks/useNow';
 
 type ClaimStatus =
   | 'ok'
@@ -167,12 +168,17 @@ export default function UpgradePanel() {
   const [hasLinuxDoLogin, setHasLinuxDoLogin] = useState(false);
   const { showToast } = useToast();
 
-  useEffect(() => {
+  const [prevLinuxDoUserId, setPrevLinuxDoUserId] = useState<string | null | undefined>(undefined);
+  if (prevLinuxDoUserId !== (user?.id ?? null)) {
+    setPrevLinuxDoUserId(user?.id ?? null);
     if (!user) {
       setHasLinuxDoLogin(false);
       setLinuxDoTrustLevel(null);
-      return;
     }
+  }
+
+  useEffect(() => {
+    if (!user) return;
     let active = true;
     void getCurrentUserProfileBundle().then((bundle) => {
       if (!active) return;
@@ -252,136 +258,145 @@ export default function UpgradePanel() {
     void init();
   }, [refreshMembership, sessionLoading, user]);
 
-  useEffect(() => {
-    if (sessionLoading) return;
+  const [prevCheckinGate, setPrevCheckinGate] = useState({ userId: user?.id ?? null, checkinEnabled });
+  if (prevCheckinGate.userId !== (user?.id ?? null) || prevCheckinGate.checkinEnabled !== checkinEnabled) {
+    setPrevCheckinGate({ userId: user?.id ?? null, checkinEnabled });
     if (!user || !checkinEnabled) {
       setCheckinStatus(null);
       setCheckinError(null);
-      return;
     }
-    void refreshCheckinStatus();
+  }
+
+  useEffect(() => {
+    if (sessionLoading) return;
+    if (!user || !checkinEnabled) return;
+    void Promise.resolve().then(refreshCheckinStatus);
   }, [checkinEnabled, refreshCheckinStatus, sessionLoading, user]);
 
   useEffect(() => {
-    if (!user?.id || !hasLinuxDoLogin) {
-      setLinuxDoClaimLockedUntil(null);
-      setLinuxDoClaimPlanName(null);
-      return;
-    }
+    void Promise.resolve().then(() => {
+      if (!user?.id || !hasLinuxDoLogin) {
+        setLinuxDoClaimLockedUntil(null);
+        setLinuxDoClaimPlanName(null);
+        return;
+      }
 
-    const storedLock = readLinuxDoClaimLock(user.id);
-    if (!storedLock) {
-      setLinuxDoClaimLockedUntil(null);
-      setLinuxDoClaimPlanName(null);
-      return;
-    }
+      const storedLock = readLinuxDoClaimLock(user.id);
+      if (!storedLock) {
+        setLinuxDoClaimLockedUntil(null);
+        setLinuxDoClaimPlanName(null);
+        return;
+      }
 
-    if (new Date(storedLock.nextAvailableAt).getTime() <= Date.now()) {
-      clearLinuxDoClaimLock(user.id);
-      setLinuxDoClaimLockedUntil(null);
-      setLinuxDoClaimPlanName(null);
-      return;
-    }
+      if (new Date(storedLock.nextAvailableAt).getTime() <= Date.now()) {
+        clearLinuxDoClaimLock(user.id);
+        setLinuxDoClaimLockedUntil(null);
+        setLinuxDoClaimPlanName(null);
+        return;
+      }
 
-    setLinuxDoClaimLockedUntil(storedLock.nextAvailableAt);
-    setLinuxDoClaimPlanName(storedLock.planName);
+      setLinuxDoClaimLockedUntil(storedLock.nextAvailableAt);
+      setLinuxDoClaimPlanName(storedLock.planName);
+    });
   }, [hasLinuxDoLogin, user?.id]);
 
   useEffect(() => {
     const claim = searchParams.get('claim') as ClaimStatus | null;
     if (!claim) return;
 
-    const nextUrl = new URL(window.location.href);
-    nextUrl.searchParams.delete('claim');
-    nextUrl.searchParams.delete('next_available_at');
-    window.history.replaceState({}, '', nextUrl.toString());
+    void Promise.resolve().then(() => {
+      const nextUrl = new URL(window.location.href);
+      nextUrl.searchParams.delete('claim');
+      nextUrl.searchParams.delete('next_available_at');
+      window.history.replaceState({}, '', nextUrl.toString());
 
-    if (claim === 'ok') {
-      const fallbackPlanName = resolveLinuxDoPlanName(linuxDoTrustLevel);
-      const lockedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
-      setLinuxDoClaimLockedUntil(lockedUntil);
-      setLinuxDoClaimPlanName(fallbackPlanName);
-      if (user?.id) {
-        persistLinuxDoClaimLock(user.id, lockedUntil, fallbackPlanName);
-      }
-      void (async () => {
-        let planName = fallbackPlanName;
-        if (user?.id) {
-          const membershipResult = await refreshMembership(user.id);
-          if (membershipResult.ok) {
-            planName = resolveMembershipPlanName(membershipResult.info?.type) ?? planName;
-          }
-        }
-
-        setLinuxDoClaimPlanName(planName);
-        if (user?.id) {
-          persistLinuxDoClaimLock(user.id, lockedUntil, planName);
-        }
-        showToast('success', `恭喜领取 ${planName ?? '会员'} 会员`);
-      })();
-      return;
-    }
-
-    if (claim === 'cooldown') {
-      const nextAvailableAt = searchParams.get('next_available_at');
-      const fallbackPlanName = resolveLinuxDoPlanName(linuxDoTrustLevel);
-      if (nextAvailableAt) {
-        setLinuxDoClaimLockedUntil(nextAvailableAt);
+      if (claim === 'ok') {
+        const fallbackPlanName = resolveLinuxDoPlanName(linuxDoTrustLevel);
+        const lockedUntil = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+        setLinuxDoClaimLockedUntil(lockedUntil);
         setLinuxDoClaimPlanName(fallbackPlanName);
         if (user?.id) {
-          persistLinuxDoClaimLock(user.id, nextAvailableAt, fallbackPlanName);
+          persistLinuxDoClaimLock(user.id, lockedUntil, fallbackPlanName);
         }
-      }
-      const formatted = nextAvailableAt
-        ? new Date(nextAvailableAt).toLocaleString('zh-CN', {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit',
-          })
-        : null;
-      showToast('info', formatted ? `本月已领取，请在 ${formatted} 后再试` : '本月已领取，请下次再来');
-      return;
-    }
+        void (async () => {
+          let planName = fallbackPlanName;
+          if (user?.id) {
+            const membershipResult = await refreshMembership(user.id);
+            if (membershipResult.ok) {
+              planName = resolveMembershipPlanName(membershipResult.info?.type) ?? planName;
+            }
+          }
 
-    if (claim === 'lower_tier_ignored') {
+          setLinuxDoClaimPlanName(planName);
+          if (user?.id) {
+            persistLinuxDoClaimLock(user.id, lockedUntil, planName);
+          }
+          showToast('success', `恭喜领取 ${planName ?? '会员'} 会员`);
+        })();
+        return;
+      }
+
+      if (claim === 'cooldown') {
+        const nextAvailableAt = searchParams.get('next_available_at');
+        const fallbackPlanName = resolveLinuxDoPlanName(linuxDoTrustLevel);
+        if (nextAvailableAt) {
+          setLinuxDoClaimLockedUntil(nextAvailableAt);
+          setLinuxDoClaimPlanName(fallbackPlanName);
+          if (user?.id) {
+            persistLinuxDoClaimLock(user.id, nextAvailableAt, fallbackPlanName);
+          }
+        }
+        const formatted = nextAvailableAt
+          ? new Date(nextAvailableAt).toLocaleString('zh-CN', {
+              year: 'numeric',
+              month: '2-digit',
+              day: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit',
+            })
+          : null;
+        showToast('info', formatted ? `本月已领取，请在 ${formatted} 后再试` : '本月已领取，请下次再来');
+        return;
+      }
+
+      if (claim === 'lower_tier_ignored') {
+        if (user?.id) {
+          clearLinuxDoClaimLock(user.id);
+        }
+        setLinuxDoClaimLockedUntil(null);
+        setLinuxDoClaimPlanName(null);
+        showToast('info', '当前已有更高等级会员，本次 Linux.do 月领未覆盖');
+        return;
+      }
+
+      if (claim === 'no_eligibility') {
+        if (user?.id) {
+          clearLinuxDoClaimLock(user.id);
+        }
+        setLinuxDoClaimLockedUntil(null);
+        setLinuxDoClaimPlanName(null);
+        showToast('info', '当前 Linux.do 等级不足，无法领取本月会员');
+        return;
+      }
+
+      if (claim === 'missing_linuxdo') {
+        if (user?.id) {
+          clearLinuxDoClaimLock(user.id);
+        }
+        setLinuxDoClaimLockedUntil(null);
+        setLinuxDoClaimPlanName(null);
+        showToast('error', '请使用 Linux.do 账号重新登录后再领取');
+        return;
+      }
+
       if (user?.id) {
         clearLinuxDoClaimLock(user.id);
       }
       setLinuxDoClaimLockedUntil(null);
       setLinuxDoClaimPlanName(null);
-      showToast('info', '当前已有更高等级会员，本次 Linux.do 月领未覆盖');
-      return;
-    }
-
-    if (claim === 'no_eligibility') {
-      if (user?.id) {
-        clearLinuxDoClaimLock(user.id);
-      }
-      setLinuxDoClaimLockedUntil(null);
-      setLinuxDoClaimPlanName(null);
-      showToast('info', '当前 Linux.do 等级不足，无法领取本月会员');
-      return;
-    }
-
-    if (claim === 'missing_linuxdo') {
-      if (user?.id) {
-        clearLinuxDoClaimLock(user.id);
-      }
-      setLinuxDoClaimLockedUntil(null);
-      setLinuxDoClaimPlanName(null);
-      showToast('error', '请使用 Linux.do 账号重新登录后再领取');
-      return;
-    }
-
-    if (user?.id) {
-      clearLinuxDoClaimLock(user.id);
-    }
-    setLinuxDoClaimLockedUntil(null);
-    setLinuxDoClaimPlanName(null);
-    showToast('error', '领取会员失败，请稍后重试');
-  }, [refreshMembership, searchParams, showToast, user]);
+      showToast('error', '领取会员失败，请稍后重试');
+    });
+  }, [linuxDoTrustLevel, refreshMembership, searchParams, showToast, user]);
 
   const handleKeySuccess = (info: MembershipInfo | null) => {
     if (info) {
@@ -467,9 +482,10 @@ export default function UpgradePanel() {
     });
     return `/api/auth/linuxdo?${params.toString()}`;
   }, [currentSearch, pathname]);
+  const now = useNow();
   const linuxDoClaimDisabled = hasLinuxDoLogin
     && !!linuxDoClaimLockedUntil
-    && new Date(linuxDoClaimLockedUntil).getTime() > Date.now();
+    && new Date(linuxDoClaimLockedUntil).getTime() > now;
   const linuxDoClaimLabel = linuxDoClaimDisabled
     ? linuxDoClaimPlanName
       ? `已领取 ${linuxDoClaimPlanName}`

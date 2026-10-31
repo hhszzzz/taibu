@@ -102,7 +102,9 @@ function ZiweiResultContent() {
     const { showToast } = useToast();
 
     // 编辑模式
-    useEffect(() => {
+    const [prevHasFormParams, setPrevHasFormParams] = useState(hasFormParams);
+    if (prevHasFormParams !== hasFormParams) {
+        setPrevHasFormParams(hasFormParams);
         if (hasFormParams) {
             setChartFromDb(null);
             setSaved(false);
@@ -110,12 +112,14 @@ function ZiweiResultContent() {
             setLoadError(null);
             setLoading(false);
         }
-    }, [hasFormParams]);
+    }
 
-    useEffect(() => {
+    const [prevUserId, setPrevUserId] = useState(userId);
+    if (prevUserId !== userId) {
+        setPrevUserId(userId);
         setSaved(false);
         setChartFromDb(null);
-    }, [userId]);
+    }
 
     // 加载已保存命盘
     useEffect(() => {

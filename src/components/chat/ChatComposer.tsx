@@ -193,9 +193,17 @@ export function ChatComposer({
     const [imageMode, setImageMode] = useState(false);
     const [imageSize, setImageSize] = useState<string>('1024x1024');
     const [imageCount, setImageCount] = useState(1);
-    useEffect(() => { if (!imageGeneration) setImageMode(false); }, [imageGeneration]);
+    const [prevImageGeneration, setPrevImageGeneration] = useState(imageGeneration);
+    if (prevImageGeneration !== imageGeneration) {
+        setPrevImageGeneration(imageGeneration);
+        if (!imageGeneration) setImageMode(false);
+    }
     // 切换对话（draftKey 变化）时退出上一次的生图模式。
-    useEffect(() => { setImageMode(false); }, [draftKey]);
+    const [prevImageDraftKey, setPrevImageDraftKey] = useState(draftKey);
+    if (prevImageDraftKey !== draftKey) {
+        setPrevImageDraftKey(draftKey);
+        setImageMode(false);
+    }
 
     const state = useComposerState({
         userId, membershipType,
@@ -236,8 +244,13 @@ export function ChatComposer({
     const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
     const [memoryBusy, setMemoryBusy] = useState(false);
     const memoryFeatureEnabled = isFeatureEnabled('ai-personalization');
+    const [prevMemoryUserId, setPrevMemoryUserId] = useState(userId);
+    if (prevMemoryUserId !== userId) {
+        setPrevMemoryUserId(userId);
+        if (!userId) setMemoryEnabled(null);
+    }
     useEffect(() => {
-        if (!userId) { setMemoryEnabled(null); return; }
+        if (!userId) return;
         let current = true;
         void getCurrentUserSettings({ expectedUserId: userId }).then(result => {
             if (current) setMemoryEnabled(result.settings ? result.settings.chatPreferences.memoryEnabled === true : false);

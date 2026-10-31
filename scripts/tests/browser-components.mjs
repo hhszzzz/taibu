@@ -1633,7 +1633,7 @@ export async function run(existingPage, bundlePath) {
     check('Visual scripts cannot fetch external content',
       await visualFrame.evaluate(async () => { try { await fetch('https://example.com/steal'); return 'allowed'; } catch { return 'blocked'; } }) === 'blocked');
     check('The visual frame cannot reach the parent page',
-      await visualFrame.evaluate(() => { try { window.parent.document.body; return 'accessible'; } catch { return 'blocked'; } }) === 'blocked');
+      await visualFrame.evaluate(() => { try { void window.parent.document.body; return 'accessible'; } catch { return 'blocked'; } }) === 'blocked');
     await until(() => parseInt(document.querySelector('[data-testid="visualization"] iframe')?.style.height ?? '0', 10) > 200);
     check('The parent accepts the height reported by the visual frame', true);
     const reportedHeight = await iframeLocator.evaluate(frame => frame.style.height);

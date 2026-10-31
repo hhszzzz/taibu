@@ -117,7 +117,7 @@ export function KeyManagementPanel() {
     }, []);
 
     useEffect(() => {
-        void loadKeys();
+        void Promise.resolve().then(loadKeys);
     }, [loadKeys]);
 
     useEffect(() => () => {

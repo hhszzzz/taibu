@@ -132,19 +132,21 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
 
     useEffect(() => {
         if (sessionLoading) return;
-        const stored = readSessionJSON<LiuyaoResultSession>('liuyao_result');
-        if (stored) {
-            const parsed = scopeResultSession(stored, userId);
-            writeSessionJSON('liuyao_result', parsed);
-            const questionPayload = readSessionJSON<LiuyaoQuestionSession | string>('liuyao_question');
-            const questionSessionTargets = questionPayload && typeof questionPayload !== 'string'
-                ? questionPayload.yongShenTargets
-                : [];
-            const normalizedTargets = resolveResultYongShenTargets(parsed.yongShenTargets, [], questionSessionTargets || []);
-            setResult({ ...parsed, createdAt: new Date(parsed.createdAt), yongShenTargets: normalizedTargets });
-            setPendingYongShenTargets(normalizedTargets);
-            setDivinationId(parsed.divinationId || null);
-        } else router.push('/liuyao');
+        void Promise.resolve().then(() => {
+            const stored = readSessionJSON<LiuyaoResultSession>('liuyao_result');
+            if (stored) {
+                const parsed = scopeResultSession(stored, userId);
+                writeSessionJSON('liuyao_result', parsed);
+                const questionPayload = readSessionJSON<LiuyaoQuestionSession | string>('liuyao_question');
+                const questionSessionTargets = questionPayload && typeof questionPayload !== 'string'
+                    ? questionPayload.yongShenTargets
+                    : [];
+                const normalizedTargets = resolveResultYongShenTargets(parsed.yongShenTargets, [], questionSessionTargets || []);
+                setResult({ ...parsed, createdAt: new Date(parsed.createdAt), yongShenTargets: normalizedTargets });
+                setPendingYongShenTargets(normalizedTargets);
+                setDivinationId(parsed.divinationId || null);
+            } else router.push('/liuyao');
+        });
     }, [router, sessionLoading, userId]);
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起卦）

@@ -94,7 +94,7 @@ function Brand() {
     return (
         <Link href="/" aria-label="太卜首页" className="flex items-center gap-2 min-w-0">
             <BrandMark className="h-[26px] w-[26px] flex-shrink-0 text-foreground" />
-            <span className="font-display text-[19px] font-medium text-foreground whitespace-nowrap">太卜</span>
+            <span className="font-brand text-[21px] font-medium text-foreground whitespace-nowrap">太卜</span>
         </Link>
     );
 }

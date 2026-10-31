@@ -240,7 +240,7 @@
 .agent-message { display: flex; min-width: 0; flex-direction: column; gap: 14px; }
 .agent-message-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-avatar { display: block; flex-shrink: 0; width: 24px; height: 24px; color: var(--foreground); }
-.agent-name { font-weight: 600; color: var(--foreground); }
+.agent-name { font-family: var(--font-brand); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--foreground); }
 .agent-response-time { font-variant-numeric: tabular-nums; }
 .agent-status { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--foreground-secondary); }
 .agent-status > svg { flex-shrink: 0; }

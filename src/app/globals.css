@@ -2,6 +2,15 @@
 @import "./cds-tokens.css";
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* 品牌字（侧栏「太卜」）：霞鹜文楷，只子集了这两个字，1KB。 */
+@font-face {
+  font-family: "Taibu Brand";
+  src: url("/fonts/taibu-brand-zh.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /*
  * TaiBu 全局样式
  * 支持深色/浅色主题切换
@@ -307,6 +316,8 @@
   --font-mono: "SFMono-Regular", "JetBrains Mono", "Menlo", "Monaco", "Consolas", "Liberation Mono", monospace;
   /* claude 的衬线字体只有 Latin（anthropic-serif）；CJK 实际回退到 PingFang 无衬线。这里按同一行为：Latin Georgia，CJK 回退 sans。 */
   --font-display: Georgia, "Times New Roman", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans SC", sans-serif;
+  /* 品牌名用楷体；子集只含「太卜」，其余字符回退系统楷体再回退衬线。 */
+  --font-brand: "Taibu Brand", "Kaiti SC", "STKaiti", "KaiTi", "TW-Kai", Georgia, "Times New Roman", serif;
   /* 圆角刻度（Claude cds 实测：chip 5 / 控件 6 / 行 8 / 卡片 10 / 输入框 14） */
   --radius-md: .375rem;
   --radius-lg: .5rem;

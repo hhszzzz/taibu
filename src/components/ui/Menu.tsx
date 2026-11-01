@@ -78,6 +78,8 @@ export function MenuContent({
                 alignOffset={alignOffset}
                 side={side}
                 sideOffset={sideOffset}
+                // 对话框本身就是滚动容器：浮层按视口定位，才不会被它的滚动偏移带跑。
+                positionMethod={container ? 'fixed' : 'absolute'}
                 className="z-[var(--z-popup)] outline-none"
             >
                 <MenuPrimitive.Popup

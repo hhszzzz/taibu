@@ -29,7 +29,8 @@ export function Tooltip({ label, children, side = 'top' }: {
                 delay={400}
             />
             <TooltipPrimitive.Portal container={container ?? undefined}>
-                <TooltipPrimitive.Positioner side={side} sideOffset={6} align="center" className="z-[var(--z-tooltip)]">
+                <TooltipPrimitive.Positioner side={side} sideOffset={6} align="center"
+                    positionMethod={container ? 'fixed' : 'absolute'} className="z-[var(--z-tooltip)]">
                     <TooltipPrimitive.Popup
                         role="tooltip"
                         className={cn(

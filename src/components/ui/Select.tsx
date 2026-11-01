@@ -13,6 +13,14 @@ export type SelectOption<Value extends string | number> = {
     disabled?: boolean;
 };
 
+/** The nearest box that scrolls, e.g. the body of the dialog the trigger sits in. */
+function scrollContainerOf(node: Element | null): HTMLElement | null {
+    for (let parent = node?.parentElement ?? null; parent; parent = parent.parentElement) {
+        if (parent.scrollHeight > parent.clientHeight + 1 && /(auto|scroll)/u.test(getComputedStyle(parent).overflowY)) return parent;
+    }
+    return null;
+}
+
 export interface SelectProps<Value extends string | number> {
     value: Value | null;
     onChange: (value: Value) => void;
@@ -53,10 +61,30 @@ export function Select<Value extends string | number>({
     const triggerRef = useRef<HTMLButtonElement | null>(null);
     const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
+    // 弹层获得焦点时浏览器会把它滚进视野，在对话框里会顺带把整块内容往上推。触发器本来就看得见时，开合的两帧内把滚动位置顶回去；
+    // 触发器在视野外就照常滚过去。
+    const onOpenChange = (open: boolean) => {
+        if (!open) return;
+        const trigger = triggerRef.current;
+        const scroller = scrollContainerOf(trigger);
+        if (!trigger || !scroller) return;
+        const box = scroller.getBoundingClientRect();
+        const rect = trigger.getBoundingClientRect();
+        if (rect.top < box.top || rect.bottom > box.bottom) return;
+        const top = scroller.scrollTop;
+        const restore = () => { if (scroller.scrollTop !== top) scroller.scrollTop = top; };
+        scroller.addEventListener('scroll', restore, { passive: true });
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+            scroller.removeEventListener('scroll', restore);
+            restore();
+        }));
+    };
+
     return (
         <SelectPrimitive.Root
             value={value}
             onValueChange={next => { if (next !== null) onChange(next); }}
+            onOpenChange={onOpenChange}
             items={options}
             name={name}
             form={form}
@@ -90,6 +118,9 @@ export function Select<Value extends string | number>({
                     align="start"
                     sideOffset={4}
                     alignItemWithTrigger={false}
+                    // 对话框本身就是滚动容器：浮层按视口定位，才不会被对话框的滚动偏移带跑
+                    // （absolute 首帧会按未滚动的坐标落一次，再把对话框横向顶出去）。
+                    positionMethod={portalContainer ? 'fixed' : 'absolute'}
                     className="z-[var(--z-popup)] outline-none"
                 >
                     <SelectPrimitive.Popup

@@ -1726,8 +1726,9 @@ CREATE OR REPLACE FUNCTION public.billing_next_reset(p_starts_at timestamp with 
     AS $$
 DECLARE steps integer; step interval; candidate timestamp with time zone;
 BEGIN
-  IF p_period NOT IN ('daily','weekly','monthly') THEN RETURN NULL; END IF;
-  step := CASE p_period WHEN 'monthly' THEN interval '1 month' WHEN 'weekly' THEN interval '7 days' ELSE interval '1 day' END;
+  IF p_period NOT IN ('five_hour','daily','weekly','monthly') THEN RETURN NULL; END IF;
+  step := CASE p_period WHEN 'monthly' THEN interval '1 month' WHEN 'weekly' THEN interval '7 days'
+    WHEN 'five_hour' THEN interval '5 hours' ELSE interval '1 day' END;
   steps := greatest(CASE p_period
     WHEN 'monthly' THEN (extract(year FROM age(p_after,p_starts_at))*12 + extract(month FROM age(p_after,p_starts_at)))::integer
     ELSE floor(extract(epoch FROM p_after-p_starts_at)/extract(epoch FROM step))::integer END, 1);
@@ -1740,36 +1741,41 @@ BEGIN
 END;
 $$;
 
--- Applies a reset that has come due to a locked subscription row.
-CREATE OR REPLACE FUNCTION public.billing_apply_reset(p_subscription public.user_subscriptions) RETURNS public.user_subscriptions
+-- Applies a reset that has come due to one locked allowance window.
+CREATE OR REPLACE FUNCTION public.billing_apply_limit_reset(p_limit public.user_subscription_limits) RETURNS public.user_subscription_limits
     LANGUAGE plpgsql
     SET search_path TO 'public', 'pg_temp'
     AS $$
+DECLARE sub public.user_subscriptions;
 BEGIN
-  IF p_subscription.next_reset_at IS NULL OR p_subscription.next_reset_at > now() THEN RETURN p_subscription; END IF;
-  UPDATE public.user_subscriptions SET used_micros=0,
-    next_reset_at=public.billing_next_reset(starts_at,ends_at,reset_period,now()),updated_at=now()
-    WHERE id=p_subscription.id RETURNING * INTO p_subscription;
-  RETURN p_subscription;
+  IF p_limit.next_reset_at IS NULL OR p_limit.next_reset_at > now() THEN RETURN p_limit; END IF;
+  SELECT * INTO sub FROM public.user_subscriptions WHERE id=p_limit.subscription_id;
+  UPDATE public.user_subscription_limits SET used_micros=0,
+    next_reset_at=public.billing_next_reset(sub.starts_at,sub.ends_at,p_limit.period,now())
+    WHERE subscription_id=p_limit.subscription_id AND period=p_limit.period RETURNING * INTO p_limit;
+  RETURN p_limit;
 END;
 $$;
 
--- Starts a subscription from a plan now. Title, allowance and reset period are
--- copied, so a later edit of the plan does not change what was sold.
+-- Starts a subscription from a plan now. The title and every allowance window
+-- are copied, so a later edit of the plan does not change what was sold.
 CREATE OR REPLACE FUNCTION public.billing_open_subscription(p_user_id uuid, p_plan public.subscription_plans, p_source text, p_order_id uuid, p_note text) RETURNS public.user_subscriptions
     LANGUAGE plpgsql
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE sub public.user_subscriptions; starts timestamp with time zone := now(); ends timestamp with time zone;
+DECLARE sub public.user_subscriptions; starts timestamp with time zone := now(); ends timestamp with time zone; lim record;
 BEGIN
   ends := starts + CASE p_plan.duration_unit
     WHEN 'day' THEN make_interval(days=>p_plan.duration_value)
     WHEN 'month' THEN make_interval(months=>p_plan.duration_value)
     ELSE make_interval(years=>p_plan.duration_value) END;
-  INSERT INTO public.user_subscriptions(user_id,plan_id,title,allowance_micros,reset_period,starts_at,ends_at,next_reset_at,source,order_id,note)
-    VALUES(p_user_id,p_plan.id,p_plan.title,p_plan.allowance_micros,p_plan.reset_period,starts,ends,
-      public.billing_next_reset(starts,ends,p_plan.reset_period,starts),p_source,p_order_id,p_note)
+  INSERT INTO public.user_subscriptions(user_id,plan_id,title,starts_at,ends_at,source,order_id,note)
+    VALUES(p_user_id,p_plan.id,p_plan.title,starts,ends,p_source,p_order_id,p_note)
     RETURNING * INTO sub;
+  FOR lim IN SELECT * FROM public.subscription_plan_limits WHERE plan_id=p_plan.id LOOP
+    INSERT INTO public.user_subscription_limits(subscription_id,period,allowance_micros,next_reset_at)
+      VALUES(sub.id,lim.period,lim.allowance_micros,public.billing_next_reset(starts,ends,lim.period,starts));
+  END LOOP;
   RETURN sub;
 END;
 $$;
@@ -1785,8 +1791,8 @@ BEGIN
     RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
   END IF;
   RETURN coalesce((SELECT balance_micros FROM public.billing_accounts WHERE user_id=p_user_id),0)
-    + coalesce((SELECT sum(CASE WHEN s.next_reset_at<=now() THEN s.allowance_micros ELSE s.allowance_micros-s.used_micros END)
-        FROM public.user_subscriptions s
+    + coalesce((SELECT sum(CASE WHEN l.next_reset_at<=now() THEN l.allowance_micros ELSE l.allowance_micros-l.used_micros END)
+        FROM public.user_subscription_limits l JOIN public.user_subscriptions s ON s.id=l.subscription_id
         WHERE s.user_id=p_user_id AND s.status='active' AND s.starts_at<=now() AND s.ends_at>now()),0);
 END;
 $$;
@@ -1801,18 +1807,24 @@ BEGIN
     RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
   END IF;
   wallet := coalesce((SELECT balance_micros FROM public.billing_accounts WHERE user_id=p_user_id),0);
-  SELECT coalesce(sum(t.allowance-t.used),0),
-      coalesce(jsonb_agg(jsonb_build_object('id',t.id,'planId',t.plan_id,'title',t.title,'source',t.source,
-        'allowanceMicros',t.allowance,'usedMicros',t.used,'resetPeriod',t.reset_period,
-        'startsAt',t.starts_at,'endsAt',t.ends_at,'nextResetAt',t.next_reset) ORDER BY t.ends_at,t.id),'[]'::jsonb)
+  SELECT coalesce(sum(u.allowance-u.used),0), coalesce(jsonb_agg(u.subscription ORDER BY u.ends_at,u.id),'[]'::jsonb)
     INTO remaining, subscriptions
-    FROM (SELECT s.id,s.plan_id,s.title,s.source,s.reset_period,s.starts_at,s.ends_at,s.allowance_micros AS allowance,
-        CASE WHEN s.next_reset_at<=now() THEN 0 ELSE s.used_micros END AS used,
-        CASE WHEN s.next_reset_at<=now() THEN public.billing_next_reset(s.starts_at,s.ends_at,s.reset_period,now()) ELSE s.next_reset_at END AS next_reset
-      FROM public.user_subscriptions s
-      WHERE s.user_id=p_user_id AND s.status='active' AND s.starts_at<=now() AND s.ends_at>now()) t;
+    FROM (SELECT s.id,s.ends_at,
+        jsonb_build_object('id',s.id,'planId',s.plan_id,'title',s.title,'source',s.source,
+          'startsAt',s.starts_at,'endsAt',s.ends_at,'limits',jsonb_agg(jsonb_build_object(
+            'period',l.period,'allowanceMicros',l.allowance,'usedMicros',l.used,'nextResetAt',l.next_reset) ORDER BY CASE l.period WHEN 'five_hour' THEN 1 WHEN 'daily' THEN 2 WHEN 'weekly' THEN 3 WHEN 'monthly' THEN 4 ELSE 5 END)) AS subscription,
+        sum(l.allowance) AS allowance, sum(l.used) AS used
+      FROM public.user_subscriptions s CROSS JOIN LATERAL (
+        SELECT l.period,l.allowance_micros AS allowance,
+          CASE WHEN l.next_reset_at<=now() THEN 0 ELSE l.used_micros END AS used,
+          CASE WHEN l.next_reset_at<=now() THEN public.billing_next_reset(s.starts_at,s.ends_at,l.period,now()) ELSE l.next_reset_at END AS next_reset
+        FROM public.user_subscription_limits l WHERE l.subscription_id=s.id) l
+      WHERE s.user_id=p_user_id AND s.status='active' AND s.starts_at<=now() AND s.ends_at>now()
+      GROUP BY s.id,s.plan_id,s.title,s.source,s.starts_at,s.ends_at) u;
   RETURN jsonb_build_object('walletMicros',wallet,'subscriptionMicros',remaining,
-    'spendableMicros',wallet+remaining,'subscriptions',subscriptions);
+    'spendableMicros',wallet+remaining,
+    'deductOrder',coalesce((SELECT deduct_order FROM public.billing_accounts WHERE user_id=p_user_id),'subscription'),
+    'subscriptions',subscriptions);
 END;
 $$;
 
@@ -1824,37 +1836,80 @@ CREATE OR REPLACE FUNCTION public.billing_charge(p_user_id uuid, p_amount bigint
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE entry public.billing_ledger; sub public.user_subscriptions; wallet bigint; remaining bigint; take bigint; parts jsonb := '[]';
+DECLARE entry public.billing_ledger; sub public.user_subscriptions; lim public.user_subscription_limits;
+  wallet bigint; remaining bigint; take bigint; parts jsonb := '[]'; prefer text; from_wallet bigint := 0; affordable bigint;
 BEGIN
   IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
   IF p_amount IS NULL OR p_amount<0 THEN RAISE EXCEPTION 'BILLING_AMOUNT_INVALID' USING ERRCODE='22023'; END IF;
   wallet := public.billing_lock_account(p_user_id);
+  SELECT deduct_order INTO STRICT prefer FROM public.billing_accounts WHERE user_id=p_user_id;
   -- Checked under the lock, so a concurrent duplicate has committed by now.
   SELECT * INTO entry FROM public.billing_ledger WHERE idempotency_key=p_idempotency_key AND user_id=p_user_id;
   IF FOUND THEN RETURN to_jsonb(entry)||jsonb_build_object('replayed',true); END IF;
   remaining := p_amount;
+  -- 先扣余额时，预付的调用要先把总额看住：余额与各份额度的剩余加起来不够就一笔都不动。
+  IF NOT p_allow_debt AND prefer='wallet' THEN
+    SELECT greatest(wallet,0)+coalesce(sum(CASE WHEN l.next_reset_at<=now() THEN l.allowance_micros ELSE l.allowance_micros-l.used_micros END),0)
+      INTO affordable FROM public.user_subscriptions s JOIN public.user_subscription_limits l ON l.subscription_id=s.id
+      WHERE s.user_id=p_user_id AND s.status='active' AND s.starts_at<=now() AND s.ends_at>now();
+    IF coalesce(affordable,greatest(wallet,0)) < remaining THEN RAISE EXCEPTION 'INSUFFICIENT_BALANCE' USING ERRCODE='P0001'; END IF;
+  END IF;
+  IF prefer='wallet' THEN
+    take := least(remaining,greatest(wallet,0));
+    IF take>0 THEN
+      wallet := wallet-take;
+      from_wallet := take;
+      remaining := remaining-take;
+      UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=p_user_id;
+    END IF;
+  END IF;
   FOR sub IN SELECT * FROM public.user_subscriptions
       WHERE user_id=p_user_id AND status='active' AND starts_at<=now() AND ends_at>now()
       ORDER BY ends_at,created_at,id FOR UPDATE LOOP
     EXIT WHEN remaining=0;
-    sub := public.billing_apply_reset(sub);
-    take := least(remaining,sub.allowance_micros-sub.used_micros);
-    CONTINUE WHEN take<=0;
-    UPDATE public.user_subscriptions SET used_micros=used_micros+take,updated_at=now() WHERE id=sub.id;
-    parts := parts||jsonb_build_array(jsonb_build_object('id',sub.id,'title',sub.title,'micros',-take));
-    remaining := remaining-take;
+    -- 窗口从短到长：最先重置的额度先用掉。
+    FOR lim IN SELECT * FROM public.user_subscription_limits WHERE subscription_id=sub.id
+        ORDER BY CASE period WHEN 'five_hour' THEN 1 WHEN 'daily' THEN 2 WHEN 'weekly' THEN 3 WHEN 'monthly' THEN 4 ELSE 5 END
+        FOR UPDATE LOOP
+      EXIT WHEN remaining=0;
+      lim := public.billing_apply_limit_reset(lim);
+      take := least(remaining,lim.allowance_micros-lim.used_micros);
+      CONTINUE WHEN take<=0;
+      UPDATE public.user_subscription_limits SET used_micros=used_micros+take
+        WHERE subscription_id=lim.subscription_id AND period=lim.period;
+      parts := parts||jsonb_build_array(jsonb_build_object('id',sub.id,'title',sub.title,'period',lim.period,'micros',-take));
+      remaining := remaining-take;
+    END LOOP;
   END LOOP;
   IF remaining>0 THEN
     IF NOT p_allow_debt AND wallet<remaining THEN RAISE EXCEPTION 'INSUFFICIENT_BALANCE' USING ERRCODE='P0001'; END IF;
     wallet := wallet-remaining;
+    from_wallet := from_wallet+remaining;
     UPDATE public.billing_accounts SET balance_micros=wallet,updated_at=now() WHERE user_id=p_user_id;
   END IF;
   INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_micros,subscription_parts,wallet_after_micros,
       source,model_key,usage,reference_type,reference_id,idempotency_key,description)
-    VALUES(p_user_id,'usage',-p_amount,-remaining,parts,wallet,coalesce(p_source,''),p_model_key,p_usage,
+    VALUES(p_user_id,'usage',-p_amount,-from_wallet,parts,wallet,coalesce(p_source,''),p_model_key,p_usage,
       p_reference_type,p_reference_id,p_idempotency_key,left(coalesce(p_description,''),500))
     RETURNING * INTO entry;
   RETURN to_jsonb(entry)||jsonb_build_object('replayed',false);
+END;
+$$;
+
+-- Which purse a charge spends first: the allowances (soonest ending first, the
+-- default) or the wallet. A member may set their own, an administrator anyone's.
+CREATE OR REPLACE FUNCTION public.billing_set_deduct_order(p_user_id uuid, p_order text) RETURNS text
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+BEGIN
+  IF p_user_id IS NULL OR (p_user_id IS DISTINCT FROM auth.uid() AND NOT public.is_admin_user()) THEN
+    RAISE EXCEPTION 'forbidden' USING ERRCODE='42501';
+  END IF;
+  IF p_order IS NULL OR p_order NOT IN ('subscription','wallet') THEN RAISE EXCEPTION 'BILLING_ORDER_INVALID' USING ERRCODE='22023'; END IF;
+  INSERT INTO public.billing_accounts(user_id) VALUES(p_user_id) ON CONFLICT (user_id) DO NOTHING;
+  UPDATE public.billing_accounts SET deduct_order=p_order,updated_at=now() WHERE user_id=p_user_id;
+  RETURN p_order;
 END;
 $$;
 
@@ -1865,7 +1920,8 @@ CREATE OR REPLACE FUNCTION public.billing_refund(p_charge_key text, p_amount big
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE charge public.billing_ledger; entry public.billing_ledger; sub public.user_subscriptions; part jsonb;
+DECLARE charge public.billing_ledger; entry public.billing_ledger; sub public.user_subscriptions;
+  lim public.user_subscription_limits; part jsonb;
   wallet bigint; due bigint; wallet_back bigint; restore bigint; restored bigint := 0; parts jsonb := '[]';
 BEGIN
   IF NOT public.is_admin_user() THEN RAISE EXCEPTION 'forbidden' USING ERRCODE='42501'; END IF;
@@ -1882,16 +1938,21 @@ BEGIN
     EXIT WHEN due=0;
     restore := least(due, -(part->>'micros')::bigint - coalesce((SELECT sum((p.value->>'micros')::bigint)
       FROM public.billing_ledger l CROSS JOIN LATERAL jsonb_array_elements(l.subscription_parts) p
-      WHERE l.kind='refund' AND l.reference_type='billing_ledger' AND l.reference_id=charge.id::text AND p.value->>'id'=part->>'id'),0));
+      WHERE l.kind='refund' AND l.reference_type='billing_ledger' AND l.reference_id=charge.id::text
+        AND p.value->>'id'=part->>'id' AND p.value->>'period'=part->>'period'),0));
     CONTINUE WHEN restore<=0;
     SELECT * INTO sub FROM public.user_subscriptions
       WHERE id=(part->>'id')::uuid AND status='active' AND ends_at>now() FOR UPDATE;
     CONTINUE WHEN NOT FOUND;
-    sub := public.billing_apply_reset(sub);
-    restore := least(restore,sub.used_micros);
+    SELECT * INTO lim FROM public.user_subscription_limits
+      WHERE subscription_id=sub.id AND period=coalesce(part->>'period','total') FOR UPDATE;
+    CONTINUE WHEN NOT FOUND;
+    lim := public.billing_apply_limit_reset(lim);
+    restore := least(restore,lim.used_micros);
     CONTINUE WHEN restore<=0;
-    UPDATE public.user_subscriptions SET used_micros=used_micros-restore,updated_at=now() WHERE id=sub.id;
-    parts := parts||jsonb_build_array(jsonb_build_object('id',sub.id,'title',sub.title,'micros',restore));
+    UPDATE public.user_subscription_limits SET used_micros=used_micros-restore
+      WHERE subscription_id=lim.subscription_id AND period=lim.period;
+    parts := parts||jsonb_build_array(jsonb_build_object('id',sub.id,'title',sub.title,'period',lim.period,'micros',restore));
     restored := restored+restore;
     due := due-restore;
   END LOOP;

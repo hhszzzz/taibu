@@ -88,6 +88,7 @@ function createCustomProviderChatRunner(customProvider: NonNullable<ReturnType<t
         await streamBrowserDirectProvider({
             provider: customProvider,
             messages: buildBrowserDirectMessages(prepared.systemPrompt, prepared.sanitizedMessages),
+            conversationId: typeof requestBody.conversationId === 'string' ? requestBody.conversationId : undefined,
             signal,
             onContentDelta: appendContentDelta,
             onReasoningDelta: appendReasoningDelta,

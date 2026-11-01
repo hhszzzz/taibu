@@ -13,6 +13,8 @@ export interface BillingLedgerConditions {
     kinds?: readonly string[];
     source?: string;
     model?: string;
+    /** Free text matched against the description and the model key. */
+    query?: string;
     from?: string;
     to?: string;
 }
@@ -23,6 +25,10 @@ export function billingLedgerWhere(conditions: BillingLedgerConditions) {
         ...(conditions.kind ? [eb('kind', '=', conditions.kind)] : conditions.kinds ? [eb('kind', 'in', conditions.kinds)] : []),
         ...(conditions.source ? [eb('source', '=', conditions.source)] : []),
         ...(conditions.model ? [eb('model_key', '=', conditions.model)] : []),
+        ...(conditions.query ? [eb.or([
+            eb('description', 'ilike', `%${conditions.query}%`),
+            eb('model_key', 'ilike', `%${conditions.query}%`),
+        ])] : []),
         ...(conditions.from ? [eb('created_at', '>=', conditions.from)] : []),
         ...(conditions.to ? [eb('created_at', '<', conditions.to)] : []),
     ]);
@@ -38,3 +44,16 @@ export const BILLING_LEDGER_TOTALS = [
     sql<string>`coalesce(sum((usage->>'images')::numeric), 0)`.as('images'),
     sql<string>`coalesce(-sum(amount_micros), 0)`.as('spent'),
 ] as const;
+
+/** Charges per referenced object, net of the refunds of those charges: what an Agent task's model calls cost, say. */
+export function billingReferenceCostsQuery(referenceType: string, ids: readonly string[]) {
+    return sql<{ reference_id: string; calls: string; spent: string }>`
+        select c.reference_id, count(*) as calls, coalesce(-sum(c.amount_micros), 0) - coalesce(sum(r.refunded), 0) as spent
+        from public.billing_ledger c
+        left join lateral (
+            select sum(x.amount_micros) as refunded from public.billing_ledger x
+            where x.kind = 'refund' and x.reference_type = 'billing_ledger' and x.reference_id = c.id::text
+        ) r on true
+        where c.kind = 'usage' and c.reference_type = ${referenceType} and c.reference_id in (${sql.join(ids)})
+        group by c.reference_id`;
+}

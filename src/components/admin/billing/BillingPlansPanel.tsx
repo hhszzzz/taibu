@@ -23,31 +23,36 @@ import { Textarea } from '@/components/ui/Textarea';
 import { useToast } from '@/components/ui/Toast';
 import { deleteAdminPlan, fetchAdminPlans, saveAdminPlan } from '@/lib/billing/client';
 import {
-    DURATION_UNITS, DURATION_UNIT_LABELS, RESET_PERIODS, RESET_PERIOD_LABELS, describePlanDuration, parsePlanInput,
-    type DurationUnit, type ResetPeriod, type SubscriptionPlanView,
+    DURATION_UNITS, DURATION_UNIT_LABELS, SUBSCRIPTION_WINDOWS, SUBSCRIPTION_WINDOW_LABELS, describePlanDuration, parsePlanInput,
+    type DurationUnit, type SubscriptionPlanView, type SubscriptionWindow,
 } from '@/lib/billing/config';
 import { formatUsd, microsToUsd, usdToMicros } from '@/lib/billing/money';
 
 const CARD = 'rounded-2xl border border-border bg-surface';
 
+type DraftLimit = { period: SubscriptionWindow; allowanceUsd: string };
 type Draft = {
-    title: string; subtitle: string; features: string; priceUsd: string; allowanceUsd: string;
-    durationUnit: DurationUnit; durationValue: string; resetPeriod: ResetPeriod; maxPerUser: string;
+    title: string; subtitle: string; features: string; priceUsd: string;
+    durationUnit: DurationUnit; durationValue: string; limits: DraftLimit[]; maxPerUser: string;
     sortOrder: string; purchasable: boolean; enabled: boolean;
 };
 
 const draftOf = (plan: SubscriptionPlanView | null): Draft => ({
     title: plan?.title ?? '', subtitle: plan?.subtitle ?? '', features: plan?.features.join('\n') ?? '',
-    priceUsd: plan ? String(plan.priceUsd) : '', allowanceUsd: plan ? String(microsToUsd(plan.allowanceMicros)) : '',
+    priceUsd: plan ? String(plan.priceUsd) : '',
     durationUnit: plan?.durationUnit ?? 'month', durationValue: String(plan?.durationValue ?? 1),
-    resetPeriod: plan?.resetPeriod ?? 'never', maxPerUser: plan?.maxPerUser == null ? '' : String(plan.maxPerUser),
+    limits: plan?.limits.length
+        ? plan.limits.map(limit => ({ period: limit.period, allowanceUsd: String(microsToUsd(limit.allowanceMicros)) }))
+        : [{ period: 'monthly', allowanceUsd: '' }],
+    maxPerUser: plan?.maxPerUser == null ? '' : String(plan.maxPerUser),
     sortOrder: String(plan?.sortOrder ?? 0), purchasable: plan?.purchasable ?? true, enabled: plan?.enabled ?? true,
 });
 
 const bodyOf = (draft: Draft) => ({
     title: draft.title, subtitle: draft.subtitle, features: draft.features.split('\n').map(line => line.trim()).filter(Boolean),
-    priceUsd: draft.priceUsd.trim() === '' ? NaN : Number(draft.priceUsd), allowanceUsd: Number(draft.allowanceUsd),
-    durationUnit: draft.durationUnit, durationValue: Number(draft.durationValue), resetPeriod: draft.resetPeriod,
+    priceUsd: draft.priceUsd.trim() === '' ? NaN : Number(draft.priceUsd),
+    durationUnit: draft.durationUnit, durationValue: Number(draft.durationValue),
+    limits: draft.limits.map(limit => ({ period: limit.period, allowanceUsd: Number(limit.allowanceUsd) })),
     maxPerUser: draft.maxPerUser.trim() === '' ? null : Number(draft.maxPerUser), sortOrder: Number(draft.sortOrder || 0),
     purchasable: draft.purchasable, enabled: draft.enabled,
 });
@@ -80,7 +85,7 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: SubscriptionPlanView | n
 
     return (
         <Dialog open onClose={() => { if (!saving) onClose(); }} busy={saving} className="dialog-lg" title={plan ? `编辑「${plan.title}」` : '新建套餐'}
-            description="已售出的订阅保留开通时的名称、额度与重置周期，改动只影响之后的开通。"
+            description="已售出的订阅保留开通时的名称与额度周期，改动只影响之后的开通。"
             footer={<>
                 {error ? <p role="alert" className="mr-auto self-center text-[13px] text-danger">{error}</p> : null}
                 <Button variant="ghost" size="lg" disabled={saving} onClick={onClose}>取消</Button>
@@ -96,9 +101,6 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: SubscriptionPlanView | n
                 <Field label="价格（美元）" description="0 表示免费开通。">
                     <Input inputMode="decimal" value={draft.priceUsd} onChange={event => set({ priceUsd: event.target.value.trim() })} placeholder="9.90" />
                 </Field>
-                <Field label="每期额度（美元）" description="每个重置周期可用的金额。">
-                    <Input inputMode="decimal" value={draft.allowanceUsd} onChange={event => set({ allowanceUsd: event.target.value.trim() })} placeholder="10" />
-                </Field>
                 <Field label="有效期">
                     {props => (
                         <div className="flex gap-2">
@@ -108,11 +110,32 @@ function PlanEditor({ plan, onClose, onSaved }: { plan: SubscriptionPlanView | n
                         </div>
                     )}
                 </Field>
-                <Field label="额度重置" description="从开通时刻起按周期滚动重置。">
-                    {props => (
-                        <Select ariaLabel="额度重置" id={props.id} value={draft.resetPeriod} onChange={resetPeriod => set({ resetPeriod })}
-                            options={RESET_PERIODS.map(period => ({ value: period, label: RESET_PERIOD_LABELS[period] }))} />
-                    )}
+                <Field label="额度" description="一个周期一行，从开通时刻起滚动重置；「整个订阅期」不重置。调用先扣最短的周期。" className="sm:col-span-2">
+                    <div className="flex flex-col gap-2">
+                        {draft.limits.map((limit, index) => (
+                            <div key={index} className="flex items-center gap-2">
+                                <Select ariaLabel={`第 ${index + 1} 个额度周期`} value={limit.period}
+                                    onChange={period => set({ limits: draft.limits.map((item, at) => at === index ? { ...item, period } : item) })}
+                                    options={SUBSCRIPTION_WINDOWS.filter(period => period === limit.period || !draft.limits.some(item => item.period === period))
+                                        .map(period => ({ value: period, label: SUBSCRIPTION_WINDOW_LABELS[period] }))}
+                                    className="w-40" />
+                                <Input aria-label={`第 ${index + 1} 个额度金额`} inputMode="decimal" placeholder="美元"
+                                    value={limit.allowanceUsd}
+                                    onChange={event => set({ limits: draft.limits.map((item, at) => at === index ? { ...item, allowanceUsd: event.target.value.trim() } : item) })} />
+                                {draft.limits.length > 1 ? (
+                                    <IconButton label={`删除第 ${index + 1} 个额度`} onClick={() => set({ limits: draft.limits.filter((_, at) => at !== index) })}>
+                                        <Trash2 className="h-4 w-4" aria-hidden="true" />
+                                    </IconButton>
+                                ) : null}
+                            </div>
+                        ))}
+                        {draft.limits.length < SUBSCRIPTION_WINDOWS.length ? (
+                            <Button variant="ghost" size="sm" className="self-start"
+                                onClick={() => set({ limits: [...draft.limits, { period: SUBSCRIPTION_WINDOWS.find(period => !draft.limits.some(item => item.period === period)) ?? 'total', allowanceUsd: '' }] })}>
+                                <Plus className="h-4 w-4" aria-hidden="true" />添加周期
+                            </Button>
+                        ) : null}
+                    </div>
                 </Field>
                 <Field label="每人限购" description="留空表示不限。">
                     <Input inputMode="numeric" value={draft.maxPerUser} onChange={event => set({ maxPerUser: event.target.value.trim() })} placeholder="不限" />
@@ -184,7 +207,7 @@ export function BillingPlansPanel() {
     return (
         <div className="flex flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-                <p className="settings-help">用户在「订阅与余额」里看到启用的套餐；可以用余额购买，开启在线支付后也能直接付款。</p>
+                <p className="settings-help">用户在「钱包」里看到启用的套餐；可以用余额购买，开启在线支付后也能直接付款。</p>
                 <Button size="sm" onClick={() => setEditing({ plan: null })}><Plus size={14} aria-hidden="true" />新建套餐</Button>
             </div>
             {plans.length ? (
@@ -199,7 +222,7 @@ export function BillingPlansPanel() {
                                 </span>
                                 <span className="text-[13px] text-foreground-secondary">
                                     {plan.priceUsd ? formatUsd(usdToMicros(plan.priceUsd)) : '免费'} / {describePlanDuration(plan)}
-                                    {` · 额度 ${formatUsd(plan.allowanceMicros)}`}{plan.resetPeriod === 'never' ? '' : `（${RESET_PERIOD_LABELS[plan.resetPeriod]}）`}
+                                    {` · 额度 ${plan.limits.map(limit => `${SUBSCRIPTION_WINDOW_LABELS[limit.period]} ${formatUsd(limit.allowanceMicros)}`).join('，')}`}
                                     {plan.maxPerUser ? ` · 每人限 ${plan.maxPerUser} 次` : ''}
                                 </span>
                                 {plan.subtitle ? <span className="text-xs text-foreground-tertiary">{plan.subtitle}</span> : null}
@@ -214,7 +237,7 @@ export function BillingPlansPanel() {
             ) : (
                 <div className={`flex flex-col items-center gap-1.5 px-6 py-12 text-center ${CARD}`}>
                     <p className="text-[15px] text-foreground">还没有套餐</p>
-                    <p className="text-[13px] text-foreground-secondary">新建一个套餐，用户就能在「订阅与余额」里开通。</p>
+                    <p className="text-[13px] text-foreground-secondary">新建一个套餐，用户就能在「钱包」里开通。</p>
                 </div>
             )}
             {editing ? <PlanEditor key={editing.plan?.id ?? 'new'} plan={editing.plan} onClose={() => setEditing(null)}

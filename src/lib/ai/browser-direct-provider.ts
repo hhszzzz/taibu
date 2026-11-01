@@ -11,9 +11,19 @@ export interface BrowserDirectMessage {
     content: string | BrowserDirectContentPart[];
 }
 
+/** Token counts the provider reported for this call; null when it reported none. */
+export interface BrowserDirectUsage {
+    input: number;
+    output: number;
+    cacheRead: number;
+    cacheWrite: number;
+    reasoning?: number;
+}
+
 export interface BrowserDirectResult {
     content: string;
     reasoning: string | null;
+    usage: BrowserDirectUsage | null;
 }
 
 export interface BrowserDirectStreamOptions {
@@ -21,6 +31,8 @@ export interface BrowserDirectStreamOptions {
     messages: BrowserDirectMessage[];
     temperature?: number;
     maxTokens?: number;
+    /** Links the recorded call to its conversation in the usage log. */
+    conversationId?: string;
     signal?: AbortSignal;
     onContentDelta?: (delta: string) => void;
     onReasoningDelta?: (delta: string) => void;
@@ -124,6 +136,21 @@ function extractChoiceData(payload: unknown): { contentDelta: string; reasoningD
         reasoningDelta,
         finishReason: firstChoice.finish_reason,
     };
+}
+
+function extractUsage(payload: unknown): BrowserDirectUsage | null {
+    if (!payload || typeof payload !== 'object') return null;
+    const usage = (payload as { usage?: Record<string, unknown> }).usage;
+    if (!usage || typeof usage !== 'object') return null;
+    const count = (value: unknown) => typeof value === 'number' && Number.isFinite(value) && value > 0 ? Math.round(value) : 0;
+    const details = (usage.prompt_tokens_details ?? {}) as Record<string, unknown>;
+    const completion = (usage.completion_tokens_details ?? {}) as Record<string, unknown>;
+    const result: BrowserDirectUsage = {
+        input: count(usage.prompt_tokens), output: count(usage.completion_tokens),
+        cacheRead: count(details.cached_tokens), cacheWrite: count(usage.cache_creation_input_tokens),
+        ...(count(completion.reasoning_tokens) ? { reasoning: count(completion.reasoning_tokens) } : {}),
+    };
+    return result.input + result.output + result.cacheRead + result.cacheWrite > 0 ? result : null;
 }
 
 async function toProviderError(response: Response): Promise<BrowserDirectProviderError> {
@@ -232,7 +259,26 @@ export function buildBrowserDirectMessages(
         : normalizedMessages;
 }
 
+/** Hands the usage to the site so the log shows this call; the site never charges for it. Fire and forget. */
+function reportDirectUsage(model: string, usage: BrowserDirectUsage | null, conversationId?: string) {
+    if (!usage) return;
+    void fetch('/api/chat/direct/usage', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, ...usage, ...(conversationId ? { conversationId } : {}) }),
+        keepalive: true,
+    }).catch(() => {});
+}
+
 export async function streamBrowserDirectProvider(
+    options: BrowserDirectStreamOptions,
+): Promise<BrowserDirectResult> {
+    const result = await streamOnce(options);
+    reportDirectUsage(options.provider.modelId, result.usage, options.conversationId);
+    return result;
+}
+
+async function streamOnce(
     options: BrowserDirectStreamOptions,
 ): Promise<BrowserDirectResult> {
     const { provider, messages, temperature = 0.7, maxTokens, signal, onContentDelta, onReasoningDelta } = options;
@@ -248,6 +294,8 @@ export async function streamBrowserDirectProvider(
             messages,
             stream: true,
             temperature,
+            // 多数网关在流式响应里只有加上这一项才会回报用量。
+            stream_options: { include_usage: true },
             ...(typeof maxTokens === 'number' ? { max_tokens: maxTokens } : {}),
         }),
         signal,
@@ -270,6 +318,7 @@ export async function streamBrowserDirectProvider(
         return {
             content: contentDelta,
             reasoning: reasoningDelta || null,
+            usage: extractUsage(payload),
         };
     }
 
@@ -284,6 +333,7 @@ export async function streamBrowserDirectProvider(
     let buffer = '';
     let content = '';
     let reasoning = '';
+    let usage: BrowserDirectUsage | null = null;
 
     try {
         while (true) {
@@ -311,6 +361,7 @@ export async function streamBrowserDirectProvider(
                 }
 
                 const parsed = JSON.parse(data) as unknown;
+                usage = extractUsage(parsed) ?? usage;
                 const { contentDelta, reasoningDelta } = extractChoiceData(parsed);
                 if (reasoningDelta) {
                     reasoning += reasoningDelta;
@@ -331,6 +382,7 @@ export async function streamBrowserDirectProvider(
             const data = buffer.trim().replace(/^data:\s*/, '');
             if (data && data !== '[DONE]') {
                 const parsed = JSON.parse(data) as unknown;
+                usage = extractUsage(parsed) ?? usage;
                 const { contentDelta, reasoningDelta } = extractChoiceData(parsed);
                 if (reasoningDelta) {
                     reasoning += reasoningDelta;
@@ -349,5 +401,6 @@ export async function streamBrowserDirectProvider(
     return {
         content,
         reasoning: reasoning || null,
+        usage,
     };
 }

@@ -1,5 +1,5 @@
 /**
- * 订阅与余额：可用额度（余额 + 订阅剩余）、当前订阅、套餐、在线充值、兑换码、账单明细与支付订单。
+ * 钱包：可用额度（余额 + 订阅剩余）、当前订阅、套餐、在线充值、兑换码与支付订单；逐次调用在「用量日志」。
  *
  * 'use client' 标记说明：
  * - 需要会话状态与 hooks 加载账户、处理兑换与购买，并在从支付页跳回时提示结果
@@ -8,9 +8,10 @@
 
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { SubscriptionIcon, WalletIcon } from '@/lib/navigation/nav-icons';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
-import { BillingLedgerSection } from '@/components/billing/BillingLedgerSection';
+import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
@@ -18,12 +19,12 @@ import { FilterChip } from '@/components/ui/FilterChip';
 import { Input } from '@/components/ui/Input';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
-import { buyPlan, fetchBillingOrders, fetchBillingOverview, redeemCode, startCheckout, submitCheckout } from '@/lib/billing/client';
+import { buyPlan, fetchBillingOrders, fetchBillingOverview, redeemCode, saveDeductOrder, startCheckout, submitCheckout } from '@/lib/billing/client';
 import {
-    PAYMENT_ORDER_STATUS_LABELS, cnyForUsd, describePlanDuration,
-    type BillingOverview, type BillingSummary, type PaymentOrderView, type SubscriptionPlanView,
+    DEDUCT_ORDERS, DEDUCT_ORDER_LABELS, PAYMENT_ORDER_STATUS_LABELS, cnyForUsd, describePlanDuration,
+    type BillingOverview, type BillingSummary, type DeductOrder, type PaymentOrderView, type SubscriptionPlanView,
 } from '@/lib/billing/config';
-import { formatBillingDay, formatBillingTime, resetPeriodLabel } from '@/lib/billing/format';
+import { formatBillingDay, formatBillingTime, windowLabel } from '@/lib/billing/format';
 import { formatUsd, usdToMicros } from '@/lib/billing/money';
 
 const SECTION_HEADING = 'text-[13px] font-medium text-foreground-tertiary';
@@ -40,7 +41,7 @@ const ORDER_TONE: Record<PaymentOrderView['status'], 'success' | 'warning' | 'ne
     paid: 'success', pending: 'warning', expired: 'neutral', failed: 'danger',
 };
 
-function BalanceCard({ summary }: { summary: BillingSummary }) {
+function BalanceCard({ summary, onDeductOrder }: { summary: BillingSummary; onDeductOrder: (order: DeductOrder) => void }) {
     return (
         <section aria-label="可用额度" className={`flex flex-col gap-4 p-6 ${CARD}`}>
             <div className="flex flex-wrap items-end justify-between gap-4">
@@ -50,11 +51,11 @@ function BalanceCard({ summary }: { summary: BillingSummary }) {
                 </div>
                 <dl className="flex gap-8 text-[13px]">
                     <div>
-                        <dt className="text-foreground-tertiary">余额</dt>
+                        <dt className="flex items-center gap-1.5 text-foreground-tertiary"><WalletIcon size={14} />余额</dt>
                         <dd className="mt-0.5 tabular-nums text-foreground">{formatUsd(summary.walletMicros)}</dd>
                     </div>
                     <div>
-                        <dt className="text-foreground-tertiary">订阅剩余</dt>
+                        <dt className="flex items-center gap-1.5 text-foreground-tertiary"><SubscriptionIcon size={14} />订阅剩余</dt>
                         <dd className="mt-0.5 tabular-nums text-foreground">{formatUsd(summary.subscriptionMicros)}</dd>
                     </div>
                 </dl>
@@ -64,7 +65,18 @@ function BalanceCard({ summary }: { summary: BillingSummary }) {
                     上一次调用超出了余额，欠 {formatUsd(-summary.walletMicros, { precise: true })}，下次充值或兑换时抵扣。
                 </p>
             ) : null}
-            <p className="text-[13px] leading-relaxed text-foreground-secondary">免费模型与自定义模型（自带 API Key）不计费。</p>
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-t border-border pt-4">
+                <span className="text-[13px] text-foreground-tertiary">平台调用先扣</span>
+                {DEDUCT_ORDERS.map(order => (
+                    <FilterChip key={order} pressed={summary.deductOrder === order} onClick={() => onDeductOrder(order)}>
+                        {DEDUCT_ORDER_LABELS[order]}
+                    </FilterChip>
+                ))}
+            </div>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                <p className="text-[13px] leading-relaxed text-foreground-secondary">免费模型记为 $0；自带 API Key 的自定义模型同样记一条日志，不扣费。</p>
+                <SettingsCenterLink tab="usage-log" className="text-[13px] font-medium text-accent hover:underline">查看用量日志</SettingsCenterLink>
+            </div>
         </section>
     );
 }
@@ -76,25 +88,29 @@ function Subscriptions({ summary }: { summary: BillingSummary }) {
             <h3 id="billing-subscriptions-heading" className={SECTION_HEADING}>我的订阅</h3>
             <ul className={`overflow-hidden ${CARD}`}>
                 {summary.subscriptions.map(subscription => {
-                    const left = Math.max(subscription.allowanceMicros - subscription.usedMicros, 0);
-                    const used = subscription.allowanceMicros ? Math.min(subscription.usedMicros / subscription.allowanceMicros, 1) * 100 : 100;
+                    const allowance = subscription.limits.reduce((sum, limit) => sum + limit.allowanceMicros, 0);
+                    const usedMicros = subscription.limits.reduce((sum, limit) => sum + limit.usedMicros, 0);
+                    const left = Math.max(allowance - usedMicros, 0);
                     return (
                         <li key={subscription.id} className="flex flex-col gap-2 border-t border-border p-4 first:border-t-0">
                             <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
                                 <span className="text-sm font-medium text-foreground">{subscription.title}</span>
                                 <span className="text-[13px] tabular-nums text-foreground-secondary">
-                                    剩余 {formatUsd(left)} / {formatUsd(subscription.allowanceMicros)}
+                                    剩余 {formatUsd(left)} / {formatUsd(allowance)}
                                 </span>
                             </div>
-                            <div role="progressbar" aria-label={`「${subscription.title}」已用额度`} aria-valuemin={0} aria-valuemax={100}
-                                aria-valuenow={Math.round(used)} className="h-1.5 overflow-hidden rounded-full bg-background-secondary">
-                                <div className="h-full rounded-full bg-accent" style={{ width: `${used}%` }} />
-                            </div>
-                            <p className="text-xs text-foreground-tertiary">
-                                {resetPeriodLabel(subscription.resetPeriod)}
-                                {subscription.nextResetAt ? ` · ${formatBillingTime(subscription.nextResetAt)} 重置` : ''}
-                                {` · ${formatBillingDay(subscription.endsAt)} 到期`}
-                            </p>
+                            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
+                                {subscription.limits.map(limit => (
+                                    <div key={limit.period} className="flex items-baseline gap-1.5">
+                                        <dt className="text-foreground-tertiary">{windowLabel(limit.period)}</dt>
+                                        <dd className="tabular-nums text-foreground">
+                                            剩余 {formatUsd(Math.max(limit.allowanceMicros - limit.usedMicros, 0))} / {formatUsd(limit.allowanceMicros)}
+                                        </dd>
+                                        {limit.nextResetAt ? <dd className="text-xs text-foreground-tertiary">{formatBillingTime(limit.nextResetAt)} 重置</dd> : null}
+                                    </div>
+                                ))}
+                            </dl>
+                            <p className="text-xs text-foreground-tertiary">{formatBillingDay(subscription.endsAt)} 到期</p>
                         </li>
                     );
                 })}
@@ -121,7 +137,9 @@ function PlanCard({ plan, payment, busy, onBuy, onPay }: {
                 <span className="text-[13px] text-foreground-tertiary">/ {describePlanDuration(plan)}</span>
             </div>
             <ul className="text-[13px] leading-[1.7] text-foreground">
-                <li>额度 {formatUsd(plan.allowanceMicros)}{plan.resetPeriod === 'never' ? '' : `，${resetPeriodLabel(plan.resetPeriod)}`}</li>
+                {plan.limits.map(limit => (
+                    <li key={limit.period}>{windowLabel(limit.period)} {formatUsd(limit.allowanceMicros)}</li>
+                ))}
                 {plan.features.map(feature => <li key={feature}>{feature}</li>)}
             </ul>
             <div className="mt-auto flex flex-wrap gap-2 pt-1">
@@ -187,6 +205,7 @@ function BillingContent() {
     const [buyingBusy, setBuyingBusy] = useState(false);
     const [checkoutBusy, setCheckoutBusy] = useState<string | null>(null);
     const [amount, setAmount] = useState('');
+    const [savingOrder, setSavingOrder] = useState(false);
 
     const load = useCallback(async () => {
         try {
@@ -239,6 +258,20 @@ function BillingContent() {
         }
     };
 
+    const changeDeductOrder = async (order: DeductOrder) => {
+        if (order === overview?.summary.deductOrder || savingOrder) return;
+        setSavingOrder(true);
+        try {
+            const { summary: next } = await saveDeductOrder(order);
+            if (next) setOverview(current => (current ? { ...current, summary: next } : current));
+            showToast('success', `已改为${DEDUCT_ORDER_LABELS[order]}`);
+        } catch (failure) {
+            showToast('error', failure instanceof Error ? failure.message : '保存扣费顺序失败');
+        } finally {
+            setSavingOrder(false);
+        }
+    };
+
     const confirmBuy = async () => {
         if (!buying) return;
         setBuyingBusy(true);
@@ -277,7 +310,7 @@ function BillingContent() {
     const amountError = amount ? topupError(amount, settings.minTopupUsd) : null;
     return (
         <div className="space-y-8">
-            <BalanceCard summary={summary} />
+            <BalanceCard summary={summary} onDeductOrder={order => void changeDeductOrder(order)} />
             <Subscriptions summary={summary} />
 
             {plans.length ? (
@@ -292,47 +325,48 @@ function BillingContent() {
                 </section>
             ) : null}
 
-            {payment.enabled ? (
-                <section aria-labelledby="billing-topup-heading" className="flex flex-col gap-3">
-                    <h3 id="billing-topup-heading" className={SECTION_HEADING}>充值</h3>
-                    <div className={`flex flex-col gap-4 p-[18px] ${CARD}`}>
-                        <div role="group" aria-label="充值金额" className="flex flex-wrap gap-2">
-                            {settings.topupOptionsUsd.map(usd => (
-                                <FilterChip key={usd} pressed={amount === String(usd)} onClick={() => setAmount(String(usd))} className="settings-filter">
-                                    ${usd}
-                                </FilterChip>
-                            ))}
+            <div className={payment.enabled ? 'grid items-start gap-8 lg:grid-cols-2' : undefined}>
+                {payment.enabled ? (
+                    <section aria-labelledby="billing-topup-heading" className="flex flex-col gap-3">
+                        <h3 id="billing-topup-heading" className={SECTION_HEADING}>充值</h3>
+                        <div className={`flex flex-col gap-4 p-[18px] ${CARD}`}>
+                            <div role="group" aria-label="充值金额" className="flex flex-wrap gap-2">
+                                {settings.topupOptionsUsd.map(usd => (
+                                    <FilterChip key={usd} pressed={amount === String(usd)} onClick={() => setAmount(String(usd))} className="settings-filter">
+                                        ${usd}
+                                    </FilterChip>
+                                ))}
+                            </div>
+                            <div className="flex flex-col gap-1.5">
+                                <label htmlFor="billing-topup-amount" className="text-sm font-medium text-foreground">金额（美元）</label>
+                                <Input id="billing-topup-amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value.trim())}
+                                    placeholder={`最低 $${settings.minTopupUsd}`} aria-invalid={amountError ? true : undefined} className="max-w-xs tabular-nums" />
+                                <p className={`text-[13px] ${amountError ? 'text-danger' : 'text-foreground-secondary'}`}>
+                                    {amountError ?? (amount ? `需支付 ¥${cnyForUsd(Number(amount), settings).toFixed(2)}` : `按 1 美元 = ${settings.cnyPerUsd} 元人民币支付`)}
+                                </p>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                                {payment.methods.map(method => (
+                                    <Button key={method.id} size="sm" disabled={!amount || !!amountError || !!checkoutBusy} loading={checkoutBusy === `topup:${method.id}`}
+                                        onClick={() => void checkout(`topup:${method.id}`, { kind: 'topup', amountUsd: Number(amount), method: method.id })}>
+                                        {method.label}
+                                    </Button>
+                                ))}
+                            </div>
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                            <label htmlFor="billing-topup-amount" className="text-sm font-medium text-foreground">金额（美元）</label>
-                            <Input id="billing-topup-amount" inputMode="decimal" value={amount} onChange={event => setAmount(event.target.value.trim())}
-                                placeholder={`最低 $${settings.minTopupUsd}`} aria-invalid={amountError ? true : undefined} className="max-w-xs tabular-nums" />
-                            <p className={`text-[13px] ${amountError ? 'text-danger' : 'text-foreground-secondary'}`}>
-                                {amountError ?? (amount ? `需支付 ¥${cnyForUsd(Number(amount), settings).toFixed(2)}` : `按 1 美元 = ${settings.cnyPerUsd} 元人民币支付`)}
-                            </p>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                            {payment.methods.map(method => (
-                                <Button key={method.id} size="sm" disabled={!amount || !!amountError || !!checkoutBusy} loading={checkoutBusy === `topup:${method.id}`}
-                                    onClick={() => void checkout(`topup:${method.id}`, { kind: 'topup', amountUsd: Number(amount), method: method.id })}>
-                                    {method.label}
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
+                    </section>
+                ) : null}
+
+                <section aria-labelledby="billing-redeem-heading" className="flex flex-col gap-3">
+                    <h3 id="billing-redeem-heading" className={SECTION_HEADING}>兑换码</h3>
+                    <form onSubmit={event => void redeem(event)} className="flex flex-wrap items-center gap-2">
+                        <Input value={code} onChange={event => setCode(event.target.value)} placeholder="tb-xxxxxxxxxxxxxxxxxxxx" aria-label="兑换码"
+                            autoComplete="off" spellCheck={false} className="max-w-sm font-mono" />
+                        <Button type="submit" loading={redeeming} disabled={!code.trim()}>兑换</Button>
+                    </form>
                 </section>
-            ) : null}
+            </div>
 
-            <section aria-labelledby="billing-redeem-heading" className="flex flex-col gap-3">
-                <h3 id="billing-redeem-heading" className={SECTION_HEADING}>兑换码</h3>
-                <form onSubmit={event => void redeem(event)} className="flex flex-wrap items-center gap-2">
-                    <Input value={code} onChange={event => setCode(event.target.value)} placeholder="tb-xxxxxxxxxxxxxxxxxxxx" aria-label="兑换码"
-                        autoComplete="off" spellCheck={false} className="max-w-sm font-mono" />
-                    <Button type="submit" loading={redeeming} disabled={!code.trim()}>兑换</Button>
-                </form>
-            </section>
-
-            <BillingLedgerSection refreshKey={refreshKey} />
             <Orders orders={orders} />
 
             <ConfirmDialog
@@ -356,6 +390,6 @@ export default function BillingPanel() {
     if (loading) {
         return <div className="flex min-h-[240px] items-center justify-center"><SoundWaveLoader variant="inline" /></div>;
     }
-    if (!user) return <SettingsLoginRequired title="请先登录后查看订阅与余额" />;
+    if (!user) return <SettingsLoginRequired title="请先登录后查看钱包" />;
     return <BillingContent key={user.id} />;
 }

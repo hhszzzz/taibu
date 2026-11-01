@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { AIModelConfig, AIModelPricing } from '@/types';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
-import type { BillingSummary } from './config';
+import { SUBSCRIPTION_WINDOWS, type BillingSummary, type SubscriptionWindow } from './config';
 import { hasTokens, imageCostMicros, isFreeTextModel, usageCostMicros, type TokenUsage } from './pricing';
 
 /** Where a charge came from; the ledger shows it beside the model. */
@@ -34,17 +34,24 @@ function normalizeSummary(value: unknown): BillingSummary {
         walletMicros: amount(source.walletMicros),
         subscriptionMicros: amount(source.subscriptionMicros),
         spendableMicros: amount(source.spendableMicros),
+        deductOrder: source.deductOrder === 'wallet' ? 'wallet' : 'subscription',
         subscriptions: subscriptions.map(item => ({
             id: String(item.id),
             planId: typeof item.planId === 'string' ? item.planId : null,
             title: String(item.title ?? ''),
             source: String(item.source ?? ''),
-            allowanceMicros: amount(item.allowanceMicros),
-            usedMicros: amount(item.usedMicros),
-            resetPeriod: String(item.resetPeriod ?? 'never'),
             startsAt: String(item.startsAt),
             endsAt: String(item.endsAt),
-            nextResetAt: typeof item.nextResetAt === 'string' ? item.nextResetAt : null,
+            limits: (Array.isArray(item.limits) ? item.limits as Record<string, unknown>[] : []).flatMap(limit => {
+                const period = limit.period;
+                if (!SUBSCRIPTION_WINDOWS.includes(period as SubscriptionWindow)) return [];
+                return [{
+                    period: period as SubscriptionWindow,
+                    allowanceMicros: amount(limit.allowanceMicros),
+                    usedMicros: amount(limit.usedMicros),
+                    nextResetAt: typeof limit.nextResetAt === 'string' ? limit.nextResetAt : null,
+                }];
+            }),
         })),
     };
 }
@@ -70,6 +77,11 @@ export async function assertSpendable(userId: string, pricing?: AIModelPricing |
     if (await getSpendableMicros(userId, db) <= 0) throw new InsufficientBalanceError();
 }
 
+/** The prices a charge is computed at, kept with its usage so the ledger can itemise it; a null cache price costs the input price. */
+function tokenPrices(pricing: AIModelPricing | null | undefined) {
+    return pricing ? { input: pricing.input ?? 0, output: pricing.output ?? 0, cacheRead: pricing.cacheRead ?? null, cacheWrite: pricing.cacheWrite ?? null } : undefined;
+}
+
 export type UsageCharge = {
     userId: string;
     model: Pick<AIModelConfig, 'id' | 'pricing'>;
@@ -92,9 +104,10 @@ export type UsageCharge = {
 export async function chargeUsage(charge: UsageCharge): Promise<number> {
     if (!hasTokens(charge.usage)) return 0;
     const micros = usageCostMicros(charge.model.pricing, charge.usage);
+    const prices = tokenPrices(charge.model.pricing);
     const args = {
-        p_user_id: charge.userId, p_amount: micros, p_allow_debt: true, p_source: charge.source,
-        p_model_key: charge.model.id, p_usage: charge.estimated ? { ...charge.usage, estimated: true } : charge.usage,
+        p_user_id: charge.userId, p_amount: micros, p_allow_debt: true, p_source: charge.source, p_model_key: charge.model.id,
+        p_usage: { ...charge.usage, ...(charge.estimated ? { estimated: true } : {}), ...(prices ? { prices } : {}) },
         p_reference_type: charge.referenceType ?? null, p_reference_id: charge.referenceId ?? null,
         p_idempotency_key: charge.idempotencyKey ?? `${charge.source}:${randomUUID()}`, p_description: charge.description ?? '',
     };
@@ -119,6 +132,32 @@ export function usageBiller(userId: string, source: BillingSource, reference?: {
     };
 }
 
+/**
+ * A call the member made with their own key: the browser reports what the provider said, and it lands in the usage
+ * log at $0 with `byok`, so the log shows every call without the platform charging for it. A no-op when the provider
+ * reported nothing. Never throws.
+ */
+export async function recordDirectUsage(input: {
+    userId: string;
+    model: string;
+    usage: TokenUsage;
+    referenceType?: string;
+    referenceId?: string;
+}): Promise<void> {
+    if (!hasTokens(input.usage)) return;
+    const key = `byok:${randomUUID()}`;
+    try {
+        await systemDb().rpc('billing_charge', {
+            p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: 'chat', p_model_key: input.model,
+            p_usage: { ...input.usage, byok: true },
+            p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
+            p_idempotency_key: key, p_description: '自带密钥调用',
+        });
+    } catch (error) {
+        console.error('[billing] byok usage record failed', { userId: input.userId, key, code: toDbError(error).code });
+    }
+}
+
 export type ImagePrepayment = { key: string; micros: number; images: number };
 
 /**
@@ -138,7 +177,8 @@ export async function prepayImages(input: {
     try {
         await systemDb().rpc('billing_charge', {
             p_user_id: input.userId, p_amount: micros, p_allow_debt: false, p_source: 'image', p_model_key: input.model.id,
-            p_usage: { images: input.images }, p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
+            p_usage: { images: input.images, prices: { image: input.model.pricing?.image ?? 0 } },
+            p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
             p_idempotency_key: key, p_description: `生成 ${input.images} 张图片`,
         });
     } catch (error) {
@@ -161,7 +201,8 @@ export async function recordFreeImages(input: {
     try {
         await systemDb().rpc('billing_charge', {
             p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: 'image', p_model_key: input.model.id,
-            p_usage: { images: input.images }, p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
+            p_usage: { images: input.images, prices: { image: 0 } },
+            p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
             p_idempotency_key: key, p_description: `生成 ${input.images} 张图片`,
         });
     } catch (error) {

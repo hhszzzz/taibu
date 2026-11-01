@@ -39,6 +39,8 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_schedule_runs_active ON public.age
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_schedule_runs_agent_run ON public.agent_schedule_runs USING btree (agent_run_id) WHERE (agent_run_id IS NOT NULL);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_schedule_runs_created ON public.agent_schedule_runs USING btree (created_at DESC);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_schedules_due ON public.agent_schedules USING btree (next_run_at) WHERE (enabled AND (next_run_at IS NOT NULL));
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_schedules_user ON public.agent_schedules USING btree (user_id, created_at);
@@ -56,6 +58,8 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS archived_sources_source_idx ON public.ar
 CREATE INDEX CONCURRENTLY IF NOT EXISTS archived_sources_user_idx ON public.archived_sources USING btree (user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS billing_ledger_created_idx ON public.billing_ledger USING btree (created_at DESC);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS billing_ledger_reference_idx ON public.billing_ledger USING btree (reference_type, reference_id) WHERE (reference_id IS NOT NULL);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS billing_ledger_refund_idx ON public.billing_ledger USING btree (reference_id) WHERE (kind = 'refund'::text);
 

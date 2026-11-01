@@ -3,7 +3,7 @@ import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
 import { readFeatureModuleStateFresh } from '@/lib/app-settings';
-import { systemDb, type ScopedDb } from '@/lib/db/context.server';
+import { systemDb, userDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { parseConfiguredOrigin } from '@/lib/runtime-env';
@@ -38,7 +38,7 @@ const GATEWAY_BODY_LIMIT = 16 * 1024;
 async function member(request: NextRequest): Promise<Member | Response> {
     const state = await readFeatureModuleStateFresh('billing');
     if (state.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
-    if (state.status !== 'enabled') return jsonError('订阅与余额当前未开放', 403, { code: 'FEATURE_DISABLED' });
+    if (state.status !== 'enabled') return jsonError('钱包与用量日志当前未开放', 403, { code: 'FEATURE_DISABLED' });
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     return { db: auth.db, userId: auth.user.id };
@@ -86,6 +86,21 @@ export async function readBillingOverview(request: NextRequest) {
     }
 }
 
+/** Which purse a charge spends first; the wallet page's switch writes it. */
+export async function updateBillingDeductOrder(request: NextRequest) {
+    const who = await member(request);
+    if (who instanceof Response) return who;
+    const body = await readBody(request);
+    const order = body?.deductOrder;
+    if (order !== 'subscription' && order !== 'wallet') return jsonError('扣费顺序无效', 400);
+    try {
+        await who.db.rpc('billing_set_deduct_order', { p_user_id: who.userId, p_order: order });
+        return jsonOk({ summary: await getBillingSummary(who.userId, who.db) });
+    } catch (error) {
+        return failure(error, '保存扣费顺序');
+    }
+}
+
 export async function readBillingLedger(request: NextRequest) {
     const who = await member(request);
     if (who instanceof Response) return who;
@@ -93,9 +108,9 @@ export async function readBillingLedger(request: NextRequest) {
     const filters = parseLedgerFilters(params);
     if ('error' in filters) return jsonError(filters.error, 400);
     try {
-        return jsonOk(await listLedger(who.userId, who.db, pageOf(params), filters));
+        return jsonOk(await listLedger(who.userId, who.db, pageOf(params), filters, { sums: true }));
     } catch (error) {
-        return failure(error, '读取账单');
+        return failure(error, '读取用量日志');
     }
 }
 
@@ -179,7 +194,7 @@ async function gatewayParams(request: NextRequest): Promise<Record<string, strin
     return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
 }
 
-/** The gateway retries until it reads `success`; an ignored status is acknowledged too, as new-api does. */
+/** The gateway retries until it reads `success`; an ignored status is acknowledged too. */
 export async function handleEpayNotify(request: NextRequest): Promise<Response> {
     const params = await gatewayParams(request).catch(() => null);
     const outcome = params && Object.keys(params).length ? await settleEpayPayment(params) : 'rejected';
@@ -334,7 +349,7 @@ export async function adminReadUser(request: NextRequest, id: string) {
         const [emails, summary, ledger, orders] = await Promise.all([
             db.rpc('admin_get_auth_user_emails', { p_user_ids: [id] }).catch(() => []),
             getBillingSummary(id, db),
-            listLedger(id, db, pageOf(request.nextUrl.searchParams)),
+            listLedger(id, db, pageOf(request.nextUrl.searchParams), {}, { operators: true }),
             listOrders(id, db, { limit: 20 }),
         ]);
         const user: AdminBillingUserView = { userId: id, email: emails[0]?.email ?? null, nickname: profile.nickname, walletMicros: summary.walletMicros };
@@ -356,7 +371,8 @@ export async function adminChangeUser(request: NextRequest, id: string) {
             const micros = Number.isFinite(usd) && Math.abs(usd) <= 100_000 ? usdToMicros(usd) : 0;
             if (!micros) return jsonError('金额需要是 -100000 到 100000 之间、不为 0 的美元金额', 400);
             try {
-                await systemDb().rpc('billing_adjust_wallet', { p_user_id: id, p_amount: micros, p_description: text(body.description, 200) });
+                // 用管理员自己的身份调用：流水里记下的操作人就是他，而不是系统账号。
+                await userDb(admin.userId).rpc('billing_adjust_wallet', { p_user_id: id, p_amount: micros, p_description: text(body.description, 200) });
             } catch (error) {
                 const { message, code } = toDbError(error);
                 if (message === 'INSUFFICIENT_BALANCE') return jsonError('余额不足以扣减这么多', 409, { code: 'INSUFFICIENT_BALANCE' });

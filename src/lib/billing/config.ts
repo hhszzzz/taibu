@@ -4,9 +4,19 @@
  */
 import { usdToMicros } from './money';
 
-export const RESET_PERIODS = ['never', 'daily', 'weekly', 'monthly'] as const;
-export type ResetPeriod = (typeof RESET_PERIODS)[number];
-export const RESET_PERIOD_LABELS: Record<ResetPeriod, string> = { never: '不重置', daily: '每日重置', weekly: '每周重置', monthly: '每月重置' };
+/** A subscription's allowances, one window each; a charge spends the shortest window first. */
+export const SUBSCRIPTION_WINDOWS = ['five_hour', 'daily', 'weekly', 'monthly', 'total'] as const;
+export type SubscriptionWindow = (typeof SUBSCRIPTION_WINDOWS)[number];
+export const SUBSCRIPTION_WINDOW_LABELS: Record<SubscriptionWindow, string> = {
+    five_hour: '每 5 小时', daily: '每天', weekly: '每周', monthly: '每月', total: '整个订阅期',
+};
+/** How long each window lasts; `total` never resets within the subscription. */
+export const SUBSCRIPTION_WINDOW_HOURS: Record<SubscriptionWindow, number | null> = {
+    five_hour: 5, daily: 24, weekly: 168, monthly: 720, total: null,
+};
+
+/** One allowance of a plan or a subscription, in micro-dollars. */
+export type SubscriptionLimit = { period: SubscriptionWindow; allowanceMicros: number };
 
 export const DURATION_UNITS = ['day', 'month', 'year'] as const;
 export type DurationUnit = (typeof DURATION_UNITS)[number];
@@ -20,9 +30,8 @@ export type SubscriptionPlanView = {
     priceUsd: number;
     durationUnit: DurationUnit;
     durationValue: number;
-    /** What each period grants, in micro-dollars. */
-    allowanceMicros: number;
-    resetPeriod: ResetPeriod;
+    /** One allowance per window, shortest first; at least one. */
+    limits: SubscriptionLimit[];
     purchasable: boolean;
     enabled: boolean;
     maxPerUser: number | null;
@@ -43,33 +52,49 @@ export function normalizeBillingBalance(value: unknown): BillingBalance | null {
         ? null : { walletMicros, subscriptionMicros, spendableMicros };
 }
 
+export type BillingSubscriptionLimit = SubscriptionLimit & {
+    usedMicros: number;
+    /** When this window refills; null for the whole-term allowance. */
+    nextResetAt: string | null;
+};
+
 export type BillingSubscription = {
     id: string;
     planId: string | null;
     title: string;
     source: string;
-    allowanceMicros: number;
-    usedMicros: number;
-    resetPeriod: string;
     startsAt: string;
     endsAt: string;
-    nextResetAt: string | null;
+    limits: BillingSubscriptionLimit[];
 };
 
-/** The balance with the active subscriptions its allowance part comes from. */
-export type BillingSummary = BillingBalance & { subscriptions: BillingSubscription[] };
+export const DEDUCT_ORDERS = ['subscription', 'wallet'] as const;
+export type DeductOrder = (typeof DEDUCT_ORDERS)[number];
+export const DEDUCT_ORDER_LABELS: Record<DeductOrder, string> = { subscription: '先扣订阅额度', wallet: '先扣余额' };
+
+/** The balance with the active subscriptions its allowance part comes from, and which purse a charge spends first. */
+export type BillingSummary = BillingBalance & { subscriptions: BillingSubscription[]; deductOrder: DeductOrder };
 
 export const LEDGER_KINDS = ['usage', 'refund', 'topup', 'subscription', 'redeem', 'adjust'] as const;
 export type LedgerKind = (typeof LEDGER_KINDS)[number];
 export const LEDGER_KIND_LABELS: Record<LedgerKind, string> = {
     usage: '消费', refund: '退回', topup: '充值', subscription: '订阅', redeem: '兑换', adjust: '调整',
 };
+export const LEDGER_KIND_TONES: Record<LedgerKind, 'neutral' | 'accent' | 'success' | 'warning'> = {
+    usage: 'neutral', refund: 'success', topup: 'success', subscription: 'accent', redeem: 'accent', adjust: 'warning',
+};
 export const BILLING_SOURCE_LABELS: Record<string, string> = {
     chat: '对话', analysis: '解读', enhance: '润色', image: '生图', agent: '智能体',
     admin: '管理员', balance: '余额', code: '兑换码', epay: '在线支付',
 };
 
-/** A model call's tokens, or the images it generated; `estimated` when the provider reported no usage. */
+/** The prices a call was charged at, in USD per million tokens or per image; a cache price left null cost the input price. */
+export type LedgerPrices = { input?: number; output?: number; cacheRead?: number | null; cacheWrite?: number | null; image?: number };
+
+/**
+ * A model call's tokens, or the images it generated; `estimated` when the provider reported no usage, `prices` when
+ * the charge kept the prices it was computed at (entries recorded before that have none).
+ */
 export type LedgerUsage = {
     input?: number;
     output?: number;
@@ -78,7 +103,13 @@ export type LedgerUsage = {
     reasoning?: number;
     images?: number;
     estimated?: boolean;
+    /** The call used the member's own key: recorded for the usage log, never charged. */
+    byok?: boolean;
+    prices?: LedgerPrices;
 };
+
+/** How a charged model is listed: its catalog name and icon; null once the model is deleted. */
+export type LedgerModelLabel = { name: string; vendor: string; icon: string | null };
 
 export type LedgerEntryView = {
     id: string;
@@ -87,7 +118,7 @@ export type LedgerEntryView = {
     amountMicros: number;
     walletMicros: number;
     /** Allowance shares, negative when spent and positive when returned. */
-    subscriptionParts: Array<{ id: string; title: string; micros: number }>;
+    subscriptionParts: Array<{ id: string; title: string; period?: SubscriptionWindow; micros: number }>;
     walletAfterMicros: number;
     source: string;
     modelKey: string | null;
@@ -97,6 +128,9 @@ export type LedgerEntryView = {
     referenceId: string | null;
     description: string;
     createdAt: string;
+    modelLabel?: LedgerModelLabel | null;
+    /** An administrator's adjustment: who made it, by sign-in address. */
+    operatorEmail?: string | null;
 };
 
 /** Model calls in the usage log, summed: the calls, their tokens and images, and what they cost net of refunds. */
@@ -110,13 +144,21 @@ export type UsageTotals = {
     spentMicros: number;
 };
 
+export type UsageByModel = UsageTotals & { model: string; modelLabel?: LedgerModelLabel | null };
+
+/** What an object's model calls cost, net of refunds: an Agent task's, say. */
+export type ReferenceCost = { calls: number; spentMicros: number };
+
+/** A page of one member's ledger; the first page also carries the spending sums within the filters. */
+export type LedgerPage = { entries: LedgerEntryView[]; nextOffset: number | null; totals?: UsageTotals; byModel?: UsageByModel[] };
+
 export type AdminUsageEntryView = LedgerEntryView & { userId: string; userEmail: string | null };
 
 export type AdminUsagePage = {
     entries: AdminUsageEntryView[];
     nextOffset: number | null;
     totals: UsageTotals;
-    byModel: Array<UsageTotals & { model: string }>;
+    byModel: UsageByModel[];
 };
 
 export type PaymentOrderView = {
@@ -189,6 +231,24 @@ export function describePlanDuration(plan: Pick<SubscriptionPlanView, 'durationU
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const isIn = <T extends string>(values: readonly T[], value: unknown): value is T => typeof value === 'string' && (values as readonly string[]).includes(value);
 
+/** The plan's allowances: one per window, at most one per period, amounts in USD. */
+function parsePlanLimits(raw: unknown): { value: SubscriptionLimit[] } | { error: string } {
+    if (!Array.isArray(raw) || raw.length === 0) return { error: '请至少设置一个额度周期' };
+    if (raw.length > SUBSCRIPTION_WINDOWS.length) return { error: '额度周期过多' };
+    const seen = new Set<string>();
+    const value: SubscriptionLimit[] = [];
+    for (const item of raw) {
+        const entry = (item && typeof item === 'object' ? item : {}) as Record<string, unknown>;
+        if (!isIn(SUBSCRIPTION_WINDOWS, entry.period)) return { error: '额度周期无效' };
+        if (seen.has(entry.period)) return { error: '同一个额度周期只能设置一次' };
+        seen.add(entry.period);
+        const allowanceUsd = Number(entry.allowanceUsd);
+        if (!Number.isFinite(allowanceUsd) || allowanceUsd <= 0 || allowanceUsd > 1_000_000) return { error: '额度需要是大于 0 的美元金额' };
+        value.push({ period: entry.period, allowanceMicros: usdToMicros(allowanceUsd) });
+    }
+    return { value: value.sort((a, b) => SUBSCRIPTION_WINDOWS.indexOf(a.period) - SUBSCRIPTION_WINDOWS.indexOf(b.period)) };
+}
+
 /** A plan as the administrator submitted it, or what is wrong with it. Amounts arrive in USD. */
 export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } | { error: string } {
     const raw = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
@@ -198,12 +258,11 @@ export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } 
     if (!Number.isFinite(priceUsd) || priceUsd < 0 || priceUsd > 100_000 || Math.round(priceUsd * 100) !== priceUsd * 100) {
         return { error: '价格需要是 0 到 100000 之间、最多两位小数的美元金额' };
     }
-    const allowanceUsd = Number(raw.allowanceUsd);
-    if (!Number.isFinite(allowanceUsd) || allowanceUsd <= 0 || allowanceUsd > 1_000_000) return { error: '额度需要是大于 0 的美元金额' };
+    const limits = parsePlanLimits(raw.limits);
+    if ('error' in limits) return limits;
     if (!isIn(DURATION_UNITS, raw.durationUnit)) return { error: '时长单位无效' };
     const durationValue = Number(raw.durationValue);
     if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 3650) return { error: '时长需要是 1 到 3650 之间的整数' };
-    if (!isIn(RESET_PERIODS, raw.resetPeriod)) return { error: '重置周期无效' };
     const maxPerUser = raw.maxPerUser === null || raw.maxPerUser === undefined || raw.maxPerUser === '' ? null : Number(raw.maxPerUser);
     if (maxPerUser !== null && (!Number.isInteger(maxPerUser) || maxPerUser < 1 || maxPerUser > 1000)) return { error: '每人限购需要留空或填 1 到 1000 的整数' };
     const features = Array.isArray(raw.features) ? raw.features.map(item => text(item, 80)).filter(Boolean) : [];
@@ -212,8 +271,7 @@ export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } 
     return {
         value: {
             title, subtitle: text(raw.subtitle, 200), features, priceUsd,
-            durationUnit: raw.durationUnit, durationValue,
-            allowanceMicros: usdToMicros(allowanceUsd), resetPeriod: raw.resetPeriod,
+            durationUnit: raw.durationUnit, durationValue, limits: limits.value,
             purchasable: raw.purchasable !== false, enabled: raw.enabled !== false, maxPerUser,
             sortOrder: Number.isInteger(sortOrder) ? Math.max(-1000, Math.min(1000, sortOrder)) : 0,
         },
@@ -221,7 +279,7 @@ export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } 
 }
 
 /** What the member's ledger and the administrator's usage log can be narrowed to. Times are ISO instants, `to` exclusive. */
-export type LedgerFilters = { kind?: LedgerKind; source?: string; model?: string; from?: string; to?: string };
+export type LedgerFilters = { kind?: LedgerKind; source?: string; model?: string; from?: string; to?: string; query?: string };
 
 export function parseLedgerFilters(params: URLSearchParams): LedgerFilters | { error: string } {
     const filters: LedgerFilters = {};
@@ -239,6 +297,11 @@ export function parseLedgerFilters(params: URLSearchParams): LedgerFilters | { e
     if (model) {
         if (model.length > 200) return { error: '模型 ID 过长' };
         filters.model = model;
+    }
+    const query = params.get('q')?.trim();
+    if (query) {
+        if (query.length > 100) return { error: '搜索词过长' };
+        filters.query = query;
     }
     for (const key of ['from', 'to'] as const) {
         const value = params.get(key);

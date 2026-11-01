@@ -38,6 +38,7 @@ export interface RpcRegistry {
   "billing_grant_subscription": { args: { "p_user_id": string | null; "p_plan_id": string | null; "p_note"?: string | null; }; result: Json };
   "billing_redeem": { args: { "p_user_id": string | null; "p_code": string | null; }; result: Json };
   "billing_refund": { args: { "p_charge_key": string | null; "p_amount": number | null; "p_idempotency_key": string | null; "p_description"?: string | null; }; result: Json };
+  "billing_set_deduct_order": { args: { "p_user_id": string | null; "p_order": string | null; }; result: string };
   "billing_spendable": { args: { "p_user_id": string | null; }; result: number };
   "billing_summary": { args: { "p_user_id": string | null; }; result: Json };
   "check_vector_index_exists": { args: { "p_dim"?: number | null; }; result: boolean };
@@ -126,6 +127,7 @@ export const RPC_SPECS = {
   "billing_grant_subscription": { args: [["p_user_id", "uuid", false], ["p_plan_id", "uuid", false], ["p_note", "text", true]], returns: "scalar" },
   "billing_redeem": { args: [["p_user_id", "uuid", false], ["p_code", "text", false]], returns: "scalar" },
   "billing_refund": { args: [["p_charge_key", "text", false], ["p_amount", "bigint", false], ["p_idempotency_key", "text", false], ["p_description", "text", true]], returns: "scalar" },
+  "billing_set_deduct_order": { args: [["p_user_id", "uuid", false], ["p_order", "text", false]], returns: "scalar" },
   "billing_spendable": { args: [["p_user_id", "uuid", false]], returns: "scalar" },
   "billing_summary": { args: [["p_user_id", "uuid", false]], returns: "scalar" },
   "check_vector_index_exists": { args: [["p_dim", "integer", true]], returns: "scalar" },

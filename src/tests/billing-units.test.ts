@@ -15,11 +15,16 @@ import {
   describeFunding,
   describeUsage,
   formatBillingDay,
+  formatBillingSecond,
   formatBillingTime,
+  formatCostLine,
+  ledgerCostBreakdown,
+  ledgerDetailParts,
+  ledgerModelName,
   formatTokenPrices,
   isFreeTokenPricing,
   ledgerEntryTitle,
-  resetPeriodLabel,
+  windowLabel,
 } from '../lib/billing/format';
 import { estimateUsage, hasTokens, imageCostMicros, tokenUsageOf, usageCostMicros } from '../lib/billing/pricing';
 import { epaySign, getEpayConfig, settleEpayPayment, verifyEpaySign } from '../lib/billing/epay.server';
@@ -58,29 +63,35 @@ test('a billing balance requires all three finite amounts', () => {
 test('plan input accepts a complete plan and rejects each invalid field', () => {
   const valid = parsePlanInput({
     title: ' 月卡 ', subtitle: ' 每月额度 ', features: [' 亮点 ', '', 3],
-    priceUsd: 3, allowanceUsd: 5, durationUnit: 'month', durationValue: 1, resetPeriod: 'monthly',
+    priceUsd: 3, limits: [{ period: 'monthly', allowanceUsd: 5 }, { period: 'five_hour', allowanceUsd: 1 }],
+    durationUnit: 'month', durationValue: 1,
     purchasable: false, enabled: true, maxPerUser: 2, sortOrder: 5000,
   });
   assert.ok('value' in valid);
   assert.deepEqual(valid.value, {
     title: '月卡', subtitle: '每月额度', features: ['亮点'],
-    priceUsd: 3, durationUnit: 'month', durationValue: 1, allowanceMicros: 5_000_000,
-    resetPeriod: 'monthly', purchasable: false, enabled: true, maxPerUser: 2, sortOrder: 1000,
+    priceUsd: 3, durationUnit: 'month', durationValue: 1,
+    limits: [{ period: 'five_hour', allowanceMicros: 1_000_000 }, { period: 'monthly', allowanceMicros: 5_000_000 }],
+    purchasable: false, enabled: true, maxPerUser: 2, sortOrder: 1000,
   });
 
   const errors: Array<[Record<string, unknown>, RegExp]> = [
     [{ title: '' }, /套餐名称/u],
     [{ priceUsd: -1 }, /价格/u],
     [{ priceUsd: 1.234 }, /价格/u],
-    [{ allowanceUsd: 0 }, /额度/u],
+    [{ limits: [] }, /额度周期/u],
+    [{ limits: [{ period: 'hourly', allowanceUsd: 1 }] }, /额度周期/u],
+    [{ limits: [{ period: 'daily', allowanceUsd: 0 }] }, /额度/u],
+    [{ limits: [{ period: 'daily', allowanceUsd: 1 }, { period: 'daily', allowanceUsd: 2 }] }, /只能设置一次/u],
+    [{ limits: [{ period: 'daily', allowanceUsd: 1_000_001 }] }, /额度/u],
+    [{ limits: ['daily', 'weekly', 'monthly', 'total', 'five_hour', 'monthly'].map(period => ({ period, allowanceUsd: 1 })) }, /额度周期过多/u],
     [{ durationUnit: 'week' }, /时长单位/u],
     [{ durationValue: 0 }, /时长/u],
-    [{ resetPeriod: 'hourly' }, /重置周期/u],
     [{ maxPerUser: 0 }, /限购/u],
     [{ features: Array.from({ length: 13 }, () => 'x') }, /12 条/u],
   ];
   const base = {
-    title: '套餐', priceUsd: 1, allowanceUsd: 1, durationUnit: 'month', durationValue: 1, resetPeriod: 'never',
+    title: '套餐', priceUsd: 1, limits: [{ period: 'monthly', allowanceUsd: 1 }], durationUnit: 'month', durationValue: 1,
   };
   for (const [overrides, pattern] of errors) {
     const result = parsePlanInput({ ...base, ...overrides });
@@ -173,7 +184,11 @@ test('formatting helpers describe usage, funding and ledger titles in Chinese', 
   assert.equal(ledgerEntryTitle({ kind: 'topup', source: 'epay', description: '' }), '充值');
   assert.equal(billingSourceLabel('agent'), '智能体');
   assert.equal(billingSourceLabel('unknown'), 'unknown');
-  assert.equal(resetPeriodLabel('daily'), '每日重置');
+  assert.equal(windowLabel('five_hour'), '每 5 小时');
+  assert.equal(windowLabel('daily'), '每天');
+  assert.equal(windowLabel('weekly'), '每周');
+  assert.equal(windowLabel('monthly'), '每月');
+  assert.equal(windowLabel('total'), '整个订阅期');
 });
 
 test('epay configuration needs an address, merchant and key, and filters methods', () => {
@@ -316,4 +331,130 @@ test('a signed gateway settlement credits once, ignores other states and rejects
   response = null;
   context.systemDb = () => ({ rpc: async () => { throw Object.assign(new Error('PAYMENT_AMOUNT_MISMATCH'), { code: 'P0001' }); } });
   assert.equal(await settleEpayPayment(signed), 'rejected');
+});
+
+test('a ledger entry itemises what each priced quantity cost, using the input price for an empty cache price', () => {
+  const token = ledgerCostBreakdown({
+    input: 1000, output: 500, cacheRead: 200, cacheWrite: 100,
+    prices: { input: 2, output: 4, cacheRead: null, cacheWrite: 1 },
+  });
+  assert.deepEqual(token, [
+    { label: '输入', quantity: 1000, unit: 'token', price: 2, micros: 2000 },
+    { label: '缓存读', quantity: 200, unit: 'token', price: 2, micros: 400, inputPrice: true },
+    { label: '缓存写', quantity: 100, unit: 'token', price: 1, micros: 100, inputPrice: false },
+    { label: '输出', quantity: 500, unit: 'token', price: 4, micros: 2000 },
+  ]);
+  assert.deepEqual(ledgerCostBreakdown({ images: 2, prices: { image: 0.02 } }), [
+    { label: '图片', quantity: 2, unit: 'image', price: 0.02, micros: 40_000 },
+  ]);
+  assert.equal(ledgerCostBreakdown({ input: 1000 }), null, 'an entry kept without prices has no breakdown');
+  assert.equal(ledgerCostBreakdown({ images: 2, prices: { input: 1 } }), null);
+  assert.equal(ledgerCostBreakdown(null), null);
+
+  assert.equal(formatCostLine({ label: '输入', quantity: 1000, unit: 'token', price: 2, micros: 2000 }), '$2/百万 × 1,000');
+  assert.equal(formatCostLine({ label: '图片', quantity: 2, unit: 'image', price: 0.02, micros: 40_000 }), '$0.02/张 × 2');
+});
+
+test('ledger details prefer priced lines, then usage, then the description', () => {
+  const priced = ledgerDetailParts({
+    usage: { input: 1000, prices: { input: 2, output: 4 } },
+    subscriptionParts: [{ id: 's1', title: '月卡', micros: -120_000 }],
+    walletMicros: -30_000,
+    description: 'ignored',
+  });
+  assert.deepEqual(priced, ['输入 $2/百万 × 1,000', '订阅「月卡」 -$0.12', '余额 -$0.03']);
+  assert.deepEqual(ledgerDetailParts({
+    usage: { input: 1000, output: 500 },
+    subscriptionParts: [],
+    walletMicros: 0,
+    description: '',
+  }), ['输入 1,000', '输出 500']);
+  assert.deepEqual(ledgerDetailParts({ usage: null, subscriptionParts: [], walletMicros: 0, description: '兑换码充值' }), ['兑换码充值']);
+  assert.deepEqual(ledgerDetailParts({ usage: null, subscriptionParts: [], walletMicros: 0, description: '' }), []);
+
+  assert.equal(ledgerModelName({ modelKey: 'deepseek-chat', modelLabel: { name: 'DeepSeek Chat', vendor: 'deepseek', icon: 'DeepSeek' } }), 'DeepSeek Chat');
+  assert.equal(ledgerModelName({ modelKey: 'deleted-model', modelLabel: null }), 'deleted-model');
+  assert.equal(ledgerModelName({ modelKey: 'deleted-model' }), 'deleted-model');
+  assert.equal(formatBillingSecond(null), '—');
+  assert.match(formatBillingSecond('2026-03-04T05:06:07Z'), /\d{2}:\d{2}:\d{2}/u);
+});
+
+test('charges keep the prices they used, and image charges keep theirs', async (t) => {
+  const { chargeUsage, prepayImages, recordDirectUsage, recordFreeImages } = require('../lib/billing/account.server') as typeof import('../lib/billing/account.server');
+  const context = require('../lib/db/context.server') as { systemDb: unknown };
+  const original = context.systemDb;
+  const rpcCalls: Array<{ name: string; args: Record<string, unknown> }> = [];
+  context.systemDb = () => ({ rpc: async (name: string, args: Record<string, unknown>) => { rpcCalls.push({ name, args }); return null; } });
+  t.after(() => { context.systemDb = original; });
+
+  const pricing = { input: 2, output: 4, cacheRead: null, cacheWrite: 1, image: null };
+  const charged = await chargeUsage({
+    userId: 'user-1', model: { id: 'fixture', pricing },
+    usage: { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0 }, source: 'chat',
+  });
+  assert.equal(charged, 4000);
+  assert.deepEqual(rpcCalls[0], {
+    name: 'billing_charge',
+    args: {
+      p_user_id: 'user-1', p_amount: 4000, p_allow_debt: true, p_source: 'chat', p_model_key: 'fixture',
+      p_usage: {
+        input: 1000, output: 500, cacheRead: 0, cacheWrite: 0,
+        prices: { input: 2, output: 4, cacheRead: null, cacheWrite: 1 },
+      },
+      p_reference_type: null, p_reference_id: null,
+      p_idempotency_key: rpcCalls[0]!.args.p_idempotency_key, p_description: '',
+    },
+  });
+  assert.match(String(rpcCalls[0]!.args.p_idempotency_key), /^chat:/u);
+
+  await chargeUsage({
+    userId: 'user-1', model: { id: 'fixture', pricing },
+    usage: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0 }, estimated: true, source: 'analysis',
+  });
+  assert.equal((rpcCalls[1]!.args.p_usage as Record<string, unknown>).estimated, true);
+
+  const prepayment = await prepayImages({ userId: 'user-1', model: { id: 'image', pricing: { ...pricing, image: 0.02 } }, images: 2 });
+  assert.deepEqual(prepayment && { micros: prepayment.micros, images: prepayment.images }, { micros: 40_000, images: 2 });
+  assert.deepEqual(rpcCalls[2], {
+    name: 'billing_charge',
+    args: {
+      p_user_id: 'user-1', p_amount: 40_000, p_allow_debt: false, p_source: 'image', p_model_key: 'image',
+      p_usage: { images: 2, prices: { image: 0.02 } },
+      p_reference_type: null, p_reference_id: null,
+      p_idempotency_key: rpcCalls[2]!.args.p_idempotency_key, p_description: '生成 2 张图片',
+    },
+  });
+
+  await recordFreeImages({ userId: 'user-1', model: { id: 'image' }, images: 2 });
+  assert.deepEqual(rpcCalls[3]!.args.p_usage, { images: 2, prices: { image: 0 } });
+  assert.equal(rpcCalls[3]!.args.p_amount, 0);
+
+  // A call with the member's own key still lands in the usage log, at $0.
+  await recordDirectUsage({
+    userId: 'user-1', model: 'own-model',
+    usage: { input: 120, output: 30, cacheRead: 10, cacheWrite: 0, reasoning: 5 },
+    referenceType: 'conversation', referenceId: 'conversation-1',
+  });
+  const byok = rpcCalls[4]!;
+  assert.equal(byok.name, 'billing_charge');
+  assert.deepEqual({
+    amount: byok.args.p_amount, debt: byok.args.p_allow_debt, source: byok.args.p_source,
+    usage: byok.args.p_usage, reference: [byok.args.p_reference_type, byok.args.p_reference_id], description: byok.args.p_description,
+  }, {
+    amount: 0, debt: true, source: 'chat',
+    usage: { input: 120, output: 30, cacheRead: 10, cacheWrite: 0, reasoning: 5, byok: true },
+    reference: ['conversation', 'conversation-1'], description: '自带密钥调用',
+  });
+  assert.match(String(byok.args.p_idempotency_key), /^byok:/u);
+
+  rpcCalls.length = 0;
+  await recordDirectUsage({ userId: 'user-1', model: 'own-model', usage: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 } });
+  assert.deepEqual(rpcCalls, [], 'a provider that reported nothing writes nothing');
+
+  // Reporting is best effort: it never breaks the call it describes.
+  const originalConsoleError = console.error;
+  console.error = () => {};
+  context.systemDb = () => ({ rpc: async () => { throw new Error('usage log down'); } });
+  t.after(() => { console.error = originalConsoleError; });
+  await recordDirectUsage({ userId: 'user-1', model: 'own-model', usage: { input: 1, output: 0, cacheRead: 0, cacheWrite: 0 } });
 });

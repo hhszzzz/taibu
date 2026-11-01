@@ -3,10 +3,11 @@ import { requestBrowserData } from '@/lib/browser-api';
 import { openSettingsCenter } from '@/lib/settings-center';
 import type {
     AdminBillingUserView, AdminPaymentOrderView, AdminUsagePage, BillingOverview, BillingPaymentView, BillingSettings, BillingSummary,
-    LedgerEntryView, PaymentOrderView, RedeemResult, RedemptionCodeView, SubscriptionPlanView,
+    DeductOrder, LedgerPage, PaymentOrderView, RedeemResult, RedemptionCodeView, SubscriptionPlanView,
 } from './config';
 
-export type LedgerPage = { entries: LedgerEntryView[]; nextOffset: number | null };
+export type { LedgerPage };
+
 export type OrdersPage = { orders: PaymentOrderView[]; nextOffset: number | null };
 export type AdminOrdersPage = { orders: AdminPaymentOrderView[]; nextOffset: number | null };
 export type AdminBillingUserDetail = { user: AdminBillingUserView; summary: BillingSummary; ledger: LedgerPage; orders: PaymentOrderView[] };
@@ -14,11 +15,11 @@ export type EpayCheckout = { url: string; params: Record<string, string> };
 
 const json = (method: string, body?: unknown) => ({ method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
-/** Toast options for a call refused for want of balance: the action opens 订阅与余额. */
+/** Toast options for a call refused for want of balance: the action opens the wallet. */
 export const TOP_UP_TOAST = { action: { label: '去充值', onClick: () => openSettingsCenter('billing') } };
 
 export const fetchBillingOverview = () => requestBrowserData<BillingOverview>('/api/billing', json('GET'), { fallbackMessage: '读取账户失败' });
-export const fetchBillingLedger = (query: URLSearchParams) => requestBrowserData<LedgerPage>(`/api/billing/ledger?${query}`, json('GET'), { fallbackMessage: '读取账单失败' });
+export const fetchBillingLedger = (query: URLSearchParams) => requestBrowserData<LedgerPage>(`/api/billing/ledger?${query}`, json('GET'), { fallbackMessage: '读取用量日志失败' });
 export const fetchBillingOrders = (offset = 0) => requestBrowserData<OrdersPage>(`/api/billing/orders?offset=${offset}`, json('GET'), { fallbackMessage: '读取订单失败' });
 
 export const redeemCode = (code: string) => requestBrowserData<{ result: RedeemResult; summary: BillingSummary | null }>(
@@ -28,7 +29,11 @@ export const buyPlan = (planId: string) => requestBrowserData<{ summary: Billing
 export const startCheckout = (input: { kind: 'topup'; amountUsd: number; method: string } | { kind: 'subscription'; planId: string; method: string }) =>
     requestBrowserData<EpayCheckout>('/api/billing/epay/checkout', json('POST', input), { fallbackMessage: '创建支付订单失败' });
 
-/** Leaves for the gateway: its pay page takes a signed form post, like new-api's wallet does. */
+/** Which purse a charge spends first, saved from the wallet page. */
+export const saveDeductOrder = (deductOrder: DeductOrder) => requestBrowserData<{ summary: BillingSummary }>(
+    '/api/billing/preferences', json('PATCH', { deductOrder }), { fallbackMessage: '保存扣费顺序失败' });
+
+/** Leaves for the gateway: its pay page takes a signed form post. */
 export function submitCheckout(checkout: EpayCheckout) {
     const form = document.createElement('form');
     form.method = 'POST';

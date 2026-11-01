@@ -465,6 +465,14 @@ CREATE POLICY subscription_plans_admin_all ON public.subscription_plans TO authe
 
 CREATE POLICY subscription_plans_read ON public.subscription_plans FOR SELECT TO authenticated USING (enabled);
 
+ALTER TABLE public.subscription_plan_limits ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY subscription_plan_limits_admin_all ON public.subscription_plan_limits TO authenticated USING (public.is_admin_user()) WITH CHECK (public.is_admin_user());
+
+CREATE POLICY subscription_plan_limits_read ON public.subscription_plan_limits FOR SELECT TO authenticated USING (((EXISTS ( SELECT 1
+   FROM public.subscription_plans p
+  WHERE ((p.id = subscription_plan_limits.plan_id) AND p.enabled))) OR public.is_admin_user()));
+
 ALTER TABLE public.tarot_readings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY tarot_readings_delete_access ON public.tarot_readings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
@@ -494,6 +502,12 @@ CREATE POLICY user_oauth_providers_update_access ON public.user_oauth_providers 
 ALTER TABLE public.user_subscriptions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY user_subscriptions_read ON public.user_subscriptions FOR SELECT TO authenticated USING (((user_id = auth.uid()) OR public.is_admin_user()));
+
+ALTER TABLE public.user_subscription_limits ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_subscription_limits_read ON public.user_subscription_limits FOR SELECT TO authenticated USING ((public.is_admin_user() OR (EXISTS ( SELECT 1
+   FROM public.user_subscriptions s
+  WHERE ((s.id = user_subscription_limits.subscription_id) AND (s.user_id = auth.uid()))))));
 
 ALTER TABLE public.user_settings ENABLE ROW LEVEL SECURITY;
 
@@ -615,6 +629,8 @@ GRANT ALL ON FUNCTION public.billing_grant_subscription(p_user_id uuid, p_plan_i
 GRANT ALL ON FUNCTION public.billing_redeem(p_user_id uuid, p_code text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.billing_refund(p_charge_key text, p_amount bigint, p_idempotency_key text, p_description text) TO authenticated;
+
+GRANT ALL ON FUNCTION public.billing_set_deduct_order(p_user_id uuid, p_order text) TO authenticated;
 
 GRANT ALL ON FUNCTION public.billing_spendable(p_user_id uuid) TO authenticated;
 
@@ -867,6 +883,8 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.reminder_subscriptions TO anon
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.scheduled_reminders TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.scheduled_reminders TO anon;
 
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.subscription_plan_limits TO authenticated;
+
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.subscription_plans TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tarot_readings TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.tarot_readings TO anon;
@@ -875,6 +893,8 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_oauth_providers TO authen
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_oauth_providers TO anon;
 
 GRANT SELECT ON TABLE public.user_subscriptions TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_subscription_limits TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_settings TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_settings TO anon;
 

@@ -320,6 +320,7 @@ export interface AiModels {
   cache_read_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
   cache_write_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
   image_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  icon: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface Announcements {
@@ -400,6 +401,7 @@ export interface BillingAccounts {
   user_id: ColumnType<string, string, string>;
   balance_micros: Generated<number>;
   updated_at: Generated<string>;
+  deduct_order: Generated<string>;
 }
 
 export interface BillingLedger {
@@ -788,6 +790,12 @@ export interface ScheduledReminders {
   created_at: Generated<string | null>;
 }
 
+export interface SubscriptionPlanLimits {
+  plan_id: ColumnType<string, string, string>;
+  period: ColumnType<string, string, string>;
+  allowance_micros: ColumnType<number, number, number>;
+}
+
 export interface SubscriptionPlans {
   id: Generated<string>;
   title: ColumnType<string, string, string>;
@@ -796,8 +804,6 @@ export interface SubscriptionPlans {
   price_usd: Generated<number>;
   duration_unit: Generated<string>;
   duration_value: Generated<number>;
-  allowance_micros: ColumnType<number, number, number>;
-  reset_period: Generated<string>;
   purchasable: Generated<boolean>;
   enabled: Generated<boolean>;
   max_per_user: ColumnType<number | null, number | null | undefined, number | null | undefined>;
@@ -862,17 +868,21 @@ export interface UserSettings {
   chart_prompt_detail_level: Generated<string>;
 }
 
+export interface UserSubscriptionLimits {
+  subscription_id: ColumnType<string, string, string>;
+  period: ColumnType<string, string, string>;
+  allowance_micros: ColumnType<number, number, number>;
+  used_micros: Generated<number>;
+  next_reset_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+}
+
 export interface UserSubscriptions {
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
   plan_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   title: ColumnType<string, string, string>;
-  allowance_micros: ColumnType<number, number, number>;
-  reset_period: ColumnType<string, string, string>;
-  used_micros: Generated<number>;
   starts_at: Generated<string>;
   ends_at: ColumnType<string, string, string>;
-  next_reset_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   status: Generated<string>;
   source: ColumnType<string, string, string>;
   order_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
@@ -982,11 +992,13 @@ export interface DB {
   "redemption_codes": RedemptionCodes;
   "reminder_subscriptions": ReminderSubscriptions;
   "scheduled_reminders": ScheduledReminders;
+  "subscription_plan_limits": SubscriptionPlanLimits;
   "subscription_plans": SubscriptionPlans;
   "tarot_readings": TarotReadings;
   "user_agent_memory": UserAgentMemory;
   "user_oauth_providers": UserOauthProviders;
   "user_settings": UserSettings;
+  "user_subscription_limits": UserSubscriptionLimits;
   "user_subscriptions": UserSubscriptions;
   "users": Users;
   "xiaoliuren_divinations": XiaoliurenDivinations;

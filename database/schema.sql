@@ -498,9 +498,11 @@ CREATE TABLE public.ai_models (
     cache_read_price numeric(12,4),
     cache_write_price numeric(12,4),
     image_price numeric(12,4),
+    icon text,
     CONSTRAINT ai_models_context_window_check CHECK (((context_window IS NULL) OR ((context_window >= 1024) AND (context_window <= 10000000)))),
     CONSTRAINT ai_models_default_reasoning_effort_check CHECK (((default_reasoning_effort IS NULL) OR (default_reasoning_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])))),
     CONSTRAINT ai_models_default_thinking_level_check CHECK (((default_reasoning_effort IS NULL) OR (cardinality(thinking_levels) = 0) OR (default_reasoning_effort = ANY (thinking_levels)))),
+    CONSTRAINT ai_models_icon_check CHECK (((icon IS NULL) OR ((length(icon) >= 1) AND (length(icon) <= 40)))),
     CONSTRAINT ai_models_price_check CHECK (((input_price >= (0)::numeric) AND (output_price >= (0)::numeric) AND (cache_read_price >= (0)::numeric) AND (cache_write_price >= (0)::numeric) AND (image_price >= (0)::numeric))),
     CONSTRAINT ai_models_thinking_levels_check CHECK ((thinking_levels <@ ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])),
     CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'embedding'::text, 'rerank'::text, 'image'::text])))
@@ -588,7 +590,9 @@ CREATE TABLE public.bazi_charts (
 CREATE TABLE public.billing_accounts (
     user_id uuid NOT NULL,
     balance_micros bigint DEFAULT 0 NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    deduct_order text DEFAULT 'subscription'::text NOT NULL,
+    CONSTRAINT billing_accounts_deduct_order_check CHECK ((deduct_order = ANY (ARRAY['subscription'::text, 'wallet'::text])))
 );
 
 CREATE TABLE public.billing_ledger (
@@ -978,23 +982,27 @@ CREATE TABLE public.subscription_plans (
     price_usd numeric(10,2) DEFAULT 0 NOT NULL,
     duration_unit text DEFAULT 'month'::text NOT NULL,
     duration_value integer DEFAULT 1 NOT NULL,
-    allowance_micros bigint NOT NULL,
-    reset_period text DEFAULT 'never'::text NOT NULL,
     purchasable boolean DEFAULT true NOT NULL,
     enabled boolean DEFAULT true NOT NULL,
     max_per_user integer,
     sort_order integer DEFAULT 0 NOT NULL,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT subscription_plans_allowance_micros_check CHECK ((allowance_micros > 0)),
     CONSTRAINT subscription_plans_duration_unit_check CHECK ((duration_unit = ANY (ARRAY['day'::text, 'month'::text, 'year'::text]))),
     CONSTRAINT subscription_plans_duration_value_check CHECK (((duration_value >= 1) AND (duration_value <= 3650))),
     CONSTRAINT subscription_plans_features_check CHECK ((cardinality(features) <= 12)),
     CONSTRAINT subscription_plans_max_per_user_check CHECK (((max_per_user IS NULL) OR (max_per_user >= 1))),
     CONSTRAINT subscription_plans_price_usd_check CHECK ((price_usd >= (0)::numeric)),
-    CONSTRAINT subscription_plans_reset_period_check CHECK ((reset_period = ANY (ARRAY['never'::text, 'daily'::text, 'weekly'::text, 'monthly'::text]))),
     CONSTRAINT subscription_plans_subtitle_check CHECK ((length(subtitle) <= 200)),
     CONSTRAINT subscription_plans_title_check CHECK (((length(btrim(title)) >= 1) AND (length(title) <= 60)))
+);
+
+CREATE TABLE public.subscription_plan_limits (
+    plan_id uuid NOT NULL,
+    period text NOT NULL,
+    allowance_micros bigint NOT NULL,
+    CONSTRAINT subscription_plan_limits_allowance_micros_check CHECK ((allowance_micros > 0)),
+    CONSTRAINT subscription_plan_limits_period_check CHECK ((period = ANY (ARRAY['five_hour'::text, 'daily'::text, 'weekly'::text, 'monthly'::text, 'total'::text])))
 );
 
 CREATE TABLE public.tarot_readings (
@@ -1047,24 +1055,28 @@ CREATE TABLE public.user_subscriptions (
     user_id uuid NOT NULL,
     plan_id uuid,
     title text NOT NULL,
-    allowance_micros bigint NOT NULL,
-    reset_period text NOT NULL,
-    used_micros bigint DEFAULT 0 NOT NULL,
     starts_at timestamp with time zone DEFAULT now() NOT NULL,
     ends_at timestamp with time zone NOT NULL,
-    next_reset_at timestamp with time zone,
     status text DEFAULT 'active'::text NOT NULL,
     source text NOT NULL,
     order_id uuid,
     note text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT user_subscriptions_allowance_micros_check CHECK ((allowance_micros > 0)),
     CONSTRAINT user_subscriptions_check CHECK ((ends_at > starts_at)),
-    CONSTRAINT user_subscriptions_reset_period_check CHECK ((reset_period = ANY (ARRAY['never'::text, 'daily'::text, 'weekly'::text, 'monthly'::text]))),
     CONSTRAINT user_subscriptions_source_check CHECK ((source = ANY (ARRAY['balance'::text, 'epay'::text, 'redeem'::text, 'admin'::text]))),
-    CONSTRAINT user_subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cancelled'::text, 'expired'::text]))),
-    CONSTRAINT user_subscriptions_used_micros_check CHECK (((used_micros >= 0) AND (used_micros <= allowance_micros)))
+    CONSTRAINT user_subscriptions_status_check CHECK ((status = ANY (ARRAY['active'::text, 'cancelled'::text, 'expired'::text])))
+);
+
+CREATE TABLE public.user_subscription_limits (
+    subscription_id uuid NOT NULL,
+    period text NOT NULL,
+    allowance_micros bigint NOT NULL,
+    used_micros bigint DEFAULT 0 NOT NULL,
+    next_reset_at timestamp with time zone,
+    CONSTRAINT user_subscription_limits_allowance_micros_check CHECK ((allowance_micros > 0)),
+    CONSTRAINT user_subscription_limits_period_check CHECK ((period = ANY (ARRAY['five_hour'::text, 'daily'::text, 'weekly'::text, 'monthly'::text, 'total'::text]))),
+    CONSTRAINT user_subscription_limits_used_micros_check CHECK (((used_micros >= 0) AND (used_micros <= allowance_micros)))
 );
 
 CREATE TABLE public.users (
@@ -1375,6 +1387,9 @@ ALTER TABLE ONLY public.user_oauth_providers
 ALTER TABLE ONLY public.subscription_plans
     ADD CONSTRAINT subscription_plans_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.subscription_plan_limits
+    ADD CONSTRAINT subscription_plan_limits_pkey PRIMARY KEY (plan_id, period);
+
 ALTER TABLE ONLY public.tarot_readings
     ADD CONSTRAINT tarot_readings_pkey PRIMARY KEY (id);
 
@@ -1392,6 +1407,9 @@ ALTER TABLE ONLY public.user_settings
 
 ALTER TABLE ONLY public.user_subscriptions
     ADD CONSTRAINT user_subscriptions_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.user_subscription_limits
+    ADD CONSTRAINT user_subscription_limits_pkey PRIMARY KEY (subscription_id, period);
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_pkey PRIMARY KEY (id);
@@ -1645,6 +1663,9 @@ ALTER TABLE ONLY public.redemption_codes
 ALTER TABLE ONLY public.redemption_codes
     ADD CONSTRAINT redemption_codes_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id);
 
+ALTER TABLE ONLY public.subscription_plan_limits
+    ADD CONSTRAINT subscription_plan_limits_plan_id_fkey FOREIGN KEY (plan_id) REFERENCES public.subscription_plans(id) ON DELETE CASCADE;
+
 ALTER TABLE ONLY public.redemption_codes
     ADD CONSTRAINT redemption_codes_used_by_fkey FOREIGN KEY (used_by) REFERENCES public.users(id) ON DELETE SET NULL;
 
@@ -1686,6 +1707,9 @@ ALTER TABLE ONLY public.user_subscriptions
 
 ALTER TABLE ONLY public.user_subscriptions
     ADD CONSTRAINT user_subscriptions_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.user_subscription_limits
+    ADD CONSTRAINT user_subscription_limits_subscription_id_fkey FOREIGN KEY (subscription_id) REFERENCES public.user_subscriptions(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.users
     ADD CONSTRAINT users_id_fkey FOREIGN KEY (id) REFERENCES identity.users(id) ON DELETE CASCADE;

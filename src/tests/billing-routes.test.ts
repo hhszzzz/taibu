@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 
 import { createMockAuthContext } from './helpers/auth-mock';
+import { createMockScopedDb } from './helpers/db-mock';
 
 const USER = '11111111-1111-4111-8111-111111111111';
 const PLAN = '22222222-2222-4222-8222-222222222222';
@@ -37,6 +38,7 @@ function setup(t: TestContext) {
     createEpayCheckout: epay.createEpayCheckout,
     settleEpayPayment: epay.settleEpayPayment,
     listUsage: ledger.listUsage,
+    listLedger: ledger.listLedger,
     setBillingSettings: settings.setBillingSettings,
   };
 
@@ -66,6 +68,10 @@ function setup(t: TestContext) {
     record('usage', { filters, page });
     return { entries: [], nextOffset: null, totals: {}, byModel: [] };
   };
+  ledger.listLedger = async (userId: unknown, _db: unknown, page: unknown, filters: unknown, options: unknown) => {
+    record('ledger', { userId, page, filters, options });
+    return { entries: [], nextOffset: null, totals: {}, byModel: [] };
+  };
   settings.setBillingSettings = async (value: unknown) => { record('settings', value); };
 
   t.after(() => {
@@ -80,6 +86,7 @@ function setup(t: TestContext) {
     epay.createEpayCheckout = originals.createEpayCheckout;
     epay.settleEpayPayment = originals.settleEpayPayment;
     ledger.listUsage = originals.listUsage;
+    ledger.listLedger = originals.listLedger;
     settings.setBillingSettings = originals.setBillingSettings;
   });
 
@@ -277,15 +284,58 @@ test('adjusting a user rejects an empty or out-of-range amount and forwards the 
   assert.equal((await state.api.adminChangeUser(post(`/api/admin/billing/users/${USER}`, { action: 'adjust', amountUsd: 100_001 }), USER)).status, 400);
   assert.equal((await state.api.adminChangeUser(post(`/api/admin/billing/users/${USER}`, { action: 'other' }), USER)).status, 400);
 
-  const systemDb = require('../lib/db/context.server') as unknown as { systemDb: unknown };
-  const original = systemDb.systemDb;
+  const context = require('../lib/db/context.server') as unknown as { systemDb: unknown; userDb: unknown };
+  const original = { systemDb: context.systemDb, userDb: context.userDb };
   const rpcCalls: unknown[] = [];
-  systemDb.systemDb = () => ({
-    rpc: async (name: string, args: unknown) => { rpcCalls.push({ name, args }); return null; },
-    tx: async () => [],
-  });
-  t.after(() => { systemDb.systemDb = original; });
+  const rpc = async (name: string, args: unknown) => { rpcCalls.push({ name, args }); return null; };
+  // 调整余额用管理员自己的身份调用，流水里记下的操作人才是他。
+  context.userDb = (userId: string) => ({ scope: { kind: 'user', userId }, rpc, tx: async () => [] });
+  context.systemDb = () => ({ rpc, tx: async () => [] });
+  t.after(() => { context.systemDb = original.systemDb; context.userDb = original.userDb; });
   const adjusted = await state.api.adminChangeUser(post(`/api/admin/billing/users/${USER}`, { action: 'adjust', amountUsd: -2.5, description: ' 补扣 ' }), USER);
   assert.equal(adjusted.status, 200);
   assert.deepEqual(rpcCalls, [{ name: 'billing_adjust_wallet', args: { p_user_id: USER, p_amount: -2_500_000, p_description: '补扣' } }]);
+});
+
+test('the member chooses which purse pays first and only a known order is accepted', async (t) => {
+  const state = setup(t);
+  const apiUtils = state.modules.apiUtils as unknown as { requireUserContext: unknown };
+  const original = apiUtils.requireUserContext;
+  const rpcCalls: Array<{ name: string; args: unknown }> = [];
+  apiUtils.requireUserContext = async () => createMockAuthContext('user-1', createMockScopedDb({
+    rpc: async (name: string, args: unknown) => { rpcCalls.push({ name, args }); return 'wallet'; },
+  }));
+  t.after(() => { apiUtils.requireUserContext = original; });
+  const patch = (body: unknown) => new NextRequest('http://localhost/api/billing/preferences', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  for (const body of [{}, { deductOrder: 'allowance' }, { deductOrder: 1 }]) {
+    const response = await state.api.updateBillingDeductOrder(patch(body));
+    assert.equal(response.status, 400, JSON.stringify(body));
+    assert.deepEqual(await response.json(), { success: false, error: '扣费顺序无效' });
+  }
+  assert.deepEqual(rpcCalls, []);
+
+  const saved = await state.api.updateBillingDeductOrder(patch({ deductOrder: 'wallet' }));
+  assert.equal(saved.status, 200);
+  assert.deepEqual(await saved.json(), { summary: SUMMARY });
+  assert.deepEqual(rpcCalls, [{ name: 'billing_set_deduct_order', args: { p_user_id: 'user-1', p_order: 'wallet' } }]);
+});
+
+test('the member ledger page asks for spending sums, filters and pagination', async (t) => {
+  const state = setup(t);
+  const response = await state.api.readBillingLedger(new NextRequest(
+    'http://localhost/api/billing/ledger?kind=usage&source=chat&model=gpt&offset=20&limit=10',
+  ));
+  assert.equal(response.status, 200);
+  assert.deepEqual(state.calls.ledger, [{
+    userId: 'user-1',
+    page: { offset: 20, limit: 10 },
+    filters: { kind: 'usage', source: 'chat', model: 'gpt' },
+    options: { sums: true },
+  }]);
+  assert.equal((await state.api.readBillingLedger(new NextRequest('http://localhost/api/billing/ledger?kind=nope'))).status, 400);
 });

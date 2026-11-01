@@ -1,5 +1,5 @@
 /**
- * 用户账户：按邮箱查用户，查看余额、订阅与账单；可以加减余额、赠送套餐、取消订阅。
+ * 用户账户：按邮箱查用户，查看余额、订阅与用量日志；可以加减余额、赠送套餐、取消订阅。
  *
  * 'use client' 标记说明：
  * - 需要 useState / useEffect 维护查找结果、选中的用户与各项操作的提交状态
@@ -8,6 +8,7 @@
 
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import { Search, X } from 'lucide-react';
+import { LedgerDetailDialog } from '@/components/billing/LedgerDetailDialog';
 import { LedgerEntryRow } from '@/components/billing/LedgerEntryRow';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
@@ -20,8 +21,10 @@ import { useToast } from '@/components/ui/Toast';
 import {
     cancelAdminSubscription, changeAdminUser, fetchAdminPlans, fetchAdminUser, searchAdminUsers, type AdminBillingUserDetail,
 } from '@/lib/billing/client';
-import { PAYMENT_ORDER_STATUS_LABELS, type AdminBillingUserView, type BillingSubscription, type SubscriptionPlanView } from '@/lib/billing/config';
-import { formatBillingDay, formatBillingTime, resetPeriodLabel } from '@/lib/billing/format';
+import {
+    PAYMENT_ORDER_STATUS_LABELS, type AdminBillingUserView, type BillingSubscription, type LedgerEntryView, type SubscriptionPlanView,
+} from '@/lib/billing/config';
+import { formatBillingDay, formatBillingTime, windowLabel } from '@/lib/billing/format';
 import { formatUsd, usdToMicros } from '@/lib/billing/money';
 
 const CARD = 'rounded-2xl border border-border bg-surface';
@@ -45,6 +48,7 @@ function UserDetail({ userId, plans, onClose, onChanged }: {
     const [grantNote, setGrantNote] = useState('');
     const [busy, setBusy] = useState<'adjust' | 'grant' | 'cancel' | null>(null);
     const [cancelling, setCancelling] = useState<BillingSubscription | null>(null);
+    const [entry, setEntry] = useState<LedgerEntryView | null>(null);
     const seq = useRef(0);
 
     const load = useCallback(async () => {
@@ -73,7 +77,7 @@ function UserDetail({ userId, plans, onClose, onChanged }: {
                 ...current, ledger: { entries: [...current.ledger.entries, ...next.ledger.entries], nextOffset: next.ledger.nextOffset },
             });
         } catch (failure) {
-            showToast('error', message(failure, '读取账单失败'));
+            showToast('error', message(failure, '读取用量日志失败'));
         } finally {
             setLoadingMore(false);
         }
@@ -178,7 +182,7 @@ function UserDetail({ userId, plans, onClose, onChanged }: {
                             aria-label="调整说明" className="min-w-0 flex-1" size="sm" />
                         <Button type="submit" size="sm" loading={busy === 'adjust'} disabled={!!busy || !amount}>确定</Button>
                     </div>
-                    <p className="text-xs text-foreground-tertiary">扣减不会让余额低于 0；用户会在账单里看到这条调整。</p>
+                    <p className="text-xs text-foreground-tertiary">扣减不会让余额低于 0；用户会在用量日志里看到这条调整。</p>
                 </form>
                 <form onSubmit={event => void grant(event)} className="flex flex-col gap-2">
                     <span className={HEADING}>赠送套餐</span>
@@ -203,8 +207,8 @@ function UserDetail({ userId, plans, onClose, onChanged }: {
                                 <div className="flex min-w-0 flex-col gap-0.5">
                                     <span className="text-sm text-foreground">{subscription.title}</span>
                                     <span className="text-xs text-foreground-tertiary">
-                                        已用 {formatUsd(subscription.usedMicros)} / {formatUsd(subscription.allowanceMicros)} · {resetPeriodLabel(subscription.resetPeriod)}
-                                        {subscription.nextResetAt ? ` · ${formatBillingTime(subscription.nextResetAt)} 重置` : ''} · {formatBillingDay(subscription.endsAt)} 到期
+                                        {subscription.limits.map(limit => `${windowLabel(limit.period)} ${formatUsd(limit.usedMicros)} / ${formatUsd(limit.allowanceMicros)}`).join(' · ')}
+                                        {` · ${formatBillingDay(subscription.endsAt)} 到期`}
                                     </span>
                                 </div>
                                 <Button variant="ghost" size="xs" disabled={!!busy} onClick={() => setCancelling(subscription)}>取消订阅</Button>
@@ -215,10 +219,10 @@ function UserDetail({ userId, plans, onClose, onChanged }: {
             </div>
 
             <div className="flex flex-col gap-2">
-                <span className={HEADING}>账单</span>
+                <span className={HEADING}>用量日志</span>
                 {ledger.entries.length ? (
                     <div className="overflow-hidden rounded-xl border border-border">
-                        <ul aria-label="用户账单">{ledger.entries.map(entry => <LedgerEntryRow key={entry.id} entry={entry} />)}</ul>
+                        <ul aria-label="用户用量日志">{ledger.entries.map(item => <LedgerEntryRow key={item.id} entry={item} onOpen={setEntry} />)}</ul>
                         {ledger.nextOffset !== null ? (
                             <Button unstyled type="button" disabled={loadingMore} onClick={() => void more()}
                                 className="h-10 w-full border-t border-border text-sm text-foreground-secondary hover:bg-background-secondary hover:text-foreground">
@@ -226,7 +230,8 @@ function UserDetail({ userId, plans, onClose, onChanged }: {
                             </Button>
                         ) : null}
                     </div>
-                ) : <p className="text-[13px] text-foreground-secondary">还没有账单记录。</p>}
+                ) : <p className="text-[13px] text-foreground-secondary">还没有用量记录。</p>}
+                <LedgerDetailDialog admin entry={entry && { ...entry, userId: user.userId, userEmail: user.email }} onClose={() => setEntry(null)} />
             </div>
 
             {orders.length ? (

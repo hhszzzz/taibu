@@ -16,9 +16,15 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     const value = await asActor(actor, statement);
     return value ? JSON.parse(value) : null;
   };
-  const plan = (values = {}) => {
-    const row = { title: '测试套餐', duration_unit: 'month', duration_value: 1, allowance_micros: 1_000_000, reset_period: 'never', ...values };
-    return admin(`INSERT INTO public.subscription_plans(${Object.keys(row).join(',')}) VALUES(${Object.values(row).map(literal).join(',')}) RETURNING id;`);
+  /** A plan with its allowance windows; `allowance_micros`/`reset_period` describe one window for short fixtures. */
+  const plan = async (values = {}) => {
+    const { allowance_micros = 1_000_000, reset_period = 'never', limits, ...fields } = values;
+    const row = { title: '测试套餐', duration_unit: 'month', duration_value: 1, ...fields };
+    const id = await admin(`INSERT INTO public.subscription_plans(${Object.keys(row).join(',')}) VALUES(${Object.values(row).map(literal).join(',')}) RETURNING id;`);
+    const windows = limits ?? [{ period: reset_period === 'never' ? 'total' : reset_period, allowance_micros }];
+    await admin(`INSERT INTO public.subscription_plan_limits(plan_id,period,allowance_micros) VALUES ${windows
+      .map(item => `(${quote(id)},${quote(item.period)},${literal(item.allowance_micros)})`).join(',')};`);
+    return id;
   };
   const grant = (user, planId) => parsed(`SELECT public.billing_grant_subscription(${quote(user)},${quote(planId)});`);
   const credit = (user, micros) => parsed(`SELECT public.billing_adjust_wallet(${quote(user)},${micros},'测试加款');`);
@@ -27,7 +33,12 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
   const refund = (chargeKey, micros, key) => parsed(`SELECT public.billing_refund(${quote(chargeKey)},${micros},${quote(key)},'测试退款');`);
   const wallet = user => asOwner(`SELECT coalesce((SELECT balance_micros FROM public.billing_accounts WHERE user_id=${quote(user)}),0);`).then(Number);
   const spendable = user => admin(`SELECT public.billing_spendable(${quote(user)});`).then(Number);
-  const used = id => asOwner(`SELECT used_micros FROM public.user_subscriptions WHERE id=${quote(id)};`).then(Number);
+  const used = (id, period = 'total') => asOwner(`SELECT used_micros FROM public.user_subscription_limits WHERE subscription_id=${quote(id)} AND period=${quote(period)};`).then(Number);
+  /** One window of a sold subscription, as the member's summary sees it. */
+  const window_ = async (id, period = 'total') => {
+    const value = await asOwner(`SELECT jsonb_build_object('allowance',allowance_micros,'used',used_micros,'next',next_reset_at) FROM public.user_subscription_limits WHERE subscription_id=${quote(id)} AND period=${quote(period)};`);
+    return value ? JSON.parse(value) : null;
+  };
   const ledgerCount = user => asOwner(`SELECT count(*) FROM public.billing_ledger WHERE user_id=${quote(user)};`).then(Number);
 
   await t.test('members read only their own money and change it only through definer functions', async () => {
@@ -47,8 +58,15 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
       // Not even an administrator writes the money tables directly.
       await assert.rejects(asActor(actor, `UPDATE public.billing_accounts SET balance_micros=999999999 WHERE user_id=${quote(owner)};`), /42501/);
       await assert.rejects(asActor(actor, `INSERT INTO public.billing_ledger(user_id,kind,amount_micros,wallet_after_micros) VALUES(${quote(owner)},'adjust',1,1);`), /42501/);
-      await assert.rejects(asActor(actor, `UPDATE public.user_subscriptions SET used_micros=0 WHERE user_id=${quote(owner)};`), /42501/);
     }
+    // Allowance windows carry money too: a direct write is filtered to no rows, an insert is refused.
+    const guarded = await grant(owner, await plan({ title: '只读额度', allowance_micros: 1_000_000 }));
+    await charge(owner, 400_000);
+    for (const actor of [owner, adminId]) {
+      await asActor(actor, 'UPDATE public.user_subscription_limits SET used_micros=0;');
+      await assert.rejects(asActor(actor, `INSERT INTO public.user_subscription_limits(subscription_id,period,allowance_micros) VALUES(${quote(guarded.id)},'daily',1);`), /42501/);
+    }
+    assert.equal(await used(guarded.id), 400_000, 'neither a member nor an administrator rewrites an allowance directly');
     for (const statement of [
       `SELECT public.billing_charge(${quote(owner)},1,true,'chat');`,
       `SELECT public.billing_refund('missing',1,'missing-refund');`,
@@ -61,7 +79,7 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     ]) await assert.rejects(asActor(owner, statement), /42501/, statement);
     await assert.rejects(asActor(null, `SELECT public.billing_spendable(${quote(owner)});`, 'anon'), /42501/);
     for (const helper of [
-      'public.billing_lock_account(uuid)', 'public.billing_apply_reset(public.user_subscriptions)',
+      'public.billing_lock_account(uuid)', 'public.billing_apply_limit_reset(public.user_subscription_limits)',
       'public.billing_open_subscription(uuid,public.subscription_plans,text,uuid,text)',
       'public.billing_next_reset(timestamp with time zone,timestamp with time zone,text,timestamp with time zone)',
     ]) assert.equal(await sql(`SELECT has_function_privilege('authenticated',${quote(helper)},'EXECUTE');`), 'f', helper);
@@ -92,22 +110,77 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     await assert.rejects(charge(user, -1), /BILLING_AMOUNT_INVALID/);
   });
 
+  await t.test('a subscription\'s windows fill on their own schedules, shortest first', async () => {
+    const user = await member();
+    const planId = await plan({ title: '多窗口', duration_value: 7, limits: [
+      { period: 'daily', allowance_micros: 2_000_000 }, { period: 'five_hour', allowance_micros: 1_000_000 },
+    ] });
+    const sub = await grant(user, planId);
+    await credit(user, 5_000_000);
+    const first = await charge(user, 1_500_000, { debt: false });
+    assert.deepEqual(first.subscription_parts.map(part => [part.period, part.micros]), [['five_hour', -1_000_000], ['daily', -500_000]],
+      'the shorter window is spent before the longer one');
+    assert.deepEqual([await used(sub.id, 'five_hour'), await used(sub.id, 'daily')], [1_000_000, 500_000]);
+    assert.equal(await spendable(user), 6_500_000, 'spendable counts what each window has left');
+
+    // Only the five-hour window has come due; the daily one keeps its usage until its own boundary.
+    await asOwner(`UPDATE public.user_subscription_limits SET next_reset_at=now()-interval '1 second' WHERE subscription_id=${quote(sub.id)} AND period='five_hour';`);
+    const summary = await parsed(`SELECT public.billing_summary(${quote(user)});`, user);
+    assert.deepEqual(summary.subscriptions[0].limits.map(limit => [limit.period, limit.usedMicros]), [['five_hour', 0], ['daily', 500_000]]);
+    assert.ok(summary.subscriptions[0].limits[0].nextResetAt, 'the reset boundary is reported for the window that has one');
+    const second = await charge(user, 1_500_000, { debt: false });
+    assert.deepEqual(second.subscription_parts.map(part => [part.period, part.micros]), [['five_hour', -1_000_000], ['daily', -500_000]]);
+    assert.deepEqual([await used(sub.id, 'five_hour'), await used(sub.id, 'daily')], [1_000_000, 1_000_000]);
+    assert.equal(typeof (await window_(sub.id, 'five_hour')).next, 'string', 'the reset wrote the next boundary');
+    assert.equal(await window_(sub.id, 'total'), null, 'a plan without a whole-term window has no such row');
+  });
+
+  await t.test('the member chooses which purse pays first, and a prepaid charge still sees every purse', async () => {
+    const user = await member(), other = await member();
+    const sub = await grant(user, await plan({ title: '顺序', allowance_micros: 1_000_000 }));
+    await credit(user, 2_000_000);
+    assert.equal((await parsed(`SELECT public.billing_summary(${quote(user)});`, user)).deductOrder, 'subscription', 'allowances pay first unless the member says otherwise');
+    const allowanceFirst = await charge(user, 500_000, { debt: false });
+    assert.deepEqual([allowanceFirst.subscription_parts.length, allowanceFirst.wallet_micros, await wallet(user)], [1, 0, 2_000_000]);
+
+    const setOrder = (actor, order, member = user) => asActor(actor, `SELECT public.billing_set_deduct_order(${quote(member)},${literal(order)});`);
+    await assert.rejects(setOrder(user, 'other'), /BILLING_ORDER_INVALID/);
+    await assert.rejects(setOrder(user, null), /BILLING_ORDER_INVALID/);
+    await assert.rejects(setOrder(other, 'wallet'), /42501/, 'nobody changes another member\'s order');
+    await assert.rejects(setOrder(null, 'wallet'), /42501/);
+    assert.equal(await setOrder(user, 'wallet'), 'wallet');
+    assert.equal((await parsed(`SELECT public.billing_summary(${quote(user)});`, user)).deductOrder, 'wallet');
+    assert.equal(await setOrder(adminId, 'wallet', other), 'wallet', 'an administrator may set anyone\'s order');
+
+    // The wallet pays first, but the allowance still stands behind it: together they must cover a prepaid charge.
+    await asOwner(`UPDATE public.user_subscription_limits SET used_micros=0 WHERE subscription_id=${quote(sub.id)};`);
+    const walletFirst = await charge(user, 1_500_000, { debt: false });
+    assert.deepEqual([walletFirst.wallet_micros, walletFirst.subscription_parts.length, await wallet(user)], [-1_500_000, 0, 500_000]);
+    assert.equal(await used(sub.id), 0);
+    await assert.rejects(charge(user, 1_500_001, { debt: false }), /INSUFFICIENT_BALANCE/, 'the wallet and the allowance together must cover the charge');
+    const exact = await charge(user, 1_500_000, { debt: false });
+    assert.deepEqual([exact.wallet_micros, exact.subscription_parts.map(part => part.micros), await wallet(user), await used(sub.id)], [-500_000, [-1_000_000], 0, 1_000_000]);
+    const debt = await charge(user, 700_000);
+    assert.deepEqual([debt.wallet_micros, debt.wallet_after_micros, await used(sub.id)], [-700_000, -700_000, 1_000_000], 'usage that already happened may leave the wallet in debt');
+  });
+
   await t.test('a due reset restores the allowance first; usage may end in debt, a prepaid charge never', async () => {
     const user = await member();
-    const daily = await grant(user, await plan({ title: '日额度', reset_period: 'daily', allowance_micros: 1_000_000 }));
-    assert.ok(daily.next_reset_at);
+    const daily = await grant(user, await plan({ title: '日额度', reset_period: 'daily', allowance_micros: 1_000_000, duration_value: 2 }));
+    assert.ok((await window_(daily.id, 'daily')).next);
     await charge(user, 1_000_000);
     assert.equal(await spendable(user), 0);
-    await asOwner(`UPDATE public.user_subscriptions SET next_reset_at=now()-interval '1 second' WHERE id=${quote(daily.id)};`);
+    await asOwner(`UPDATE public.user_subscription_limits SET next_reset_at=now()-interval '1 second' WHERE subscription_id=${quote(daily.id)} AND period='daily';`);
     assert.equal(await spendable(user), 1_000_000, 'a due reset counts as a full allowance before anything writes it');
     const summary = await parsed(`SELECT public.billing_summary(${quote(user)});`, user);
-    assert.equal(summary.subscriptions[0].usedMicros, 0);
+    assert.equal(summary.subscriptions[0].limits[0].usedMicros, 0);
+    assert.equal(summary.subscriptions[0].limits[0].period, 'daily');
     await charge(user, 600_000);
-    assert.equal(await used(daily.id), 600_000);
-    assert.equal(await asOwner(`SELECT next_reset_at>now() FROM public.user_subscriptions WHERE id=${quote(daily.id)};`), 't');
+    assert.equal(await used(daily.id, 'daily'), 600_000);
+    assert.equal(await asOwner(`SELECT next_reset_at>now() FROM public.user_subscription_limits WHERE subscription_id=${quote(daily.id)} AND period='daily';`), 't');
     const before = await ledgerCount(user);
     await assert.rejects(charge(user, 1_000_000, { debt: false }), /INSUFFICIENT_BALANCE/);
-    assert.deepEqual([await used(daily.id), await wallet(user), await ledgerCount(user)], [600_000, 0, before], 'a refused prepaid charge changes nothing');
+    assert.deepEqual([await used(daily.id, 'daily'), await wallet(user), await ledgerCount(user)], [600_000, 0, before], 'a refused prepaid charge changes nothing');
     const debt = await charge(user, 1_000_000);
     assert.deepEqual([debt.wallet_micros, debt.wallet_after_micros], [-600_000, -600_000]);
     assert.equal(await spendable(user), -600_000);
@@ -162,7 +235,8 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     await credit(user, 2_000_000);
     await assert.rejects(buy(other), /42501/, 'nobody buys on another member\'s wallet');
     const bought = await buy(user);
-    assert.deepEqual([bought.entry.kind, bought.entry.amount_micros, bought.subscription.allowance_micros, bought.subscription.source], ['subscription', -3_000_000, 5_000_000, 'balance']);
+    assert.deepEqual([bought.entry.kind, bought.entry.amount_micros, bought.subscription.source], ['subscription', -3_000_000, 'balance']);
+    assert.deepEqual(await window_(bought.subscription.id), { allowance: 5_000_000, used: 0, next: null }, 'the plan\'s windows are copied, the whole-term one never resets');
     assert.equal(await wallet(user), 1_000_000);
     await assert.rejects(buy(user), /BILLING_PLAN_LIMIT/);
     await grant(user, limited);
@@ -171,7 +245,8 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     await assert.rejects(buy(user, await plan({ title: '停用', price_usd: 1, enabled: false })), /BILLING_PLAN_UNAVAILABLE/);
     await assert.rejects(buy(user, await plan({ title: '不售', price_usd: 1, purchasable: false })), /BILLING_PLAN_UNAVAILABLE/);
     assert.equal(await asActor(user, "SELECT count(*) FROM public.subscription_plans WHERE title IN ('停用','不售','限购');"), '2', 'members see enabled plans only');
-    await assert.rejects(asActor(user, "INSERT INTO public.subscription_plans(title,allowance_micros) VALUES('自建',1);"), /42501/);
+    await assert.rejects(asActor(user, "INSERT INTO public.subscription_plans(title) VALUES('自建');"), /42501/);
+    await assert.rejects(asActor(user, `INSERT INTO public.subscription_plan_limits(plan_id,period,allowance_micros) VALUES(${quote(limited)},'daily',1);`), /42501/, 'members never write plan windows');
   });
 
   await t.test('a redemption code is used once, by one member', async () => {
@@ -187,7 +262,8 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     assert.match(results.find(result => result.status === 'rejected').reason.message, /REDEMPTION_CODE_USED/);
     assert.equal(await wallet(first) + await wallet(second), 2_000_000);
     const plan_ = await redeem(first, 'TB-PLAN-ONCE');
-    assert.deepEqual([plan_.kind, plan_.subscription.source, plan_.subscription.allowance_micros], ['subscription', 'redeem', 3_000_000]);
+    assert.deepEqual([plan_.kind, plan_.subscription.source], ['subscription', 'redeem']);
+    assert.deepEqual(await window_(plan_.subscription.id), { allowance: 3_000_000, used: 0, next: null });
     await assert.rejects(redeem(second, 'TB-DISABLED'), /REDEMPTION_CODE_UNAVAILABLE/);
     await assert.rejects(redeem(second, 'TB-EXPIRED'), /REDEMPTION_CODE_UNAVAILABLE/);
     await assert.rejects(redeem(second, 'TB-UNKNOWN'), /REDEMPTION_CODE_NOT_FOUND/);
@@ -267,6 +343,6 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     assert.equal(await next('2026-01-01 00:00+00', '2027-01-01 00:00+00', 'weekly', '2026-01-08 00:00+00'), '2026-01-15 00:00');
     assert.equal(await next('2026-01-01 08:00+00', '2026-02-01 08:00+00', 'daily', '2026-01-05 07:59+00'), '2026-01-05 08:00');
     assert.equal(await next('2026-01-01 00:00+00', '2026-01-02 00:00+00', 'daily', '2026-01-01 01:00+00'), '');
-    assert.equal(await next('2026-01-01 00:00+00', '2027-01-01 00:00+00', 'never', '2026-01-01 01:00+00'), '');
+    assert.equal(await next('2026-01-01 00:00+00', '2027-01-01 00:00+00', 'total', '2026-01-01 01:00+00'), '');
   });
 }

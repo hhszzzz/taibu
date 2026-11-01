@@ -1603,6 +1603,11 @@ export async function run(existingPage, bundlePath) {
     checks.push('Browser back returns to the prior settings category');
 
     await page.evaluate(() => { history.replaceState(null, '', '#settings/personalization'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    const betaMark = label => page.locator('.settings-nav-label').filter({ hasText: label }).locator('.beta-badge');
+    await page.locator('.settings-form-heading h3').filter({ hasText: '记忆' }).waitFor();
+    check('Beta is marked on the wallet, the usage log and memory', await betaMark(/^钱包/u).count() === 1
+      && await betaMark(/^用量日志/u).count() === 1
+      && await page.locator('.settings-form-heading h3').filter({ hasText: '记忆' }).locator('.beta-badge').count() === 1);
     const instructions = page.getByPlaceholder('例如：先给结论，再给依据；避免空话和术语堆叠。', { exact: true });
     await instructions.fill('Dirty same-account draft');
     const readsBeforeFocus = settingsReads;

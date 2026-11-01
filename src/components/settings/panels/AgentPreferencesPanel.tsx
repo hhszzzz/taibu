@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { SettingsRow, SettingsSaveBar, SettingsSwitch } from '@/components/settings/SettingsControls';
 import { useToast } from '@/components/ui/Toast';
+import { BetaBadge } from '@/components/ui/BetaBadge';
 import { Button } from '@/components/ui/Button';
 import { getCurrentUserSettings, updateCurrentUserSettings } from '@/lib/user/settings';
 import { requestBrowserJson } from '@/lib/browser-api';
@@ -55,7 +56,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
     };
     return <>{memoryAvailable ? <section className="settings-form-section settings-form-section-divided" aria-label="记忆设置">
         <div className="settings-form-heading">
-            <h3>记忆</h3>
+            <h3>记忆<BetaBadge /></h3>
             <p>让太卜记住你的偏好和事实，随时可以查看或删除。</p>
         </div>
         <div className="settings-form-body">

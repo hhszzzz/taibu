@@ -54,6 +54,8 @@ test('settings center exposes the wallet and usage log tabs and rejects removed 
   assert.equal(tabs.some((tab) => tab.id === 'billing' && tab.disabled === false), true);
   assert.equal(tabs.find(tab => tab.id === 'billing')?.label, '钱包');
   assert.equal(tabs.find(tab => tab.id === 'usage-log')?.label, '用量日志');
+  assert.deepEqual(tabs.filter(tab => tab.beta).map(tab => tab.id), ['billing', 'usage-log', 'skills', 'connectors'],
+    'the wallet and the usage log are still shown as beta');
   assert.equal(tabs.findIndex((tab) => tab.id === 'usage-log'), tabs.findIndex((tab) => tab.id === 'billing') + 1);
   assert.equal(getNavItemById('settings-billing')?.href, getSettingsCenterRouteTarget('billing'));
   assert.equal(getSettingsCenterRouteTarget('usage-log'), '/settings/usage-log');

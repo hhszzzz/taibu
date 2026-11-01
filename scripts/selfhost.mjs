@@ -238,6 +238,8 @@ async function writeEnvironment(config) {
 async function initialize(project, port) {
   const config = createConfig(project, port);
   const directory = projectDirectory(project);
+  // A fresh checkout has no state directory yet.
+  await privateDirectory(STATE);
   await privateDirectory(directory, true);
   await writePrivate(path.join(directory, 'config.json'), `${JSON.stringify(config, null, 2)}\n`);
   await writeEnvironment(config);

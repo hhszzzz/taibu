@@ -675,6 +675,7 @@ export async function executeAgentRun(
     // MCP opens before the members are defined: a role may grant them its tools.
     const servers = mcp = await openAgentMcp({
       run, confirm: confirmMcp, approval: parseAgentApproval(run.input.approval),
+      unattended: run.input.origin === 'schedule',
       main: conversationId => conversationId === root?.id,
       signal: context.abortSignal!, estimate: text => estimateTokens(config.modelId || config.id, text),
       ...(injected?.mcpPool ? { pool: injected.mcpPool } : {}),

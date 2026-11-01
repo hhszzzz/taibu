@@ -135,6 +135,24 @@ test('a tool that needs consent asks the user and runs only once they allow it',
   assert.equal(text(results(store).filter(message => message.toolName === 'mcp__archive__lookup').at(-1)!), '档案：甲子');
 });
 
+test('a scheduled run fails a guarded MCP call without waiting for a user', async (t) => {
+  const { server, pool } = archive({ exposure: 'direct', tool_policy: { lookup: { title: '查档案', confirm: true } } });
+  t.after(() => pool.close());
+  const store = new MemoryStore(), run = row();
+  run.input.webEnabled = true;
+  run.input.origin = 'schedule';
+  await executeAgentRun(store, run, undefined, { config, mcpPool: pool, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'lookup', name: 'mcp__archive__lookup', arguments: { query: '甲子' } }]
+    : [{ type: 'text', text: '定时任务没有调用需要确认的工具。' }]) });
+
+  assert.equal(finished(store).args.p_status, 'completed');
+  assert.equal(server.state.calls.length, 0);
+  const denied = results(store).find(message => message.toolName === 'mcp__archive__lookup')!;
+  assert.equal(denied.isError, true);
+  assert.match(text(denied), /需要用户确认，定时任务不会等待用户回复/u);
+  assert.equal(parts(store).some(part => part.type === 'question'), false);
+});
+
 test('declining a guarded call returns an error to the model and calls nothing', async (t) => {
   const { server, pool } = archive({ exposure: 'direct', tool_policy: { lookup: { confirm: true } } });
   t.after(() => pool.close());

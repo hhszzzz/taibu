@@ -30,6 +30,8 @@ export interface AgentRunRow {
     planMode?: boolean;
     /** Whether external tools may run without asking; fixed when the task is created. Absent means auto. */
     approval?: "auto" | "manual" | "allow_all";
+    /** Where this task was admitted; scheduled tasks cannot wait for a user reply. */
+    origin?: "http" | "schedule";
     /** A `/compact` task: it compacts the conversation's context for the next task and answers nothing. */
     compact?: { instructions: string | null };
     systemPrompt: string;

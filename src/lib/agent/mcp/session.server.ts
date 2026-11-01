@@ -90,6 +90,8 @@ export async function openAgentMcp(options: {
   confirm: McpConfirm;
   /** Whether an external tool may run without asking, from the member's choice at the composer. */
   approval: AgentApprovalMode;
+  /** Scheduled runs cannot ask for interactive consent. */
+  unattended?: boolean;
   /** Whether a prompt is for the task's main conversation rather than a member's. */
   main: (conversationId: ConversationId) => boolean;
   signal: AbortSignal;
@@ -150,7 +152,9 @@ export async function openAgentMcp(options: {
         description: mcpToolDescription(row, remote, resolved.scrub),
       };
       specs.push(spec);
-      tools.push(defineMcpTool(spec, { pool, authorize, confirm: options.confirm, approval: options.approval }));
+      tools.push(defineMcpTool(spec, {
+        pool, authorize, confirm: options.confirm, approval: options.approval, unattended: options.unattended === true,
+      }));
       titles.set(name, title);
       searchTitles.set(name, [title, policy?.keywords, row.display_name].filter(Boolean).join(' '));
       if (!spec.confirm && exposure !== 'codemode') memberTools.set(name, row.owner_id === null ? row.name : null);

@@ -55,14 +55,15 @@ pnpm selfhost restore --project taibu-v2 --input ./backups/taibu.dump
 
 ## 数据库
 
-`database/` 直接保存当前 PostgreSQL SQL，不保留编号迁移或版本账本。
+`database/` 保存当前 PostgreSQL SQL，另有少量编号迁移处理旧库中无法自动收敛的结构变更。
 
 SQL 是创建空库及更新数据库对象的源码。搬迁已有数据库时，完整的 `pg_dump -Fc` 备份会携带表、数据、函数、触发器、权限及索引定义，`pg_restore` 会据此重建索引，不需要手工逐条建索引。只导出 CSV 或使用 `--data-only` 则不包含这些结构。集群角色、扩展安装和文件卷仍需在目标环境准备；数据库备份不能代替文件卷备份。
 
 | 文件 | 内容与执行方式 |
 | --- | --- |
-| `bootstrap/` | 超级用户建立角色、schema、扩展与角色密码 |
-| `schema.sql` | 表、序列和约束，仅用于全新空库 |
+| `bootstrap/` | 超级用户建立角色、schema、扩展、角色密码与迁移账本 `taibu_meta.schema_migrations` |
+| `migrations/` | 编号迁移：删表删列、改类型、回填与收紧约束；每个文件带存在性守卫，已执行的不得修改 |
+| `schema.sql` | 表、序列和约束：全新空库据此建表，已有库据此补齐缺失的表、列与约束 |
 | `functions.sql` | 函数与视图；未在此声明的函数/视图会被删除 |
 | `triggers.sql` | 当前触发器定义 |
 | `access.sql` | RLS、策略和明确的角色权限；未在此声明的权限会被撤销 |
@@ -77,9 +78,13 @@ pnpm db:diff       # --a/--b 两个 DSN 的 public/identity/auth/extensions 结�
 pnpm db:verify-restore  # 在临时库验证备份：定义对比、用户一致性、FK
 ```
 
-`db:init` 使用数据库锁串行执行，没有迁移账本。它把每个声明对象与 PostgreSQL 反解出的规范文本比较，只应用差异：全新库先创建表，再应用其余 SQL；已有库替换变化的函数与视图、重建变化的策略与触发器、按规范文本新建或重建索引、补齐声明权限并撤销未声明权限，然后删除文件不再声明的函数、视图、策略、触发器与索引。业务数据保持不变。每段 DDL 在独立短事务中执行并带锁超时，部署时正在服务的旧版本不会被长时间阻塞；没有变化的一轮不会写入系统目录。
+`db:init` 用数据库咨询锁串行执行，分三步：
 
-**表与列的结构不会被隐式修改。** 已有库与 `database/schema.sql` 不一致时，`db:init` 在改动任何对象之前失败并逐条列出差异；增加列、改变类型、修改约束需要维护者先备份并执行明确的 `ALTER`，然后同步当前定义。索引、策略、触发器、视图与函数定义由 `db:init` 自动收敛，删除表或列仍需显式 SQL。
+1. **迁移**：全新空库跳过这一步，建好表后把全部迁移记为基线；已有库按编号执行尚未记录的 `migrations/*.sql`，每个文件与它的账本行在同一个事务里提交，账本按校验和拒绝被改动过的已执行迁移。
+2. **补齐**：按 `schema.sql` 补上缺失的表、列与约束（约束先以 `NOT VALID` 添加再校验），放宽 `NOT NULL` 与存储参数。类型不同、改过名或未声明的表与列不会自动处理，`db:init` 在这里停下并列出全部差异，这类变更要写成新的编号迁移。
+3. **收敛**：把每个声明对象与 PostgreSQL 反解出的规范文本比较，只应用差异：替换变化的函数与视图、重建变化的策略与触发器、按规范文本新建或重建索引、补齐声明权限并撤销未声明权限，然后删除文件不再声明的函数、视图、策略、触发器与索引。
+
+业务数据保持不变。每段 DDL 在独立短事务中执行并带锁超时，部署时正在服务的旧版本不会被长时间阻塞；没有变化的一轮不会写入系统目录。`db:init --check` 只打印待执行的迁移与补齐计划，不写入任何对象。
 
 宿主机操作需要 PostgreSQL 17 客户端；对比与恢复校验支持 `PG_DUMP_BIN` / `PG_RESTORE_BIN` / `PSQL_BIN` 覆盖路径。私有连接保存在 `.taibu-local/<project>/env/*.env`（0600）：DDL 连接是 `schema.env` 里的 `SCHEMA_DATABASE_URL`，登录角色 `taibu_schema`；它只能 `SET ROLE taibu_owner`，本身不是对象属主。
 
@@ -206,28 +211,28 @@ BullMQ 的 `taibu-email` 队列失败计数可在 Redis 里查看；连续失败
 ```bash
 # 按上一个 v* 标签以来的提交生成 CHANGELOG.md 段落、更新 package.json，再提交并打注释标签；不会推送。
 pnpm release prepare minor --dry-run   # 先预览版本号与更新说明
-pnpm release prepare minor             # 也可以是 major、patch 或 1.0.0-rc.1 这样的明确版本
-# 还没有 v* 标签时（首个版本），用 --from 指定更新说明的起点。
-pnpm release prepare 1.0.0 --from <提交或标签>
+pnpm release prepare minor             # 也可以是 major、patch 或 1.1.0-rc.1 这样的明确版本
 # 核对 CHANGELOG.md 后推送分支与标签。
-git push origin master v0.2.0
+git push origin master v1.1.0
 ```
+
+首个版本 `v1.0.0` 与主版本的更新说明是手写的概要段落，格式与要求见 [文档与发布规范](../engineering/documentation.md#6-更新日志与发布说明)。
 
 推送 `v*` 标签后，`.github/workflows/release.yml` 先确认标签与 `package.json` 的版本一致，再构建 `linux/amd64` 镜像并推送为 `ghcr.io/hhszzzz/taibu:<标签>`，正式版本同时更新 `latest`。镜像的 OCI 标签与索引注解写明标题、带版本号和更新说明链接的描述、源码仓库、许可证与本手册地址，GHCR 包页面据此显示描述并关联仓库。镜像推送成功后，工作流用该版本的 CHANGELOG 段落、拉取命令和镜像摘要创建 GitHub Release，预发布版本标为 Pre-release。
 
 更新说明来自 Conventional Commits：`feat`、`fix`、`perf`、`refactor`、`docs` 各成一栏，`chore`、`build`、`ci` 归入维护，`test`、`style` 不写入。带 `!` 或 `BREAKING CHANGE:` 脚注的提交排在最前面的「升级须知」；需要手动执行 SQL、重新填写配置的变更必须这样标记，并把完整步骤写进提交说明。
 
-其他架构的主机在 Actions 页面手动运行 release 工作流，填写已有标签并选择架构，得到 `v0.2.0-arm64` 这样的镜像，不会移动正式标签和 `latest`。部署时 `compose.env` 的 `TAIBU_IMAGE` 指向 `ghcr.io/hhszzzz/taibu`，再执行 `deploy/deploy.sh <标签>`。
+其他架构的主机在 Actions 页面手动运行 release 工作流，填写已有标签并选择架构，得到 `v1.0.0-arm64` 这样的镜像，不会移动正式标签和 `latest`。部署时 `compose.env` 的 `TAIBU_IMAGE` 指向 `ghcr.io/hhszzzz/taibu`，再执行 `deploy/deploy.sh <标签>`。
 
 ## 生产部署与备份
 
-生产使用 `deploy/compose.base.yml` + `deploy/compose.prod.yml`，私有配置写入 `/opt/taibu/env/`。`compose.env` 保存项目名、镜像、tag、域名及 `TAIBU_ENV_DIR`；账号口令按 `app.env`、`db.env`、`db-setup.env`、`schema.env`、`backup.env`、`restore.env` 拆分。部署使用 CI 构建好的镜像。
+生产使用 `deploy/compose.base.yml` + `deploy/compose.prod.yml`，私有配置写入 `/opt/taibu/env/`。`compose.env` 保存项目名、镜像、tag、域名、`TAIBU_ENV_DIR` 与边缘模式 `EDGE_MODE`（宿主已有反向代理时另写 `WEB_PORT`）；账号口令按 `app.env`、`db.env`、`db-setup.env`、`schema.env`、`redis.env`、`backup.env`、`restore.env` 拆分。部署使用 CI 构建好的镜像。
 
 ```bash
-# 在主机源码目录执行；已有宿主反向代理时使用 host。
+# 在主机源码目录执行；未在命令行指定 EDGE_MODE 时取 compose.env 里的值，都没有则为 container。
+deploy/deploy.sh <tag>
+# 已有宿主反向代理时使用 host，由 Compose 的 Caddy 接管 80/443 时使用 container。
 EDGE_MODE=host deploy/deploy.sh <tag>
-# 由 Compose 的 Caddy 接管 80/443 时使用 container（默认）。
-EDGE_MODE=container deploy/deploy.sh <tag>
 ```
 
 `host` 模式叠加 `compose.host-edge.yml`，Web 只发布回环端口；`container` 模式启动 Caddy 的 `edge` profile。TLS、域名、代理真实 IP 与上传限制以 `deploy/Caddyfile`（容器边缘）或 `deploy/Caddyfile.host`（宿主 Caddy 模板）为准；`deploy/update-cloudflare-ips.sh` 从 Cloudflare 官方列表刷新 `trusted_proxies`，改完需自行 validate + reload。

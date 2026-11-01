@@ -30,7 +30,7 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
 
 - 通用测试栈使用 Docker Compose 项目 `taibu-v2`（db、redis、web、worker、mailpit），入口以 `.taibu-local/taibu-v2/env/` 生成的端口为准。
 - `pnpm local:up` 启动本地栈；`pnpm local:update` 重新构建镜像并启动；`pnpm local:status` / `pnpm local:logs` 检查状态。
-- 本地数据卷与生成的密钥保存在 `.taibu-local/taibu-v2/`，不得输出或提交。数据库直接维护 `database/*.sql` 当前定义，不新增历史迁移。
+- 本地数据卷与生成的密钥保存在 `.taibu-local/taibu-v2/`，不得输出或提交。数据库以 `database/*.sql` 的当前定义为准，只有下文「数据库规范」要求的结构变更才追加编号迁移。
 
 ## 项目最小地图
 
@@ -75,11 +75,12 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
   - 如何验证（命令 + 结果）
   - 风险与回滚点（如有）
 - Commit message 使用 Conventional Commits：`feat: / fix: / refactor: / chore: / docs:`。
-- npm 发布优先使用 npm access token，不要依赖 OTP 交互流程。
-- 版本号遵循 `x.y.z`：
+- npm 发布优先使用 npm access token，不要依赖 OTP 交互流程；用 `pnpm publish`，按 `taibu-core` → `taibu-mcp` → `taibu-mcp-server` 的顺序。
+- 应用版本号遵循 `x.y.z`：
   `x`：重大架构变更
   `y`：功能新增
   `z`：bug 修复
+- npm 包各自遵循语义化版本；每个应用版本在 `CHANGELOG.md` 写一段，需要运维动作的变更同步 `docs/UPGRADE.md`。文档分工、版本与发布步骤见 [文档与发布规范](docs/engineering/documentation.md)。
 
 ## 分支
 

@@ -4,60 +4,88 @@
 
 # TaiBu
 
-**Integrating traditional metaphysics with AI**
+**An open-source, self-hostable AI platform for Chinese metaphysics and divination**
 
-[![Next.js](https://img.shields.io/badge/Next.js-16+-black?style=flat-square&logo=next.js)](https://nextjs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.x-blue?style=flat-square&logo=typescript)](https://www.typescriptlang.org/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-4.x-38B2AC?style=flat-square&logo=tailwind-css)](https://tailwindcss.com/)
-[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql)](https://www.postgresql.org/)
-[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker)](https://www.docker.com/)
+Code casts the chart. AI reads it.
 
-Language: [中文](README.md) | **English**
+[![Release](https://img.shields.io/github/v/release/hhszzzz/taibu?style=flat-square&label=release&color=b5651d)](https://github.com/hhszzzz/taibu/releases)
+[![taibu-mcp](https://img.shields.io/npm/v/taibu-mcp?style=flat-square&label=taibu-mcp)](https://www.npmjs.com/package/taibu-mcp)
+[![taibu-core](https://img.shields.io/npm/v/taibu-core?style=flat-square&label=taibu-core)](https://www.npmjs.com/package/taibu-core)
+[![Next.js](https://img.shields.io/badge/Next.js-16-black?style=flat-square&logo=next.js)](https://nextjs.org/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-17-4169E1?style=flat-square&logo=postgresql&logoColor=white)](https://www.postgresql.org/)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white)](docs/manual/Self-Hosting.md)
 
-[Live Demo](https://www.mingai.fun) · [Report Issues](https://github.com/hhszzzz/taibu/issues)
+[中文](README.md) | **English**
+
+[Live site](https://mingai.fun) · [Changelog](CHANGELOG.md) · [Self-hosting](docs/manual/Self-Hosting.md) · [MCP manual](docs/manual/MCP-Server-Manual.md) · [Issues](https://github.com/hhszzzz/taibu/issues)
 
 </div>
 
 ---
 
-## Highlights
+## About
 
-- **Multiple Metaphysics Systems** - Bazi, Liuyao, Ziwei Doushu, Qimen Dunjia, Da Liu Ren, MeiHua, Tarot, MBTI, Face Reading, Palm Reading, Synastry, Dream Interpretation
-- **AI-Powered Analysis** - Export chart/divination text for AI analysis with multi-model support, deep reasoning, and visual recognition
-- **MCP Server** - Supports Model Context Protocol (MCP), allowing direct use of metaphysics tools in MCP-compatible agent
-- **History, Knowledge Base, and @Mentions** - Store records across all systems, add them into your personal knowledge base, and explicitly reference data sources
-- **AI Personalization** - Expression style, user profile, and custom instructions with context/prompt budget visualization
-- **Cross-Platform Experience** - Web + iOS/Android clients
-- **Community and Incentives** - Metaphysics records, anonymous discussions, and daily check-in rewards
+TaiBu turns traditional Chinese metaphysics into reproducible, checkable tools, and lets AI interpret their results.
 
----
+- **Charts are computed, not guessed.** `taibu-core` implements the calendar and casting rules of 11 systems and returns canonical text plus canonical JSON; the rules are documented in [ALGORITHM_RULES.md](packages/core/ALGORITHM_RULES.md). Models never work out stems, hexagrams or stars by hand.
+- **AI does the reading.** Chat, the background Agent, collaboration members and scheduled tasks all use the same tools and 15 reading methods.
+- **Open to any AI client.** The same implementation is available over MCP, as an offline Skill and as npm packages for Claude, Cursor, Cherry Studio and others.
+- **Fully self-hosted.** A Docker Compose stack of Next.js, PostgreSQL and Redis; one image runs both the web app and the worker.
 
-## Feature Overview
+The current version is **v1.0.0**, TaiBu's first stable release. See the [changelog](CHANGELOG.md).
 
-| Module | Core Capabilities |
-| :----: | :--- |
-| **Bazi Charting** | · True solar time, solar/lunar calendar charting, instant charting, Four Pillars charting<br/>· Five elements, heavenly stems & earthly branches, Ten Gods, hidden stems, star phases, Na Yin, shensha (51 types), Twelve Growth Phases, clash/harm/combine/punishment<br/>· Stem combinations (wu he), branch half-combinations, branch three-meetings<br/>· Major luck cycles, yearly/monthly/daily luck<br/>· Traditional and blind-school analysis |
-| **Ziwei Doushu** | · Twelve palaces, three-way/four-direction structure<br/>· Main/support/minor stars, Four Transformations (incl. self-mutagens)<br/>· Life Master Star, Body Master Star, Small Limit, Scholar Stars (Bo Shi 12)<br/>· Strength/fall states, decadal/yearly/monthly/daily/hourly fortune analysis<br/>· Flying star analysis (mutagen placements, three-way/four-direction) |
-| **Qimen Dunjia** | · Nine palaces, heaven/earth stems, eight gates, nine stars, eight deities<br/>· Duty star & duty gate, dun type, ju number<br/>· Formation assessment (auspicious/inauspicious), void, post horse, entombment, strength<br/>· Rotating-plate method, chaibu/maoshan ju methods<br/>· Explicit IANA timezone support |
-| **Da Liu Ren** | · Heaven/earth plates, four lessons, three transmissions<br/>· Heavenly generals, hidden stems<br/>· 49 shensha types, lesson-body classification<br/>· Twelve growth phases, five-element strength, jianchu twelve gods<br/>· Explicit timezone, optional natal stem/year support |
-| **Liuyao Divination** | · Coin casting, quick casting, selected-hexagram casting, time-based casting, number-based casting<br/>· Explicit and implicit moving lines<br/>· Hexagram text, line text, image text<br/>· Useful spirit, original spirit, hidden spirit, adversary spirit<br/>· Void branches, self/opponent lines, strength states, clash/combine/harm<br/>· Nuclear/opposite/reversed hexagrams<br/>· Timing prediction |
-| **Meihua Yishu** | · Time casting, count/sound casting, text casting, measure casting, classifier cues<br/>· Extended two-number / three-number casting<br/>· Original, nuclear, changed, opposite, and reversed hexagrams with moving lines<br/>· Body/use trigrams, generating-controlling analysis, seasonal strength, response hierarchy<br/>· Timing clues and qualitative auspicious/inauspicious judgment |
-| **Tarot Reading** | · 9 spreads: single-card, three-card, love, Celtic Cross, horseshoe, decision, mind-body-spirit, situation, yes-no<br/>· Reversed-card judgment, full 78-card interpretation, refined card visuals<br/>· Astrological/elemental correspondences, numerology (personality/soul/yearly cards)<br/>· Daily guidance |
-| **Synastry** | · Couple, business, and parent-child analysis<br/>· Future trend lines<br/>· Communication advice |
-| **Face & Palm Reading** | · Forehead, nose, eyes, mouth analysis<br/>· Life line, wisdom line, career line, relationship line |
-| **Fortune Center** | · Daily and monthly fortune analysis based on natal charts<br/>· Daily almanac (directions, 12 hourly fortunes, 28 mansions)<br/>· Future trend lines |
-| **MBTI Test** | · 90+ personality questions<br/>· Comprehensive AI personality analysis |
-| **Deep AI Integration** | · Combined analysis based on past readings<br/>· Full-system metaphysics analysis<br/>· Knowledge base, attachments, and search<br/>· Mention all metaphysics systems during AI chat<br/>· Annual metaphysics report |
+The product UI and most documentation are in Chinese.
 
----
+## Features
 
-## MCP Server
+### Systems
 
-TaiBu runs a public MCP (Model Context Protocol) server that exposes every metaphysics tool to compatible agents. It now serves MCP `2026-07-28` and keeps stateless compatibility for 2025-era clients.
+| System | Highlights |
+| :--: | :-- |
+| **BaZi** (Four Pillars) | True solar time, solar/lunar input and reverse lookup from pillars; ten gods, hidden stems, na-yin, shensha, twelve growth stages, branch relations; decade, year, month and day luck; pairing; three pillars when the birth hour is unknown, or hour inference with the Agent |
+| **Zi Wei Dou Shu** | Twelve palaces, triangle and opposite palaces, major and minor stars, four transformations, decade to hour horoscopes, flying stars, palace drilldown |
+| **Liu Yao** | Coin, time, number and manual casting; moving lines, six relations and six spirits, strength, void, hidden lines; nuclear, inverse and reversed hexagrams; timing cues; per-line drilldown |
+| **Mei Hua Yi Shu** | Casting by date, objects, sounds, characters, measurements and directions; body/use analysis, seasonal strength, timing cues |
+| **Qi Men Dun Jia** | Rotating and flying plates, chai-bu, mao-shan and equal-term methods; nine palaces, gates, stars, spirits, formations; palace drilldown |
+| **Da Liu Ren** | Heaven and earth plates, four lessons and three transmissions, twelve generals, hidden stems, spirits; natal and yearly positions; lesson drilldown |
+| **Xiao Liu Ren · Tai Yi** | Xiao Liu Ren readings; Tai Yi nine stars and the traditional 72 configurations |
+| **Tarot** | Full 78-card deck with reversals, 9 built-in spreads and custom spreads, astrological and elemental correspondences, numerology |
+| **Western astrology** | Natal and transit charts, seven house systems, custom orbs, sidereal zodiac; single-point drilldown |
+| **Almanac** | Daily dos and don'ts, directions, hourly fortune, 28 mansions; date selection by activity and against several zodiac clashes at once |
+| **More** | Relationship pairing (couple, business, family), MBTI, face and palm photo readings, dream interpretation, daily and monthly fortune, annual report |
 
-### Quick Setup
+Result pages cast and display; interpretation always happens in AI chat, where any saved chart or record can be @-mentioned.
 
-Import this server entry into your MCP client:
+### AI chat
+
+- Multiple models, reasoning levels, attachments (PDF, Word, Excel), knowledge-base retrieval and web search. Platform models are billed by actual token usage; bring your own API key (BYOK) to use any feature without being billed.
+- 15 built-in chart templates and sandboxed HTML visualizations, quoting a passage into the next turn, and public read-only share links.
+- Expression style, user profile, custom instructions and long-term memory; context usage shown in the composer.
+
+### Agent
+
+- **Durable execution**: tasks run in a background worker on [Pi Durable](https://www.npmjs.com/package/@earendil-works/pi-durable); closing the page, losing the network or restarting the service loses no progress.
+- **Workspace**: charts open, scroll and highlight to follow what the model is looking at; cast charts, drilldowns, pairings and hour inference can be expanded, pinned and saved.
+- **Plan and code modes**: research first and act after the user approves; compose tool calls in a sandbox. Low-frequency tools load on demand and long chats can be `/compact`ed.
+- **Collaboration**: members that split and merge work, and persistent background subagents, each with a role (specialist, researcher, verifier or a custom role) that decides its tools, instructions and model.
+- **Extensions**: SKILL.md skills, external MCP connectors, web search and page reading routed through MCP services such as Exa and Tavily, and a choice of when external tools ask for consent.
+- **Schedules, images and evals**: append a turn to a fixed conversation on a schedule (with a built-in daily briefing), text-to-image generation, run telemetry and a multi-model evaluation leaderboard.
+
+See the [Agent manual](docs/manual/Agent.md) for the full behaviour and limits.
+
+### Accounts, billing and administration
+
+- Email and password, email codes, password reset and Linux.do sign-in.
+- US dollar wallet and subscriptions with 5-hour, daily, weekly, monthly or whole-term allowances; redemption codes, admin credits and plans bought from the balance; Epay (Alipay, WeChat Pay) once merchant settings are configured.
+- Admin console: announcements, feature switches, billing, AI services (gateways, models, models.dev catalog fill), Agent extensions (MCP services, skills, roles, user extension policy) and a log center (usage, Agent tasks, schedules, deployments).
+- The sidebar shows the running version; administrators can update in one click when a release is published.
+- Community, notifications, records and a knowledge base; the web app works on desktop and phones, and there are Android and iOS clients (Capacitor).
+
+## MCP, Skill and SDK
+
+`taibu-core` exposes 26 tools: 11 charting tools and 15 low-frequency tools (drilldowns, luck cycles, reverse lookup, horoscopes, flying stars, date selection, pairing, hour inference). It also ships 15 reading methods: a default method per system, plus the Mangpai BaZi school, dream interpretation (no chart), and the birth-hour and past-events techniques.
+
+### Public MCP server
 
 ```json
 {
@@ -70,147 +98,204 @@ Import this server entry into your MCP client:
 }
 ```
 
-Modern clients automatically perform `server/discover` and supply the per-request protocol metadata; no OAuth, API key, or session header is required. For a fully local stdio setup, see [`packages/mcp/README.md`](packages/mcp/README.md).
+No OAuth, API key or session header is needed. The server implements MCP `2026-07-28` and still accepts stateless 2025-era requests. If your client cannot load tools on demand, use `https://mcp.mingai.fun/mcp/core`: it lists the 11 charting tools and reaches the rest through `tool_search` / `tool_call`, cutting the tool text the model sees by about 60%.
 
-### Supported Tools
+### Local stdio
 
-| Tool | Function | Example Prompt |
-| --- | --- | --- |
-| `bazi` | Generate a Bazi chart (solar/lunar supported, 51 shensha types, stem combinations, branch half-combinations/three-meetings, Tai Yuan/Ming Gong) | "I was born at 3:00 PM on May 15, 1990. Please generate my chart." |
-| `bazi_pillars_resolve` | Reverse-lookup birth time from Four Pillars (1900-2100) | "My Bazi is 丙午 庚寅 丙辰 癸巳, please analyze it." |
-| `bazi_dayun` | Compute major luck cycles (10-year periods with annual transits, Tai Sui annotations, minor luck) | AI automatically calls this based on your Bazi |
-| `bazi_relations` | Bazi clash/combination drill-down for luck, year, month and day overlays on the natal pillars (natal-only relations stay in the chart) | "Which clashes and combinations does 2027 bring to my chart?" |
-| `bazi_wuxing` | Bazi five-element strength drill-down (monthly vigor and exposed month stems, roots of every stem, stem–branch and adjacent-stem cycles, missing elements; no strength verdicts) | "Is my day master rooted?" |
-| `bazi_liunian_scan` | Scan annual pillars year by year (pillar, luck period, relations to natal and luck, Tai Sui; up to 30 years) | "Scan my annual pillars from 2026 to 2035." |
-| `bazi_hepan` | Bazi compatibility of two people (relations between the two charts, how each day master sees the other, day and year pillars, year Na Yin, complementary elements; facts only, no score) | "I was born 1990-01-15 at 9 AM and she was born 1992-08-03 at 2 PM. Are we compatible?" |
-| `bazi_hour_candidates` | Infer an unknown birth hour (lists every two-hour candidate of the day with the facts that tell them apart, optionally against years of past events; facts only, you confirm) | "I was born on 1995-01-09, female, but I don't know the hour. Can you work it out?" |
-| `ziwei` | Generate a Ziwei Doushu chart (Life/Body Master stars, Small Limit, Scholar Stars, San Fang Si Zheng) | "I was born on the 8th day of the 4th lunar month in 1990, please generate my Ziwei chart." |
-| `ziwei_horoscope` | Ziwei fortune periods (decadal/small limit/yearly/monthly/daily/hourly with transit stars) | "What are my Ziwei fortune periods for 2026?" |
-| `ziwei_flying_star` | Flying star analysis (four transformations, mutagen placements, surrounded palaces) | "Analyze the flying stars of my Life Palace." |
-| `ziwei_palace` | Ziwei palace drill-down (stars and transformations of one palace, surrounded palaces, flanking, palace-stem flights, period overlays) | "Show the surrounded palaces of my Life Palace." |
-| `liuyao` | Liuyao divination (auto-casting / custom hexagram / time-based / number-based, with nuclear/opposite/reversed hexagrams) | "I want to divine my career luck this year." |
-| `liuyao_line` | Liuyao line drill-down (one line by position/role/kin: stems, vigor, void, reverse generation, changed line) | "How strong is the Officer line in my hexagram?" |
-| `meihua` | Meihua Yishu divination (time casting, count/sound, text casting, measure casting, classifier cues, modern number casting) | "Cast a Meihua Yishu reading for whether this cooperation will succeed." |
-| `tarot` | Draw Tarot cards (9 spreads, 78 cards with independent reversed keywords, astrological/elemental correspondences) | "Please draw a Tarot card for my recent love fortune." |
-| `almanac` | Daily almanac & calendar query (directions, 12 hourly fortunes, 28 mansions) | "How is today's almanac? Is it suitable for a proposal?" |
-| `almanac_select` | Almanac date screening (candidate days in a range, filter by activity, exclude clash; up to 92 days) | "Pick wedding dates for the coming month." |
-| `astrology` | Western astrology natal and transit charting (Big Three, natal anchors, major transit triggers) | "What are the key astrology transit themes for me right now?" |
-| `astrology_point` | Astrology single-point drill-down (one planet or house: placement, traditional dignity, aspects, transit triggers) | "Where is my Venus and what aspects does it make?" |
-| `qimen` | Qimen Dunjia charting (palaces, gates, stars, gods, dun type, ju number, explicit timezone) | "Use Qimen Dunjia to see whether today's negotiation is favorable." |
-| `qimen_palace` | Qimen palace drill-down (plate stems, star/gate/deity, states, vigor, relations, formations; locate by stem/star/gate/deity) | "Which palace does Zhi Fu land on?" |
-| `taiyi` | Taiyi nine-star observation (external temporal environment, nine-star array, energy interaction) | "Use Taiyi nine-star observation to review this project's momentum." |
-| `daliuren` | Da Liu Ren charting (four lessons, three transmissions, heavenly plate, generals, explicit timezone) | "Use Da Liu Ren to analyze the outcome of this matter." |
-| `daliuren_lessons` | Da Liu Ren lesson drill-down (four lessons and six kins, transmission progression, inner/outer battles, day-stem lodging, classifier) | "Detail the three transmissions of this lesson." |
-| `xiaoliuren` | Xiao Liu Ren divination (result state, palace landing, core interpretive clues) | "Use Xiao Liu Ren to see whether today's trip will go smoothly." |
+```json
+{
+  "mcpServers": {
+    "taibu": {
+      "command": "npx",
+      "args": ["-y", "taibu-mcp"]
+    }
+  }
+}
+```
+
+Runs fully offline and only needs Node.js. Set `"env": { "TAIBU_MCP_TOOLS": "core" }` for the same short list as `/mcp/core`; see [taibu-mcp](packages/mcp/README.md).
+
+### Skill
+
+[`skills/taibu-divination`](skills/taibu-divination/SKILL.md) is a self-contained Agent Skill with the calculation engine bundled; it only needs Node.js 18+. Copy the whole directory into your client's skills directory (for Claude Code, `~/.claude/skills/`). The method cards live in `methods/`.
 
 ### SDK
-
-If you want to call the calculation engine directly in your own Node.js project (without MCP), use the core library:
 
 ```bash
 npm install taibu-core
 ```
 
-See [taibu-core on npm](https://www.npmjs.com/package/taibu-core) and [packages/core/README.md](packages/core/README.md) for full API docs and subpath exports.
+```ts
+import { calculateBazi, toBaziText } from 'taibu-core/bazi';
+import { executeTool, renderToolResult } from 'taibu-core/mcp';
 
----
+const chart = calculateBazi({ gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 });
+console.log(toBaziText(chart));
 
-## Quick Start
-
-### Self-hosted stack (PostgreSQL 17 + Redis 8)
-
-Data, authentication and files are served by a local Docker stack. You need Docker, Node.js 24 and pnpm:
-
-```bash
-pnpm install
-pnpm local:update  # build and start db, redis, web, worker and mailpit (first run)
-pnpm local:up      # start with existing images
-pnpm local:status  # ports and health
-pnpm selfhost down --project taibu-v2 # keep database and file volumes
+const result = await executeTool('qimen', { year: 2026, month: 3, day: 19, hour: 21, timezone: 'Asia/Shanghai' });
+console.log(renderToolResult('qimen', result).content[0].text);
 ```
 
-Random secrets and ports are generated under `.taibu-local/taibu-v2/` on first
-start. Verification emails are captured by Mailpit. The local stack uses the
-current PostgreSQL definitions in `database/` and the same Compose services as
-production, with no numbered migrations or ledger. See
-[Self-Hosting](docs/manual/Self-Hosting.md) for initialization, explicit SQL
-changes to existing databases, deployment and backups.
+Domain subpaths, the output contract and the algorithm rules are documented in [taibu-core](packages/core/README.md).
 
-### Local Development
+<details>
+<summary><b>All 26 tools</b></summary>
 
-Requirements:
-- Node.js 24+
-- pnpm (recommended) / npm / yarn
+| Tool | Purpose |
+| --- | --- |
+| `bazi` | BaZi chart (solar/lunar input, shensha, stem and branch combinations, conception and life palaces; three pillars without a birth hour) |
+| `bazi_pillars_resolve` | Birth time candidates from four pillars (1900–2100) |
+| `bazi_dayun` | Decade luck, minor luck and years |
+| `bazi_relations` | Branch and stem relations when decade, year, month or day luck overlay the natal chart |
+| `bazi_wuxing` | Five-element strength facts: month command, roots, self-seated stems, adjacent stems, missing elements |
+| `bazi_liunian_scan` | Year-by-year scan of up to 30 years against the natal chart and decade luck |
+| `bazi_hepan` | Fact-only pairing of two charts |
+| `bazi_hour_candidates` | Birth-hour candidates for a day, optionally checked against past events |
+| `ziwei` | Zi Wei Dou Shu chart |
+| `ziwei_horoscope` | Decade to hour horoscopes |
+| `ziwei_flying_star` | Flying and self transformations |
+| `ziwei_palace` | One palace in depth: stars, transformations, triangle, flanking palaces, horoscope overlays |
+| `liuyao` | Liu Yao casting and analysis |
+| `liuyao_line` | One line in depth: na-jia, strength, void, changes |
+| `meihua` | Mei Hua Yi Shu casting and reading |
+| `tarot` | Tarot draws |
+| `almanac` | Daily almanac |
+| `almanac_select` | Date selection over a range of up to 92 days |
+| `astrology` | Natal chart and transits |
+| `astrology_point` | One body or house in depth |
+| `qimen` | Qi Men Dun Jia chart |
+| `qimen_palace` | One palace in depth |
+| `taiyi` | Tai Yi nine stars and the 72 configurations |
+| `daliuren` | Da Liu Ren chart |
+| `daliuren_lessons` | Lessons and transmissions in depth |
+| `xiaoliuren` | Xiao Liu Ren reading |
+
+</details>
+
+## Getting started
+
+### Run locally
+
+Requires Docker with Compose v2, Node.js 24 and pnpm 10.
 
 ```bash
-# Clone repository
-git clone git@github.com:hhszzzz/taibu.git
+git clone https://github.com/hhszzzz/taibu.git
 cd taibu
-
-# Install dependencies
 pnpm install
-
-# Configure environment variables
-cp .env.example .env
-# Edit .env and fill required API keys
-
-# Start dev server
-pnpm dev
+pnpm local:update   # first run: generate config, build the image, start db, redis, web, worker and mailpit
 ```
 
-Visit [http://localhost:3000](http://localhost:3000) to view the app.
-
----
-
-## Developer Documentation
-
-- [Architecture (Chinese)](docs/manual/Architecture.md): module ownership, data permissions and AI lifecycle.
-- [Core public API](packages/core/README.md) · [MCP manual](docs/manual/MCP-Server-Manual.md)
-- [Agent manual (Chinese)](docs/manual/Agent.md) · [Self-Hosting (Chinese)](docs/manual/Self-Hosting.md)
+Open `http://127.0.0.1:3080`; sign-up emails land in Mailpit at `http://127.0.0.1:8025`. `pnpm local:status` prints the actual ports. Generated secrets and ports live in `.taibu-local/taibu-v2/`; never publish or commit them.
 
 ```bash
-pnpm test -- src/tests/chat-route.test.ts # Selected tests; builds required packages
-pnpm test                                # Default unit, route, protocol and guard tests
-pnpm exec playwright install --only-shell chromium # First-time browser setup
-pnpm verify                              # Build each package once; full verification (local Docker required)
+pnpm local:up       # start with the existing image
+pnpm local:status   # ports and health
+pnpm local:logs     # follow logs (credentials redacted)
+pnpm selfhost down --project taibu-v2   # stop and keep the volumes
 ```
 
-SQL, Better Auth, and browser checks also run independently with `pnpm test:db`, `pnpm test:auth`, and `pnpm test:browser`. `test:auth` uses Better Auth and Mailpit in the selected local stack, which must be running; `test:db` uses disposable PostgreSQL containers. If Chromium downloads are unavailable and Chrome is already installed, explicitly use `pnpm verify -- --chrome`; no browser assertions are skipped. CI uses pinned Chromium; database and browser checks have separate entry points.
+After signing up, make yourself an administrator and add a gateway and models under Settings → AI 服务; see the [self-hosting manual](docs/manual/Self-Hosting.md#设为管理员).
 
----
+### Production
+
+Production runs `deploy/compose.base.yml` + `deploy/compose.prod.yml` with images that CI publishes to `ghcr.io/hhszzzz/taibu`; the host pulls and never builds:
+
+```bash
+# /opt/taibu/source holds the repository; /opt/taibu/env/ holds compose.env and the per-container secrets
+EDGE_MODE=host deploy/deploy.sh v1.0.0   # an existing Caddy or Nginx owns 80/443
+deploy/deploy.sh v1.0.0                  # the stack's own Caddy owns 80/443
+```
+
+The script backs up the database, runs database setup and migrations, then rolls out with a health check and rolls back on failure. [`.env.example`](.env.example) lists every variable; mail, backups, billing and one-click updates are covered in the [self-hosting manual](docs/manual/Self-Hosting.md), and upgrades from older deployments in the [upgrade guide](docs/UPGRADE.md).
+
+## Architecture
+
+```text
+browser / app ──► Caddy ──► web (Next.js: pages, API, SSE)
+                              │
+            ┌─────────────────┼──────────────────┐
+            ▼                 ▼                  ▼
+  PostgreSQL 17 + pgvector   Redis 8           file volume
+  data · RLS · tasks         limits · cache · BullMQ   attachments · images
+            ▲                 ▲                  ▲
+            └──────── worker (Agent, documents, mail, schedules, maintenance)
+
+taibu-core ──► in-process for web and Agent · taibu-mcp (stdio) · taibu-mcp-server (HTTP) · Skill
+```
+
+| Part | Notes |
+| --- | --- |
+| Web | Next.js 16 modular monolith (standalone) with React 19, Tailwind CSS 4 and Base UI |
+| Auth | Better Auth on its own `identity` schema and connection role |
+| Data | Kysely `ScopedDb` sets the role and identity per transaction; PostgreSQL RLS isolates user data |
+| Background | The worker from the same image: Pi Durable runs the Agent, BullMQ runs schedules, mail and maintenance |
+| Database | `database/` holds the current SQL and numbered migrations; `db:init` migrates, completes and reconciles |
+| Releases | Pushing a `v*` tag makes CI build the image and publish a GitHub Release |
+
+See [architecture](docs/manual/Architecture.md) for module boundaries and data access.
+
+## Repository layout
+
+```text
+src/                 Next.js app: pages, API routes, components and domain modules
+packages/core/       taibu-core: algorithms, tool definitions, methods, canonical output (MIT)
+packages/mcp/        taibu-mcp: local stdio MCP server (MIT)
+packages/mcp-server/ taibu-mcp-server: public HTTP MCP server (MIT)
+skills/              taibu-divination Skill and method card sources
+database/            PostgreSQL definitions, role bootstrap and numbered migrations
+deploy/              Compose, Caddy, backup, deploy and update scripts
+scripts/             build, database tooling, self-hosting, release and tests
+docs/                manuals, engineering standards and the upgrade guide
+android/ ios/        Capacitor clients
+```
+
+## Development
+
+```bash
+pnpm test                         # unit, route, protocol and guard tests (builds the packages they need)
+pnpm test -- src/tests/chat-route.test.ts   # selected files only
+pnpm lint && pnpm typecheck
+pnpm test:db                      # SQL, RLS and concurrency in a throwaway PostgreSQL
+pnpm exec playwright install --only-shell chromium   # once, before browser tests
+pnpm verify                       # everything: builds, tests, database, auth and browser (needs Docker and the local stack)
+```
+
+Conventions are in [AGENTS.md](AGENTS.md) and the [engineering standards](docs/engineering/README.md); commits follow Conventional Commits.
+
+## Documentation
+
+| Document | Covers |
+| --- | --- |
+| [Self-hosting manual](docs/manual/Self-Hosting.md) | Local stack, database, mail, billing, releases, deployment and backups |
+| [Upgrade guide](docs/UPGRADE.md) | Moving older deployments to 1.0.0 and later updates |
+| [Architecture](docs/manual/Architecture.md) | Runtime parts, module boundaries, data access and billing |
+| [Agent manual](docs/manual/Agent.md) | Tasks, tools, extensions, collaboration, schedules and billing |
+| [MCP manual](docs/manual/MCP-Server-Manual.md) | Client setup, protocol behaviour, tools and self-hosting the server |
+| [taibu-core](packages/core/README.md) · [algorithm rules](packages/core/ALGORITHM_RULES.md) | SDK usage, output contract and calculation rules |
+| [Engineering standards](docs/engineering/README.md) | Code, components, frontend, backend, data security, testing and documentation |
+
+## Versioning
+
+The app version lives in the root `package.json` and follows `x.y.z`: x for major architecture changes, y for features, z for fixes. The npm packages are versioned separately; `taibu-core`, `taibu-mcp` and `taibu-mcp-server` are at 4.0.0.
 
 ## Contributing
 
-Issues and Pull Requests are welcome.
-
----
+Issues and pull requests are welcome. Please read [AGENTS.md](AGENTS.md) first and describe what changed, why, and how you verified it.
 
 ## License
 
-This repository uses a mixed licensing model:
+This repository is dual-licensed:
 
-- `packages/core`
-- `packages/mcp`
-- `packages/mcp-server`
+- `packages/core`, `packages/mcp` and `packages/mcp-server` are [MIT](packages/core/LICENSE): commercial use, redistribution and modification are allowed as long as the copyright and license notices are kept.
+- Everything else (web app, server, deployment and runtime code) is [AGPL-3.0-only](LICENSE): commercial use is allowed, but if you offer a modified version as a network service you must publish its source.
 
-These three packages are licensed under `MIT`. See the `LICENSE` file inside
-each package directory.
-
-All other web app, server, deployment, and runtime code in this repository is
-licensed under `AGPL-3.0-only`. See the repository root [LICENSE](LICENSE).
-
-Notes:
-
-- `AGPL-3.0-only` does not prohibit commercial use, but it does require source
-  sharing obligations when modified network services are offered to users
-- The `MIT` packages allow commercial use, redistribution, and modification,
-  subject to preserving the copyright and license notice
+Third-party licenses are in [licenses/](licenses/) and [THIRD_PARTY_NOTICES.md](packages/core/THIRD_PARTY_NOTICES.md).
 
 ---
 
 <div align="center">
 
-**TaiBu** - Interpret destiny with AI, preserve culture with technology
+**TaiBu** · AI for reading fate, technology for carrying tradition
 
 Made with ❤️ by [hhszzzz](https://github.com/hhszzzz)
 

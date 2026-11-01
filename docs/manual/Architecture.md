@@ -32,7 +32,7 @@
 
 后台 `systemDb()` 使用固定系统主体；该主体不能登录，且业务请求不能通过缺少身份回退为系统主体。管理员身份来自数据库账号状态。Better Auth 使用独立的 `taibu_auth` 连接，仅访问 `identity`。
 
-数据库直接维护当前 SQL：`schema.sql` 描述表与约束，`functions.sql` 描述函数与视图，`triggers.sql`、`access.sql`、`indexes.sql` 和 `seed.sql` 分别描述触发器、权限、索引与系统主体/数据不变量。没有编号迁移、校验账本或历史 SQL 重放。`db:init` 把声明对象与 PostgreSQL 反解文本比较，只应用差异，并删除文件不再声明的函数、视图、策略、触发器与索引；表与列的结构调整仍由维护者执行明确的 SQL，不能靠重跑建表文件完成。
+数据库以当前 SQL 为准：`schema.sql` 描述表与约束，`functions.sql` 描述函数与视图，`triggers.sql`、`access.sql`、`indexes.sql` 和 `seed.sql` 分别描述触发器、权限、索引与系统主体/数据不变量。`db:init` 先执行 `migrations/` 中尚未记录的编号迁移（账本 `taibu_meta.schema_migrations` 按校验和防止改动历史），再补齐缺失的表、列与约束，最后把声明对象与 PostgreSQL 反解文本比较，只应用差异，并删除文件不再声明的函数、视图、策略、触发器与索引。删表删列、改类型与回填只通过编号迁移完成，详见 [自托管手册](Self-Hosting.md#数据库)。
 
 安全函数显式固定 `search_path` 与执行权限。余额、订阅、账单流水、兑换码与订单只经 `SECURITY DEFINER` 函数在同一事务中写入，用户只能读自己的行；通知的用户写权限仅允许确认已读。
 

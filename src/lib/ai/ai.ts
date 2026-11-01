@@ -321,6 +321,7 @@ export async function callAIStream(
         const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
         const coreMessages = toCoreMessages(messages);
         const result = await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
+            abortSignal: options?.abortSignal,
             reasoning,
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,
@@ -352,6 +353,7 @@ export async function callAIUIMessageResult(
         const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
         const coreMessages = toCoreMessages(messages);
         const result = await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
+            abortSignal: options?.abortSignal,
             reasoning,
             reasoningEffort: options?.reasoningEffort ?? undefined,
             temperature: options?.temperature,

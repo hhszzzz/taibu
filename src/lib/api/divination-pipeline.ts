@@ -789,7 +789,7 @@ export function createInterpretHandler<
       completionOwnsTerminal = mode === 'stream';
       try {
         if (mode === 'stream') {
-          return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete, observation, onUsage);
+          return await handleStreamCall(resolvedModelId, reasoningEnabled, systemPrompt, userPrompt, complete, observation, onUsage, request.signal);
         }
 
         const outcome = await runManagedAnalysis(async () => {
@@ -854,13 +854,14 @@ export function createInterpretHandler<
     resolvedModelId: string, reasoningEnabled: boolean,
     systemPrompt: string, userPrompt: string, complete: CompleteManagedAnalysis,
     observation: RequestObservation, onUsage: ReturnType<typeof usageBiller>,
+    signal: AbortSignal,
   ): Promise<Response> {
     const streamResult = await callAIUIMessageResult(
       [{ role: 'user', content: userPrompt }],
       personality,
       `\n\n${systemPrompt}\n\n`,
       resolvedModelId,
-      { reasoning: reasoningEnabled, temperature: 0.7, onUsage },
+      { abortSignal: signal, reasoning: reasoningEnabled, temperature: 0.7, onUsage },
     );
     return createPersistentStreamResponse({
       streamResult,

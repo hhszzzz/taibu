@@ -249,6 +249,7 @@ export function streamWithAISDK(
         model,
         system: systemPrompt,
         messages,
+        abortSignal: options?.abortSignal,
         maxRetries: 0,
         temperature: options?.temperature ?? 0.7,
         maxOutputTokens: options?.maxTokens ?? config.defaultMaxTokens ?? undefined,

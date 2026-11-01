@@ -10,7 +10,6 @@ import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { FilterChip } from '@/components/ui/FilterChip';
 import { Textarea } from '@/components/ui/Textarea';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
@@ -24,7 +23,7 @@ import {
     formatTokenCount, parseModelInput, priceFieldsFor,
     type AdminGateway, type AdminModel, type AdminModelInput, type AdminModelSource, type PriceField,
 } from '@/lib/admin/ai-catalog';
-import { defaultThinkingLevel, type ModelsDevPricing, type ModelsDevSuggestion } from '@/lib/admin/models-dev';
+import { type ModelsDevPricing, type ModelsDevSuggestion } from '@/lib/admin/models-dev';
 import { probeGateway, probeSummary } from './AIGatewayPanel';
 import { ModelIconPicker } from './ModelIconPicker';
 
@@ -33,10 +32,6 @@ const CUSTOM_VENDOR = '__custom__';
 const CUSTOM_WINDOW = '__custom__';
 const NEW_MODEL_WINDOW = '1000000';
 const SELECT_SM = 'h-8 rounded-lg';
-const CATALOG_PRICES = [
-    { key: 'input', label: '输入价' }, { key: 'output', label: '输出价' },
-    { key: 'cacheRead', label: '缓存读价' }, { key: 'cacheWrite', label: '缓存写价' },
-] as const;
 
 /** Form state: numbers and JSON stay text until saved, so a half-typed value is never lost. */
 type Draft = Omit<AdminModelInput, 'contextWindow' | 'defaultMaxTokens' | 'customParameters' | 'sortOrder' | 'pricing'> & {
@@ -77,45 +72,12 @@ function payloadOf(draft: Draft): Record<string, unknown> | { error: string } {
     return { ...draft, customParameters, sortOrder: draft.sortOrder.trim() || 0 };
 }
 
-/** The output limit must stay under the context window and within what the catalog accepts. */
-const fitsOutput = (maxTokens: number, contextWindow: string) => maxTokens <= 1_000_000 && (!contextWindow || maxTokens < Number(contextWindow));
-
 /** `$3 / $15 · 缓存 $0.3 / $3.75`; 免费 when every price is 0. */
 function catalogPriceLabel(pricing: ModelsDevPricing): string {
     if (!pricing.input && !pricing.output && !pricing.cacheRead && !pricing.cacheWrite) return '免费';
     const cache = pricing.cacheRead === undefined && pricing.cacheWrite === undefined ? ''
         : ` · 缓存 ${pricing.cacheRead === undefined ? '—' : formatPrice(pricing.cacheRead)} / ${pricing.cacheWrite === undefined ? '—' : formatPrice(pricing.cacheWrite)}`;
     return `${formatPrice(pricing.input)} / ${formatPrice(pricing.output)}${cache}`;
-}
-
-/** 精确命中目录时只补空着的字段，新模型还停在初始 1M 的上下文也换成目录值；目录价格全为 0 时不补，图片输入不动。 */
-function fillBlanks(draft: Draft, suggestion: ModelsDevSuggestion, creating: boolean): { draft: Draft; changes: string[] } {
-    const next: Draft = { ...draft, pricing: { ...draft.pricing } };
-    const changes: string[] = [];
-    if (suggestion.contextWindow && String(suggestion.contextWindow) !== draft.contextWindow
-        && (!draft.contextWindow || (creating && draft.contextWindow === NEW_MODEL_WINDOW))) {
-        next.contextWindow = String(suggestion.contextWindow);
-        changes.push('上下文');
-    }
-    if (!draft.defaultMaxTokens && suggestion.maxTokens && fitsOutput(suggestion.maxTokens, next.contextWindow)) {
-        next.defaultMaxTokens = String(suggestion.maxTokens);
-        changes.push('输出上限');
-    }
-    if (!draft.thinkingLevels.length && suggestion.reasoning && suggestion.thinkingLevels.length) {
-        next.thinkingLevels = suggestion.thinkingLevels;
-        next.defaultReasoningEffort = defaultThinkingLevel(suggestion.thinkingLevels);
-        changes.push('思考等级');
-    }
-    const pricing = suggestion.pricing;
-    if (pricing && (pricing.input > 0 || pricing.output > 0)) {
-        for (const { key, label } of CATALOG_PRICES) {
-            const value = pricing[key];
-            if (value === undefined || draft.pricing[key].trim()) continue;
-            next.pricing[key] = String(value);
-            changes.push(label);
-        }
-    }
-    return { draft: next, changes };
 }
 
 /** The context window: a preset ladder plus a free number, defaulting new models to 1M. */
@@ -203,26 +165,23 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<'discard' | 'delete' | null>(null);
-    const [lookup, setLookup] = useState<{ busy: boolean; error: string | null; searched: boolean; models: ModelsDevSuggestion[]; filled: string[] }>(
-        { busy: false, error: null, searched: false, models: [], filled: [] });
+    const [catalogConfirm, setCatalogConfirm] = useState<ModelsDevSuggestion | null>(null);
+    const [lookup, setLookup] = useState<{ busy: boolean; error: string | null; searched: boolean; models: ModelsDevSuggestion[] }>(
+        { busy: false, error: null, searched: false, models: [] });
     const lookupSeq = useRef(0);
-    const latestDraft = useRef(draft);
     const firstField = useRef<HTMLInputElement>(null);
     const dirty = JSON.stringify(draft) !== JSON.stringify(baseline);
     useUnsavedSettingsGuard(dirty);
-    useEffect(() => { latestDraft.current = draft; }, [draft]);
     const patch = (change: Partial<Draft>) => { setDraft(current => ({ ...current, ...change })); setError(null); };
     const gatewayById = useMemo(() => new Map(gateways.map(gateway => [gateway.id, gateway])), [gateways]);
     const unused = gateways.filter(gateway => !draft.sources.some(source => source.gatewayId === gateway.id));
-    const creating = !model;
-    const savedKey = baseline.modelKey;
     const chat = draft.usageType === 'chat';
     const image = draft.usageType === 'image';
 
     const lookupModelsDev = useCallback(async (query: string) => {
         const seq = ++lookupSeq.current;
         if (query.length < 2) {
-            setLookup({ busy: false, error: null, searched: false, models: [], filled: [] });
+            setLookup({ busy: false, error: null, searched: false, models: [] });
             return;
         }
         setLookup(current => ({ ...current, busy: true, error: null }));
@@ -230,57 +189,43 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             const result = await requestBrowserData<{ models: ModelsDevSuggestion[] }>(
                 `/api/admin/models-dev?q=${encodeURIComponent(query)}`, undefined, { fallbackMessage: '查询 models.dev 失败' });
             if (seq !== lookupSeq.current) return;
-            // 只在新建或改了模型 ID 时自动补：打开已有模型不改表单，已保存的选择（如关掉的图片输入）不会被翻回去。
-            const exact = query !== savedKey ? result.models?.find(suggestion => suggestion.id.toLowerCase() === query.trim().toLowerCase()) : undefined;
-            const fill = exact ? fillBlanks(latestDraft.current, exact, creating) : null;
-            if (fill?.changes.length) setDraft(fill.draft);
-            setLookup({ busy: false, error: null, searched: true, models: result.models ?? [], filled: fill?.changes ?? [] });
+            setLookup({ busy: false, error: null, searched: true, models: result.models ?? [] });
+            // 模型 ID 精确命中目录时，自动带出不可直填的默认值：输出上限与思考等级。
+            const exact = result.models?.find(suggestion => suggestion.id.toLowerCase() === query.trim().toLowerCase());
+            if (exact) {
+                setDraft(current => {
+                    let next = current;
+                    if (!current.defaultMaxTokens && exact.maxTokens) {
+                        next = { ...next, defaultMaxTokens: String(exact.maxTokens) };
+                    }
+                    if (!current.thinkingLevels.length && exact.thinkingLevels.length) {
+                        next = {
+                            ...next,
+                            thinkingLevels: exact.thinkingLevels,
+                            defaultReasoningEffort: exact.thinkingLevels.includes('medium') ? 'medium' : exact.thinkingLevels.at(-1) ?? null,
+                        };
+                    }
+                    return next;
+                });
+            }
         } catch (e) {
             if (seq !== lookupSeq.current) return;
-            setLookup({ busy: false, error: e instanceof Error ? e.message : '查询 models.dev 失败', searched: true, models: [], filled: [] });
+            setLookup({ busy: false, error: e instanceof Error ? e.message : '查询 models.dev 失败', searched: true, models: [] });
         }
-    }, [creating, savedKey]);
+    }, []);
 
-    // 模型 ID 停下 600ms 后查一次 models.dev；按钮可以立刻重查。新填的 ID 精确命中时只补空缺，其余结果点「填入」才写进表单。
+    // 模型 ID 停下 600ms 后查一次 models.dev；按钮可以立刻重查。精确命中时补上空的输出上限与思考等级，其余结果点「填入」才写进表单。
     useEffect(() => {
         if (!chat) return;
         const timer = setTimeout(() => { void lookupModelsDev(draft.modelKey.trim()); }, 600);
         return () => clearTimeout(timer);
     }, [chat, draft.modelKey, lookupModelsDev]);
 
-    // 「填入」是显式操作：目录里有的字段（含单价）都覆盖表单。
+    // 「填入」先确认，再按目录值更新上下文、输出上限、思考等级与图片能力。
     const applyCatalog = (suggestion: ModelsDevSuggestion) => {
-        const levels = suggestion.reasoning ? suggestion.thinkingLevels : [];
-        const contextWindow = suggestion.contextWindow ? String(suggestion.contextWindow) : draft.contextWindow;
-        const pricing = { ...draft.pricing };
-        for (const { key } of CATALOG_PRICES) {
-            const value = suggestion.pricing?.[key];
-            if (value !== undefined) pricing[key] = String(value);
-        }
-        patch({
-            contextWindow,
-            ...(suggestion.maxTokens && fitsOutput(suggestion.maxTokens, contextWindow) ? { defaultMaxTokens: String(suggestion.maxTokens) } : {}),
-            ...(draft.displayName ? {} : { displayName: suggestion.name }),
-            thinkingLevels: levels,
-            defaultReasoningEffort: defaultThinkingLevel(levels),
-            isReasoningDefault: levels.length > 0 && draft.isReasoningDefault,
-            supportsVision: suggestion.vision || draft.supportsVision,
-            pricing,
-        });
-        setLookup(current => ({ ...current, filled: [] }));
-        showToast('success', `已填入 ${suggestion.name} 的目录值`);
+        setCatalogConfirm(suggestion);
     };
 
-    const toggleLevel = (level: AIReasoningEffort) => {
-        const levels = draft.thinkingLevels.includes(level) ? draft.thinkingLevels.filter(item => item !== level) : [...draft.thinkingLevels, level];
-        const ordered = AI_REASONING_EFFORTS.filter(item => levels.includes(item));
-        // The default stays one of the listed levels.
-        patch({
-            thinkingLevels: ordered,
-            defaultReasoningEffort: draft.defaultReasoningEffort && ordered.includes(draft.defaultReasoningEffort) ? draft.defaultReasoningEffort : defaultThinkingLevel(ordered),
-            ...(ordered.length ? {} : { isReasoningDefault: false }),
-        });
-    };
     const setSource = (index: number, change: Partial<AdminModelSource>) =>
         patch({ sources: draft.sources.map((source, position) => (position === index ? { ...source, ...change } : source)) });
     const moveSource = (index: number, offset: number) => {
@@ -377,7 +322,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                 </div>
                 {chat && <div className="ai-catalog-lookup">
                     <div className="ai-catalog-lookup-head">
-                        <span>models.dev<small>按模型 ID 查上下文、输出上限、思考等级与单价；新填的 ID 精确命中时自动补空着的字段，点「填入」用目录值覆盖。</small></span>
+                        <span>models.dev<small>按模型 ID 查上下文、输出上限、思考等级与单价；点「填入」确认后按目录值更新表单。</small></span>
                         <Button variant="ghost" size="xs" loading={lookup.busy} loadingText="查询中…"
                             disabled={draft.modelKey.trim().length < 2}
                             onClick={() => void lookupModelsDev(draft.modelKey.trim())}>
@@ -385,7 +330,6 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                         </Button>
                     </div>
                     {lookup.error && <span className="ai-catalog-hint">{lookup.error}</span>}
-                    {lookup.filled.length > 0 && <span className="ai-catalog-hint" data-tone="accent">已补全空着的{lookup.filled.join('、')}，保存后生效。</span>}
                     {!lookup.busy && !lookup.error && lookup.models.length > 0 && <ul className="ai-catalog-lookup-list" aria-label="models.dev 匹配结果">
                         {lookup.models.slice(0, 6).map(suggestion => <li key={`${suggestion.provider}:${suggestion.id}`}>
                             <span className="ai-catalog-lookup-name"><strong>{suggestion.name}</strong><small>{suggestion.providerName} · {suggestion.id}</small></span>
@@ -422,39 +366,42 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                 </div>
             </section>}
 
-            {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-capability`}>
-                <header><h3 id={`${titleId}-capability`}>能力</h3><p>Agent 按上下文窗口决定何时压缩对话；输入框的「努力程度」只列出勾选的思考等级，不勾选时不发送思考参数。</p></header>
-                <div className="ai-catalog-grid">
-                    <ContextWindowField value={draft.contextWindow} onChange={contextWindow => patch({ contextWindow })} />
-                    <label className="ai-catalog-field"><span>输出上限{draft.defaultMaxTokens ? <span className="ai-catalog-hint"> · {formatTokenCount(Number(draft.defaultMaxTokens))}</span> : null}</span>
-                        <Input size="sm" type="number" inputMode="numeric" min={1} aria-label="输出上限" value={draft.defaultMaxTokens}
-                            placeholder="按模型默认" onChange={event => patch({ defaultMaxTokens: event.target.value })} />
-                    </label>
+            {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-limits`}>
+                <header><h3 id={`${titleId}-limits`}>上下文与输出</h3><p>Agent 按上下文窗口决定何时压缩对话；输出上限取自模型目录，取不到时按模型默认。</p></header>
+                <ContextWindowField value={draft.contextWindow} onChange={contextWindow => patch({ contextWindow })} />
+                <div className="ai-catalog-field"><span>输出上限</span>
+                    <span className="ai-catalog-hint">{draft.defaultMaxTokens
+                        ? `当前上限 ${formatTokenCount(Number(draft.defaultMaxTokens))}`
+                        : '未设 · 按模型默认'}</span>
                 </div>
-                <div className="ai-catalog-field">
-                    <span>思考等级</span>
-                    <div className="ai-catalog-limit" role="group" aria-label="可选思考等级">
-                        {AI_REASONING_EFFORTS.map(level => <FilterChip key={level} className="ai-catalog-chip"
-                            pressed={draft.thinkingLevels.includes(level)} onClick={() => toggleLevel(level)}>{THINKING_LEVEL_LABELS[level]}</FilterChip>)}
-                    </div>
+                <div className="ai-catalog-toggle">
+                    <span>支持图片输入<small>Agent 会把图片附件随消息发给模型</small></span>
+                    <SettingsSwitch label="支持图片输入" checked={draft.supportsVision} onToggle={() => patch({ supportsVision: !draft.supportsVision })} />
                 </div>
-                <div className="ai-catalog-grid">
-                    {draft.thinkingLevels.length > 0 ? <label className="ai-catalog-field"><span>默认等级</span>
-                        <Select ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''} className={SELECT_SM}
-                            onChange={value => patch({ defaultReasoningEffort: (value || null) as AIReasoningEffort | null })}
-                            options={draft.thinkingLevels.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] }))} />
-                    </label> : <span aria-hidden="true" />}
-                    <div className="ai-catalog-toggles">
-                        <div className="ai-catalog-toggle">
-                            <span>支持图片输入</span>
-                            <SettingsSwitch label="支持图片输入" checked={draft.supportsVision} onToggle={() => patch({ supportsVision: !draft.supportsVision })} />
-                        </div>
-                        {draft.thinkingLevels.length > 0 && <div className="ai-catalog-toggle">
-                            <span>默认开启思考</span>
-                            <SettingsSwitch label="默认开启思考" checked={draft.isReasoningDefault} onToggle={() => patch({ isReasoningDefault: !draft.isReasoningDefault })} />
-                        </div>}
-                    </div>
-                </div>
+            </section>}
+
+            {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-thinking`}>
+                <header><h3 id={`${titleId}-thinking`}>思考</h3><p>选择默认思考等级即表示支持思考；选「不支持」时不会发送思考参数。</p></header>
+                <label className="ai-catalog-field"><span>默认思考等级</span>
+                    <Select ariaLabel="默认思考等级" value={draft.defaultReasoningEffort ?? ''}
+                        onChange={value => {
+                            const level = (value || null) as AIReasoningEffort | null;
+                            patch({
+                                defaultReasoningEffort: level,
+                                thinkingLevels: level ? AI_REASONING_EFFORTS.filter(item => AI_REASONING_EFFORTS.indexOf(item) <= AI_REASONING_EFFORTS.indexOf(level)) : [],
+                                isReasoningDefault: level !== null && draft.isReasoningDefault,
+                            });
+                        }}
+                        options={[
+                            { value: '', label: '不支持' },
+                            ...AI_REASONING_EFFORTS.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] })),
+                        ]} />
+                    <span className="ai-catalog-hint">选择最高等级；用户可以在输入框选择这个等级及以下的等级。</span>
+                </label>
+                {draft.defaultReasoningEffort && <div className="ai-catalog-toggle">
+                    <span>默认开启思考</span>
+                    <SettingsSwitch label="默认开启思考" checked={draft.isReasoningDefault} onToggle={() => patch({ isReasoningDefault: !draft.isReasoningDefault })} />
+                </div>}
             </section>}
 
             <section className="ai-catalog-section" aria-labelledby={`${titleId}-sources`}>
@@ -497,5 +444,23 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             description={confirm === 'delete' ? '用户的模型菜单里不再出现它；进行中的任务会失败。' : '关闭后，这次填写的内容不会保存。'}
             confirmText={confirm === 'delete' ? '删除' : '放弃修改'}
             onConfirm={() => (confirm === 'delete' ? remove() : onClose())} />
+        {catalogConfirm && <ConfirmDialog isOpen onClose={() => setCatalogConfirm(null)} loading={false}
+            title={`从 models.dev 填入 ${catalogConfirm.name}？`}
+            description={`将更新上下文窗口${catalogConfirm.contextWindow ? `（${formatTokenCount(catalogConfirm.contextWindow)}）` : '（未知）'}、输出上限${catalogConfirm.maxTokens ? `（${formatTokenCount(catalogConfirm.maxTokens)}）` : '（不设）'}${catalogConfirm.reasoning ? '、思考等级' : ''}${catalogConfirm.vision ? '、图片输入能力' : ''}。`}
+            confirmText="填入"
+            onConfirm={() => {
+                const levels = catalogConfirm.reasoning ? [catalogConfirm.thinkingLevels.at(-1) ?? 'medium'].filter(Boolean) as AIReasoningEffort[] : [];
+                patch({
+                    ...(catalogConfirm.contextWindow ? { contextWindow: String(catalogConfirm.contextWindow) } : {}),
+                    ...(catalogConfirm.maxTokens ? { defaultMaxTokens: String(catalogConfirm.maxTokens) } : {}),
+                    ...(draft.displayName ? {} : { displayName: catalogConfirm.name }),
+                    defaultReasoningEffort: levels.length > 0 ? levels[0] : null,
+                    thinkingLevels: levels,
+                    isReasoningDefault: levels.length > 0 && draft.isReasoningDefault,
+                    supportsVision: catalogConfirm.vision || draft.supportsVision,
+                });
+                showToast('success', `已填入 ${catalogConfirm.name} 的目录值`);
+                setCatalogConfirm(null);
+            }} />}
     </Dialog>;
 }

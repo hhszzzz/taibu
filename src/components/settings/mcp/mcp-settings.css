@@ -60,3 +60,9 @@
   .mcp-pair { grid-template-columns: minmax(0, 1fr) auto; }
   .mcp-pair > :nth-child(2) { grid-column: 1; }
 }
+
+/* 连接测试状态指示 */
+.mcp-health { display: inline-flex; align-items: center; gap: .375rem; padding: .5rem .75rem; border-radius: .5rem; font-size: .8125rem; animation: motion-fade var(--duration-base) var(--ease-out) both; }
+.mcp-health--testing { background: var(--fill-field); color: var(--foreground-secondary); }
+.mcp-health--ok { background: color-mix(in srgb, var(--success) 12%, transparent); color: var(--success); }
+.mcp-health--error { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); }

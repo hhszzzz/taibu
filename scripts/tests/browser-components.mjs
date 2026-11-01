@@ -1820,12 +1820,10 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('listbox').waitFor();
     await page.getByRole('option', { name: '1M', exact: true }).click({ force: true });
     check('The context window preset writes its number', (await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).textContent()) === '1M');
-    const levels = editor.getByRole('group', { name: '可选思考等级', exact: true });
-    for (const level of ['最高', '低', '高']) await levels.getByRole('button', { name: level, exact: true }).click();
-    await editor.getByRole('combobox', { name: /^默认等级/ }).click();
+    await editor.getByRole('combobox', { name: '默认思考等级', exact: true }).click();
     await page.getByRole('listbox').waitFor();
     await page.getByRole('option', { name: '最高', exact: true }).click({ force: true });
-    check('The default level offers only the ticked levels', (await editor.getByRole('combobox', { name: /^默认等级/ }).textContent()) === '最高');
+    check('Choosing a thinking level fills the ladder up to it', (await editor.getByRole('combobox', { name: '默认思考等级', exact: true }).textContent()) === '最高');
     await editor.getByRole('button', { name: '读取网关的模型列表', exact: true }).click();
     await editor.getByRole('combobox', { name: '从网关列表选择', exact: true }).waitFor();
     await editor.getByRole('combobox', { name: '从网关列表选择', exact: true }).click();
@@ -1840,24 +1838,24 @@ export async function run(existingPage, bundlePath) {
     const created = requests.find(item => item.pathname === '/api/admin/ai-models' && item.method === 'POST');
     check('Creating a model submits the identity, icon, window and trusted output default', created?.body.modelKey === 'created-fixture'
       && created.body.icon === 'OpenAI' && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === null);
-    check('Creating a model submits the thinking ladder in order with a listed default', JSON.stringify(created?.body.thinkingLevels) === '["low","high","max"]'
+    check('Creating a model submits the thinking ladder in order with a listed default', JSON.stringify(created?.body.thinkingLevels) === '["minimal","low","medium","high","xhigh","max"]'
       && created.body.defaultReasoningEffort === 'max');
     check('A new model starts on the first gateway and keeps the added backup in order', created?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a1,00000000-0000-4000-8000-0000000000a2');
 
-    // models.dev: an exact id fills only blanks; 「填入」 overwrites with catalog values.
+    // models.dev: an exact id fills the empty output limit and thinking level; 「填入」 asks first.
     await modelPanel.getByRole('button', { name: '添加模型', exact: true }).click();
     editor = page.locator('dialog.ai-catalog-dialog');
     await editor.getByRole('heading', { name: '添加模型', exact: true }).waitFor();
     await editor.getByLabel('模型 ID', { exact: true }).fill('catalog-fixture');
-    await editor.getByText(/已补全空着的/u).waitFor();
-    check('An exact models.dev match fills the empty output limit, levels and prices but leaves image input alone', await editor.getByLabel('输出上限', { exact: true }).inputValue() === '64000'
-      && await editor.getByRole('button', { name: '中', exact: true }).getAttribute('aria-pressed') === 'true'
-      && !(await editor.getByRole('switch', { name: '支持图片输入', exact: true }).isChecked())
-      && await editor.getByLabel('输入', { exact: true }).inputValue() === '2.5'
-      && await editor.getByLabel('输出', { exact: true }).inputValue() === '10'
-      && await editor.getByLabel('缓存读取', { exact: true }).inputValue() === '1.25');
+    await editor.getByText('当前上限 64K', { exact: true }).waitFor();
+    check('An exact models.dev match fills the empty output limit and thinking level but no prices', await editor.getByText('当前上限 64K', { exact: true }).isVisible()
+      && (await editor.getByRole('combobox', { name: '默认思考等级', exact: true }).textContent()) === '中'
+      && await editor.getByLabel('输入', { exact: true }).inputValue() === '');
     await editor.getByRole('list', { name: 'models.dev 匹配结果' }).getByRole('button', { name: '填入', exact: true }).click();
-    check('Filling from the catalog overwrites the context window and the name', (await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).textContent()) === '200K'
+    const catalogConfirm = page.getByRole('alertdialog', { name: '从 models.dev 填入 Catalog Fixture？', exact: true });
+    await catalogConfirm.waitFor();
+    await catalogConfirm.getByRole('button', { name: '填入', exact: true }).click();
+    check('Filling from the catalog asks first, then overwrites the context window and the name', (await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).textContent()) === '200K'
       && await editor.getByLabel('显示名称', { exact: true }).inputValue() === 'Catalog Fixture');
     await editor.getByRole('button', { name: '取消', exact: true }).click();
     await page.getByRole('button', { name: '放弃修改', exact: true }).click();
@@ -1868,9 +1866,7 @@ export async function run(existingPage, bundlePath) {
     await editor.getByRole('heading', { name: 'Fixture Model', exact: true }).waitFor();
     check('An unchanged model cannot be saved', await editor.getByRole('button', { name: '保存', exact: true }).isDisabled());
     await editor.getByLabel('显示名称', { exact: true }).fill('Edited Fixture Model');
-    await editor.getByRole('group', { name: '可选思考等级', exact: true }).getByRole('button', { name: '最高', exact: true }).click();
-    check('Unticking a level keeps the default on a listed level', await editor.getByRole('combobox', { name: /^默认等级/ }).textContent() === '高');
-    await editor.getByRole('combobox', { name: /^默认等级/ }).click();
+    await editor.getByRole('combobox', { name: '默认思考等级', exact: true }).click();
     await page.getByRole('listbox').waitFor();
     await page.getByRole('option', { name: '低', exact: true }).click({ force: true });
     await editor.getByRole('combobox', { name: '添加来源', exact: true }).click();
@@ -1890,7 +1886,7 @@ export async function run(existingPage, bundlePath) {
     await editor.getByRole('button', { name: '保存', exact: true }).click();
     await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Edited Fixture Model' }).waitFor();
     const saved = requests.findLast(item => item.pathname === '/api/admin/ai-models/model-1' && item.method === 'PUT');
-    check('Saving a model writes the whole edited model', saved?.body.displayName === 'Edited Fixture Model' && JSON.stringify(saved.body.thinkingLevels) === '["low","high"]'
+    check('Saving a model writes the whole edited model', saved?.body.displayName === 'Edited Fixture Model' && JSON.stringify(saved.body.thinkingLevels) === '["minimal","low"]'
       && saved.body.defaultReasoningEffort === 'low' && saved.body.customParameters?.top_k === 40);
     check('Sources save in the shown order with an override equal to the model ID inherited and others trimmed', saved?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a2,00000000-0000-4000-8000-0000000000a1'
       && saved.body.sources[0].modelIdOverride === 'upstream-fixture' && saved.body.sources[1].modelIdOverride === null);

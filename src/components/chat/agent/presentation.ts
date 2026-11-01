@@ -554,7 +554,7 @@ export function formatAgentValue(value: unknown): string {
 /** Short tags shown on process steps, one per tool family. */
 export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
     chart: '命盘', calculation: '推演', drilldown: '详查', search: '依据', data: '资料', method: '指引', skill: '技能', plan: '计划', todo: '清单',
-    question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', image: '生图', other: '工具',
+    question: '问题', collaboration: '协作', memory: '记忆', archive: '档案', code: '脚本', external: '外部', image: '生图', time: '时间', other: '工具',
 };
 
 /**

@@ -56,7 +56,7 @@ export interface AgentWorkspaceModel {
  */
 export const AGENT_WORKSPACE_AUTO_OPEN: readonly AgentToolFamily[] = ['chart', 'drilldown'];
 /** The task list and the plan are already bars in the chat; following them would pull the panel away on every update. */
-const UNFOLLOWED: readonly AgentToolFamily[] = ['plan', 'todo'];
+const UNFOLLOWED: readonly AgentToolFamily[] = ['plan', 'todo', 'time'];
 
 type Artifact = Extract<AgentPart, { type: 'artifact' }>;
 

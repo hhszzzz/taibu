@@ -4,7 +4,7 @@
 import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
-import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Database, Files, FileCode2, FileText, Globe, GripVertical, ImagePlus, ListChecks, ScanSearch, Search, Sigma, Sparkles, Users, Wrench, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Clock, Database, Files, FileCode2, FileText, Globe, GripVertical, ImagePlus, ListChecks, ScanSearch, Search, Sigma, Sparkles, Users, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
 import { getAgentCalculation, getAgentChart, getAgentPlan, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
@@ -21,7 +21,7 @@ import {
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
     chart: Calculator, calculation: Sigma, drilldown: ScanSearch, search: Search, data: Database, method: BookOpen, skill: Sparkles, plan: ListChecks, todo: ListChecks,
-    question: CircleHelp, collaboration: Users, memory: Database, archive: BookmarkPlus, code: FileCode2, external: Globe, image: ImagePlus, other: Wrench,
+    question: CircleHelp, collaboration: Users, memory: Database, archive: BookmarkPlus, code: FileCode2, external: Globe, image: ImagePlus, time: Clock, other: Wrench,
     saved: Files, attachment: FileText,
 };
 

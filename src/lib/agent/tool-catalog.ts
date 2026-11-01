@@ -138,6 +138,7 @@ export type AgentToolFamily =
   | 'code'
   | 'external'
   | 'image'
+  | 'time'
   | 'other';
 
 /** Pi's code mode tool (`CODEMODE_TOOL_NAME`); its scripts' calls are parts with `parentId`. */
@@ -257,6 +258,7 @@ const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, Agen
   ['read_user_notes', 'data'],
   ['search_conversations', 'data'],
   ['read_user_profile', 'data'],
+  ['current_time', 'time'],
   ['read_attachment', 'data'],
   ['generate_image', 'image'],
   [AGENT_SKILL_TOOLS.load, 'skill'],

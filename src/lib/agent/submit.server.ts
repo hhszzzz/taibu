@@ -12,6 +12,7 @@ import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
 import type { AIModelConfig, ChatMessage, CustomProviderRequest, Mention, ChatAttachment } from "@/types";
 import type { AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from "@/lib/chat/model-settings";
+import type { AgentApprovalMode } from "./mcp/config";
 import type { MessageQuote } from "@/lib/chat/quotes";
 import { CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH, validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
 import { AgentStore, type AgentRunRow } from "./store.server";
@@ -75,6 +76,8 @@ export type AgentSubmitBody = {
   webEnabled: boolean;
   codeMode: boolean;
   planMode: boolean;
+  /** Whether external tools may run without asking: auto (as configured), manual (every call), allow_all. */
+  approval: AgentApprovalMode;
   reasoning: boolean;
   reasoningEffort: AIReasoningEffort | null;
   collaborators: AgentCollaborator[];
@@ -312,6 +315,7 @@ export async function submitAgentTask(
     webEnabled: !compact && body.webEnabled !== false,
     codeMode: !compact && body.codeMode,
     planMode: !compact && body.planMode,
+    approval: body.approval,
     ...(compact ? { compact } : {}),
     systemPrompt: prepared.systemPrompt,
     memoryEnabled: prepared.agentMemoryEnabled === true,

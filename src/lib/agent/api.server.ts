@@ -13,6 +13,7 @@ import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { isChatAttachment } from "@/lib/ai/document-formats";
 import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
 import { webRouteAvailable } from "./mcp/web-route.server";
+import { parseAgentApproval } from "./mcp/config";
 import { isValidUUID } from "@/lib/validation";
 import type { ChatMessage, CustomProviderRequest, Mention } from "@/types";
 import { normalizeMessageQuotes } from "@/lib/chat/quotes";
@@ -142,6 +143,7 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
     webEnabled: value.webEnabled !== false,
     codeMode: value.codeMode === true,
     planMode: value.planMode === true,
+    approval: parseAgentApproval(value.approval),
     reasoning: value.reasoning === true,
     reasoningEffort,
     collaborators,

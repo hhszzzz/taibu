@@ -4,6 +4,13 @@ import ipaddr from "ipaddr.js";
 import { Agent as HttpAgent, fetch as undiciFetch } from "undici";
 import { validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
 
+/** VPN 的 fake-IP 网段：不是内网，外部域名被本地解析器映射到这里，再经隧道转发。 */
+function isVirtualAddress(parsed: ipaddr.IPv4 | ipaddr.IPv6) {
+  return parsed.kind() === "ipv4"
+    ? parsed.match(ipaddr.parse("198.18.0.0") as ipaddr.IPv4, 15) // Clash / Surge 等 dns fake-ip
+    : parsed.match(ipaddr.parse("2001:2::") as ipaddr.IPv6, 48); // sing-box / tun 的 IPv6 fake-ip
+}
+
 export function isPublicAgentAddress(address: string) {
   try {
     let parsed = ipaddr.parse(address.replace(/^\[|\]$/gu, ""));
@@ -12,6 +19,7 @@ export function isPublicAgentAddress(address: string) {
       (parsed as ipaddr.IPv6).isIPv4MappedAddress()
     )
       parsed = (parsed as ipaddr.IPv6).toIPv4Address();
+    if (isVirtualAddress(parsed)) return true;
     return parsed.range() === "unicast";
   } catch {
     return false;
@@ -81,9 +89,13 @@ const dispatcher = new HttpAgent({
 
 export function createAgentSafeFetch(
   transport: typeof undiciFetch = undiciFetch,
-  { validate = validateAgentProviderUrl, redirectMessage = "模型服务重定向被拒绝，请配置最终 HTTPS 地址" }: {
+  {
+    validate = validateAgentProviderUrl, redirectMessage = "模型服务重定向被拒绝，请配置最终 HTTPS 地址", resolveAddresses = true,
+  }: {
     validate?: (url: string) => void;
     redirectMessage?: string;
+    /** False for addresses an administrator chose: the socket resolver is skipped, so no DNS preflight at all. */
+    resolveAddresses?: boolean;
   } = {},
 ): typeof globalThis.fetch {
   return async (input, init) => {
@@ -97,7 +109,7 @@ export function createAgentSafeFetch(
         Parameters<typeof undiciFetch>[1]
       >["body"],
       duplex: "half",
-      dispatcher,
+      ...(resolveAddresses ? { dispatcher } : {}),
       redirect: "manual",
       signal: AbortSignal.any([request.signal, AbortSignal.timeout(120_000)]),
     });
@@ -112,4 +124,10 @@ export const agentSafeFetch = createAgentSafeFetch();
 export const mcpSafeFetch = createAgentSafeFetch(undiciFetch, {
   validate: validateMcpServerUrl,
   redirectMessage: "MCP 服务重定向被拒绝，请填写最终地址",
+});
+/** Platform MCP servers: an administrator supplied the address, so it is connected as given. */
+export const mcpAdminFetch = createAgentSafeFetch(undiciFetch, {
+  validate: validateMcpServerUrl,
+  redirectMessage: "MCP 服务重定向被拒绝，请填写最终地址",
+  resolveAddresses: false,
 });

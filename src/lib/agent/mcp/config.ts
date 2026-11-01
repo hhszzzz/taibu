@@ -19,6 +19,21 @@ export const MCP_EXPOSURE_HINTS: Record<McpExposure, string> = {
   hidden: '不注册任何工具，只供联网搜索与读网页的路由使用。',
 };
 
+/** How readily an external tool may run without asking: only the ones marked, every call, or never ask. */
+export const AGENT_APPROVAL_MODES = ['auto', 'manual', 'allow_all'] as const;
+export type AgentApprovalMode = (typeof AGENT_APPROVAL_MODES)[number];
+export const AGENT_APPROVAL_LABELS: Record<AgentApprovalMode, string> = {
+  auto: '自动', manual: '每次确认', allow_all: '允许任何操作',
+};
+export const AGENT_APPROVAL_HINTS: Record<AgentApprovalMode, string> = {
+  auto: '只有标了「征求同意」的外部工具才先问你。',
+  manual: '每次调用外部工具之前都问你。',
+  allow_all: '外部工具直接调用，不再询问。',
+};
+export function parseAgentApproval(value: unknown): AgentApprovalMode {
+  return AGENT_APPROVAL_MODES.includes(value as AgentApprovalMode) ? value as AgentApprovalMode : 'auto';
+}
+
 export const MCP_SERVER_NAME_PATTERN = /^[a-z][a-z0-9_]{1,30}$/;
 /** Tools one server may register; a user's connector gets fewer so one cannot flood the model's tool list. */
 export const MCP_PLATFORM_TOOL_LIMIT = 200;

@@ -121,6 +121,8 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
       webEnabled: schedule.options.webEnabled,
       codeMode: false,
       planMode: false,
+      // 定时任务无人值守：沿用平台配置，标了「征求同意」的工具在任务里直接失败而不是等人回答。
+      approval: 'auto',
       reasoning: schedule.options.reasoning,
       reasoningEffort: schedule.options.reasoningEffort,
       collaborators: schedule.options.collaborators,

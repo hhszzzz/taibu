@@ -49,6 +49,7 @@ import { BUILTIN_AGENT_PROFILES, DEFAULT_AGENT_PROFILE, type AgentProfileView } 
 import { availableProfiles, createMemberKit, type MemberModel } from './profiles/members.server';
 import { parallelAnalysisResults } from './parallel-results';
 import { openAgentMcp, type AgentMcpSession } from './mcp/session.server';
+import { parseAgentApproval } from './mcp/config';
 import type { McpConfirm } from './mcp/tools.server';
 import type { McpPool } from './mcp/pool.server';
 import { builtinSkillsSession, expandSkillMessages, openAgentSkills, type AgentSkillsSession } from './skills/catalog.server';
@@ -673,7 +674,7 @@ export async function executeAgentRun(
     const titles = new Map(tools.map(tool => [tool.name, tool.label]));
     // MCP opens before the members are defined: a role may grant them its tools.
     const servers = mcp = await openAgentMcp({
-      run, confirm: confirmMcp,
+      run, confirm: confirmMcp, approval: parseAgentApproval(run.input.approval),
       main: conversationId => conversationId === root?.id,
       signal: context.abortSignal!, estimate: text => estimateTokens(config.modelId || config.id, text),
       ...(injected?.mcpPool ? { pool: injected.mcpPool } : {}),

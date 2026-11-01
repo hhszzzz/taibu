@@ -234,7 +234,7 @@ test('fork API owner scopes its snapshot, discards active state and reports a br
 test('next-task preferences reject malformed values and strip keys from the stored preference',async t => {
     const f=fixture(t); f.rows.conversations={id:f.id};
     const saved=await configuration(request('/configuration',{model:'fixture',reasoning:false,webEnabled:false,apiKey:'private'}),params(f.id)); assert.equal(saved?.status,200);
-    assert.deepEqual(f.inserts.conversations,{next_task_config:{model:'fixture',reasoning:false,webEnabled:false,codeMode:false,planMode:false,reasoningEffort:null,collaborators:[]}});
+    assert.deepEqual(f.inserts.conversations,{next_task_config:{model:'fixture',reasoning:false,webEnabled:false,codeMode:false,planMode:false,approval:'auto',reasoningEffort:null,collaborators:[]}});
     const malformed=await configuration(request('/configuration',{model:'fixture',reasoning:'yes',webEnabled:false}),params(f.id)); assert.equal(malformed?.status,400);
     const codeMode=await configuration(request('/configuration',{model:'fixture',reasoning:false,webEnabled:false,codeMode:'on'}),params(f.id)); assert.equal(codeMode?.status,400);
     const planMode=await configuration(request('/configuration',{model:'fixture',reasoning:false,webEnabled:false,planMode:'on'}),params(f.id)); assert.equal(planMode?.status,400);

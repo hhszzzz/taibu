@@ -14,6 +14,7 @@ import { ChevronDown, KeyRound, X } from 'lucide-react';
 import { ModelSelector } from '@/components/ui/ModelSelector';
 import { Button } from '@/components/ui/Button';
 import { AgentModeMenu } from '@/components/chat/composer/AgentModeMenu';
+import { AgentApprovalMenu } from '@/components/chat/composer/AgentApprovalMenu';
 import { CustomProviderPanel } from '@/components/chat/CustomProviderPanel';
 import { Dialog } from '@/components/ui/Dialog';
 import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
@@ -54,6 +55,10 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
                     onPlanModeChange={props.onPlanModeChange}
                     onCodeModeChange={props.onCodeModeChange}
                 />
+            )}
+            {/* 外部工具的同意方式：自动 / 每次确认 / 允许任何操作。 */}
+            {agentMode && props.onApprovalChange && (
+                <AgentApprovalMenu value={props.approval ?? 'auto'} disabled={disabled} onChange={props.onApprovalChange} />
             )}
             <span className="chat-toolbar-spacer" />
             {/* chin 中央免责声明：仅普通 chat 模式显示（Agent 模式不显示），hero 也不显示 */}

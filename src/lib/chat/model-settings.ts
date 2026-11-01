@@ -1,5 +1,6 @@
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { AGENT_PROFILE_NAME_PATTERN } from '@/lib/agent/profiles/config';
+import { parseAgentApproval, type AgentApprovalMode } from '@/lib/agent/mcp/config';
 
 export const REASONING_EFFORT_LABELS: Record<AIReasoningEffort, string> = {
   minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高',
@@ -25,6 +26,8 @@ export interface NextTaskConfiguration {
   codeMode: boolean;
   /** Agent 计划模式：模型先提交分析计划，用户批准后再执行；每个任务创建时固定。 */
   planMode: boolean;
+  /** 外部工具是否先征求同意：自动 / 每次确认 / 允许任何操作。 */
+  approval: AgentApprovalMode;
   collaborators: AgentCollaborator[];
 }
 
@@ -37,6 +40,8 @@ export interface ModelSettingsProps {
   onCodeModeChange?: (enabled: boolean) => void;
   planMode?: boolean;
   onPlanModeChange?: (enabled: boolean) => void;
+  approval?: AgentApprovalMode;
+  onApprovalChange?: (mode: AgentApprovalMode) => void;
 }
 
 export function parseReasoningEffort(value: unknown): AIReasoningEffort | null {
@@ -72,6 +77,7 @@ export function parseNextTaskConfiguration(value: unknown): NextTaskConfiguratio
     (input.planMode !== undefined && typeof input.planMode !== 'boolean')) throw new Error('配置无效');
   // 代码模式与计划模式、推理档位、协作成员一样有缺省值：缺省为关闭。
   return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled, codeMode: input.codeMode === true, planMode: input.planMode === true,
+    approval: parseAgentApproval(input.approval),
     reasoningEffort: parseReasoningEffort(input.reasoningEffort), collaborators: parseAgentCollaborators(input.collaborators) };
 }
 

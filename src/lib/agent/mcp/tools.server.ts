@@ -5,7 +5,7 @@ import { Type } from '@earendil-works/pi-ai';
 import { defineTool, type ToolExecutionApi, type ToolExecutionResult, type ToolRegistration } from '@earendil-works/pi-durable';
 import { toLlmContent, type CallToolResult, type Tool } from '@earendil-works/pi-mcp';
 import { AGENT_MCP_TOOL_PREFIX } from '../tool-catalog';
-import type { McpExposure } from './config';
+import type { AgentApprovalMode, McpExposure } from './config';
 import { describeMcpError, resolveMcpServer } from './endpoint.server';
 import type { McpPool } from './pool.server';
 import type { McpServerRow } from './store.server';
@@ -95,6 +95,8 @@ export function defineMcpTool(spec: McpToolSpec, deps: {
   pool: McpPool;
   authorize: (spec: McpToolSpec) => Promise<McpServerRow>;
   confirm: McpConfirm;
+  /** The member's choice at the composer: ask only where marked, every call, or never. */
+  approval: AgentApprovalMode;
 }): ToolRegistration {
   return defineTool({
     name: spec.name,
@@ -108,7 +110,8 @@ export function defineMcpTool(spec: McpToolSpec, deps: {
     execute: async (args, api, context): Promise<ToolExecutionResult> => {
       const row = await deps.authorize(spec);
       const policy = row.tool_policy?.[spec.remote.name];
-      if (policy?.confirm) {
+      const needsConsent = deps.approval === 'allow_all' ? false : deps.approval === 'manual' || policy?.confirm === true;
+      if (needsConsent) {
         if (api.callId.includes('/')) throw new Error('这个外部工具每次调用前都需要用户确认，不能在脚本中调用');
         const allowed = await deps.confirm({ tool: spec.name, title: spec.title, server: row.display_name }, api, context);
         if (!allowed) return { output: [{ type: 'text', text: '用户没有同意这次外部工具调用；不要换用其他方式绕过，按用户意见继续。' }], isError: true };

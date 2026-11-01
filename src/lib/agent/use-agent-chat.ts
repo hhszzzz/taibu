@@ -15,6 +15,7 @@ import { isAgentRunTerminal, type AgentRunView } from "./types";
 import { clearAgentTail, clearAgentTails, pushAgentTail } from "./use-agent-tail";
 import { useNextTaskConfiguration } from '@/lib/chat/use-next-task-configuration';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
+import type { AgentApprovalMode } from './mcp/config';
 
 type AgentCapabilities = {
   enabled: boolean;
@@ -48,8 +49,9 @@ export function useAgentChat(
   const [webEnabled, setWebEnabled] = useState(true);
   const [codeMode, setCodeMode] = useState(false);
   const [planMode, setPlanMode] = useState(false);
-  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode, planMode }, value => {
-    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode);
+  const [approval, setApproval] = useState<AgentApprovalMode>('auto');
+  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode, planMode, approval }, value => {
+    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode); setApproval(value.approval);
   });
   // React's documented "adjust state during render" for a value that must change with the account.
   const [identity, setIdentity] = useState({ userId, epoch: 0 });
@@ -263,6 +265,7 @@ export function useAgentChat(
       webEnabled,
       codeMode,
       planMode,
+      approval,
       dreamMode: state.chatMode === "dream",
       mangpaiMode: state.chatMode === "mangpai",
       timezone: browserTimeZone(),
@@ -390,6 +393,8 @@ export function useAgentChat(
     setCodeMode,
     planMode,
     setPlanMode,
+    approval,
+    setApproval,
     running: active && run?.status !== "awaiting_input",
   };
 }

@@ -7,7 +7,7 @@ import { PATCH, GET } from '../app/api/conversations/[id]/configuration/route';
 import { createMockAuthContext } from './helpers/auth-mock';
 
 const collaborators = ['first', 'second'].map(id => ({ id, name: id, model: id, focus: '核对盘面', reasoning: true, reasoningEffort: 'max' as const }));
-const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, webEnabled: false, codeMode: true, planMode: true, collaborators };
+const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, webEnabled: false, codeMode: true, planMode: true, approval: 'auto' as const, collaborators };
 
 function unwrap(value: unknown): unknown {
   if (!value || typeof value !== 'object' || !('toOperationNode' in value)) return value;
@@ -57,6 +57,13 @@ test('model settings validate the whole bounded team and preserve explicit reaso
   assert.equal(parseNextTaskConfiguration(unsaved).planMode, false);
   for (const codeMode of ['true', 1, null]) assert.throws(() => parseNextTaskConfiguration({ ...configuration, codeMode }));
   for (const planMode of ['true', 1, null]) assert.throws(() => parseNextTaskConfiguration({ ...configuration, planMode }));
+  // 外部工具同意策略缺省为自动，未知值也回落到自动；两个明确选项原样保存。
+  const unsavedApproval: Record<string, unknown> = { ...configuration };
+  delete unsavedApproval.approval;
+  assert.equal(parseNextTaskConfiguration(unsavedApproval).approval, 'auto');
+  assert.equal(parseNextTaskConfiguration({ ...configuration, approval: 'manual' }).approval, 'manual');
+  assert.equal(parseNextTaskConfiguration({ ...configuration, approval: 'allow_all' }).approval, 'allow_all');
+  assert.equal(parseNextTaskConfiguration({ ...configuration, approval: 'sometimes' }).approval, 'auto');
 });
 
 test('conversation model settings persist and read the owner-scoped reasoning and team JSON', async t => {

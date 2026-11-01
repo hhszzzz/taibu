@@ -4,7 +4,7 @@ import {
   McpClient, McpConnectionClosedError, McpSessionExpiredError, StreamableHttpTransport,
   type CallToolResult, type Implementation, type McpTransport, type Tool,
 } from '@earendil-works/pi-mcp';
-import { mcpSafeFetch } from '../safe-fetch.server';
+import { mcpAdminFetch, mcpSafeFetch } from '../safe-fetch.server';
 
 /** A server ready to connect: the URL with its secret query parameters, and every header including the secret ones. */
 export type McpEndpoint = {
@@ -12,6 +12,8 @@ export type McpEndpoint = {
   url: string;
   headers: Record<string, string>;
   timeoutMs: number;
+  /** A platform server an administrator configured: connected as given, without the member-side address guard. */
+  platform?: boolean;
 };
 
 export type McpServerDescription = { tools: Tool[]; server?: Implementation; instructions?: string };
@@ -103,7 +105,7 @@ export class McpPool {
     this.evict();
     const client = new McpClient({ name: 'taibu-agent', version: '1.0.0', requestTimeoutMs: endpoint.timeoutMs, capabilities: {} });
     const transport = this.options.transport?.(endpoint) ?? new StreamableHttpTransport({
-      url: endpoint.url, headers: endpoint.headers, fetch: mcpSafeFetch, maxMessageBytes: MAX_MESSAGE_BYTES,
+      url: endpoint.url, headers: endpoint.headers, fetch: endpoint.platform ? mcpAdminFetch : mcpSafeFetch, maxMessageBytes: MAX_MESSAGE_BYTES,
       // Tasks only call tools: no server-to-client stream to keep open between them.
       openGetStream: false, reconnect: { maxRetries: 1 },
     });

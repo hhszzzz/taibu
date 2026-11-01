@@ -155,6 +155,7 @@ export function ChatComposer({
     reasoningEnabled = false,
     onReasoningChange,
     reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange, planMode, onPlanModeChange,
+    approval, onApprovalChange,
     customProviderActive = false,
     customProviderLabel = null,
     userId,
@@ -790,6 +791,8 @@ export function ChatComposer({
                     onCodeModeChange={onCodeModeChange}
                     planMode={planMode}
                     onPlanModeChange={onPlanModeChange}
+                    approval={approval}
+                    onApprovalChange={onApprovalChange}
                     customProviderActive={customProviderActive}
                     customProviderLabel={customProviderLabel}
                     contextData={contextData}

@@ -476,6 +476,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         collaborators: props.collaborators, onCollaboratorsChange: props.onCollaboratorsChange,
         codeMode: agent?.codeMode, onCodeModeChange: agent?.setCodeMode,
         planMode: agent?.planMode, onPlanModeChange: agent?.setPlanMode,
+        approval: agent?.approval, onApprovalChange: agent?.setApproval,
         agentMode: isAgentMode,
         onEnableAgent: () => {
             agent?.setMode('agent');

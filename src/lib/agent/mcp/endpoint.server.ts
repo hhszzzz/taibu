@@ -37,14 +37,26 @@ export function resolveMcpServer(row: McpServerRow): ResolvedMcpServer {
   const url = new URL(row.url);
   for (const [name, value] of Object.entries(secretQuery)) url.searchParams.set(name, value);
   return {
-    endpoint: { id: row.id, url: url.href, headers: { ...row.headers, ...secretHeaders }, timeoutMs: row.timeout_ms },
+    endpoint: { id: row.id, url: url.href, headers: { ...row.headers, ...secretHeaders }, timeoutMs: row.timeout_ms, platform: row.owner_id === null },
     scrub: secretScrubber([...Object.values(secretHeaders), ...Object.values(secretQuery)]),
   };
+}
+
+/** The error and the causes under it, so a network wrapper's "fetch failed" still shows why the socket refused. */
+function causeChain(error: unknown): string {
+  const parts: string[] = [];
+  let current: unknown = error;
+  for (let depth = 0; current instanceof Error && depth < 5; depth++) {
+    if (current.message) parts.push(current.message);
+    current = (current as { cause?: unknown }).cause;
+  }
+  return parts.join(' | ');
 }
 
 /** A failure in words the settings pages and the model can see; remote text is cut short and scrubbed. */
 export function describeMcpError(error: unknown, scrub: (text: string) => string): string {
   const remote = (text: string) => scrub(text).replace(/\s+/gu, ' ').trim().slice(0, 300);
+  const chain = causeChain(error);
   if (error instanceof McpAuthRequiredError || (error instanceof McpHttpError && (error.status === 401 || error.status === 403)))
     return '外部服务拒绝了认证，请检查密钥设置';
   if (error instanceof McpSessionExpiredError) return '外部服务的会话已失效，请重试';
@@ -54,10 +66,10 @@ export function describeMcpError(error: unknown, scrub: (text: string) => string
   if (error instanceof McpError) return `外部服务报错：${remote(error.message) || `错误码 ${error.code}`}`;
   const message = error instanceof Error ? error.message : '';
   if (message === 'AGENT_MCP_SECRET_INVALID') return '保存的密钥无法解密，请重新填写';
-  if (/AGENT_PRIVATE_ADDRESS_BLOCKED/u.test(message)) return '外部服务地址解析到非公开网络，已拒绝连接';
+  if (/AGENT_PRIVATE_ADDRESS_BLOCKED/u.test(chain)) return '外部服务地址解析到非公开网络，已拒绝连接';
   if (/^MCP 服务/u.test(message)) return message;
-  if (/unsupported protocol version/iu.test(message)) return '外部服务的 MCP 协议版本不受支持';
-  if (error instanceof TypeError || /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket/iu.test(message)) return '无法连接外部服务';
+  if (/unsupported protocol version/iu.test(chain)) return '外部服务的 MCP 协议版本不受支持';
+  if (error instanceof TypeError || /fetch failed|ECONN|ENOTFOUND|EAI_AGAIN|socket/iu.test(chain)) return '无法连接外部服务';
   return '外部服务调用失败';
 }
 

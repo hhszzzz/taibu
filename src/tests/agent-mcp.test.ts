@@ -256,6 +256,7 @@ test('an MCP tool re-checks its server, asks before guarded calls and never repe
     pool,
     authorize: async () => { authorized++; return row; },
     confirm: async () => { asked++; return allow; },
+    approval: 'auto' as const,
   };
   const tool: ToolRegistration = defineMcpTool(spec, deps);
   assert.deepEqual([tool.deferred, tool.replay, tool.callers], [true, 'safe', undefined]);
@@ -283,6 +284,65 @@ test('an MCP tool re-checks its server, asks before guarded calls and never repe
   row = { ...row, tool_policy: {} };
   server.state.fail = new McpError(-32000, 'quota exceeded for tok-999999');
   await assert.rejects(tool.execute({ query: 'q' }, invocation('call-5').api, BACKGROUND_CONTEXT), /外部服务报错：quota exceeded for \[REDACTED\]/);
+});
+
+test('the composer approval decides whether an external tool asks, and a guarded one stays out of scripts', async (t) => {
+  useKey(t);
+  const id = '00000000-0000-4000-8000-0000000000e6';
+  const server = fakeMcpServer({ tools: [fixtureTool('lookup')] });
+  const pool = new McpPool({ transport: server.transport });
+  t.after(() => pool.close());
+  const row = mcpServerRow({ id, secret_headers: applyMcpSecretChanges({ serverId: id, ownerId: null }, 'header', {}, { 'x-api-key': 'tok-1' }) });
+  const spec: McpToolSpec = {
+    name: 'mcp__archive__lookup', remote: fixtureTool('lookup'), server: row, title: '查档', exposure: 'deferred', confirm: false,
+    parameters: { type: 'object' }, description: '外部工具',
+  };
+  let asked = 0;
+  const calls = async (approval: 'auto' | 'manual' | 'allow_all', policy: Record<string, { confirm?: boolean }>) => {
+    asked = 0;
+    const tool = defineMcpTool(spec, {
+      pool, authorize: async () => ({ ...row, tool_policy: policy }),
+      confirm: async () => { asked++; return true; }, approval,
+    });
+    await tool.execute({ query: 'q' }, invocation(`call-${approval}-${asked}`).api, BACKGROUND_CONTEXT);
+    return asked;
+  };
+  assert.equal(await calls('auto', {}), 0, 'auto asks only where the tool is marked');
+  assert.equal(await calls('auto', { lookup: { confirm: true } }), 1);
+  assert.equal(await calls('manual', {}), 1, 'manual asks before every external call');
+  assert.equal(await calls('allow_all', { lookup: { confirm: true } }), 0, 'allow_all never asks, even for a guarded tool');
+  assert.deepEqual(defineMcpTool({ ...spec, confirm: true }, {
+    pool, authorize: async () => row, confirm: async () => true, approval: 'allow_all',
+  }).callers, ['model'], 'a tool that requires consent is still kept out of code scripts');
+});
+
+test('manual approval leaves code-mode servers unregistered, while auto and allow_all offer them', async (t) => {
+  const store = require('../lib/agent/mcp/store.server') as typeof import('../lib/agent/mcp/store.server');
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const userId = '00000000-0000-4000-8000-00000000f002';
+  const scripts = mcpServerRow({ id: '00000000-0000-4000-8000-000000000301', name: 'scripts', exposure: 'codemode' });
+  t.mock.method(store, 'platformMcpServers', async () => [scripts]);
+  t.mock.method(store, 'userMcpServers', async () => []);
+  t.mock.method(store, 'recordMcpServerCheck', async () => undefined);
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
+  t.mock.method(settings, 'getAgentExtensionsPolicy', async () => ({ ...DEFAULT_AGENT_EXTENSIONS_POLICY, connectors: { enabled: true, limit: 1 } }));
+  const fake = fakeMcpServer({ tools: [fixtureTool('batch')] });
+  const pool = new McpPool({ transport: () => fake.transport() });
+  t.after(() => pool.close());
+  const run = runRow();
+  run.user_id = userId;
+  run.input.webEnabled = true;
+  run.input.codeMode = true;
+  const open = (approval: 'auto' | 'manual' | 'allow_all') => openAgentMcp({
+    run, confirm: async () => true, approval, main: () => true, signal: new AbortController().signal, pool,
+  });
+
+  for (const approval of ['auto', 'allow_all'] as const) {
+    const session = await open(approval);
+    assert.deepEqual(session.extension?.tools?.map(tool => tool.name), ['mcp__scripts__batch'], approval);
+  }
+  const manual = await open('manual');
+  assert.equal(manual.extension, undefined, 'a code script cannot wait for consent, so manual registers nothing');
 });
 
 test('a task registers the MCP tools its member may use, by exposure, and leaves out servers that fail', async (t) => {
@@ -325,7 +385,7 @@ test('a task registers the MCP tools its member may use, by exposure, and leaves
   run.user_id = userId;
   run.input.webEnabled = true;
   const open = (overrides: Partial<Parameters<typeof openAgentMcp>[0]> = {}) => openAgentMcp({
-    run, confirm: async () => true, main: (conversationId) => conversationId === 1, signal: new AbortController().signal, pool, ...overrides,
+    run, confirm: async () => true, approval: 'auto', main: (conversationId) => conversationId === 1, signal: new AbortController().signal, pool, ...overrides,
   });
 
   const session = await open();

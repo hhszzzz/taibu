@@ -167,6 +167,21 @@ test('a paid platform model needs a positive balance to start; a free one and BY
   assert.equal((await unpriced.json()).code, 'MODEL_UNPRICED');
 });
 
+test('the task keeps the member\'s approval choice and falls back to auto for anything else', async (t) => {
+  const fixture = setup(t);
+  const cases: Array<[unknown, string]> = [
+    ['manual', 'manual'], ['allow_all', 'allow_all'], ['auto', 'auto'],
+    ['sometimes', 'auto'], [undefined, 'auto'], [1, 'auto'],
+  ];
+  for (const [approval, expected] of cases) {
+    const response = await agentEndpoint(() => createAgentTask(fixture.request({
+      ...fixture.body, clientRequestId: randomUUID(), approval,
+    })));
+    assert.equal(response.status, 201, String(approval));
+    assert.equal((fixture.writes.at(-1)!.args.p_input as AgentRunRow['input']).approval, expected, String(approval));
+  }
+});
+
 test('the task keeps the browser\'s time zone for dating the messages sent into it, and ignores one that is not a zone', async t => {
   const fixture = setup(t);
   const zones: Array<string | undefined> = [];

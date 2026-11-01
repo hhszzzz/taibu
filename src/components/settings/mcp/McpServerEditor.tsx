@@ -269,7 +269,7 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                 {props => <Textarea {...props} rows={3} maxLength={2000} value={draft.description} onChange={event => set({ description: event.target.value })} />}
               </Field>
               {scope === 'platform' ? (
-                <Field label="工具提供方式" wide hint={MCP_EXPOSURE_HINTS[draft.exposure]}>
+                <Field label="工具提供方式" wide hint={<span className="block min-h-[2.5rem]">{MCP_EXPOSURE_HINTS[draft.exposure]}</span>}>
                   {props => (
                     <Select ariaLabel="工具提供方式" id={props.id} value={draft.exposure}
                       onChange={exposure => set({ exposure })} options={exposures.map(exposure => ({ value: exposure, label: MCP_EXPOSURE_LABELS[exposure] }))} />
@@ -277,19 +277,6 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                 </Field>
               ) : null}
             </div>
-
-            {scope === 'platform' ? (
-              <fieldset className="mcp-group">
-                <legend>联网路由</legend>
-                <p className="mcp-hint">填了搜索或读网页工具，这个服务就会承担 Agent 的 web_search / web_fetch 与普通对话的联网搜索：按优先级数字从小到大尝试，出错、超时或没有结果时转下一个，连续失败 3 次的服务暂停 1 分钟。工具名以测试连接列出的为准，返回内容自动识别。</p>
-                <div className="mcp-fields">
-                  <Field label="搜索工具">{props => <Input {...props} list={toolsId} value={draft.searchTool} spellCheck={false} onChange={event => set({ searchTool: event.target.value })} />}</Field>
-                  <Field label="读网页工具">{props => <Input {...props} list={toolsId} value={draft.fetchTool} spellCheck={false} onChange={event => set({ fetchTool: event.target.value })} />}</Field>
-                  <Field label="路由优先级">{props => <Input {...props} inputMode="numeric" value={draft.routePriority} onChange={event => set({ routePriority: event.target.value })} />}</Field>
-                </div>
-                <datalist id={toolsId}>{tools.map(tool => <option key={tool.name} value={tool.name} />)}</datalist>
-              </fieldset>
-            ) : null}
 
             <SecretRows label="密钥请求头" kind="header" list={draft.secretHeaders} onChange={secretHeaders => set({ secretHeaders })} />
             {scope === 'platform' ? (
@@ -302,6 +289,16 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
             {scope === 'platform' ? <details className="mcp-advanced">
               <summary>高级设置</summary>
               <div className="mcp-advanced-body">
+                <fieldset className="mcp-group">
+                  <legend>联网路由</legend>
+                  <p className="mcp-hint">工具不用手填：测试连接会列出服务提供的工具。这里只指定哪两个承接 Agent 的 web_search / web_fetch 与普通对话的联网搜索；留空就不参与路由（只作普通工具）。按优先级数字从小到大尝试，出错、超时或没有结果时转下一个，连续失败 3 次的服务暂停 1 分钟。</p>
+                  <div className="mcp-fields">
+                    <Field label="搜索工具">{props => <Input {...props} list={toolsId} value={draft.searchTool} spellCheck={false} onChange={event => set({ searchTool: event.target.value })} />}</Field>
+                    <Field label="读网页工具">{props => <Input {...props} list={toolsId} value={draft.fetchTool} spellCheck={false} onChange={event => set({ fetchTool: event.target.value })} />}</Field>
+                    <Field label="路由优先级">{props => <Input {...props} inputMode="numeric" value={draft.routePriority} onChange={event => set({ routePriority: event.target.value })} />}</Field>
+                  </div>
+                  <datalist id={toolsId}>{tools.map(tool => <option key={tool.name} value={tool.name} />)}</datalist>
+                </fieldset>
                 <fieldset className="mcp-group">
                   <legend>普通请求头</legend>
                   {draft.headers.map(pair => (

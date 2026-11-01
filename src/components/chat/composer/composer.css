@@ -230,7 +230,7 @@
 /* ---- Menus (portaled outside the chat column) ---- */
 :is(.chat-model-menu, .chat-plus-menu, .chat-context-panel) { border-radius: 12px; box-shadow: var(--shadow-panel-popover); }
 :is(.chat-model-menu, .chat-plus-menu) { display: flex; flex-direction: column; gap: 0; padding: 4px; }
-.chat-model-menu { gap: 2px; width: min(240px, calc(100vw - 16px)); }
+.chat-model-menu { gap: 2px; width: min(288px, calc(100vw - 16px)); }
 .chat-plus-menu { min-width: 12rem; max-width: min(320px, calc(100vw - 16px)); }
 .chat-plus-menu [role^="menuitem"], .chat-model-options > [role^="menuitem"],
 .chat-model-action { display: flex; width: 100%; min-height: 32px; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; color: var(--foreground); }
@@ -273,6 +273,8 @@
 .chat-model-menu .chat-model-options > [aria-checked="true"] { background: var(--fill-ghost-hover); color: var(--foreground); }
 .chat-model-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-model-option-price { flex-shrink: 0; margin-left: 12px; font-size: calc(12 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
+/* 右侧给选中勾留位，免得压住价格。 */
+.chat-model-options > [role="menuitemradio"] { padding-right: 32px; }
 /* claude 模型菜单：单行项（名称 + clay 勾），二级菜单行（努力程度）右侧当前值 + chevron。 */
 .chat-model-menu-row { justify-content: space-between; }
 .chat-model-menu-row .beta-badge { margin-left: 6px; }

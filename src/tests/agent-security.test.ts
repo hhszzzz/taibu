@@ -72,6 +72,9 @@ test("Agent custom URLs and socket DNS reject private, reserved, mixed and rebou
     assert.equal(isPublicAgentAddress(address), false, address);
   for (const address of ["8.8.8.8", "1.1.1.1", "2606:4700:4700::1111"])
     assert.equal(isPublicAgentAddress(address), true, address);
+  // VPN 的 fake-IP 段：本地解析器把外部域名映射到这里，经隧道转发，不是内网。
+  for (const address of ["198.18.0.18", "2001:2::26"])
+    assert.equal(isPublicAgentAddress(address), true, address);
   for (const url of [
     "http://model.example/v1",
     "https://localhost/v1",

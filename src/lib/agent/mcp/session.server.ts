@@ -3,7 +3,7 @@ import type { ConversationId, Extension, PromptSection, ToolRegistration } from 
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from '@/lib/app-settings';
 import { systemDb } from '@/lib/db/context.server';
 import type { AgentRunRow } from '../store.server';
-import { MCP_PLATFORM_TOOL_LIMIT, MCP_USER_TOOL_LIMIT, extensionAllowance, type McpExposure } from './config';
+import { MCP_PLATFORM_TOOL_LIMIT, MCP_USER_TOOL_LIMIT, extensionAllowance, type AgentApprovalMode, type McpExposure } from './config';
 import { describeMcpError, resolveMcpServer, type ResolvedMcpServer } from './endpoint.server';
 import { mcpPool, type McpPool, type McpServerDescription } from './pool.server';
 import { currentMcpServer, platformMcpServers, recordMcpServerCheck, userMcpServers, type McpServerRow } from './store.server';
@@ -88,6 +88,8 @@ function authorizer() {
 export async function openAgentMcp(options: {
   run: Pick<AgentRunRow, 'id' | 'user_id' | 'input'>;
   confirm: McpConfirm;
+  /** Whether an external tool may run without asking, from the member's choice at the composer. */
+  approval: AgentApprovalMode;
   /** Whether a prompt is for the task's main conversation rather than a member's. */
   main: (conversationId: ConversationId) => boolean;
   signal: AbortSignal;
@@ -135,7 +137,8 @@ export async function openAgentMcp(options: {
     for (const remote of description.tools) {
       if (registered >= limit) break;
       const policy = row.tool_policy?.[remote.name];
-      if (policy?.enabled === false || (exposure === 'codemode' && policy?.confirm)) continue;
+      const confirm = options.approval === 'allow_all' ? false : options.approval === 'manual' || policy?.confirm === true;
+      if (policy?.enabled === false || (exposure === 'codemode' && confirm)) continue;
       const parameters = mcpToolParameters(remote, resolved.scrub);
       if (!parameters) continue;
       const name = mcpToolName(prefix, remote.name, taken, row.id);
@@ -143,11 +146,11 @@ export async function openAgentMcp(options: {
       taken.add(name);
       const title = (policy?.title ?? resolved.scrub(String(remote.title ?? remote.annotations?.title ?? remote.name))).slice(0, 40);
       const spec: McpToolSpec = {
-        name, remote, server: row, title, exposure, confirm: policy?.confirm === true, parameters,
+        name, remote, server: row, title, exposure, confirm, parameters,
         description: mcpToolDescription(row, remote, resolved.scrub),
       };
       specs.push(spec);
-      tools.push(defineMcpTool(spec, { pool, authorize, confirm: options.confirm }));
+      tools.push(defineMcpTool(spec, { pool, authorize, confirm: options.confirm, approval: options.approval }));
       titles.set(name, title);
       searchTitles.set(name, [title, policy?.keywords, row.display_name].filter(Boolean).join(' '));
       if (!spec.confirm && exposure !== 'codemode') memberTools.set(name, row.owner_id === null ? row.name : null);

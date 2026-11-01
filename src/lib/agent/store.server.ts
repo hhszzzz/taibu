@@ -28,6 +28,8 @@ export interface AgentRunRow {
     codeMode?: boolean;
     /** Whether the model must submit a plan for approval before executing; fixed when the task is created. */
     planMode?: boolean;
+    /** Whether external tools may run without asking; fixed when the task is created. Absent means auto. */
+    approval?: "auto" | "manual" | "allow_all";
     /** A `/compact` task: it compacts the conversation's context for the next task and answers nothing. */
     compact?: { instructions: string | null };
     systemPrompt: string;
@@ -201,7 +203,7 @@ export class AgentStore {
       userMessage: run.input?.userMessage,
       commandMessageIds: commands.filter(command => command.delivery_state !== 'cancelled').map(command => command.message.id),
       billing: run.billing,
-      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled, codeMode: run.input.codeMode === true, planMode: run.input.planMode === true } : undefined,
+      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled, codeMode: run.input.codeMode === true, planMode: run.input.planMode === true, approval: run.input.approval ?? 'auto' } : undefined,
       queue: commands.map(command => ({ sequence: command.sequence, message: command.message, mode: command.mode, revision: command.revision ?? 1, sortOrder: command.sort_order ?? command.sequence, state: command.delivery_state ?? 'admitted' })),
     };
   }

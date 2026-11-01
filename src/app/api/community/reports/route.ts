@@ -6,10 +6,10 @@
  */
 
 import { NextRequest } from 'next/server';
-import { TargetType, ReportReason, ReportStatus } from '@/lib/community';
-import { jsonError, jsonOk, requireAdminContext, requireUserContext } from '@/lib/api-utils';
+import { COMMUNITY_LIMITS, TargetType, ReportReason, ReportStatus, isReportReason } from '@/lib/community';
+import { jsonError, jsonOk, readJsonBody, requireAdminContext, requireUserContext } from '@/lib/api-utils';
 import { parsePagination } from '@/lib/pagination';
-import { missingFields } from '@/lib/validation';
+import { isValidUUID, missingFields } from '@/lib/validation';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 export async function GET(request: NextRequest) {
@@ -53,7 +53,9 @@ export async function POST(request: NextRequest) {
             return jsonError(auth.error.message, auth.error.status);
         }
 
-        const body = await request.json();
+        const parsed = await readJsonBody<Record<string, unknown>>(request, 8 * 1024);
+        if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+        const body = parsed.body;
         const { targetType, targetId, reason, description } = body as {
             targetType: TargetType;
             targetId: string;
@@ -63,6 +65,15 @@ export async function POST(request: NextRequest) {
 
         if (missingFields(body, ['targetType', 'targetId', 'reason']).length > 0) {
             return jsonError('缺少参数', 400);
+        }
+        if (!['post', 'comment'].includes(targetType)) return jsonError('无效的目标类型', 400);
+        if (!isValidUUID(targetId)) return jsonError('目标ID无效', 400);
+        if (!isReportReason(reason)) return jsonError('举报原因无效', 400);
+        if (typeof description !== 'undefined' && description !== null && typeof description !== 'string') {
+            return jsonError('举报说明无效', 400);
+        }
+        if ((description ?? '').length > COMMUNITY_LIMITS.reportDescription) {
+            return jsonError(`举报说明不能超过 ${COMMUNITY_LIMITS.reportDescription} 个字符`, 400);
         }
 
         let data: unknown;
@@ -74,6 +85,10 @@ export async function POST(request: NextRequest) {
                 p_description: description || null,
             });
         } catch (error) {
+            const code = (error as { code?: string }).code;
+            if (code === 'P0002') return jsonError('目标不存在或已删除', 404);
+            if (code === '23505') return jsonError('你已经举报过这条内容', 409);
+            if (code === '22023') return jsonError('举报内容无效', 400);
             console.error('提交举报失败:', error);
             return jsonError('提交举报失败', 500);
         }

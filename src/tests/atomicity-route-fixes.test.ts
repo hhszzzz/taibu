@@ -368,7 +368,7 @@ test('community reports POST should submit and notify via transactional rpc', as
             id: 'report-1',
             reporter_id: 'user-1',
             target_type: 'comment',
-            target_id: 'comment-1',
+            target_id: 'c0000000-0000-4000-8000-000000000001',
             reason: 'spam',
           },
         });
@@ -386,7 +386,7 @@ test('community reports POST should submit and notify via transactional rpc', as
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       targetType: 'comment',
-      targetId: 'comment-1',
+      targetId: 'c0000000-0000-4000-8000-000000000001',
       reason: 'spam',
       description: 'bad content',
     }),
@@ -400,7 +400,7 @@ test('community reports POST should submit and notify via transactional rpc', as
   assert.equal(rpcCall.fn, 'submit_community_report_and_notify');
   assert.deepEqual(rpcCall.args, {
     p_target_type: 'comment',
-    p_target_id: 'comment-1',
+    p_target_id: 'c0000000-0000-4000-8000-000000000001',
     p_reason: 'spam',
     p_description: 'bad content',
   });
@@ -434,7 +434,7 @@ test('community reports POST should return 500 when transactional rpc fails', as
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       targetType: 'post',
-      targetId: 'post-1',
+      targetId: 'c0000000-0000-4000-8000-000000000002',
       reason: 'spam',
     }),
   }));

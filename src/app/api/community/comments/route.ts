@@ -4,10 +4,11 @@
  */
 
 import { NextRequest } from 'next/server';
+import { COMMUNITY_LIMITS } from '@/lib/community';
 import { loadSingleCommunityAuthorProfile } from '@/lib/community-server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
-import { hasNonEmptyStrings } from '@/lib/validation';
+import { hasNonEmptyStrings, isValidUUID } from '@/lib/validation';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 export async function POST(request: NextRequest) {
@@ -20,31 +21,44 @@ export async function POST(request: NextRequest) {
         }
         const { user } = auth;
 
-        const body = await request.json() as Record<string, unknown>;
+        const parsed = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
+        if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+        const body = parsed.body;
 
         if (!hasNonEmptyStrings(body, ['post_id', 'content'])) {
             return jsonError('帖子ID和内容不能为空', 400);
         }
+        const postId = body.post_id as string;
+        const content = (body.content as string).trim();
+        const parentId = typeof body.parent_id === 'string' && body.parent_id ? body.parent_id : null;
+        if (!isValidUUID(postId) || (parentId && !isValidUUID(parentId))) {
+            return jsonError('帖子ID无效', 400);
+        }
+        if (!content || content.length > COMMUNITY_LIMITS.comment) {
+            return jsonError(`评论不能超过 ${COMMUNITY_LIMITS.comment} 个字符`, 400);
+        }
 
         const authorProfile = await loadSingleCommunityAuthorProfile(auth.db, user.id);
 
-        // 创建评论
-        let data;
-        try {
-            data = await withRetry(() => auth.db.tx((trx) => trx
+        // 帖子必须存在且未删除；回复的父评论必须属于同一帖子，两件都在插入事务里核对。
+        const outcome = await withRetry(() => auth.db.tx(async (trx) => {
+            const post = await trx.selectFrom('community_posts').select('id')
+                .where('id', '=', postId).where('is_deleted', '=', false).executeTakeFirst();
+            if (!post) return { ok: false as const, error: '帖子不存在或已删除', status: 404 };
+            if (parentId) {
+                const parent = await trx.selectFrom('community_comments').select('post_id')
+                    .where('id', '=', parentId).where('is_deleted', '=', false).executeTakeFirst();
+                if (!parent || parent.post_id !== postId) return { ok: false as const, error: '父评论不存在或不属于该帖子', status: 400 };
+            }
+            const data = await trx
                 .insertInto('community_comments')
-                .values({
-                    post_id: body.post_id as string,
-                    user_id: user.id,
-                    parent_id: typeof body.parent_id === 'string' && body.parent_id ? body.parent_id : null,
-                    content: body.content as string,
-                })
+                .values({ post_id: postId, user_id: user.id, parent_id: parentId, content })
                 .returningAll()
-                .executeTakeFirstOrThrow()));
-        } catch (commentError) {
-            console.error('创建评论失败:', commentError);
-            return jsonError('创建评论失败', 500);
-        }
+                .executeTakeFirstOrThrow();
+            return { ok: true as const, data };
+        }));
+        if (!outcome.ok) return jsonError(outcome.error, outcome.status);
+        const data = outcome.data;
 
         return jsonOk({
             id: data.id,

@@ -116,9 +116,22 @@ function hasOwn(obj: Record<string, unknown>, key: string): boolean {
     return Object.prototype.hasOwnProperty.call(obj, key);
 }
 
+/** Post and comment limits: the API, the editor counters and the body cap all agree on these. */
+export const COMMUNITY_LIMITS = {
+    title: 120,
+    content: 20_000,
+    tags: 8,
+    tag: 24,
+    comment: 5_000,
+    reportDescription: 500,
+} as const;
+
 function normalizeTags(value: unknown): string[] | { error: string } {
     if (!Array.isArray(value)) {
         return { error: 'tags 必须是字符串数组' };
+    }
+    if (value.length > COMMUNITY_LIMITS.tags) {
+        return { error: `最多 ${COMMUNITY_LIMITS.tags} 个标签` };
     }
 
     const tags: string[] = [];
@@ -127,6 +140,9 @@ function normalizeTags(value: unknown): string[] | { error: string } {
             return { error: 'tags 必须是字符串数组' };
         }
         const trimmed = entry.trim();
+        if (trimmed.length > COMMUNITY_LIMITS.tag) {
+            return { error: `每个标签不能超过 ${COMMUNITY_LIMITS.tag} 个字符` };
+        }
         if (trimmed) {
             tags.push(trimmed);
         }
@@ -149,14 +165,22 @@ export function normalizePostInput(
         if (typeof input.title !== 'string' || !input.title.trim()) {
             return { error: '标题和内容不能为空' };
         }
-        data.title = input.title.trim();
+        const title = input.title.trim();
+        if (title.length > COMMUNITY_LIMITS.title) {
+            return { error: `标题不能超过 ${COMMUNITY_LIMITS.title} 个字符` };
+        }
+        data.title = title;
     }
 
     if (mode === 'create' || hasOwn(input, 'content')) {
         if (typeof input.content !== 'string' || !input.content.trim()) {
             return { error: '标题和内容不能为空' };
         }
-        data.content = input.content.trim();
+        const content = input.content.trim();
+        if (content.length > COMMUNITY_LIMITS.content) {
+            return { error: `正文不能超过 ${COMMUNITY_LIMITS.content} 个字符` };
+        }
+        data.content = content;
     }
 
     if (mode === 'create' || hasOwn(input, 'category')) {
@@ -208,6 +232,10 @@ export const REPORT_REASONS: { value: ReportReason; label: string }[] = [
     { value: 'inappropriate', label: '不当内容' },
     { value: 'other', label: '其他原因' },
 ];
+
+export function isReportReason(value: unknown): value is ReportReason {
+    return typeof value === 'string' && REPORT_REASONS.some((reason) => reason.value === value);
+}
 
 // =====================================================
 // 帖子 CRUD 操作

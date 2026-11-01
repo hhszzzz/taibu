@@ -8,7 +8,7 @@
 import { NextRequest } from 'next/server';
 import { CommunityComment, normalizePostInput } from '@/lib/community';
 import { loadCommunityAuthorProfileMap, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
-import { getAuthContext, jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { getAuthContext, jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
@@ -195,12 +195,9 @@ export async function PUT(
         const { user } = auth;
 
         const { id } = await params;
-        let body: unknown;
-        try {
-            body = await request.json();
-        } catch {
-            return jsonError('请求体不是合法 JSON', 400);
-        }
+        const parsed = await readJsonBody(request, 64 * 1024);
+        if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+        const body = parsed.body;
 
         const normalized = normalizePostInput(body, 'update');
         if ('error' in normalized) {
@@ -228,7 +225,7 @@ export async function PUT(
         }
 
         if (!data) {
-            return jsonError('更新帖子失败', 500);
+            return jsonError('帖子不存在或无权修改', 404);
         }
 
         const authorMap = await loadCommunityAuthorProfileMap(auth.db, [user.id]);

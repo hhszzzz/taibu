@@ -7,7 +7,7 @@
 import { NextRequest } from 'next/server';
 import { PostCategory, PostFilters, normalizePostInput } from '@/lib/community';
 import { loadCommunityAuthorProfileMap, loadSingleCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { anonDb } from '@/lib/db/context.server';
 import { escapeLike } from '@/lib/db/sql-helpers';
 import { withRetry } from '@/lib/retry';
@@ -73,12 +73,9 @@ export async function POST(request: NextRequest) {
         }
         const { user } = auth;
 
-        let body: unknown;
-        try {
-            body = await request.json();
-        } catch {
-            return jsonError('请求体不是合法 JSON', 400);
-        }
+        const parsed = await readJsonBody(request, 64 * 1024);
+        if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+        const body = parsed.body;
 
         const normalized = normalizePostInput(body, 'create');
         if ('error' in normalized) {

@@ -6,9 +6,9 @@
 
 import { NextRequest } from 'next/server';
 import { TargetType, VoteType } from '@/lib/community';
-import { getAuthContext, jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { getAuthContext, jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
-import { missingFields, missingSearchParams } from '@/lib/validation';
+import { isValidUUID, missingFields, missingSearchParams } from '@/lib/validation';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
 export async function GET(request: NextRequest) {
@@ -54,7 +54,9 @@ export async function POST(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status);
         }
-        const body = await request.json();
+        const parsed = await readJsonBody<Record<string, unknown>>(request, 4 * 1024);
+        if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+        const body = parsed.body;
         const { targetType, targetId, voteType } = body as {
             targetType: TargetType;
             targetId: string;
@@ -72,6 +74,9 @@ export async function POST(request: NextRequest) {
         if (!['up', 'down'].includes(voteType)) {
             return jsonError('无效的投票类型', 400);
         }
+        if (!isValidUUID(targetId)) {
+            return jsonError('目标ID无效', 400);
+        }
 
         let data: unknown;
         try {
@@ -81,6 +86,7 @@ export async function POST(request: NextRequest) {
                 p_vote_type: voteType,
             });
         } catch (error) {
+            if ((error as { code?: string }).code === 'P0002') return jsonError('目标不存在或已删除', 404);
             console.error('投票失败:', error);
             return jsonError('投票失败', 500);
         }

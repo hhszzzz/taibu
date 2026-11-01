@@ -3613,6 +3613,33 @@ BEGIN
     RAISE EXCEPTION 'authentication required' USING ERRCODE = '42501';
   END IF;
 
+  IF p_reason NOT IN ('spam', 'abuse', 'inappropriate', 'other') THEN
+    RAISE EXCEPTION 'invalid reason' USING ERRCODE = '22023';
+  END IF;
+
+  IF length(coalesce(p_description, '')) > 500 THEN
+    RAISE EXCEPTION 'description too long' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_target_type = 'post' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.community_posts WHERE id = p_target_id AND NOT is_deleted) THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+  ELSIF p_target_type = 'comment' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.community_comments WHERE id = p_target_id AND NOT is_deleted) THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+  ELSE
+    RAISE EXCEPTION 'invalid target_type' USING ERRCODE = '22023';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM public.community_reports
+    WHERE reporter_id = v_user_id AND target_type = p_target_type AND target_id = p_target_id AND status = 'pending'
+  ) THEN
+    RAISE EXCEPTION 'already reported' USING ERRCODE = '23505';
+  END IF;
+
   INSERT INTO public.community_reports (
     reporter_id,
     target_type,
@@ -3721,6 +3748,14 @@ BEGIN
 
   IF p_vote_type NOT IN ('up', 'down') THEN
     RAISE EXCEPTION 'invalid vote_type' USING ERRCODE = '22023';
+  END IF;
+
+  IF p_target_type = 'post' THEN
+    IF NOT EXISTS (SELECT 1 FROM public.community_posts WHERE id = p_target_id AND NOT is_deleted) THEN
+      RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
+    END IF;
+  ELSIF NOT EXISTS (SELECT 1 FROM public.community_comments WHERE id = p_target_id AND NOT is_deleted) THEN
+    RAISE EXCEPTION 'target not found' USING ERRCODE = 'P0002';
   END IF;
 
   PERFORM pg_advisory_xact_lock(

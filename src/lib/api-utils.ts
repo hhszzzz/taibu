@@ -191,6 +191,17 @@ export async function readRequestBytes(request: Request, maxBytes: number): Prom
     return { bytes: Buffer.concat(chunks) };
 }
 
+/** Reads a JSON body with a byte cap, so an oversized payload is refused before it is buffered whole. */
+export async function readJsonBody<T = unknown>(request: Request, maxBytes: number): Promise<{ body: T } | { error: { message: string; status: number } }> {
+    const input = await readRequestBytes(request, maxBytes);
+    if ('error' in input) return input;
+    try {
+        return { body: JSON.parse(input.bytes.toString('utf8')) as T };
+    } catch {
+        return { error: { message: '请求体不是合法 JSON', status: 400 } };
+    }
+}
+
 /** Parses a multipart body without ever buffering more than `maxBytes`. */
 export async function readMultipartForm(
     request: Request,

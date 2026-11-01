@@ -23,7 +23,7 @@ export const MCP_EXPOSURE_HINTS: Record<McpExposure, string> = {
 export const AGENT_APPROVAL_MODES = ['auto', 'manual', 'allow_all'] as const;
 export type AgentApprovalMode = (typeof AGENT_APPROVAL_MODES)[number];
 export const AGENT_APPROVAL_LABELS: Record<AgentApprovalMode, string> = {
-  auto: '自动', manual: '每次确认', allow_all: '允许任何操作',
+  auto: '自动', manual: '手动', allow_all: '全部允许',
 };
 export const AGENT_APPROVAL_HINTS: Record<AgentApprovalMode, string> = {
   auto: '只有标了「征求同意」的外部工具才先问你。',

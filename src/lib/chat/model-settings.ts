@@ -26,7 +26,7 @@ export interface NextTaskConfiguration {
   codeMode: boolean;
   /** Agent 计划模式：模型先提交分析计划，用户批准后再执行；每个任务创建时固定。 */
   planMode: boolean;
-  /** 外部工具是否先征求同意：自动 / 每次确认 / 允许任何操作。 */
+  /** 外部工具是否先征求同意：自动 / 手动 / 全部允许。 */
   approval: AgentApprovalMode;
   collaborators: AgentCollaborator[];
 }

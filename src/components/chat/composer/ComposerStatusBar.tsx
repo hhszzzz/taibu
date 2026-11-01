@@ -56,7 +56,7 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
                     onCodeModeChange={props.onCodeModeChange}
                 />
             )}
-            {/* 外部工具的同意方式：自动 / 每次确认 / 允许任何操作。 */}
+            {/* 外部工具的同意方式：自动 / 手动 / 全部允许。 */}
             {agentMode && props.onApprovalChange && (
                 <AgentApprovalMenu value={props.approval ?? 'auto'} disabled={disabled} onChange={props.onApprovalChange} />
             )}

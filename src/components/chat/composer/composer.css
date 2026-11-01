@@ -115,7 +115,9 @@
 .chat-run-mode-trigger { height: 24px; border-radius: 6px; padding: 0 8px; }
 .chat-run-mode-trigger > span { font-size: calc(13 / 16 * 1rem); font-weight: 500; }
 .chat-run-mode-trigger > svg:last-child { margin-left: -2px; opacity: .7; }
-.chat-run-mode-menu { min-width: 148px; }
+.chat-run-mode-menu { min-width: 7rem; }
+/* 两三个短词的弹窗，收紧内边距和行高，不必撑成默认菜单的尺寸。 */
+.chat-run-mode-menu [role="menuitemradio"] { min-height: 28px; padding-inline: .5rem; }
 .chat-tool-button, .chat-tool-text, .chat-model-trigger, .chat-context-meter { flex-shrink: 0; height: 32px; border-radius: 8px; transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
 .chat-tool-button { display: inline-flex; width: 32px; align-items: center; justify-content: center; border: 1px solid transparent; color: var(--foreground-secondary); }
 .chat-tool-button.is-bordered { border-color: transparent; }
@@ -253,7 +255,8 @@
 .chat-model-options > [role^="menuitem"][data-highlighted],
 .chat-model-action[data-highlighted] { background: transparent; color: var(--accent-hover); }
 :is(.chat-plus-menu [role^="menuitem"], .chat-model-options > [role^="menuitem"])[data-disabled] { opacity: .55; cursor: not-allowed; }
-.chat-plus-menu [role^="menuitem"][aria-checked="true"], .chat-plus-menu [role^="menuitem"][aria-checked="true"] > svg { background: transparent; color: var(--accent-hover); }
+/* 只换文字色：底色留给 data-highlighted，勾选过的行悬停时仍然有底色。 */
+.chat-plus-menu [role^="menuitem"][aria-checked="true"], .chat-plus-menu [role^="menuitem"][aria-checked="true"] > svg { color: var(--accent-hover); }
 /* The toolbar carries the Agent web switch except on phones. */
 
 /* claude + 菜单分组横线 */

@@ -17,6 +17,10 @@ export TAIBU_TAG="$TAG"
 ROOT="${ROOT:-/opt/taibu/source}"
 # host: an existing system Caddy proxies 127.0.0.1:3000 (hw).
 # container: this compose stack owns the caddy service and 80/443.
+# The updater service passes no EDGE_MODE, so compose.env keeps the host's choice.
+if [ -z "${EDGE_MODE:-}" ] && [ -f "$ENV_FILE" ]; then
+  EDGE_MODE="$(sed -n 's/^EDGE_MODE=//p' "$ENV_FILE" | tail -n 1)"
+fi
 EDGE_MODE="${EDGE_MODE:-container}"
 case "$EDGE_MODE" in
   host|container) ;;

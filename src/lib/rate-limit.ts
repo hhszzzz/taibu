@@ -1,10 +1,4 @@
-/**
- * Distributed rate limiting backed exclusively by Redis (P4).
- *
- * Redis outages preserve fail-open availability without falling back to a
- * per-process counter, so a broken limiter never silently admits more traffic
- * on each web instance.
- */
+/** Distributed rate limiting backed exclusively by Redis. Redis failure denies admission. */
 
 import { consumeRedisRateLimit } from '@/lib/rate-limit-redis';
 
@@ -42,7 +36,7 @@ export async function checkRateLimit(
         return await consumeRedisRateLimit(identifier, endpoint, config);
     } catch {
         console.error('Rate limit check failed: redis unavailable');
-        return { allowed: true, remaining: config.maxRequests, resetAt: new Date() };
+        return { allowed: false, remaining: 0, resetAt: new Date(Date.now() + config.windowMs) };
     }
 }
 

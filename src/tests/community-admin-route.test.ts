@@ -50,3 +50,43 @@ test('community admin post rejects invalid action', async (t) => {
     assert.equal(response.status, 400);
     assert.equal(payload.error, '无效操作');
 });
+
+test('community report submission is rate limited before writing a report', async (t) => {
+    const apiUtils = require('../lib/api-utils') as any;
+    const featureGate = require('../lib/feature-gate-utils') as any;
+    const rateLimit = require('../lib/rate-limit') as any;
+    const originalRequireUserContext = apiUtils.requireUserContext;
+    const originalEnsureFeatureEnabledFresh = featureGate.ensureFeatureEnabledFresh;
+    const originalCheckRateLimit = rateLimit.checkRateLimit;
+    let rpcCalls = 0;
+    let limiterArgs: unknown[] = [];
+
+    apiUtils.requireUserContext = async () => ({
+        db: { rpc: async () => { rpcCalls++; return { status: 'ok', report: {} }; } },
+        user: { id: 'user-1' },
+    });
+    featureGate.ensureFeatureEnabledFresh = async () => null;
+    rateLimit.checkRateLimit = async (...args: unknown[]) => {
+        limiterArgs = args;
+        return { allowed: false, remaining: 0, resetAt: new Date() };
+    };
+    t.after(() => {
+        apiUtils.requireUserContext = originalRequireUserContext;
+        featureGate.ensureFeatureEnabledFresh = originalEnsureFeatureEnabledFresh;
+        rateLimit.checkRateLimit = originalCheckRateLimit;
+    });
+
+    const { POST } = await import('../app/api/community/reports/route');
+    const request = new NextRequest('http://localhost/api/community/reports', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetType: 'post', targetId: '00000000-0000-4000-8000-000000000001', reason: 'spam' }),
+    });
+    const response = await POST(request);
+    const payload = await response.json();
+
+    assert.equal(response.status, 429);
+    assert.equal(payload.error, '举报过于频繁，请稍后再试');
+    assert.deepEqual(limiterArgs, ['user-1', '/api/community/reports', { maxRequests: 5, windowMs: 60_000 }]);
+    assert.equal(rpcCalls, 0);
+});

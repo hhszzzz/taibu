@@ -3633,6 +3633,11 @@ BEGIN
     RAISE EXCEPTION 'invalid target_type' USING ERRCODE = '22023';
   END IF;
 
+  PERFORM pg_advisory_xact_lock(hashtextextended(
+    v_user_id::text || ':' || p_target_type || ':' || p_target_id::text,
+    0
+  ));
+
   IF EXISTS (
     SELECT 1 FROM public.community_reports
     WHERE reporter_id = v_user_id AND target_type = p_target_type AND target_id = p_target_id AND status = 'pending'

@@ -11,6 +11,9 @@ import { jsonError, jsonOk, readJsonBody, requireAdminContext, requireUserContex
 import { parsePagination } from '@/lib/pagination';
 import { isValidUUID, missingFields } from '@/lib/validation';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { checkRateLimit } from '@/lib/rate-limit';
+
+const REPORT_RATE_LIMIT = { maxRequests: 5, windowMs: 60_000 } as const;
 
 export async function GET(request: NextRequest) {
     try {
@@ -74,6 +77,9 @@ export async function POST(request: NextRequest) {
         }
         if ((description ?? '').length > COMMUNITY_LIMITS.reportDescription) {
             return jsonError(`举报说明不能超过 ${COMMUNITY_LIMITS.reportDescription} 个字符`, 400);
+        }
+        if (!(await checkRateLimit(auth.user.id, '/api/community/reports', REPORT_RATE_LIMIT)).allowed) {
+            return jsonError('举报过于频繁，请稍后再试', 429);
         }
 
         let data: unknown;

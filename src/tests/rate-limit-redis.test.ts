@@ -91,13 +91,13 @@ test('Redis connect deadline is bounded and never dispatches admission', async t
     assert.equal(fixture.disconnected(), 1);
 });
 
-test('Redis-only rate limiting fails open without touching the database', async (t) => {
+test('Redis-only rate limiting fails closed without touching the database', async (t) => {
     const redis = require('../lib/rate-limit-redis') as typeof import('../lib/rate-limit-redis');
     const { checkRateLimit } = require('../lib/rate-limit') as typeof import('../lib/rate-limit');
     t.mock.method(redis, 'consumeRedisRateLimit', async () => { throw new Error('redis://secret:password@host'); });
     const diagnostics: unknown[][] = [];
     t.mock.method(console, 'error', (...args: unknown[]) => { diagnostics.push(args); });
-    for (let i = 0; i < 4; i++) assert.equal((await checkRateLimit('user', '/chat', config)).allowed, true);
+    for (let i = 0; i < 4; i++) assert.equal((await checkRateLimit('user', '/chat', config)).allowed, false);
     assert.ok(!JSON.stringify(diagnostics).includes('secret'));
     await assert.rejects(checkRateLimit('user', '/chat', { maxRequests: 0, windowMs: 1 }), /Invalid/);
     await assert.rejects(checkRateLimit('', '/chat', config), /Invalid/);

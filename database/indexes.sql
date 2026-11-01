@@ -81,6 +81,10 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS community_comments_post_idx ON public.co
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS community_reports_reporter_idx ON public.community_reports USING btree (reporter_id);
 
+CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS community_reports_pending_target_unique
+  ON public.community_reports USING btree (reporter_id, target_type, target_id)
+  WHERE (status = 'pending'::text);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_content_trgm ON public.conversation_messages USING gin (content extensions.gin_trgm_ops);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS conversation_messages_conversation_created_idx ON public.conversation_messages USING btree (conversation_id, created_at DESC);

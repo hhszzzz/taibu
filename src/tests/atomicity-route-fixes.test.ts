@@ -350,6 +350,7 @@ test('knowledge-base id routes fail closed instead of falling back to the system
 
 test('community reports POST should submit and notify via transactional rpc', async (t) => {
   mockAIFeatureState(t);
+  mockAIRateLimit(t);
   const apiUtils = require('../lib/api-utils') as {
     requireUserContext: typeof import('../lib/api-utils').requireUserContext;
   };
@@ -410,6 +411,7 @@ test('community reports POST should submit and notify via transactional rpc', as
 
 test('community reports POST should return 500 when transactional rpc fails', async (t) => {
   mockAIFeatureState(t);
+  mockAIRateLimit(t);
   const apiUtils = require('../lib/api-utils') as {
     requireUserContext: typeof import('../lib/api-utils').requireUserContext;
   };
@@ -529,7 +531,7 @@ test('records import POST should return 500 when transactional RPC fails', async
   assert.equal(body.error, '导入数据失败');
 });
 
-test('checkRateLimit should fail open when Redis is unavailable', async (t) => {
+test('checkRateLimit should fail closed when Redis is unavailable', async (t) => {
   const redis = require('../lib/rate-limit-redis') as typeof import('../lib/rate-limit-redis');
   t.mock.method(redis, 'consumeRedisRateLimit', async () => { throw new Error('redis down'); });
   t.mock.method(console, 'error', () => {});
@@ -540,8 +542,8 @@ test('checkRateLimit should fail open when Redis is unavailable', async (t) => {
     windowMs: 60_000,
   });
 
-  assert.equal(result.allowed, true);
-  assert.equal(result.remaining, 10);
+  assert.equal(result.allowed, false);
+  assert.equal(result.remaining, 0);
 });
 
 test('mbti save should persist through shared save helper and return reading id', async (t) => {

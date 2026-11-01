@@ -59,7 +59,7 @@ TaiBu 的本地 `stdio` MCP Server，适合直接接入 Claude Desktop、Cursor�
 
 ## 方法
 
-除计算工具外，服务还提供太卜的 13 个方法：每个体系一个（断法、工具流程与输出要求），另有「盲派八字」与不需排盘的「周公解梦」。
+除计算工具外，服务还提供太卜的 15 个方法：每个体系一个默认方法（断法、工具流程与输出要求），另有流派方法「盲派八字」、不需排盘的「周公解梦」，以及与体系方法同用的技法「推理时柱」（`birth-hour`）与「验证前事」（`past-events`）。
 
 - 工具 `load_analysis_method`：模型自己加载方法，`id` 填方法 ID，或填刚调用的工具名（得到该体系的默认方法）。服务说明（`instructions`）提示模型解读前先加载。
 - prompts：每个方法一个同名 prompt（如 `bazi`、`bazi-mangpai`、`dream`），可选参数 `question`。支持 prompts 的客户端可以把它们当作斜杠命令选用。
@@ -80,7 +80,7 @@ MCP 没有「延迟提供」的工具：`tools/list` 一次列出全部工具，
 }
 ```
 
-`core` 只列出 11 个排盘工具与 `load_analysis_method`，另加 `tool_search`（按中文关键词查找其余 14 个低频工具，返回用途与参数 schema）和 `tool_call`（按名称调用这些工具，结果与直接调用相同）；给模型看的工具说明约减少六成。默认值 `all` 列出全部工具；其他取值会让服务启动失败并说明原因。
+`core` 只列出 11 个排盘工具与 `load_analysis_method`，另加 `tool_search`（按中文关键词查找其余 15 个低频工具，返回用途与参数 schema）和 `tool_call`（按名称调用这些工具，结果与直接调用相同）；给模型看的工具说明约减少六成。默认值 `all` 列出全部工具；其他取值会让服务启动失败并说明原因。
 
 ## 返回结构
 
@@ -134,6 +134,8 @@ node packages/mcp/dist/index.js
 
 | 版本 | 批次说明 |
 |------|----------|
+| `4.0.0` | 随 `taibu-core` 4.0.0 发布：26 个工具（新增 8 个详查工具与 `almanac_select`、`bazi_hepan`、`bazi_hour_candidates`）、15 个方法（`load_analysis_method` 与同名 prompt）、`TAIBU_MCP_TOOLS=core` 精简列表；工具文本只写新事实，计算规则只在 `structuredContent` |
+| `3.6.0` | 随 `taibu-core` 3.6.0 发布：六爻反伏、应期类型与三合提示等输出补充 |
 | `3.5.0` | 升级 MCP `2026-07-28` 与官方 TypeScript SDK v2，兼容旧版 stdio 初始化流程 |
 | `3.4.1` | 修复 npm 包中 `taibu-core` 依赖误发为 `workspace:*`，恢复 `npx -y taibu-mcp` 可用性 |
 | `3.4.0` | 新增 `astrology` 西方占星命盘与流运 |

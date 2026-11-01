@@ -167,6 +167,15 @@ MCP 在发送结构化结果前按公开 schema 校验字段类型、必需主�
 结构化结果中的 `计算规则` 与原始结果的选项快照用于复现口径；`计算规则` 只在 `structuredContent` 里，不写进文本。保存历史结果时应同时保存输入、随机种子和原始输出。
 日期/时区拒绝无效值；没有实现的分支会报错。历史保存结果缺少新增元数据时仍可渲染。
 
+## 版本批次
+
+| 版本 | 批次说明 |
+|------|----------|
+| `4.0.0` | 新增 8 个详查工具（`bazi_relations`、`bazi_wuxing`、`bazi_liunian_scan`、`ziwei_palace`、`liuyao_line`、`qimen_palace`、`daliuren_lessons`、`astrology_point`）与 `almanac_select`、`bazi_hepan`、`bazi_hour_candidates`；15 个方法（`taibu-core/mcp` 的方法 API）与 `tool_search`；八字不知时辰时只排三柱。**破坏性**：工具文本只写新事实，计算规则只在结构化结果；`bazi_relations` 只列岁运叠加关系；`bazi_wuxing` 去掉五行统计、相生链、十神分布与透干；`almanac_select.excludeClash` 改为数组；不再导出 `calculateBaziFiveElementsStats` |
+| `3.6.0` | 六爻反伏范围、应期提示类型、未成三合提示与逐候选依据等可选输出字段 |
+
+更早的版本见 Git 历史。
+
 ## Related Packages
 
 - [`taibu-mcp`](https://www.npmjs.com/package/taibu-mcp)

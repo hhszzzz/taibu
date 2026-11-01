@@ -6,7 +6,7 @@ TaiBu 的公共在线 MCP Server，使用 MCP HTTP 传输，任何网络客户�
 
 ## 功能
 
-- 复用 `taibu-core` 的全部公开 MCP 工具，以及 13 个方法：模型用 `load_analysis_method` 加载，用户可选用同名 prompt
+- 复用 `taibu-core` 的全部 26 个 MCP 工具，以及 15 个方法：模型用 `load_analysis_method` 加载，用户可选用同名 prompt
 - 标准入口：`POST /mcp` 列出全部工具；`POST /mcp/core` 只列排盘工具，其余低频工具经 `tool_search`／`tool_call` 使用
 - `content[0].text` 返回规范文本，`structuredContent` 返回 canonical JSON
 - MCP `2026-07-28`：`server/discover`、每请求能力声明、标准 HTTP 头校验与 `subscriptions/listen`
@@ -81,3 +81,12 @@ docker compose --env-file .env -f docker-compose.mcp.yml up -d --build
 - `taibu-core`：算法、工具 manifest、规范文本和 JSON
 - `taibu-mcp`：本地 stdio MCP Server，支持新旧协议
 - `taibu-mcp-server`：公共 HTTP MCP 运行时，主协议为 `2026-07-28`
+
+## 版本批次
+
+| 版本 | 批次说明 |
+|------|----------|
+| `4.0.0` | 随 `taibu-core` 4.0.0 发布：26 个工具与 15 个方法，新增 `POST /mcp/core` 精简入口（`tool_search`／`tool_call`），方法以 `load_analysis_method` 与同名 prompt 提供 |
+| `3.1.1` | MCP `2026-07-28` 公共 HTTP 运行时，清理旧的认证与 Supabase 构建产物 |
+
+更早的版本见 Git 历史。

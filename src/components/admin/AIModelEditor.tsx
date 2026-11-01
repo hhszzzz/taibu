@@ -10,7 +10,6 @@ import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { FilterChip } from '@/components/ui/FilterChip';
 import { Textarea } from '@/components/ui/Textarea';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
@@ -151,6 +150,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [confirm, setConfirm] = useState<'discard' | 'delete' | null>(null);
+    const [catalogConfirm, setCatalogConfirm] = useState<ModelsDevSuggestion | null>(null);
     const [lookup, setLookup] = useState<{ busy: boolean; error: string | null; searched: boolean; models: ModelsDevSuggestion[] }>(
         { busy: false, error: null, searched: false, models: [] });
     const lookupSeq = useRef(0);
@@ -207,30 +207,9 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
     }, [chat, draft.modelKey, lookupModelsDev]);
 
     const applyCatalog = (suggestion: ModelsDevSuggestion) => {
-        const levels = suggestion.reasoning ? suggestion.thinkingLevels : [];
-        patch({
-            ...(suggestion.contextWindow ? { contextWindow: String(suggestion.contextWindow) } : {}),
-            ...(suggestion.maxTokens ? { defaultMaxTokens: String(suggestion.maxTokens) } : {}),
-            ...(draft.displayName ? {} : { displayName: suggestion.name }),
-            thinkingLevels: levels,
-            defaultReasoningEffort: levels.includes('medium') ? 'medium' : levels.at(-1) ?? null,
-            isReasoningDefault: levels.length > 0 && draft.isReasoningDefault,
-            supportsVision: suggestion.vision || draft.supportsVision,
-        });
-        showToast('success', `已填入 ${suggestion.name} 的目录值`);
+        setCatalogConfirm(suggestion);
     };
 
-    const toggleLevel = (level: AIReasoningEffort) => {
-        const levels = draft.thinkingLevels.includes(level) ? draft.thinkingLevels.filter(item => item !== level) : [...draft.thinkingLevels, level];
-        const ordered = AI_REASONING_EFFORTS.filter(item => levels.includes(item));
-        // The default stays one of the listed levels.
-        const fallback = ordered.includes('medium') ? 'medium' : ordered.at(-1) ?? null;
-        patch({
-            thinkingLevels: ordered,
-            defaultReasoningEffort: draft.defaultReasoningEffort && ordered.includes(draft.defaultReasoningEffort) ? draft.defaultReasoningEffort : ordered.length ? fallback : null,
-            ...(ordered.length ? {} : { isReasoningDefault: false }),
-        });
-    };
     const setSource = (index: number, change: Partial<AdminModelSource>) =>
         patch({ sources: draft.sources.map((source, position) => (position === index ? { ...source, ...change } : source)) });
     const moveSource = (index: number, offset: number) => {
@@ -372,28 +351,27 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             </section>}
 
             {chat && <section className="ai-catalog-section" aria-labelledby={`${titleId}-thinking`}>
-                <header><h3 id={`${titleId}-thinking`}>思考</h3><p>勾选模型支持的等级即表示支持思考；不勾选时不会发送思考参数。</p></header>
-                <div className="ai-catalog-field">
-                    <span>可选等级</span>
-                    <div className="ai-catalog-limit" role="group" aria-label="可选思考等级">
-                        {AI_REASONING_EFFORTS.map(level => <FilterChip key={level} className="ai-catalog-chip"
-                            pressed={draft.thinkingLevels.includes(level)} onClick={() => toggleLevel(level)}>{THINKING_LEVEL_LABELS[level]}</FilterChip>)}
-                    </div>
-                    <span className="ai-catalog-hint">输入框的「努力程度」只列出这里勾选的等级。</span>
-                </div>
-                {draft.thinkingLevels.length > 0 && <>
-                    <div className="ai-catalog-grid">
-                        <label className="ai-catalog-field"><span>默认等级</span>
-                            <Select ariaLabel="默认等级" value={draft.defaultReasoningEffort ?? ''}
-                                onChange={value => patch({ defaultReasoningEffort: (value || null) as AIReasoningEffort | null })}
-                                options={draft.thinkingLevels.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] }))} />
-                        </label>
-                    </div>
-                    <div className="ai-catalog-toggle">
-                        <span>默认开启思考</span>
-                        <SettingsSwitch label="默认开启思考" checked={draft.isReasoningDefault} onToggle={() => patch({ isReasoningDefault: !draft.isReasoningDefault })} />
-                    </div>
-                </>}
+                <header><h3 id={`${titleId}-thinking`}>思考</h3><p>选择默认思考等级即表示支持思考；选「不支持」时不会发送思考参数。</p></header>
+                <label className="ai-catalog-field"><span>默认思考等级</span>
+                    <Select ariaLabel="默认思考等级" value={draft.defaultReasoningEffort ?? ''}
+                        onChange={value => {
+                            const level = (value || null) as AIReasoningEffort | null;
+                            patch({
+                                defaultReasoningEffort: level,
+                                thinkingLevels: level ? AI_REASONING_EFFORTS.filter(item => AI_REASONING_EFFORTS.indexOf(item) <= AI_REASONING_EFFORTS.indexOf(level)) : [],
+                                isReasoningDefault: level !== null && draft.isReasoningDefault,
+                            });
+                        }}
+                        options={[
+                            { value: '', label: '不支持' },
+                            ...AI_REASONING_EFFORTS.map(level => ({ value: level, label: THINKING_LEVEL_LABELS[level] })),
+                        ]} />
+                    <span className="ai-catalog-hint">选择最高等级；用户可以在输入框选择这个等级及以下的等级。</span>
+                </label>
+                {draft.defaultReasoningEffort && <div className="ai-catalog-toggle">
+                    <span>默认开启思考</span>
+                    <SettingsSwitch label="默认开启思考" checked={draft.isReasoningDefault} onToggle={() => patch({ isReasoningDefault: !draft.isReasoningDefault })} />
+                </div>}
             </section>}
 
             <section className="ai-catalog-section" aria-labelledby={`${titleId}-sources`}>
@@ -446,5 +424,23 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
             description={confirm === 'delete' ? '用户的模型菜单里不再出现它；进行中的任务会失败。' : '关闭后，这次填写的内容不会保存。'}
             confirmText={confirm === 'delete' ? '删除' : '放弃修改'}
             onConfirm={() => (confirm === 'delete' ? remove() : onClose())} />
+        {catalogConfirm && <ConfirmDialog isOpen onClose={() => setCatalogConfirm(null)} loading={false}
+            title={`从 models.dev 填入 ${catalogConfirm.name}？`}
+            description={`将更新上下文窗口${catalogConfirm.contextWindow ? `（${formatTokenCount(catalogConfirm.contextWindow)}）` : '（未知）'}、输出上限${catalogConfirm.maxTokens ? `（${formatTokenCount(catalogConfirm.maxTokens)}）` : '（不设）'}${catalogConfirm.reasoning ? '、思考等级' : ''}${catalogConfirm.vision ? '、图片输入能力' : ''}。`}
+            confirmText="填入"
+            onConfirm={() => {
+                const levels = catalogConfirm.reasoning ? [catalogConfirm.thinkingLevels.at(-1) ?? 'medium'].filter(Boolean) as AIReasoningEffort[] : [];
+                patch({
+                    ...(catalogConfirm.contextWindow ? { contextWindow: String(catalogConfirm.contextWindow) } : {}),
+                    ...(catalogConfirm.maxTokens ? { defaultMaxTokens: String(catalogConfirm.maxTokens) } : {}),
+                    ...(draft.displayName ? {} : { displayName: catalogConfirm.name }),
+                    defaultReasoningEffort: levels.length > 0 ? levels[0] : null,
+                    thinkingLevels: levels,
+                    isReasoningDefault: levels.length > 0 && draft.isReasoningDefault,
+                    supportsVision: catalogConfirm.vision || draft.supportsVision,
+                });
+                showToast('success', `已填入 ${catalogConfirm.name} 的目录值`);
+                setCatalogConfirm(null);
+            }} />}
     </Dialog>;
 }

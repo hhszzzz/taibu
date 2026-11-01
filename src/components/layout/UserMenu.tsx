@@ -1,6 +1,6 @@
 'use client';
 
-import { createElement, Fragment, useState } from 'react';
+import { createElement, Fragment, useRef, useState } from 'react';
 import { ChevronRight, ChevronsUpDown } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { BustIcon, FeedbackIcon, GaugeIcon, GithubIcon, LogoutIcon } from '@/lib/navigation/nav-icons';
@@ -110,6 +110,15 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
       ? '加载失败'
       : formatUsd(balance.spendableMicros);
 
+  // 余额卡片：悬停打开，指针离开卡片后收回，不跟用户抢住弹层。
+  const [balanceOpen, setBalanceOpen] = useState(false);
+  const balanceCloseTimer = useRef<number | undefined>(undefined);
+  const keepBalanceOpen = () => { window.clearTimeout(balanceCloseTimer.current); setBalanceOpen(true); };
+  const scheduleBalanceClose = () => {
+    window.clearTimeout(balanceCloseTimer.current);
+    balanceCloseTimer.current = window.setTimeout(() => setBalanceOpen(false), 160);
+  };
+
   const handleSignOut = async () => {
     if (signingOut) return;
     setSigningOut(true);
@@ -180,14 +189,14 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 <Fragment key={item.tab}>
                   <UserMenuShortcutLink {...item} onClick={() => setIsMenuOpen(false)} />
                   {index === 0 ? (
-                    <MenuSub>
-                      <MenuSubTrigger className={`${MENU_ITEM_CLASS} justify-between`}>
+                    <MenuSub open={balanceOpen} onOpenChange={setBalanceOpen}>
+                      <MenuSubTrigger onPointerEnter={keepBalanceOpen} className={`${MENU_ITEM_CLASS} justify-between`}>
                         <span className="flex items-center gap-2.5">
                           {createElement(GaugeIcon, { size: 18, className: MENU_ICON_CLASS })}
                           <span>余额</span>
                         </span>
                       </MenuSubTrigger>
-                      <MenuSubContent sideOffset={8} className="user-usage-menu">
+                      <MenuSubContent sideOffset={8} className="user-usage-menu" onPointerEnter={keepBalanceOpen} onPointerLeave={scheduleBalanceClose}>
                         <div className="px-1.5 py-1">
                           <div className="flex items-baseline justify-between gap-3 px-1.5 pt-1">
                             <strong className="text-[13px] font-medium leading-[1.4] text-foreground">可用额度</strong>

@@ -50,7 +50,7 @@ try {
   } else {
     const migrResult = await runMigrations(client, root, { log, checkOnly });
     if (checkOnly) {
-      log(`Would apply ${migrResult.applied} migration(s)`);
+      log(`Would apply ${migrResult.plan.length} migration(s)`);
       for (const m of migrResult.plan) {
         log(`  - ${m.version} ${m.name}`);
       }

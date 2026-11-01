@@ -105,7 +105,7 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
     const adminUrl = (name) => `postgres://postgres:${postgresPassword}@127.0.0.1:${hostPort}/${name}`;
     const native = new pg.Client({ host: '127.0.0.1', port: hostPort, user: 'postgres', password: postgresPassword, database });
     await native.connect();
-    const initialize = (target = database) => new Promise((resolve, reject) => execFile(process.execPath, ['scripts/db/init.mjs'], {
+    const initialize = (target = database, args = []) => new Promise((resolve, reject) => execFile(process.execPath, ['scripts/db/init.mjs', ...args], {
       cwd: repoRoot, timeout: 180_000, maxBuffer: 4 * 1024 * 1024,
       env: { ...process.env, SCHEMA_DATABASE_URL: `postgres://taibu_schema:${schemaPassword}@127.0.0.1:${hostPort}/${target}` },
     }, (error, stdout, stderr) => error ? reject(new Error(stderr || error.message)) : resolve(stdout)));
@@ -242,6 +242,119 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
             ALTER TABLE public.notifications DROP COLUMN review_extra;
             ALTER TABLE public.notifications RENAME COLUMN review_missing_read TO is_read;`);
         }
+      });
+      await t.test('legacy subscription quotas and duplicate reports migrate before reconciliation', async () => {
+        const userId = '00000000-0000-4000-8000-0000000000e1';
+        const planId = '00000000-0000-4000-8000-0000000000e2';
+        const subscriptionId = '00000000-0000-4000-8000-0000000000e3';
+        const postId = '00000000-0000-4000-8000-0000000000e4';
+        const earlierReportId = '00000000-0000-4000-8000-0000000000e5';
+        const duplicateReportId = '00000000-0000-4000-8000-0000000000e6';
+        await native.query(`
+          DROP FUNCTION public.billing_apply_limit_reset(public.user_subscription_limits);
+          DROP TABLE public.user_subscription_limits;
+          DROP TABLE public.subscription_plan_limits;
+          DROP INDEX IF EXISTS public.community_reports_pending_target_unique;
+          ALTER TABLE public.subscription_plans
+            ADD COLUMN allowance_micros bigint NOT NULL DEFAULT 25000000,
+            ADD COLUMN reset_period text NOT NULL DEFAULT 'never';
+          ALTER TABLE public.user_subscriptions
+            ADD COLUMN allowance_micros bigint NOT NULL DEFAULT 12000000,
+            ADD COLUMN reset_period text NOT NULL DEFAULT 'daily',
+            ADD COLUMN used_micros bigint NOT NULL DEFAULT 3500000,
+            ADD COLUMN next_reset_at timestamptz DEFAULT '2030-05-06 07:08:09+00';
+        `);
+        await native.query(`
+          INSERT INTO identity.users (id, email, email_verified, name)
+          VALUES ($1, 'legacy-billing@fixture.test', true, '旧订阅用户');
+        `, [userId]);
+        await native.query(`
+          INSERT INTO public.subscription_plans (id, title, price_usd, allowance_micros, reset_period)
+          VALUES ($1, '旧套餐', 9.99, 25000000, 'never');
+        `, [planId]);
+        await native.query(`
+          INSERT INTO public.user_subscriptions
+            (id, user_id, plan_id, title, starts_at, ends_at, status, source, allowance_micros, reset_period, used_micros, next_reset_at)
+          VALUES ($1, $2, $3, '旧订阅', '2029-01-01 00:00:00+00', '2031-01-01 00:00:00+00', 'active', 'admin',
+            12000000, 'daily', 3500000, '2030-05-06 07:08:09+00');
+        `, [subscriptionId, userId, planId]);
+        await native.query(`
+          INSERT INTO public.community_posts (id, user_id, title, content, category)
+          VALUES ($1, $2, '旧举报目标', '迁移验收', 'general');
+        `, [postId, userId]);
+        await native.query(`
+          INSERT INTO public.community_reports (id, reporter_id, target_type, target_id, reason, status, created_at)
+          VALUES ($1, $2, 'post', $3, 'spam', 'pending', '2029-01-01 00:00:00+00'),
+                 ($4, $2, 'post', $3, 'spam', 'pending', '2029-01-02 00:00:00+00');
+        `, [earlierReportId, userId, postId, duplicateReportId]);
+        await native.query("DELETE FROM taibu_meta.schema_migrations WHERE version IN ('0002', '0003')");
+
+        const log = await initialize();
+        assert.match(log, /Applying 0002 0002_subscription_windows/);
+        assert.match(log, /Applying 0003 0003_community_report_dedup/);
+        assert.deepEqual((await native.query(`
+          SELECT period, allowance_micros::text FROM public.subscription_plan_limits WHERE plan_id = $1;
+        `, [planId])).rows, [{ period: 'total', allowance_micros: '25000000' }]);
+        const limit = (await native.query(`
+          SELECT period, allowance_micros::text, used_micros::text, next_reset_at
+          FROM public.user_subscription_limits WHERE subscription_id = $1;
+        `, [subscriptionId])).rows[0];
+        assert.deepEqual({ ...limit, next_reset_at: limit.next_reset_at.toISOString() }, {
+          period: 'daily', allowance_micros: '12000000', used_micros: '3500000', next_reset_at: '2030-05-06T07:08:09.000Z',
+        });
+        const oldColumns = await native.query(`
+          SELECT count(*)::int AS n FROM information_schema.columns
+          WHERE table_schema = 'public' AND (
+            (table_name = 'subscription_plans' AND column_name IN ('allowance_micros', 'reset_period')) OR
+            (table_name = 'user_subscriptions' AND column_name IN ('allowance_micros', 'reset_period', 'used_micros', 'next_reset_at'))
+          );
+        `);
+        assert.equal(oldColumns.rows[0].n, 0);
+        const reports = (await native.query(`
+          SELECT id, status, review_notes FROM public.community_reports
+          WHERE reporter_id = $1 AND target_id = $2 ORDER BY created_at, id;
+        `, [userId, postId])).rows;
+        assert.deepEqual(reports.map(report => [report.id, report.status]), [
+          [earlierReportId, 'pending'], [duplicateReportId, 'dismissed'],
+        ]);
+        assert.match(reports[1].review_notes, /升级时合并重复待处理举报/);
+        assert.equal((await native.query(`
+          SELECT count(*)::int AS n FROM pg_indexes
+          WHERE schemaname = 'public' AND indexname = 'community_reports_pending_target_unique';
+        `)).rows[0].n, 1);
+        assert.equal((await native.query(`
+          SELECT baseline FROM taibu_meta.schema_migrations WHERE version = '0002';
+        `)).rows[0].baseline, false);
+
+        await native.query('DELETE FROM public.community_reports WHERE target_id = $1', [postId]);
+        await native.query('DELETE FROM public.community_posts WHERE id = $1', [postId]);
+        await native.query('DELETE FROM public.user_subscriptions WHERE id = $1', [subscriptionId]);
+        await native.query('DELETE FROM public.subscription_plans WHERE id = $1', [planId]);
+        await native.query('DELETE FROM identity.users WHERE id = $1', [userId]);
+      });
+      await t.test('db:init --check leaves a missing migration ledger untouched', async () => {
+        await native.query('DROP SCHEMA taibu_meta CASCADE');
+        const before = (await native.query(`
+          SELECT md5(string_agg(x, ',' ORDER BY x)) AS hash FROM (
+            SELECT oid::text || ':' || xmin::text AS x FROM pg_class
+            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_proc
+            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_policy
+            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_trigger
+          ) objects;
+        `)).rows[0].hash;
+        const output = await initialize(database, ['--check']);
+        assert.match(output, /Migration ledger is missing/u);
+        assert.match(output, /Would apply 3 migration\(s\)/u);
+        assert.equal((await native.query("SELECT to_regclass('taibu_meta.schema_migrations') AS ledger")).rows[0].ledger, null);
+        const after = (await native.query(`
+          SELECT md5(string_agg(x, ',' ORDER BY x)) AS hash FROM (
+            SELECT oid::text || ':' || xmin::text AS x FROM pg_class
+            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_proc
+            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_policy
+            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_trigger
+          ) objects;
+        `)).rows[0].hash;
+        assert.equal(after, before, 'check-only must not change catalog objects');
       });
       await t.test('retired principals are not created', async () => {
         assert.equal((await native.query("select count(*)::int as n from pg_roles where rolname in ('service_role','taibu_migrator')")).rows[0].n, 0);

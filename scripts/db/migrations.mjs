@@ -193,9 +193,22 @@ export async function executeMigration(client, migration, options = {}) {
 export async function runMigrations(client, root, options = {}) {
   const { log = console.log, checkOnly = false } = options;
 
-  await ensureLedgerTable(client);
   const migrations = await readMigrationFiles(root);
-  const applied = await readAppliedMigrations(client);
+  let applied;
+  if (checkOnly) {
+    const { rows: [{ exists }] } = await client.query(
+      "SELECT to_regclass('taibu_meta.schema_migrations') IS NOT NULL AS exists",
+    );
+    if (exists) {
+      applied = await readAppliedMigrations(client);
+    } else {
+      applied = new Map();
+      log('Migration ledger is missing; treating all migrations as pending without creating it');
+    }
+  } else {
+    await ensureLedgerTable(client);
+    applied = await readAppliedMigrations(client);
+  }
 
   log(`Ledger: ${applied.size} migration(s) recorded`);
 

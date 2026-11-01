@@ -196,7 +196,13 @@ export function planTableSync(declared, live) {
     if (reset.length) plan.options.push(`${target} RESET (${reset.join(', ')})`);
   }
   for (const name of have.keys()) plan.errors.push(`${name}: table is not declared`);
+  // A foreign key needs the referenced key, which may be added in this same pass.
+  plan.addConstraints.sort((a, b) => foreignKey(a) - foreignKey(b));
   return plan;
+}
+
+function foreignKey(constraint) {
+  return Number(constraint.definition.startsWith('FOREIGN KEY '));
 }
 
 function createTableStatement(table) {

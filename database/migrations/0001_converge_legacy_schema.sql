@@ -36,14 +36,18 @@ ALTER TABLE IF EXISTS public.ai_model_gateway_bindings DROP COLUMN IF EXISTS not
 
 ALTER TABLE IF EXISTS public.user_settings DROP COLUMN IF EXISTS daily_briefing_settings;
 
--- app_settings.setting_value: boolean -> jsonb, keeping the stored values
+-- app_settings.setting_value: boolean -> jsonb, keeping the stored values.
+-- The boolean default does not cast to jsonb, so it is replaced around the type change.
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'app_settings' AND column_name = 'setting_value'
       AND data_type = 'boolean'
   ) THEN
-    ALTER TABLE public.app_settings ALTER COLUMN setting_value TYPE jsonb USING to_jsonb(setting_value);
+    ALTER TABLE public.app_settings
+      ALTER COLUMN setting_value DROP DEFAULT,
+      ALTER COLUMN setting_value TYPE jsonb USING to_jsonb(setting_value),
+      ALTER COLUMN setting_value SET DEFAULT 'false'::jsonb;
   END IF;
 END $$;
 

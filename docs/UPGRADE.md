@@ -12,7 +12,7 @@
 
 ## 从 1.0.0 之前的自托管栈升级
 
-1. **备份**。`deploy/deploy.sh` 在升级前会自动 `pg_dump` 一份到 `/opt/taibu/backups/`；本地栈用 `pnpm selfhost backup --project <项目> --output <文件>`。数据重要时，先把备份恢复到一个临时库，用新镜像对它完整执行一次 `db-setup` 与 `db-init`，确认迁移与补齐都能完成。
+1. **备份**。`deploy/deploy.sh` 在升级前会自动 `pg_dump` 一份到 `/opt/taibu/backups/`；本地栈用 `pnpm selfhost backup --project <项目> --output <文件>`。数据重要时先演练：把备份恢复到同一集群的临时库，用新版本的 `scripts/db/bootstrap.mjs --no-passwords` 与 `scripts/db/init.mjs` 对它各执行一次，确认迁移与补齐都能完成，再删除临时库。角色是集群级的，演练时不要设置口令，以免改动正在运行的栈的口令。
 2. **更新配置**。`compose.env` 写入 `TAIBU_IMAGE=ghcr.io/hhszzzz/taibu`；宿主已有 Caddy 时再写 `EDGE_MODE=host` 与 `WEB_PORT`。私有配置按容器拆分为 `app.env`、`db.env`、`db-setup.env`、`schema.env`、`redis.env`、`backup.env`、`restore.env`，旧的 `migrate.env` 已改名为 `schema.env`。
 3. **部署**。在主机源码目录执行 `deploy/deploy.sh v1.0.0`。脚本依次执行 `files-init`、`db-setup`、`db-init`，成功后更新 Web 与 worker 并检查 `/api/health/ready`，失败时退回 `compose.env` 记录的上一个镜像。
 4. **重新配置**。按下文「升级后需要重新配置」逐项完成。

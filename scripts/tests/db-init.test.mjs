@@ -243,6 +243,36 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
             ALTER TABLE public.notifications RENAME COLUMN review_missing_read TO is_read;`);
         }
       });
+      await t.test('tables recreated in one pass get their keys before the foreign keys between them', async () => {
+        await native.query('DROP TABLE public.agent_eval_results, public.agent_eval_runs');
+        const log = await initialize();
+        assert.match(log, /created table public\.agent_eval_results/);
+        assert.match(log, /created table public\.agent_eval_runs/);
+        assert.match(await initialize(), /\(no definition changes\)/);
+      });
+      await t.test('legacy boolean settings keep their values through migration 0001', async () => {
+        // The pre-1.0 column: boolean with a default that does not cast to jsonb.
+        await native.query(`
+          ALTER TABLE public.app_settings
+            ALTER COLUMN setting_value DROP DEFAULT,
+            ALTER COLUMN setting_value TYPE boolean USING setting_value::boolean,
+            ALTER COLUMN setting_value SET DEFAULT false;
+          INSERT INTO public.app_settings (setting_key, setting_value)
+          VALUES ('feature_disabled:review-on', true), ('feature_disabled:review-off', false);
+          DELETE FROM taibu_meta.schema_migrations WHERE version = '0001';`);
+        try {
+          assert.match(await initialize(), /✓ 0001 0001_converge_legacy_schema/);
+          assert.deepEqual((await native.query(`
+            SELECT setting_key, setting_value FROM public.app_settings
+            WHERE setting_key LIKE 'feature_disabled:review-%' ORDER BY setting_key`)).rows, [
+            { setting_key: 'feature_disabled:review-off', setting_value: false },
+            { setting_key: 'feature_disabled:review-on', setting_value: true },
+          ]);
+          assert.match(await initialize(), /\(no definition changes\)/);
+        } finally {
+          await native.query("DELETE FROM public.app_settings WHERE setting_key LIKE 'feature_disabled:review-%'");
+        }
+      });
       await t.test('legacy subscription quotas and duplicate reports migrate before reconciliation', async () => {
         const userId = '00000000-0000-4000-8000-0000000000e1';
         const planId = '00000000-0000-4000-8000-0000000000e2';
@@ -332,29 +362,36 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         await native.query('DELETE FROM public.subscription_plans WHERE id = $1', [planId]);
         await native.query('DELETE FROM identity.users WHERE id = $1', [userId]);
       });
-      await t.test('db:init --check leaves a missing migration ledger untouched', async () => {
+      await t.test('db:init --check lists pending migrations without touching the ledger or a legacy table', async () => {
         await native.query('DROP SCHEMA taibu_meta CASCADE');
-        const before = (await native.query(`
-          SELECT md5(string_agg(x, ',' ORDER BY x)) AS hash FROM (
-            SELECT oid::text || ':' || xmin::text AS x FROM pg_class
-            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_proc
-            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_policy
-            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_trigger
-          ) objects;
-        `)).rows[0].hash;
-        const output = await initialize(database, ['--check']);
-        assert.match(output, /Migration ledger is missing/u);
-        assert.match(output, /Would apply 3 migration\(s\)/u);
-        assert.equal((await native.query("SELECT to_regclass('taibu_meta.schema_migrations') AS ledger")).rows[0].ledger, null);
-        const after = (await native.query(`
-          SELECT md5(string_agg(x, ',' ORDER BY x)) AS hash FROM (
-            SELECT oid::text || ':' || xmin::text AS x FROM pg_class
-            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_proc
-            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_policy
-            UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_trigger
-          ) objects;
-        `)).rows[0].hash;
-        assert.equal(after, before, 'check-only must not change catalog objects');
+        // Only a pending migration drops this column, so completion cannot be planned before it runs.
+        await native.query('ALTER TABLE public.users ADD COLUMN membership text');
+        try {
+          const before = (await native.query(`
+            SELECT md5(string_agg(x, ',' ORDER BY x)) AS hash FROM (
+              SELECT oid::text || ':' || xmin::text AS x FROM pg_class
+              UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_proc
+              UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_policy
+              UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_trigger
+            ) objects;
+          `)).rows[0].hash;
+          const output = await initialize(database, ['--check']);
+          assert.match(output, /Migration ledger is missing/u);
+          assert.match(output, /Would apply 3 migration\(s\)/u);
+          assert.match(output, /planned after the pending migrations/u);
+          assert.equal((await native.query("SELECT to_regclass('taibu_meta.schema_migrations') AS ledger")).rows[0].ledger, null);
+          const after = (await native.query(`
+            SELECT md5(string_agg(x, ',' ORDER BY x)) AS hash FROM (
+              SELECT oid::text || ':' || xmin::text AS x FROM pg_class
+              UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_proc
+              UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_policy
+              UNION ALL SELECT oid::text || ':' || xmin::text FROM pg_trigger
+            ) objects;
+          `)).rows[0].hash;
+          assert.equal(after, before, 'check-only must not change catalog objects');
+        } finally {
+          await native.query('ALTER TABLE public.users DROP COLUMN membership');
+        }
       });
       await t.test('retired principals are not created', async () => {
         assert.equal((await native.query("select count(*)::int as n from pg_roles where rolname in ('service_role','taibu_migrator')")).rows[0].n, 0);

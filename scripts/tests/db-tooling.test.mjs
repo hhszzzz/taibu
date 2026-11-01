@@ -12,6 +12,7 @@ import { normalizeSchemaDump } from '../db/normalize-schema.mjs';
 import { execute } from '../selfhost.mjs';
 import { libpqEnvironment } from '../db/connection-env.mjs';
 import { DATABASE_SQL_FILES, parseDatabaseSql } from '../db/current-sql.mjs';
+import { planTableSync } from '../db/reconcile.mjs';
 import { normalizeStatement, splitStatements } from '../db/sql-text.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -63,6 +64,18 @@ test('db:init refuses SQL it cannot reconcile instead of ignoring it', () => {
   assert.throws(parse('schema', 'CREATE INDEX x ON public.users (id);'), /database\/schema\.sql: unsupported statement/);
   assert.throws(parse('indexes', 'CREATE INDEX x ON public.users (id);'), /unsupported statement/);
   assert.throws(parse('access', sql.access.match(/^CREATE POLICY .*;$/mu)[0]), /duplicate policy declaration/);
+});
+
+test('tables created in one completion pass get their keys before the foreign keys between them', () => {
+  const { tables } = parseDatabaseSql(currentSql());
+  const missing = new Set(['public.agent_eval_results', 'public.agent_eval_runs']);
+  const plan = planTableSync(tables, tables.filter(table => !missing.has(table.name)));
+  assert.deepEqual(plan.errors, []);
+  assert.deepEqual(plan.create.map(table => table.name), [...missing]);
+  const names = plan.addConstraints.map(constraint => constraint.name);
+  assert.ok(names.indexOf('agent_eval_runs_pkey') < names.indexOf('agent_eval_results_run_id_fkey'));
+  const foreignKeys = plan.addConstraints.map(constraint => constraint.definition.startsWith('FOREIGN KEY '));
+  assert.deepEqual(foreignKeys, [...foreignKeys].sort((a, b) => a - b), 'foreign keys come after every other constraint');
 });
 
 test('schema normalisation ignores dump order and session boilerplate', () => {

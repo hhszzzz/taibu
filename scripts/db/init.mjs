@@ -44,12 +44,14 @@ try {
 
   // Step 1: Run migrations
   log('Step 1: Running migrations...');
+  let pending = 0;
   if (freshDatabase) {
     const migrations = await readMigrationFiles(root);
     log(`Fresh database: ${migrations.length} migration(s) will be baselined after creating the schema`);
   } else {
     const migrResult = await runMigrations(client, root, { log, checkOnly });
     if (checkOnly) {
+      pending = migrResult.plan.length;
       log(`Would apply ${migrResult.plan.length} migration(s)`);
       for (const m of migrResult.plan) {
         log(`  - ${m.version} ${m.name}`);
@@ -63,7 +65,10 @@ try {
 
   // Step 2: Reconcile main database objects
   log('Step 2: Reconciling database objects...');
-  if (checkOnly) {
+  if (checkOnly && pending) {
+    // Completion compares against the migrated tables, which only exist once the migrations run.
+    log('(check-only mode) planned after the pending migrations; rehearse db:init on a restored copy to see it');
+  } else if (checkOnly) {
     const { summary } = await reconcileDatabase(client, definitions, { log, checkOnly: true });
     log(`(check-only mode) ${summary}`);
   } else {

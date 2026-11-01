@@ -11,7 +11,7 @@ import {
   RELATION_SCHEMAS, ROUTINE_SCHEMAS, compareTables, describeIndexes, describePolicies, describeRoutines,
   describeRowSecurity, describeTables, describeTriggers, describeViews,
 } from './catalog.mjs';
-import { IDENTIFIER } from './sql-text.mjs';
+import { IDENTIFIER, normalizeStatement } from './sql-text.mjs';
 
 /** Schemas whose USAGE/CREATE privileges access.sql declares. */
 const PRIVILEGE_SCHEMAS = ['public', 'auth', 'identity', 'extensions'];
@@ -83,11 +83,206 @@ function differences(declared, live) {
   return plan;
 }
 
-/** Existing structure must already match schema.sql: tables are only ever changed by explicit SQL. */
-export async function inspectTables(client, definitions) {
+const NOT_NULL = / NOT NULL$/u;
+
+function nullability(definition) {
+  return NOT_NULL.test(definition)
+    ? { core: definition.slice(0, -' NOT NULL'.length), notNull: true }
+    : { core: definition, notNull: false };
+}
+
+function optionMap(options) {
+  return new Map(options.map((option) => {
+    const equals = option.indexOf('=');
+    return equals < 0 ? [option, ''] : [option.slice(0, equals), option.slice(equals + 1)];
+  }));
+}
+
+/** NOT VALID applies to CHECK and FOREIGN KEY only; the rest are added at once. */
+function validatable(definition) {
+  return /^(?:CHECK|FOREIGN KEY) /u.test(definition);
+}
+
+/**
+ * Differences db:init repairs on its own: missing tables, columns, constraints
+ * and nullable/default-compatible column changes. Anything that could lose
+ * data or reinterpret values (type changes, undeclared tables/columns,
+ * identity removal) is reported for an explicit migration instead.
+ */
+export function planTableSync(declared, live) {
+  const plan = { create: [], addColumns: [], alter: [], addConstraints: [], dropConstraints: [], options: [], errors: [] };
+  const have = new Map(live.map((table) => [table.name, table]));
+  for (const table of declared) {
+    const found = have.get(table.name);
+    have.delete(table.name);
+    if (!found) {
+      plan.create.push(table);
+      // Columns come with CREATE TABLE; identity, compression and constraints follow.
+      for (const column of table.columns) {
+        if (column.identity) plan.alter.push(column.identity);
+        if (column.compression) {
+          plan.alter.push(`ALTER TABLE ${quoteQualified(table.name)} ALTER COLUMN ${quoteIdentifier(column.name)} SET COMPRESSION ${column.compression}`);
+        }
+      }
+      for (const constraint of table.constraints) {
+        plan.addConstraints.push({
+          table: table.name,
+          name: constraint.name,
+          definition: constraint.definition,
+          notValid: validatable(constraint.definition),
+        });
+      }
+      continue;
+    }
+    const liveColumns = new Map(found.columns.map((column) => [column.name, column]));
+    for (const column of table.columns) {
+      const current = liveColumns.get(column.name);
+      liveColumns.delete(column.name);
+      if (!current) {
+        plan.addColumns.push({ table: table.name, column });
+        continue;
+      }
+      const want = nullability(column.definition);
+      const actual = nullability(current.definition);
+      if (normalizeStatement(want.core) !== normalizeStatement(actual.core)) {
+        plan.errors.push(`${table.name}.${column.name}: definition is ${current.definition}, declared ${column.definition}`);
+        continue;
+      }
+      if (want.notNull !== actual.notNull) {
+        plan.alter.push(`ALTER TABLE ${quoteQualified(table.name)} ALTER COLUMN ${quoteIdentifier(column.name)} `
+          + (want.notNull ? 'SET NOT NULL' : 'DROP NOT NULL'));
+      }
+      if ((column.compression ?? null) !== (current.compression ?? null)) {
+        if (column.compression) {
+          plan.alter.push(`ALTER TABLE ${quoteQualified(table.name)} ALTER COLUMN ${quoteIdentifier(column.name)} SET COMPRESSION ${column.compression}`);
+        } else {
+          plan.errors.push(`${table.name}.${column.name}: compression is ${current.compression}, not declared`);
+        }
+      }
+      if ((column.identity ?? null) !== (current.identity ?? null)) {
+        // Restoring an identity column is a plain ADD GENERATED; dropping one rewrites values.
+        if (column.identity && !current.identity) plan.alter.push(column.identity);
+        else plan.errors.push(`${table.name}.${column.name}: identity is declared differently`);
+      }
+    }
+    for (const name of liveColumns.keys()) {
+      plan.errors.push(`${table.name}.${name}: column is not declared`);
+    }
+
+    const constraints = new Map(found.constraints.map((constraint) => [constraint.name, constraint.definition]));
+    for (const constraint of table.constraints) {
+      const current = constraints.get(constraint.name);
+      constraints.delete(constraint.name);
+      if (current !== undefined && normalizeStatement(current) === constraint.definition) continue;
+      if (current !== undefined) plan.dropConstraints.push(`ALTER TABLE ${quoteQualified(table.name)} DROP CONSTRAINT ${quoteIdentifier(constraint.name)}`);
+      plan.addConstraints.push({
+        table: table.name,
+        name: constraint.name,
+        definition: constraint.definition,
+        notValid: validatable(constraint.definition),
+      });
+    }
+    for (const name of constraints.keys()) {
+      plan.dropConstraints.push(`ALTER TABLE ${quoteQualified(table.name)} DROP CONSTRAINT ${quoteIdentifier(name)}`);
+    }
+
+    const declaredOptions = optionMap(table.options);
+    const liveOptions = optionMap(found.options);
+    const set = [...declaredOptions].filter(([key, value]) => liveOptions.get(key) !== value);
+    const reset = [...liveOptions.keys()].filter((key) => !declaredOptions.has(key));
+    if (!set.length && !reset.length) continue;
+    const target = `ALTER TABLE ${quoteQualified(table.name)}`;
+    if (set.length) plan.options.push(`${target} SET (${set.map(([key, value]) => (value ? `${key}=${value}` : key)).join(', ')})`);
+    if (reset.length) plan.options.push(`${target} RESET (${reset.join(', ')})`);
+  }
+  for (const name of have.keys()) plan.errors.push(`${name}: table is not declared`);
+  return plan;
+}
+
+function createTableStatement(table) {
+  const columns = table.columns.map((column) => `    ${quoteIdentifier(column.name)} ${column.definition}`);
+  const options = table.options.length ? `\nWITH (${table.options.join(', ')})` : '';
+  return `CREATE TABLE ${quoteQualified(table.name)} (\n${columns.join(',\n')}\n)${options};`;
+}
+
+async function hasRows(client, table) {
+  const { rows } = await client.query(`SELECT EXISTS (SELECT 1 FROM ${quoteQualified(table)}) AS present`);
+  return rows[0].present;
+}
+
+/**
+ * Applies the repairable part of schema.sql to an existing database: creates
+ * missing tables (constraints after every table exists), adds missing columns
+ * and constraints, and follows declared nullability. Returns `empty` when the
+ * database has no tables yet, in which case the caller creates schema.sql whole.
+ */
+export async function syncTables(client, definitions, { log = console.log, checkOnly = false } = {}) {
   const live = await describeTables(client);
-  if (!live.length) return { empty: true, drift: [] };
-  return { empty: false, drift: compareTables(definitions.tables, live) };
+  if (!live.length) return { empty: true, changes: 0 };
+
+  const plan = planTableSync(definitions.tables, live);
+  if (plan.errors.length) {
+    throw new Error(`Existing tables differ from database/schema.sql; write a migration (after a backup) before db:init:\n- ${plan.errors.join('\n- ')}`);
+  }
+
+  if (checkOnly) {
+    const planned = plan.create.length + plan.addColumns.length + plan.alter.length
+      + plan.options.length + plan.addConstraints.length + plan.dropConstraints.length;
+    for (const table of plan.create) log(`would create table ${table.name}`);
+    for (const { table, column } of plan.addColumns) log(`would add column ${table}.${column.name}`);
+    for (const statement of [...plan.alter, ...plan.options, ...plan.dropConstraints]) log(`would apply ${statement.slice(0, 100)}`);
+    for (const constraint of plan.addConstraints) log(`would add constraint ${constraint.table}.${constraint.name}`);
+    return { empty: false, changes: 0, planned };
+  }
+
+  for (const table of plan.create) {
+    await transaction(client, () => client.query(createTableStatement(table)));
+    log(`created table ${table.name}`);
+  }
+
+  const columns = [];
+  for (const { table, column } of plan.addColumns) {
+    const { notNull } = nullability(column.definition);
+    if (notNull && !/ DEFAULT /u.test(column.definition) && await hasRows(client, table)) {
+      throw new Error(`${table}.${column.name}: adding a NOT NULL column without a default needs a migration (table already has rows)`);
+    }
+    columns.push(`ALTER TABLE ${quoteQualified(table)} ADD COLUMN ${quoteIdentifier(column.name)} ${column.definition}`);
+  }
+  if (columns.length || plan.alter.length || plan.options.length) {
+    await transaction(client, async () => {
+      for (const statement of [...columns, ...plan.alter, ...plan.options]) {
+        await client.query(statement);
+        log(`applied ${statement.slice(0, 100)}`);
+      }
+    });
+  }
+
+  const constraints = [...plan.dropConstraints];
+  const validations = [];
+  for (const constraint of plan.addConstraints) {
+    const target = `ALTER TABLE ${quoteQualified(constraint.table)} ADD CONSTRAINT ${quoteIdentifier(constraint.name)} ${constraint.definition}`;
+    constraints.push(constraint.notValid ? `${target} NOT VALID` : target);
+    if (constraint.notValid) {
+      validations.push(`ALTER TABLE ${quoteQualified(constraint.table)} VALIDATE CONSTRAINT ${quoteIdentifier(constraint.name)}`);
+    }
+  }
+  if (constraints.length) {
+    await transaction(client, async () => {
+      for (const statement of constraints) {
+        await client.query(statement);
+        log(`applied ${statement.slice(0, 100)}`);
+      }
+    });
+  }
+  if (validations.length) {
+    await transaction(client, async () => {
+      for (const statement of validations) await client.query(statement);
+    });
+  }
+
+  const changes = plan.create.length + plan.addColumns.length + plan.alter.length
+    + plan.options.length + plan.addConstraints.length + plan.dropConstraints.length;
+  return { empty: false, changes };
 }
 
 export async function createTables(client, definitions) {
@@ -333,15 +528,21 @@ function summary(result) {
 }
 
 /** Applies every step in dependency order; returns a one-line summary. */
-export async function reconcileDatabase(client, definitions, { log = console.log } = {}) {
-  const state = await inspectTables(client, definitions);
-  if (state.drift.length) {
-    throw new Error(`Existing tables differ from database/schema.sql; apply explicit SQL (after a backup) before db:init:\n- ${state.drift.join('\n- ')}`);
+export async function reconcileDatabase(client, definitions, { log = console.log, checkOnly = false } = {}) {
+  const state = await syncTables(client, definitions, { log, checkOnly });
+  if (checkOnly) {
+    if (state.empty) log(`would create ${definitions.tables.length} table(s) from database/schema.sql`);
+    return { empty: state.empty, summary: `check-only: ${state.empty ? `${definitions.tables.length} tables` : `${state.planned} table change(s)`} planned` };
   }
   if (state.empty) {
     await createTables(client, definitions);
     const drift = compareTables(definitions.tables, await describeTables(client));
     if (drift.length) throw new Error(`database/schema.sql is not in canonical form:\n- ${drift.join('\n- ')}`);
+  } else {
+    // syncTables repairs everything it safely can; whatever is left needs explicit SQL.
+    const drift = compareTables(definitions.tables, await describeTables(client));
+    if (drift.length) throw new Error(`db:init could not converge the schema; write a migration:\n- ${drift.join('\n- ')}`);
+    if (state.changes) log(`repaired ${state.changes} table difference(s)`);
   }
   const routines = await replaceRoutines(client, definitions);
   const views = await replaceViews(client, definitions);

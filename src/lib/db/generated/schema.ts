@@ -544,6 +544,18 @@ export interface DaliurenDivinations {
   created_at: Generated<string | null>;
 }
 
+export interface DeploymentLogs {
+  id: Generated<string>;
+  version_from: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  version_to: ColumnType<string, string, string>;
+  triggered_by: ColumnType<string, string, string>;
+  status: Generated<string>;
+  log_output: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  started_at: Generated<string>;
+  completed_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  created_at: Generated<string>;
+}
+
 export interface FaceReadings {
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
@@ -974,6 +986,7 @@ export interface DB {
   "conversations": Conversations;
   "conversations_with_archive_status": ConversationsWithArchiveStatus;
   "daliuren_divinations": DaliurenDivinations;
+  "deployment_logs": DeploymentLogs;
   "face_readings": FaceReadings;
   "generated_images": GeneratedImages;
   "hepan_charts": HepanCharts;

@@ -307,6 +307,10 @@ CREATE POLICY billing_ledger_read ON public.billing_ledger FOR SELECT TO authent
 
 ALTER TABLE public.daliuren_divinations ENABLE ROW LEVEL SECURITY;
 
+ALTER TABLE public.deployment_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY deployment_logs_admin_all ON public.deployment_logs TO authenticated USING (( SELECT public.is_admin_user() AS is_admin_user)) WITH CHECK (( SELECT public.is_admin_user() AS is_admin_user));
+
 ALTER TABLE public.face_readings ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY face_readings_delete_access ON public.face_readings FOR DELETE USING ((public.is_admin_user() OR (( SELECT auth.uid() AS uid) = user_id)));
@@ -906,3 +910,6 @@ GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.xiaoliuren_divinations TO anon
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ziwei_charts TO authenticated;
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.ziwei_charts TO anon;
+
+GRANT SELECT,INSERT ON TABLE public.deployment_logs TO authenticated;
+

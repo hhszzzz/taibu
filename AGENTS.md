@@ -42,9 +42,10 @@ pnpm release prepare <major|minor|patch>  # 本地生成版本提交、CHANGELOG
 
 ## 数据库规范
 
-- `pnpm db:bootstrap` 创建角色与扩展；`pnpm db:init` 应用 `database/` 当前 SQL。Compose 中由 `db-setup`、`db-init` 先于 Web 和 worker 执行。
+- `pnpm db:bootstrap` 创建角色与扩展；`pnpm db:init` 先执行 `database/migrations/` 中未应用的迁移，再应用 `database/` 当前 SQL。Compose 中由 `db-setup`、`db-init` 先于 Web 和 worker 执行。
 - `schema.sql` 描述全新库的表与约束，不是生成快照；函数、权限、触发器、索引和系统主体/数据不变量分别维护于同目录 SQL。`db:init` 只应用与反解文本不同的对象，并删除未声明的函数、视图、策略、触发器与索引。
-- 不维护编号迁移和版本账本。已有库的表或列变更使用明确的 SQL，先备份并验证，随后同步当前定义与生成类型；不得重建已有业务表来替代升级。
+- 维护编号迁移与版本账本 `taibu_meta.schema_migrations`（校验和、执行耗时、baseline 标记）：建表、加列、补约束和放宽 NOT NULL 由 `db:init` 自动补齐；删表删列、改类型、回填和约束收紧写进 `database/migrations/NNNN_*.sql`。已应用的迁移文件不得修改，只能追加新迁移。空库建好后把全部迁移记为 baseline。
+- 删除、改名和类型转换先于自动补齐执行，因此每个迁移都要带存在性守卫（`IF EXISTS` / `to_regclass` / 列存在判断），对任意旧形态都能跑。`pnpm db:init --check` 只打印待执行迁移与补齐计划。
 - 安全函数、视图和触发器显式声明 `search_path` 与权限边界，同时评估 RLS、索引、默认值、回填和旧数据兼容。
 - 生产发布由主机运行 `deploy/deploy.sh <tag>`，具体操作见自托管手册；发布需要用户授权。
 

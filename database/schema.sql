@@ -1128,6 +1128,19 @@ CREATE TABLE public.ziwei_charts (
     CONSTRAINT ziwei_charts_timezone_check CHECK (((char_length(timezone) >= 1) AND (char_length(timezone) <= 100) AND (timezone = btrim(timezone))))
 );
 
+CREATE TABLE public.deployment_logs (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    version_from text,
+    version_to text NOT NULL,
+    triggered_by uuid NOT NULL,
+    status text DEFAULT 'pending'::text NOT NULL,
+    log_output text,
+    started_at timestamp with time zone DEFAULT now() NOT NULL,
+    completed_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT deployment_logs_status_check CHECK ((status = ANY (ARRAY['pending'::text, 'running'::text, 'success'::text, 'failed'::text])))
+);
+
 ALTER TABLE ONLY identity.accounts
     ADD CONSTRAINT accounts_pkey PRIMARY KEY (id);
 
@@ -1724,3 +1737,10 @@ ALTER TABLE ONLY public.xiaoliuren_divinations
 
 ALTER TABLE ONLY public.ziwei_charts
     ADD CONSTRAINT ziwei_charts_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+ALTER TABLE ONLY public.deployment_logs
+    ADD CONSTRAINT deployment_logs_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.deployment_logs
+    ADD CONSTRAINT deployment_logs_triggered_by_fkey FOREIGN KEY (triggered_by) REFERENCES public.users(id) ON DELETE RESTRICT;
+

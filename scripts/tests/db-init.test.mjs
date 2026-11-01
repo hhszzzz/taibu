@@ -150,11 +150,14 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
           await rm(directory, { recursive: true, force: true });
         }
       });
-      await t.test('concurrent initialization is serialized without a migration ledger', async () => {
+      await t.test('concurrent initialization is serialized and baselines the migration ledger', async () => {
         const logs = await Promise.all([initialize(), initialize()]);
         assert.equal(logs.filter(log => log.includes('[db:init] initialized')).length, 1);
         assert.equal(logs.filter(log => log.includes('[db:init] refreshed current SQL definitions (no definition changes)')).length, 1);
-        assert.equal((await native.query("select count(*)::int as n from pg_namespace where nspname = 'taibu_meta'")).rows[0].n, 0);
+        const ledger = await native.query("select version, baseline from taibu_meta.schema_migrations order by version");
+        assert.ok(ledger.rows.length > 0, 'a fresh database records every migration as a baseline');
+        assert.ok(ledger.rows.every(row => row.baseline), 'first-time rows are baselines, not executions');
+        assert.match(await initialize(), /No pending migrations/);
       });
       await t.test('a refresh with nothing to change commits no catalog change', async () => {
         const catalog = async () => (await native.query(`select md5(string_agg(x, ',' order by x)) as hash from (
@@ -199,35 +202,46 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         assert.equal(await definitionsOf(database), await definitionsOf(reference), 'a refreshed database must equal a fresh one');
         assert.match(await initialize(), /\(no definition changes\)/);
       });
-      await t.test('table drift fails before anything changes, naming each difference', async () => {
-        const before = await definitionsOf(database);
+      await t.test('missing columns and constraints are added back, undeclared ones still fail', async () => {
+        // Repairable: a declared column and its constraint are gone, and a
+        // declared NOT NULL was relaxed. db:init must restore all three.
+        await native.query(`
+          ALTER TABLE public.notifications DROP CONSTRAINT notifications_pkey;
+          ALTER TABLE public.notifications DROP COLUMN is_read;
+          ALTER TABLE public.notifications ALTER COLUMN title DROP NOT NULL;`);
+        const repairs = await initialize();
+        assert.match(repairs, /repaired 3 table difference\(s\)/);
+        assert.match(await initialize(), /\(no definition changes\)/, 'the repair is idempotent');
+        const restored = await native.query(`
+          select count(*)::int as n from information_schema.columns
+          where table_schema = 'public' and table_name = 'notifications' and column_name = 'is_read'`);
+        assert.equal(restored.rows[0].n, 1, 'the missing column is back');
+        const title = await native.query(`
+          select is_nullable from information_schema.columns
+          where table_schema = 'public' and table_name = 'notifications' and column_name = 'title'`);
+        assert.equal(title.rows[0].is_nullable, 'NO', 'the relaxed NOT NULL is back');
+        const constraint = await native.query("select count(*)::int as n from pg_constraint where conname = 'notifications_pkey'");
+        assert.equal(constraint.rows[0].n, 1, 'the missing primary key is back');
+
+        // Unrepairable: an undeclared column and a renamed column need explicit SQL.
         await native.query(`
           ALTER TABLE public.notifications RENAME COLUMN is_read TO review_missing_read;
-          ALTER TABLE public.notifications ALTER COLUMN title DROP NOT NULL;
-          ALTER TABLE public.notifications ADD COLUMN review_extra text;
-          ALTER TABLE public.notifications DROP CONSTRAINT notifications_pkey;
-          SET ROLE taibu_owner;
-          CREATE POLICY review_unapplied_policy ON public.notifications FOR SELECT USING (true);
-          RESET ROLE;`);
+          ALTER TABLE public.notifications ADD COLUMN review_extra text;`);
         try {
           const failure = await initialize().then(() => null, error => error.message);
-          assert.match(failure, /public\.notifications\.is_read: column is missing/);
+          // The rename looks like a missing column plus an undeclared one; the
+          // undeclared half refuses the repair before anything is applied.
           assert.match(failure, /public\.notifications\.review_missing_read: column is not declared/);
-          assert.match(failure, /public\.notifications\.title: definition is text, declared text NOT NULL/);
           assert.match(failure, /public\.notifications\.review_extra: column is not declared/);
-          assert.match(failure, /public\.notifications: constraint notifications_pkey is missing/);
-          assert.equal((await native.query("select count(*)::int as n from pg_policy where polname = 'review_unapplied_policy'")).rows[0].n, 1,
+          assert.equal((await native.query(`
+            select count(*)::int as n from information_schema.columns
+            where table_schema = 'public' and table_name = 'notifications' and column_name = 'is_read'`)).rows[0].n, 0,
             'nothing is applied while tables differ');
-          assert.equal((await native.query("select count(*)::int as n from identity.users where email='retained@fixture.test'")).rows[0].n, 1);
         } finally {
           await native.query(`
-            DROP POLICY review_unapplied_policy ON public.notifications;
-            ALTER TABLE public.notifications ADD CONSTRAINT notifications_pkey PRIMARY KEY (id);
             ALTER TABLE public.notifications DROP COLUMN review_extra;
-            ALTER TABLE public.notifications ALTER COLUMN title SET NOT NULL;
             ALTER TABLE public.notifications RENAME COLUMN review_missing_read TO is_read;`);
         }
-        assert.equal(await definitionsOf(database), before);
       });
       await t.test('retired principals are not created', async () => {
         assert.equal((await native.query("select count(*)::int as n from pg_roles where rolname in ('service_role','taibu_migrator')")).rows[0].n, 0);

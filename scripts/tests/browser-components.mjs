@@ -1812,9 +1812,9 @@ export async function run(existingPage, bundlePath) {
     await editor.getByRole('heading', { name: '添加模型', exact: true }).waitFor();
     await editor.getByLabel('模型 ID', { exact: true }).fill('catalog-fixture');
     await editor.getByText(/已补全空着的/u).waitFor();
-    check('An exact models.dev match fills the empty output limit, levels, vision and prices', await editor.getByLabel('输出上限', { exact: true }).inputValue() === '64000'
-      && await editor.getByRole('button', { name: '高', exact: true }).getAttribute('aria-pressed') === 'true'
-      && await editor.getByRole('switch', { name: '支持图片输入', exact: true }).isChecked()
+    check('An exact models.dev match fills the empty output limit, levels and prices but leaves image input alone', await editor.getByLabel('输出上限', { exact: true }).inputValue() === '64000'
+      && await editor.getByRole('button', { name: '中', exact: true }).getAttribute('aria-pressed') === 'true'
+      && !(await editor.getByRole('switch', { name: '支持图片输入', exact: true }).isChecked())
       && await editor.getByLabel('输入', { exact: true }).inputValue() === '2.5'
       && await editor.getByLabel('输出', { exact: true }).inputValue() === '10'
       && await editor.getByLabel('缓存读取', { exact: true }).inputValue() === '1.25');
@@ -1960,9 +1960,21 @@ export async function run(existingPage, bundlePath) {
     const usageLog = page.getByTestId('usage-log');
     const usageList = usageLog.getByRole('table', { name: '用量日志', exact: true });
     await usageList.getByText('分析模型', { exact: true }).first().waitFor();
-    check('The usage log lists priced model calls with their funding', await usageList.getByText(/输入 398 · 输出 35/u).isVisible()
-      && await usageList.getByText(/订阅「轻享月卡」 -\$0\.0015/u).isVisible()
+    check('The usage log lists priced model calls with the purse that paid', await usageList.getByText('398 / 35', { exact: true }).isVisible()
+      && await usageList.getByRole('img', { name: '订阅额度' }).isVisible()
       && requests.some(item => item.pathname === '/api/billing/ledger' && item.search.includes('offset=0')));
+    const ledgerReads = () => requests.filter(item => item.pathname === '/api/billing/ledger').length;
+    const readsBeforeQuery = ledgerReads();
+    await usageLog.getByLabel('按模型筛选').fill('fixture-analysis');
+    check('Typing in the query bar only changes the draft', ledgerReads() === readsBeforeQuery);
+    await usageLog.getByRole('button', { name: '查询', exact: true }).click();
+    check('The query bar asks for the conditions only when submitted', await waitForRequest(() => requests.some(item => item.pathname === '/api/billing/ledger'
+      && item.search.includes('model=fixture-analysis'))));
+    await usageLog.getByRole('button', { name: '重置', exact: true }).click();
+    check('Reset clears every condition and asks again', await waitForRequest(() => {
+      const last = requests.filter(item => item.pathname === '/api/billing/ledger').at(-1);
+      return !!last && !last.search.includes('model=') && !last.search.includes('kind=');
+    }) && (await usageLog.getByLabel('按模型筛选').inputValue()) === '');
     await usageList.getByRole('button', { name: '查看', exact: true }).first().click();
     const ledgerDetail = page.getByRole('dialog', { name: /流水详情/u });
     await ledgerDetail.waitFor();
@@ -1970,8 +1982,10 @@ export async function run(existingPage, bundlePath) {
       && await ledgerDetail.getByText(/合计/u).isVisible());
     await ledgerDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
     await ledgerDetail.waitFor({ state: 'detached' });
-    check('A call made with the member\'s own key is logged at no charge', await usageList.getByText('自带密钥', { exact: true }).isVisible());
-    await usageList.getByRole('button', { name: /自带模型/u }).click();
+    const byokMark = usageList.getByText(/自带密钥：\s*BYOK/u);
+    check('A call made with the member\'s own key shows BYOK instead of an amount', await byokMark.isVisible()
+      && await byokMark.getAttribute('title') === '自带密钥，本站不扣费');
+    await usageList.getByRole('button', { name: '查看', exact: true }).nth(1).click();
     const byokDetail = page.getByRole('dialog', { name: /流水详情/u });
     await byokDetail.waitFor();
     check('Its detail says the member\'s own key paid for it', await byokDetail.getByText('自带密钥，本站不扣费', { exact: true }).isVisible());
@@ -1982,11 +1996,12 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('button', { name: 'Fixture Admin usage route', exact: true }).click();
     const adminUsage = page.getByTestId('admin-usage');
     const adminUsageTable = adminUsage.getByRole('table', { name: '用量明细', exact: true });
-    await adminUsageTable.getByText('alice@example.com', { exact: true }).waitFor();
-    check('The admin usage log lists every kind with the user and a details column', await adminUsageTable.getByText('消费 · 对话', { exact: true }).isVisible()
-      && await adminUsageTable.getByText('分析模型', { exact: true }).isVisible()
+    await adminUsageTable.getByText('alice@example.com', { exact: true }).first().waitFor();
+    const adminUsageRow = adminUsageTable.getByRole('row').filter({ hasText: '分析模型' });
+    check('The admin usage log lists every kind with the user and a details column', await adminUsageRow.getByText('消费', { exact: true }).isVisible()
+      && await adminUsageRow.getByText('对话', { exact: true }).isVisible()
       && await adminUsageTable.getByRole('button', { name: '查看', exact: true }).first().isVisible());
-    await adminUsageTable.getByRole('button', { name: 'alice@example.com', exact: true }).click();
+    await adminUsageTable.getByRole('button', { name: 'alice@example.com', exact: true }).first().click();
     check('Clicking a user filters the usage log by that email', await waitForRequest(() => requests.some(item => item.pathname === '/api/admin/billing/usage' && item.search.includes('email=alice%40example.com'))));
     await adminUsageTable.getByRole('button', { name: '查看', exact: true }).first().click();
     const adminLedgerDetail = page.getByRole('dialog', { name: /流水详情/u });

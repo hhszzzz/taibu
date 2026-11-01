@@ -65,7 +65,7 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   profile: { id: 'profile', label: '账户', group: 'account', description: '管理个人资料与登录安全。' },
   general: { id: 'general', label: '常规', group: 'account', description: '调整外观、阅读字号与提醒方式。' },
   billing: { id: 'billing', label: '钱包', group: 'account', description: '余额、订阅、充值、兑换码与支付订单；可自选先扣订阅额度还是先扣余额。' },
-  'usage-log': { id: 'usage-log', label: '用量日志', group: 'account', description: '每次平台模型调用的用量与费用，以及充值、兑换、订阅等资金变动。' },
+  'usage-log': { id: 'usage-log', label: '用量日志', group: 'account', description: '每次模型调用的用量与费用（自带密钥的调用也记一条），以及充值、兑换、订阅等资金变动。' },
   shares: { id: 'shares', label: '分享链接', group: 'account', description: '你公开分享过的对话。删除后原链接立即失效。' },
   help: { id: 'help', label: '帮助', group: 'account', description: '常见问题与联系方式。' },
   personalization: { id: 'personalization', label: '个性化', group: 'extensions', description: '这些偏好会带入 AI 对话与结果页解读。' },

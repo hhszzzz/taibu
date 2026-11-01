@@ -99,17 +99,31 @@ function Subscriptions({ summary }: { summary: BillingSummary }) {
                                     剩余 {formatUsd(left)} / {formatUsd(allowance)}
                                 </span>
                             </div>
-                            <dl className="flex flex-wrap gap-x-6 gap-y-1 text-[13px]">
-                                {subscription.limits.map(limit => (
-                                    <div key={limit.period} className="flex items-baseline gap-1.5">
-                                        <dt className="text-foreground-tertiary">{windowLabel(limit.period)}</dt>
-                                        <dd className="tabular-nums text-foreground">
-                                            剩余 {formatUsd(Math.max(limit.allowanceMicros - limit.usedMicros, 0))} / {formatUsd(limit.allowanceMicros)}
-                                        </dd>
-                                        {limit.nextResetAt ? <dd className="text-xs text-foreground-tertiary">{formatBillingTime(limit.nextResetAt)} 重置</dd> : null}
-                                    </div>
-                                ))}
-                            </dl>
+                            <ul className="flex flex-col gap-2">
+                                {subscription.limits.map(limit => {
+                                    const usedPercent = limit.allowanceMicros
+                                        ? Math.min(limit.usedMicros / limit.allowanceMicros, 1) * 100 : 100;
+                                    const label = windowLabel(limit.period);
+                                    return (
+                                        <li key={limit.period} className="grid grid-cols-[5.5rem_minmax(0,1fr)] items-center gap-x-3 gap-y-1 sm:grid-cols-[5.5rem_minmax(0,1fr)_auto]">
+                                            <span className="text-[13px] text-foreground-tertiary">{label}</span>
+                                            <div className="flex min-w-0 items-center gap-2.5">
+                                                <div role="progressbar" aria-label={`「${subscription.title}」${label}已用额度`} aria-valuemin={0}
+                                                    aria-valuemax={100} aria-valuenow={Math.round(usedPercent)}
+                                                    className="h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-background-secondary">
+                                                    <div className="h-full rounded-full bg-accent" style={{ width: `${usedPercent}%` }} />
+                                                </div>
+                                                <span className="shrink-0 text-[13px] tabular-nums text-foreground-secondary">
+                                                    剩余 {formatUsd(Math.max(limit.allowanceMicros - limit.usedMicros, 0))} / {formatUsd(limit.allowanceMicros)}
+                                                </span>
+                                            </div>
+                                            <span className="col-start-2 text-xs text-foreground-tertiary sm:col-start-3">
+                                                {limit.nextResetAt ? `${formatBillingTime(limit.nextResetAt)} 重置` : '不重置'}
+                                            </span>
+                                        </li>
+                                    );
+                                })}
+                            </ul>
                             <p className="text-xs text-foreground-tertiary">{formatBillingDay(subscription.endsAt)} 到期</p>
                         </li>
                     );

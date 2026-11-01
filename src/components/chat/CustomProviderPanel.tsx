@@ -101,7 +101,7 @@ function StorageNotice({ compact }: { compact: boolean }) {
         <div className="flex flex-col gap-2.5 rounded-xl bg-background-secondary px-[18px] py-4 text-[13px] leading-relaxed text-foreground">
             <p className="flex items-start gap-2.5">
                 <Monitor aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-foreground-secondary" />
-                <span><b className="font-medium">对话、解读、润色与生图</b>：Key 只存在当前标签页，由浏览器直连模型供应商，不经过本站服务器；关闭页面即失效。生成的图片会上传到本站保存。</span>
+                <span><b className="font-medium">对话、解读、润色与生图</b>：Key 只存在当前标签页，由浏览器直连模型供应商，内容与 Key 不经过本站；调用结束后只回报 token 数用于用量日志，不扣费。关闭页面即失效。生成的图片会上传到本站保存。</span>
             </p>
             <p className="flex items-start gap-2.5">
                 <LockKeyhole aria-hidden="true" className="mt-0.5 h-4 w-4 flex-shrink-0 text-foreground-secondary" />

@@ -1,6 +1,6 @@
 /**
- * 用量日志：每次平台模型调用的用量与费用，以及充值、兑换、订阅等资金变动；上方是筛选范围内的消费合计与按模型汇总，
- * 点一行看详情。每页 20 条，向下加载更多。
+ * 用量日志：每次模型调用的用量与费用（自带密钥的调用也记一条），以及充值、兑换、订阅等资金变动；上方是合计，
+ * 点「查看」打开详情，底部按页翻。
  *
  * 'use client' 标记说明：
  * - 需要会话状态与 hooks 维护筛选、分页、请求顺序与详情弹窗
@@ -64,16 +64,14 @@ function UsageLogContent() {
         setFilters(value => ({ ...value, model }));
         setDetail(null);
     };
-    const filtered = filters.kind !== 'all' || filters.source !== 'all' || filters.range !== 'all' || !!filters.model;
+    const filtered = filters.kind !== 'all' || filters.source !== 'all' || filters.range !== 'all' || !!filters.model || !!filters.query;
     return (
         <div className="space-y-6">
             {sums ? <UsageTotalsCard totals={sums.totals} /> : null}
-            <div className="flex flex-wrap items-center gap-2">
-                <LedgerFilterBar value={filters} onChange={setFilters} kinds={LEDGER_KINDS} />
-                <Button variant="secondary" size="sm" onClick={() => void load(page, pageSize)} className="ml-auto">
+            <LedgerFilterBar value={filters} onChange={setFilters} kinds={LEDGER_KINDS}
+                actions={<Button variant="ghost" size="sm" className="ml-auto" onClick={() => void load(page, pageSize)}>
                     <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />刷新
-                </Button>
-            </div>
+                </Button>} />
             {error ? (
                 <div role="alert" className="settings-alert">
                     <span className="min-w-0 flex-1">{error}</span>

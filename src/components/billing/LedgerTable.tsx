@@ -11,8 +11,8 @@ import { Button } from '@/components/ui/Button';
 import { LEDGER_KIND_LABELS, LEDGER_KIND_TONES, type LedgerEntryView, type LedgerUsage } from '@/lib/billing/config';
 import { billingSourceLabel, formatBillingTime, formatCount } from '@/lib/billing/format';
 
-const TH = 'px-3 py-2.5 text-left text-xs font-medium text-foreground-tertiary';
-const TD = 'px-3 py-2.5 text-[13px] text-foreground-secondary';
+const TH = 'px-2.5 py-2.5 text-left text-xs font-medium text-foreground-tertiary';
+const TD = 'px-2.5 py-2.5 text-[13px] text-foreground-secondary';
 const CELL_LINK = 'max-w-full truncate text-left hover:text-foreground hover:underline';
 
 /** 用量：输入 / 输出两个数；缓存有量时在下面补一行「缓存↓ 读 ↑ 写」。 */
@@ -70,40 +70,44 @@ export function LedgerTable({ entries, label, showUser = false, onOpen, onModel,
     return (
         // relative 让表头里 sr-only 的绝对定位文字也被滚动容器裁剪，否则手机上会撑宽整页。
         <div className="relative overflow-x-auto">
-            <table className={`w-full border-collapse ${showUser ? 'min-w-[52rem]' : 'min-w-[42rem]'}`} aria-label={label}>
+            <table className={`w-full border-collapse ${showUser ? 'min-w-[46rem]' : 'min-w-[40rem]'}`} aria-label={label}>
                 <thead>
                     <tr className="border-b border-border bg-background-secondary/60">
-                        <th scope="col" className={`${TH} pl-5`}>时间</th>
+                        <th scope="col" className={`${TH} pl-4`}>时间</th>
                         {showUser ? <th scope="col" className={TH}>用户</th> : null}
                         <th scope="col" className={TH}>类型</th>
                         <th scope="col" className={TH}>模型</th>
                         <th scope="col" className={TH}>用量</th>
-                        <th scope="col" className={`${TH} text-right`}>金额</th>
-                        <th scope="col" className={`${TH} pr-5 text-right`}>详情</th>
+                        <th scope="col" className={`${TH} pr-2 text-right`}>金额</th>
+                        <th scope="col" className={`${TH} pr-6 text-right`}>详情</th>
                     </tr>
                 </thead>
                 <tbody>
                     {entries.map(entry => (
                         <tr key={entry.id} className="border-b border-border transition-colors last:border-b-0 hover:bg-background-secondary/50">
-                            <td className={`${TD} whitespace-nowrap pl-5 font-mono text-xs tabular-nums`}>{formatBillingTime(entry.createdAt)}</td>
+                            <td className={`${TD} whitespace-nowrap pl-4 font-mono text-xs tabular-nums`}>
+                                <span className="flex flex-col leading-tight">
+                                    <span>{formatBillingTime(entry.createdAt).split(' ')[0]}</span>
+                                    <span className="text-[11px] text-foreground-tertiary">{formatBillingTime(entry.createdAt).split(' ')[1]}</span>
+                                </span>
+                            </td>
                             {showUser ? <td className={`${TD} whitespace-nowrap`}>
                                 {entry.userEmail && onUser ? (
                                     <Button unstyled type="button" title={`只看 ${entry.userEmail}`} onClick={() => onUser(entry.userEmail as string)}
                                         className={`flex items-center gap-2 ${CELL_LINK}`}>
                                         <UserMark email={entry.userEmail} />
-                                        <span className="max-w-[10rem] truncate">{entry.userEmail}</span>
+                                        <span className="max-w-[8rem] truncate">{entry.userEmail}</span>
                                     </Button>
                                 ) : <span className="font-mono text-xs" title={entry.userId}>{entry.userId?.slice(0, 8) ?? '—'}</span>}
                             </td> : null}
                             <td className={`${TD} whitespace-nowrap`}>
                                 <Badge variant={LEDGER_KIND_TONES[entry.kind]}>{LEDGER_KIND_LABELS[entry.kind]}</Badge>
                                 {entry.kind === 'usage' && entry.source ? <span className="ml-1.5 text-xs text-foreground-tertiary">{billingSourceLabel(entry.source)}</span> : null}
-                                {entry.usage?.byok ? <span className="ml-1.5 rounded-md bg-fill-field px-1 py-px text-[11px] text-foreground-tertiary" title="用会员自己的 API Key 调用，本站不扣费">自带密钥</span> : null}
                             </td>
                             <td className={TD}>
                                 {entry.modelKey ? (
                                     <Button unstyled type="button" title={onModel ? `只看 ${entry.modelKey}` : entry.modelKey} onClick={() => onModel?.(entry.modelKey as string)}
-                                        className={`inline-flex max-w-[13rem] items-center gap-1.5 rounded-md bg-fill-field px-1.5 py-0.5 text-xs text-foreground ${onModel ? 'hover:text-accent' : ''}`}>
+                                        className={`inline-flex max-w-[10rem] items-center gap-1.5 rounded-md bg-fill-field px-1.5 py-0.5 text-xs text-foreground ${onModel ? 'hover:text-accent' : ''}`}>
                                         <LedgerModel entry={entry} size={14} />
                                     </Button>
                                 ) : <span className="text-foreground-tertiary">—</span>}
@@ -114,14 +118,20 @@ export function LedgerTable({ entries, label, showUser = false, onOpen, onModel,
                                     <LedgerMarks entry={entry} />
                                 </span>
                             </td>
-                            {/* 消费不写符号：这一列就是花掉多少。 */}
-                            <td className="whitespace-nowrap py-2.5 pl-3 pr-3 text-right">
-                                <span className="inline-flex items-center gap-1.5">
-                                    <FundingIcons entry={entry} />
-                                    <LedgerAmount micros={entry.kind === 'usage' ? Math.abs(entry.amountMicros) : entry.amountMicros} signed={entry.kind !== 'usage'} />
-                                </span>
+                            {/* 消费不写符号：这一列就是花掉多少；自带密钥的花费不在本站，标 BYOK 而不是 $0。 */}
+                            <td className="whitespace-nowrap py-2.5 pl-2 pr-2 text-right">
+                                {entry.kind === 'usage' && entry.usage?.byok ? (
+                                    <span className="rounded-md bg-fill-field px-1.5 py-0.5 text-[11px] font-medium text-foreground-secondary" title="自带密钥，本站不扣费">
+                                        <span className="sr-only">自带密钥：</span>BYOK
+                                    </span>
+                                ) : (
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <FundingIcons entry={entry} />
+                                        <LedgerAmount micros={entry.kind === 'usage' ? Math.abs(entry.amountMicros) : entry.amountMicros} signed={entry.kind !== 'usage'} />
+                                    </span>
+                                )}
                             </td>
-                            <td className="whitespace-nowrap py-2.5 pl-3 pr-5 text-right">
+                            <td className="whitespace-nowrap py-2.5 pl-2 pr-4 text-right">
                                 <Button variant="ghost" size="xs" aria-haspopup="dialog" onClick={() => onOpen(entry)}>查看</Button>
                             </td>
                         </tr>

@@ -14,7 +14,7 @@ import { formatUsd } from '@/lib/billing/money';
 
 export function LedgerMarks({ entry }: { entry: Pick<LedgerEntryView, 'kind' | 'amountMicros' | 'usage'> }) {
     return <>
-        {entry.kind === 'usage' && entry.amountMicros === 0 ? <Badge variant="success">免费</Badge> : null}
+        {entry.kind === 'usage' && entry.amountMicros === 0 && !entry.usage?.byok ? <Badge variant="success">免费</Badge> : null}
         {entry.usage?.estimated ? <Badge variant="warning" title="上游没有返回用量，按提示词与输出估算">估算</Badge> : null}
     </>;
 }

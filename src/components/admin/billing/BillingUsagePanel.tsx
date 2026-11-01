@@ -8,15 +8,13 @@
  */
 'use client';
 
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
-import { RefreshCw, Search, X } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { LedgerDetailDialog } from '@/components/billing/LedgerDetailDialog';
 import { LedgerTable } from '@/components/billing/LedgerTable';
 import { EMPTY_LEDGER_FILTERS, LedgerFilterBar, ledgerFilterQuery, type LedgerFilterState } from '@/components/billing/LedgerFilterBar';
 import { UsageTotalsCard } from '@/components/billing/UsageSummary';
 import { Button } from '@/components/ui/Button';
-import { IconButton } from '@/components/ui/IconButton';
-import { Input } from '@/components/ui/Input';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { TablePagination } from '@/components/ui/TablePagination';
 import { fetchAdminUsage } from '@/lib/billing/client';
@@ -27,8 +25,6 @@ const CARD = 'rounded-2xl border border-border bg-surface';
 
 export function BillingUsagePanel({ active = true }: { active?: boolean }) {
     const [filters, setFilters] = useState<LedgerFilterState>(EMPTY_LEDGER_FILTERS);
-    const [emailInput, setEmailInput] = useState('');
-    const [email, setEmail] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE);
     const [page, setPage] = useState<AdminUsagePage | null>(null);
@@ -42,7 +38,6 @@ export function BillingUsagePanel({ active = true }: { active?: boolean }) {
         const current = ++seq.current;
         setLoading(true);
         const query = ledgerFilterQuery(filters);
-        if (email) query.set('email', email);
         query.set('offset', String((target - 1) * size));
         query.set('limit', String(size));
         try {
@@ -55,17 +50,12 @@ export function BillingUsagePanel({ active = true }: { active?: boolean }) {
         } finally {
             if (current === seq.current) setLoading(false);
         }
-    }, [filters, email, pageSize]);
+    }, [filters, pageSize]);
 
     useEffect(() => {
         if (active) void Promise.resolve().then(() => load(1));
     }, [active, load]);
 
-    const search = (event: FormEvent<HTMLFormElement>) => {
-        event.preventDefault();
-        setCurrentPage(1);
-        setEmail(emailInput.trim().toLowerCase());
-    };
     const filterModel = (model: string) => {
         setCurrentPage(1);
         setFilters(value => ({ ...value, model }));
@@ -73,32 +63,19 @@ export function BillingUsagePanel({ active = true }: { active?: boolean }) {
     };
     const filterUser = (address: string) => {
         setCurrentPage(1);
-        setEmail(address.toLowerCase());
-        setEmailInput(address);
+        setFilters(value => ({ ...value, email: address.toLowerCase() }));
         setDetail(null);
     };
 
     return (
         <div className="flex flex-col gap-4">
             <p className="settings-help">
-                每条流水一行：模型调用、退回、充值、订阅、兑换与管理员调整；合计与按模型汇总只算调用与退回。免费模型记 $0，上游没报用量时按估算计费并标出。浏览器直连的自定义模型对话不经服务器，不在这里。
+                每条流水一行：模型调用、退回、充值、订阅、兑换与管理员调整；合计与按模型汇总只算调用与退回。免费模型记 $0，上游没报用量时按估算计费并标出，自带密钥的调用由浏览器回报，金额列标 BYOK。
             </p>
-            <div className="flex flex-wrap items-center gap-2">
-                <form role="search" onSubmit={search} className="flex items-center gap-1.5">
-                    <Input type="search" value={emailInput} onChange={event => setEmailInput(event.target.value)} placeholder="用户邮箱（前缀）"
-                        aria-label="按用户邮箱筛选" className="w-56" size="sm" />
-                    <IconButton type="submit" label="按邮箱筛选" size="sm"><Search aria-hidden="true" className="h-4 w-4" /></IconButton>
-                    {email ? (
-                        <IconButton label="清除邮箱筛选" size="sm" onClick={() => { setEmail(''); setEmailInput(''); }}>
-                            <X aria-hidden="true" className="h-4 w-4" />
-                        </IconButton>
-                    ) : null}
-                </form>
-                <LedgerFilterBar value={filters} onChange={setFilters} kinds={LEDGER_KINDS} />
-                <Button variant="secondary" size="sm" onClick={() => void load(currentPage)} className="ml-auto">
+            <LedgerFilterBar value={filters} onChange={setFilters} kinds={LEDGER_KINDS} showUser
+                actions={<Button variant="ghost" size="sm" className="ml-auto" onClick={() => void load(currentPage)}>
                     <RefreshCw aria-hidden="true" className="h-3.5 w-3.5" />刷新
-                </Button>
-            </div>
+                </Button>} />
 
             {error ? (
                 <div role="alert" className="settings-alert">

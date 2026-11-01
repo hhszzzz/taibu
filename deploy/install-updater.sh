@@ -12,6 +12,7 @@ fi
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="${ROOT:-$(cd "${SCRIPT_DIR}/.." && pwd)}"
 RUN_DIR="${TAIBU_RUN_DIR:-/run/taibu}"
+WEB_GID=101
 ENV_FILE="${ENV_FILE:-/opt/taibu/env/compose.env}"
 SERVICE_NAME="taibu-updater"
 SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
@@ -24,8 +25,9 @@ for script in deploy.sh update.sh update-watch.sh; do
   chmod +x "${SCRIPT_DIR}/${script}"
 done
 
-# The container runs as uid 100 and must be able to create the request file.
-install -d -m 1777 "${RUN_DIR}"
+# The web image runs as uid 100, gid 101. Only that group and root may access
+# the signal directory; other host users cannot ask the root service to deploy.
+install -d -o root -g "${WEB_GID}" -m 0730 "${RUN_DIR}"
 
 cat > "${SERVICE_FILE}" <<EOF
 [Unit]
@@ -38,6 +40,7 @@ Type=simple
 Environment=ROOT=${ROOT}
 Environment=ENV_FILE=${ENV_FILE}
 Environment=TAIBU_RUN_DIR=${RUN_DIR}
+Environment=TAIBU_WEB_GID=${WEB_GID}
 ExecStart=/usr/bin/env bash ${SCRIPT_DIR}/update-watch.sh
 Restart=always
 RestartSec=10

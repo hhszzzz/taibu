@@ -52,8 +52,11 @@ export async function POST(request: NextRequest) {
         release_tag: versionInfo.releaseName ?? versionInfo.latest,
         log_id: logId,
         triggered_at: new Date().toISOString(),
-      }), 'utf-8');
+      }), { encoding: 'utf-8', flag: 'wx', mode: 0o640 });
     } catch (signalError) {
+      if ((signalError as NodeJS.ErrnoException).code === 'EEXIST') {
+        return jsonError('已有更新请求正在处理中', 409);
+      }
       console.warn('[admin][system][update] failed to write signal file:', signalError);
       return jsonError('无法通知主机更新服务，请确认部署已安装 updater', 503);
     }

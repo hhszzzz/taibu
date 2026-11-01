@@ -6,12 +6,12 @@ set -uo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 RUN_DIR="${TAIBU_RUN_DIR:-/run/taibu}"
+WEB_GID="${TAIBU_WEB_GID:-101}"
 SIGNAL="${RUN_DIR}/update-request"
 
-mkdir -p "${RUN_DIR}"
-chmod 1777 "${RUN_DIR}" 2>/dev/null || true
+install -d -o root -g "${WEB_GID}" -m 0730 "${RUN_DIR}"
 # The web app only accepts update requests when this marker exists.
-touch "${RUN_DIR}/updater-ready"
+install -o root -g "${WEB_GID}" -m 0640 /dev/null "${RUN_DIR}/updater-ready"
 
 while true; do
   if [[ -f "${SIGNAL}" ]]; then

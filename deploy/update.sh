@@ -35,11 +35,13 @@ LOG_ID="$(field log_id)"
 # Images are published under the release tag itself (v0.2.4).
 TAG="$(field release_tag)"
 TAG="${TAG:-}"
-[[ -n "${LOG_ID}" && -n "${TAG}" ]] || {
-  log "signal file is missing log_id or the release tag"
+if [[ ! "${LOG_ID}" =~ ^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$ \
+   || ${#TAG} -gt 128 \
+   || ! "${TAG}" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?(\+[0-9A-Za-z.-]+)?$ ]]; then
+  log "signal file has an invalid request id or release tag"
   rm -f "${HANDLED}"
   exit 1
-}
+fi
 
 log "updating to ${TAG} (log ${LOG_ID})"
 record running "deploy/deploy.sh ${TAG}"

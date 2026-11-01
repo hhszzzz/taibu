@@ -6,7 +6,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEST_DIRECTORIES = ['src/tests', 'packages/core/tests', 'packages/mcp/tests', 'packages/mcp-server/tests'];
 const SCRIPT_TESTS = ['scripts/tests/architecture-guards.test.mjs', 'scripts/tests/test-runner.test.mjs', 'scripts/tests/methods.test.mjs',
-  'scripts/tests/db-tooling.test.mjs', 'scripts/tests/selfhost.test.mjs', 'scripts/tests/release.test.mjs'];
+  'scripts/tests/db-tooling.test.mjs', 'scripts/tests/selfhost.test.mjs', 'scripts/tests/release.test.mjs',
+  'scripts/tests/updater-security.test.mjs'];
 const ARTIFACT_TESTS = [
   'scripts/tests/npm-package-artifacts.test.mjs',
   'scripts/tests/skill-bundle.test.mjs',

@@ -1488,6 +1488,9 @@ export async function run(existingPage, bundlePath) {
       if (method === 'PATCH') return ok({ profile: Object.assign(profile, body) }, true);
       if (method === 'DELETE') { adminProfiles.splice(adminProfiles.indexOf(profile), 1); return ok({ deleted: true }, true); }
     }
+    if (url.pathname === '/api/admin/system/version' && method === 'GET') return ok({
+      current: '0.1.0', latest: '0.1.0', needsUpdate: false, releaseUrl: null, releaseName: null, publishedAt: null, releaseNotes: null,
+    });
     if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
     if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree(), cost: { calls: 4, spentMicros: 1500 } }, true);
     if (url.pathname === '/api/billing/ledger' && method === 'GET') return ok(ledgerPage);
@@ -3649,6 +3652,17 @@ export async function run(existingPage, bundlePath) {
     await page.addStyleTag({ content: 'aside[class*="lg:flex"] { display: flex !important; }' });
     const sidebar = page.getByRole('complementary');
     await sidebar.getByText('待回答', { exact: true }).waitFor();
+    // The version chip appears once the viewer is known to be an administrator.
+    const versionChip = sidebar.getByRole('button', { name: /当前版本/ });
+    await versionChip.waitFor();
+    check('The sidebar shows the running version next to the brand', await versionChip.getAttribute('aria-label') === '当前版本 0.0.0');
+    await versionChip.click();
+    const updateDialog = page.getByRole('dialog');
+    await updateDialog.waitFor();
+    check('With no newer release the update dialog says so and offers no update button', await updateDialog.getByRole('heading', { name: '当前已是最新版本', exact: true }).isVisible()
+      && await updateDialog.getByRole('button', { name: '立即更新' }).count() === 0);
+    await page.keyboard.press('Escape');
+    await page.waitForFunction(() => !document.querySelector('[role="dialog"]'));
     const sidebarRow = title => sidebar.locator('[data-conversation-row]').filter({ hasText: title });
     check('The site sidebar lists /chat conversations under one 最近使用 section', (await sidebar.getByRole('heading').allInnerTexts()).join() === '' && await sidebar.getByText('最近使用', { exact: true }).count() === 1);
     check('Sidebar rows mark a running task and a waiting question; finished answers only toast', await sidebarRow('明年适合换工作吗？').getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&

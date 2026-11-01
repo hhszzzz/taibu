@@ -232,7 +232,18 @@ EDGE_MODE=container deploy/deploy.sh <tag>
 
 `host` 模式叠加 `compose.host-edge.yml`，Web 只发布回环端口；`container` 模式启动 Caddy 的 `edge` profile。TLS、域名、代理真实 IP 与上传限制以 `deploy/Caddyfile`（容器边缘）或 `deploy/Caddyfile.host`（宿主 Caddy 模板）为准；`deploy/update-cloudflare-ips.sh` 从 Cloudflare 官方列表刷新 `trusted_proxies`，改完需自行 validate + reload。
 
-发布脚本先备份运行中的 PostgreSQL（默认保留最近 10 份 `pre-*`），再执行 `files-init`、`db-setup` 与 `db-init`，成功后更新 Web / worker 并检查 `/api/health/ready`；启动失败或健康检查超时会把 Web / worker 退回 `compose.env` 中记录的上一版本。数据库定义已由 `db-init` 收敛，回到更早版本需要恢复发布前备份。准备表结构变更时需把前述显式 SQL 操作纳入发布顺序；切换镜像 tag 不会撤销已经执行的结构变更。
+### 一键更新
+
+安装过主机服务后，管理员可以在侧栏「太卜」右侧的版本号里点「立即更新」，由主机完成备份、拉取、迁移与滚动重启：
+
+```bash
+# 在主机源码目录执行一次；会写入 systemd 单元 taibu-updater 并启动。
+sudo ROOT=/opt/taibu/source deploy/install-updater.sh
+```
+
+`taibu-updater` 每 5 秒检查 `/run/taibu/update-request`。Web 容器通过 `TAIBU_RUN_DIR` 挂载同一目录，写入请求后即可看到「已提交更新」；执行结果（成功/失败与日志）写回 `deployment_logs`，在「设置 → 日志 → 部署日志」查看。更新期间有进行中的 Agent 任务时，接口会拒绝请求。
+
+发布脚本先备份运行中的 PostgreSQL（默认保留最近 10 份 `pre-*`），再执行 `files-init`、`db-setup` 与 `db-init`，成功后更新 Web / worker 并检查 `/api/health/ready`；启动失败或健康检查超时会把 Web / worker 退回 `compose.env` 中记录的上一版本。数据库定义已由 `db-init` 收敛，回到更早版本需要恢复发布前备份。表结构变更随镜像发布：`db-init` 先执行 `database/migrations/` 中未应用的编号迁移（账本校验和防止改动历史），再自动补齐缺失的表、列与约束；切换镜像 tag 不会撤销已经执行的结构变更。注意账本检查只对 `db-init` 生效，不要为旧库跳过 `db-init`。
 
 `deploy/backup/` 按整点备份 PostgreSQL 和文件卷（当天首份成功备份即成为当日副本，可选同步到异地 restic 仓库）。`db:verify-restore` 或生产 `restore-check` 工具在独立临时库恢复备份，并把还原出的定义与当前 `database/*.sql` 逐项比较（表与列、策略、触发器、视图、索引、函数名与 RLS），再校验用户一致性与外键；使用较早版本镜像产生的备份可以加 `--no-schema` 跳过定义比较。该校验使用 `--no-owner --no-privileges`，不验证业务角色权限。恢复业务环境前停止写入，使用匹配的数据库、文件备份和镜像，并恢复对象属主与权限。
 

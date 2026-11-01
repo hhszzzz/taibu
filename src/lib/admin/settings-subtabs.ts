@@ -28,6 +28,7 @@ export const ADMIN_SUBTABS = {
     { id: 'usage', label: '用量日志' },
     { id: 'agent-tasks', label: 'Agent 任务' },
     { id: 'schedules', label: '定时任务' },
+    { id: 'deployment', label: '部署日志' },
   ],
 } as const;
 

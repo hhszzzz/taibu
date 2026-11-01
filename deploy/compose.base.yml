@@ -81,7 +81,10 @@ services:
   web:
     <<: *node
     command: [node, server.js]
-    volumes: [files:/data/files]
+    # The host updater service watches the same directory for update requests.
+    volumes:
+      - files:/data/files
+      - ${TAIBU_RUN_DIR:-/run/taibu}:${TAIBU_RUN_DIR:-/run/taibu}
     depends_on:
       db-init: { condition: service_completed_successfully }
       files-init: { condition: service_completed_successfully }

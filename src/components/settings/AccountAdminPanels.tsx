@@ -71,6 +71,9 @@ const LazyAgentScheduleLimitsPanel = lazy(async () => ({
 const LazyAgentScheduleRunsPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentScheduleRunsPanel')).AgentScheduleRunsPanel,
 }));
+const LazyDeploymentLogsPanel = lazy(async () => ({
+  default: (await import('@/components/admin/DeploymentLogsPanel')).DeploymentLogsPanel,
+}));
 
 type AdminBillingTab = AdminSubTabId<'admin-billing'>;
 type AdminAITab = AdminSubTabId<'admin-ai-services'>;
@@ -157,7 +160,8 @@ const renderAIPanel = (tab: AdminAITab, active: boolean) => (
 );
 const renderLogsPanel = (tab: AdminLogsTab, active: boolean) => (
   tab === 'usage' ? <LazyBillingUsagePanel active={active} />
-    : tab === 'agent-tasks' ? <LazyAgentTaskPanel active={active} /> : <LazyAgentScheduleRunsPanel active={active} />
+    : tab === 'agent-tasks' ? <LazyAgentTaskPanel active={active} />
+      : tab === 'schedules' ? <LazyAgentScheduleRunsPanel active={active} /> : <LazyDeploymentLogsPanel />
 );
 const renderExtensionsPanel = (tab: AdminExtensionsTab) => (
   tab === 'mcp' ? <LazyAgentMcpPanel />

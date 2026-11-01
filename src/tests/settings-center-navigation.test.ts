@@ -197,7 +197,7 @@ test('the administrator 日志 category owns usage, Agent tasks and schedules; m
   assert.equal(getSettingsCenterTabs(ENABLED_FLAGS).some(tab => tab.id === 'admin-logs'), false);
   assert.deepEqual([tabs.find(tab => tab.id === 'admin-logs')?.label, tabs.find(tab => tab.id === 'admin-logs')?.group], ['日志', 'management']);
   assert.equal(tabs.findIndex(tab => tab.id === 'admin-logs'), tabs.findIndex(tab => tab.id === 'help') - 1);
-  assert.deepEqual(ADMIN_SUBTABS['admin-logs'].map(option => option.label), ['用量日志', 'Agent 任务', '定时任务']);
+  assert.deepEqual(ADMIN_SUBTABS['admin-logs'].map(option => option.label), ['用量日志', 'Agent 任务', '定时任务', '部署日志']);
   assert.deepEqual(ADMIN_SUBTABS['admin-billing'].map(option => option.id), ['users', 'plans', 'codes', 'orders', 'settings']);
   assert.deepEqual(ADMIN_SUBTABS['admin-ai-services'].map(option => option.id), ['models', 'gateways', 'agent-evals']);
   assert.equal(ADMIN_SUBTABS['admin-agent-extensions'].find(option => option.id === 'schedules')?.label, '定时任务额度');

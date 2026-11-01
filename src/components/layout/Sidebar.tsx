@@ -22,6 +22,7 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
 import { RecentsHead, SidebarConversations } from '@/components/layout/SidebarConversations';
 import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButton';
+import { VersionChip } from '@/components/layout/VersionChip';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { getSidebarNavItems, getSidebarToolItems, visibleNavItems, type NavItemDef } from '@/lib/navigation/registry';
@@ -123,8 +124,10 @@ export function Sidebar() {
 function SidebarSkeleton() {
     return (
         <aside className={ASIDE_CLASS}>
-            <div className="flex items-center h-11 px-2 justify-between">
-                <Brand />
+            <div className="flex items-center h-11 px-2 gap-2 justify-between">
+                <div className="flex items-center gap-1 min-w-0">
+                    <Brand />
+                </div>
                 <div className="w-8 h-8 rounded-lg bg-background-secondary animate-pulse" />
             </div>
             <div className="flex-1 py-3 px-2 space-y-2">
@@ -139,8 +142,10 @@ function SidebarSkeleton() {
 function SidebarLoadError({ onRetry }: { onRetry: () => void }) {
     return (
         <aside className={ASIDE_CLASS}>
-            <div className="flex items-center h-11 px-2">
-                <Brand />
+            <div className="flex items-center h-11 px-2 gap-2">
+                <div className="flex items-center gap-1 min-w-0">
+                    <Brand />
+                </div>
             </div>
             <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
                 <p className="text-sm text-foreground-secondary dark:text-foreground-secondary">导航状态加载失败</p>
@@ -226,7 +231,10 @@ function SidebarInner() {
         <>
             <aside className={ASIDE_CLASS}>
                 <div className="flex items-center h-11 px-2 gap-2 justify-between flex-shrink-0">
-                    <Brand />
+                    <div className="flex items-center gap-1 min-w-0">
+                        <Brand />
+                        <VersionChip />
+                    </div>
                     <ModeSwitch fallback={{
                         mode: isChatRoute ? routeMode : storedMode,
                         onSelect: (mode) => {

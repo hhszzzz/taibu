@@ -107,3 +107,31 @@ export async function testMcpServer(
     return { snapshot: null, error: describeMcpError(error, resolved.scrub) };
   }
 }
+
+/** Test an unsaved MCP server input directly without saving to database. */
+export async function testMcpServerInput(
+  fields: { url: string; headers?: Record<string, string>; secretHeaders?: Record<string, string>; secretQuery?: Record<string, string>; timeoutMs?: number },
+  options: { signal?: AbortSignal; pool?: McpPool } = {},
+): Promise<{ snapshot: McpServerSnapshot | null; error: string | null }> {
+  try {
+    const secretHeaders = fields.secretHeaders ?? {};
+    const secretQuery = fields.secretQuery ?? {};
+    const url = new URL(fields.url);
+    for (const [name, value] of Object.entries(secretQuery)) url.searchParams.set(name, value);
+
+    const endpoint: McpEndpoint = {
+      id: 'test-preview',
+      url: url.href,
+      headers: { ...fields.headers, ...secretHeaders },
+      timeoutMs: fields.timeoutMs ?? 30_000,
+    };
+
+    const scrub = secretScrubber([...Object.values(secretHeaders), ...Object.values(secretQuery)]);
+    const description = await (options.pool ?? mcpPool).describe(endpoint, { signal: options.signal, fresh: true });
+    return { snapshot: snapshotOf(description, scrub, MCP_PLATFORM_TOOL_LIMIT), error: null };
+  } catch (error) {
+    options.signal?.throwIfAborted();
+    const scrub = secretScrubber(Object.values(fields.secretHeaders ?? {}).concat(Object.values(fields.secretQuery ?? {})));
+    return { snapshot: null, error: describeMcpError(error, scrub) };
+  }
+}

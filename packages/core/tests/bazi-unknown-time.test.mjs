@@ -137,8 +137,14 @@ test('drilldowns work on the three pillars and refuse to look at an hour pillar 
 });
 
 test('a pairing leaves out the hour pillar of whoever has no birth time, on either side', async () => {
+  const outputSchema = listToolDefinitions().find((tool) => tool.name === 'bazi_hepan').outputSchema;
+  const personSchema = outputSchema.properties.双方.items.properties;
+  assert.ok(personSchema.出生时辰, 'the schema exposes the field emitted for an unknown birth time');
+  assert.ok(!(personSchema.required ?? []).includes('出生时辰'), 'the field stays optional for a known birth time');
+
   for (const [a, b, unknownName, knownName] of [[HER, HIM, '甲方', '乙方'], [HIM, HER, '乙方', '甲方']]) {
     const json = (await render('bazi_hepan', { a, b })).structuredContent;
+    assert.doesNotThrow(() => validateOutput('bazi_hepan', json, outputSchema));
     const [first, second] = json.双方;
     const unknown = first.称呼 === unknownName ? first : second;
     const known = first.称呼 === knownName ? first : second;

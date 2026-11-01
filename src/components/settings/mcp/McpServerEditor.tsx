@@ -9,7 +9,7 @@
 'use client';
 
 import { useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import { Plus, Trash2, Undo2, X } from 'lucide-react';
+import { Plus, Trash2, Undo2, X, Zap } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { Field as FieldBase } from '@/components/ui/Field';
@@ -48,6 +48,7 @@ type Draft = {
   maxResultChars: string;
   sortOrder: string;
   enabled: boolean;
+  healthStatus?: { state: 'idle' | 'testing' | 'ok' | 'error'; message?: string };
 };
 
 let rowKey = 0;
@@ -66,6 +67,7 @@ function draftOf(seed: McpEditorSeed, scope: McpServerScope): Draft {
       secretHeaders: server.secretHeaders.map(stored), secretQuery: server.secretQuery.map(stored),
       timeoutSeconds: String(server.timeoutMs / 1000), maxResultChars: String(server.maxResultChars),
       sortOrder: String(server.sortOrder), enabled: server.enabled,
+      healthStatus: { state: 'idle' },
     };
   }
   const { input, secretHeader } = seed;
@@ -74,13 +76,14 @@ function draftOf(seed: McpEditorSeed, scope: McpServerScope): Draft {
     exposure: input.exposure ?? 'deferred',
     searchTool: input.searchTool ?? '', fetchTool: input.fetchTool ?? '',
     routePriority: String(input.routePriority ?? 100), headers: [],
-    // 用户连接器默认给一行空白密钥，填了再保存；平台服务沿用模板。
+    // 用户连接器默认给一行 Authorization 请求头，填了再保存；平台服务沿用模板。
     secretHeaders: secretHeader
       ? [{ key: nextKey(), name: secretHeader.name, stored: false, value: '', removed: false, placeholder: secretHeader.placeholder }]
-      : scope === 'user' ? [{ key: nextKey(), name: '', stored: false, value: '', removed: false }] : [],
+      : scope === 'user' ? [{ key: nextKey(), name: 'Authorization', stored: false, value: '', removed: false }] : [],
     secretQuery: [],
     timeoutSeconds: String(MCP_TIMEOUT_RANGE.default / 1000), maxResultChars: String(MCP_RESULT_CHARS_RANGE.default),
     sortOrder: '0', enabled: input.enabled ?? true,
+    healthStatus: { state: 'idle' },
   };
 }
 
@@ -218,6 +221,25 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
   const selfHosted = scope === 'user' && isTaibuMcpUrl(draft?.url ?? '');
   const set = (patch: Partial<Draft>) => setState(current => current.draft ? { ...current, draft: { ...current.draft, ...patch } } : current);
 
+  const testConnection = async () => {
+    if (!draft || !draft.url.trim()) return;
+    set({ healthStatus: { state: 'testing' } });
+    try {
+      // 构建用于测试的临时 input
+      const testInput = payloadOf(draft, scope);
+      const response = await fetch('/api/admin/mcp/test', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(testInput),
+      });
+      if (!response.ok) throw new Error(`测试失败：${response.statusText}`);
+      const result = await response.json() as { success: boolean; message?: string };
+      set({ healthStatus: { state: result.success ? 'ok' : 'error', message: result.message ?? (result.success ? '连接成功' : '连接失败') } });
+    } catch (problem) {
+      set({ healthStatus: { state: 'error', message: problem instanceof Error ? problem.message : '连接测试失败' } });
+    }
+  };
+
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     if (!draft || saving) return;
@@ -264,6 +286,17 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                 {props => <Input {...props} type="url" inputMode="url" value={draft.url} required spellCheck={false} autoComplete="off"
                   placeholder="https://example.com/mcp" onChange={event => set({ url: event.target.value })} />}
               </Field>
+              {draft.healthStatus && draft.healthStatus.state !== 'idle' ? (
+                <div className={`mcp-health is-wide mcp-health--${draft.healthStatus.state}`} role="status">
+                  {draft.healthStatus.state === 'testing' ? '测试连接中…' : draft.healthStatus.message}
+                </div>
+              ) : null}
+              <div className="is-wide" style={{ marginTop: '-0.5rem', marginBottom: '0.5rem' }}>
+                <Button size="sm" type="button" variant="secondary" onClick={testConnection} disabled={!draft.url.trim() || draft.healthStatus?.state === 'testing'}>
+                  <Zap size={16} aria-hidden="true" />
+                  测试连接
+                </Button>
+              </div>
               {selfHosted ? <p className="mcp-notice is-wide" role="status">太卜已经有这个 MCP 了，不需要重复导入；可以直接在「Taibu MCP」页复制配置。</p> : null}
               <Field label="用途说明" wide hint={scope === 'platform' ? '写给模型看：这个服务能做什么、什么时候用。' : '写给 Agent 看：什么时候该用这个连接器。'}>
                 {props => <Textarea {...props} rows={3} maxLength={2000} value={draft.description} onChange={event => set({ description: event.target.value })} />}
@@ -297,7 +330,23 @@ export function McpServerEditor({ scope, seed, onClose, onSubmit }: {
                 <SecretRows label="密钥查询参数" kind="query" list={draft.secretQuery} onChange={secretQuery => set({ secretQuery })} />
                 <p className="mcp-hint">密钥加密保存，保存后不再显示；调用时才附加到请求上。</p>
               </>
-            ) : <p className="mcp-hint">密钥加密保存，保存后不再显示。</p>}
+            ) : (
+              <>
+                <Field label="密钥" wide hint="MCP 服务可以通过 Authorization 请求头读取；加密保存，保存后不再显示。">
+                  {props => {
+                    const secret = draft.secretHeaders[0];
+                    return secret?.stored ? (
+                      <span className="mcp-secret-state" role="status">{secret.removed ? '保存后删除' : '已设置'}</span>
+                    ) : (
+                      <Input {...props} type="password" autoComplete="new-password" spellCheck={false}
+                        placeholder={secret?.placeholder ?? '密钥值'}
+                        value={secret?.value ?? ''}
+                        onChange={event => set({ secretHeaders: [{ key: secret?.key ?? 0, name: 'Authorization', stored: secret?.stored ?? false, value: event.target.value, removed: false }] })} />
+                    );
+                  }}
+                </Field>
+              </>
+            )}
 
             {scope === 'platform' ? <details className="mcp-advanced">
               <summary>高级设置</summary>

@@ -1,5 +1,7 @@
 import "server-only";
 import type { ScopedDb } from "@/lib/db/context.server";
+import { referenceCosts } from "@/lib/billing/ledger.server";
+import type { ReferenceCost } from "@/lib/billing/config";
 import type { JsonValue } from "@earendil-works/chord";
 import type { ConversationRecord, JsonObject, StorageWrite, SubmissionRecord, TaskRecord } from "@earendil-works/pi-durable";
 import { AGENT_ACTIVE_STATUSES, type AgentRunStatus } from "./types";
@@ -185,8 +187,8 @@ export async function listAgentRunsForAdmin(db: ScopedDb, options: { scope: "act
   return (rows as unknown as AdminRunRow[]).map(row => adminRun(row, emails));
 }
 
-/** A task with its task tree, or null when there is no such task. */
-export async function readAgentTaskTreeForAdmin(db: ScopedDb, id: string): Promise<{ run: AgentAdminRun; tree: AgentTaskTree } | null> {
+/** A task with its task tree and what its model calls cost (null when that lookup fails), or null when there is no such task. */
+export async function readAgentTaskTreeForAdmin(db: ScopedDb, id: string): Promise<{ run: AgentAdminRun; tree: AgentTaskTree; cost: ReferenceCost | null } | null> {
   const row = await db.tx((trx) => trx.selectFrom("agent_runs")
     .select(["id", "conversation_id", "user_id", "status", "billing", "worker_id", "fence", "lease_until", "cancel_requested", "created_at", "updated_at", "input"])
     .where("id", "=", id).executeTakeFirst());
@@ -200,5 +202,9 @@ export async function readAgentTaskTreeForAdmin(db: ScopedDb, id: string): Promi
     if (read.length < TASK_LOG_PAGE) break;
     if (page === TASK_LOG_PAGES) { truncated = true; break; }
   }
-  return { run: adminRun(row as unknown as AdminRunRow, await userEmails(db, [row.user_id])), tree: buildAgentTaskTree(commits, truncated) };
+  const [emails, cost] = await Promise.all([
+    userEmails(db, [row.user_id]),
+    referenceCosts("agent_run", [id], db).then(costs => costs.get(id) ?? { calls: 0, spentMicros: 0 }, () => null),
+  ]);
+  return { run: adminRun(row as unknown as AdminRunRow, emails), tree: buildAgentTaskTree(commits, truncated), cost };
 }

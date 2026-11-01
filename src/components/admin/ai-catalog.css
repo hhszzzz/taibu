@@ -30,25 +30,60 @@
 
 /* 弹层编辑器：头部、可滚动表单、粘底操作栏。 */
 .app-modal.ai-catalog-dialog { display: flex; width: min(42rem, calc(100vw - 32px)); max-height: min(52rem, calc(100dvh - 32px)); flex-direction: column; overflow: hidden; }
-.ai-catalog-dialog-head { display: flex; align-items: center; gap: .75rem; padding: 1rem 1rem .75rem 1.25rem; border-bottom: 1px solid var(--fill-field); }
+.app-modal.ai-catalog-dialog-wide { width: min(48rem, calc(100vw - 32px)); }
+.ai-catalog-dialog-head { display: flex; align-items: center; gap: .75rem; padding: .875rem 1rem .75rem 1.25rem; border-bottom: 1px solid var(--fill-field); }
 .ai-catalog-dialog-head h2 { flex: 1; min-width: 0; font-size: 1rem; font-weight: 600; }
 .ai-catalog-dialog-head p { font-size: .75rem; color: var(--foreground-tertiary); }
-.ai-catalog-dialog-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: 1.5rem; padding: 1.25rem; overflow-y: auto; overscroll-behavior: contain; }
-.ai-catalog-dialog-foot { display: flex; align-items: center; gap: .5rem; padding: .75rem 1rem; border-top: 1px solid var(--fill-field); background: var(--surface); }
+.ai-catalog-dialog-body { display: flex; flex: 1; min-height: 0; flex-direction: column; gap: .875rem; padding: 1rem 1.25rem 1.25rem; overflow-y: auto; overscroll-behavior: contain; }
+.ai-catalog-dialog-foot { display: flex; align-items: center; gap: .5rem; padding: .625rem 1rem; border-top: 1px solid var(--fill-field); background: var(--surface); }
 .ai-catalog-dialog-foot > .ai-catalog-spacer { flex: 1; }
 .ai-catalog-dialog-foot .ai-catalog-error { flex: 1; min-width: 0; font-size: .8125rem; color: var(--danger); }
 
-.ai-catalog-section { display: flex; flex-direction: column; gap: .875rem; animation: motion-fade-up var(--duration-base) var(--ease-out) both; }
-.ai-catalog-section > header { display: flex; flex-direction: column; gap: .125rem; }
+/* 分区之间一条细线；区块说明跟在标题后面，放不下再折行。 */
+.ai-catalog-section { display: flex; flex-direction: column; gap: .625rem; animation: motion-fade-up var(--duration-base) var(--ease-out) both; }
+.ai-catalog-section + .ai-catalog-section { padding-top: .875rem; border-top: 1px solid var(--fill-field); }
+.ai-catalog-section > header { display: flex; flex-wrap: wrap; align-items: baseline; gap: .125rem .5rem; }
 .ai-catalog-section h3 { font-size: .8125rem; font-weight: 600; color: var(--foreground); }
 .ai-catalog-section > header p, .ai-catalog-hint { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
-.ai-catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .875rem; }
-.ai-catalog-field { display: flex; min-width: 0; flex-direction: column; gap: .375rem; font-size: .8125rem; color: var(--foreground-secondary); }
+.ai-catalog-hint[data-tone=accent] { color: var(--accent-strong); }
+.ai-catalog-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; }
+.ai-catalog-grid[data-columns="4"] { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.ai-catalog-field { display: flex; min-width: 0; flex-direction: column; gap: .25rem; font-size: .75rem; color: var(--foreground-secondary); }
 .ai-catalog-field > .settings-input, .ai-catalog-field > .settings-select, .ai-catalog-field > .settings-textarea { width: 100%; background: var(--background); }
 .ai-catalog-field .ai-catalog-mono.settings-input { font-size: .8125rem; }
-.ai-catalog-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: .875rem; color: var(--foreground); }
+.ai-catalog-field input[type=number] { font-variant-numeric: tabular-nums; }
+.ai-catalog-toggles { display: flex; flex-direction: column; justify-content: flex-end; gap: .375rem; }
+.ai-catalog-toggle { display: flex; align-items: center; justify-content: space-between; gap: 1rem; font-size: .8125rem; color: var(--foreground); }
 .ai-catalog-toggle > span { display: flex; flex-direction: column; gap: .125rem; }
 .ai-catalog-toggle small { font-size: .75rem; color: var(--foreground-tertiary); }
+
+/* 基本信息：图标 + 名称 + ID 一行，供应商、用途、排序一行。 */
+.ai-catalog-identity { display: grid; grid-template-columns: auto minmax(0, 1fr) minmax(0, 1fr); align-items: end; gap: .625rem; }
+.ai-catalog-meta-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .625rem; }
+.ai-catalog-meta-row > .ai-catalog-field { flex: 1 1 9rem; }
+.ai-catalog-meta-row > .ai-catalog-usage { flex: 0 1 16.25rem; }
+.ai-catalog-meta-row > .ai-catalog-sort { flex: 0 0 5rem; }
+
+/* 图标选择：方形按钮显示生效的图标，弹层里搜索全部图标。 */
+.ai-catalog-icon-trigger { display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--background); color: var(--foreground-secondary);
+  transition: border-color var(--duration-snap) var(--ease-out), background-color var(--duration-snap) var(--ease-out), scale var(--duration-snap) var(--ease-out); }
+.ai-catalog-icon-trigger:hover { border-color: var(--border-hover); background: var(--fill-field); }
+.ai-catalog-icon-trigger:active { scale: .96; }
+.ai-catalog-icon-trigger:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ai-catalog-icon-trigger[data-popup-open] { border-color: var(--accent); }
+.ai-catalog-icon-panel { display: flex; width: min(20rem, calc(100vw - 32px)); flex-direction: column; gap: .5rem; padding: .75rem; }
+.ai-catalog-icon-current { display: flex; align-items: center; gap: .625rem; }
+.ai-catalog-icon-preview { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 2.5rem; height: 2.5rem; border-radius: .625rem; background: var(--fill-field); color: var(--foreground-secondary); }
+.ai-catalog-icon-current-text { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: .125rem; }
+.ai-catalog-icon-current-text strong { overflow: hidden; font-size: .8125rem; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; color: var(--foreground); }
+.ai-catalog-icon-current-text small { font-size: .6875rem; color: var(--foreground-tertiary); }
+.ai-catalog-icon-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(2.25rem, 1fr)); gap: .25rem; max-height: 13.5rem; overflow-y: auto; overscroll-behavior: contain; }
+.ai-catalog-icon-option { display: inline-flex; align-items: center; justify-content: center; aspect-ratio: 1; border: 1px solid transparent; border-radius: .5rem; color: var(--foreground-secondary);
+  transition: background-color var(--duration-snap) var(--ease-out), border-color var(--duration-snap) var(--ease-out), scale var(--duration-snap) var(--ease-out); }
+.ai-catalog-icon-option:hover { background: var(--fill-field); }
+.ai-catalog-icon-option:active { scale: .94; }
+.ai-catalog-icon-option:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ai-catalog-icon-option[aria-pressed=true] { border-color: var(--accent); background: var(--accent-light); }
 
 /* 预设阶梯（Pi Desktop 同构）：点选写入数值，输入框仍可手填，与当前值相等的一格高亮。 */
 .ai-catalog-limit { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; }
@@ -62,7 +97,7 @@
 
 /* 来源：按顺序故障转移，可上下调整。 */
 .ai-catalog-sources { display: flex; flex-direction: column; gap: .5rem; }
-.ai-catalog-source { display: flex; flex-direction: column; gap: .625rem; padding: .75rem; border: 1px solid var(--border); border-radius: .625rem; background: var(--background);
+.ai-catalog-source { display: flex; flex-direction: column; gap: .5rem; padding: .625rem .75rem; border: 1px solid var(--border); border-radius: .625rem; background: var(--background);
   transition: border-color var(--duration-snap) var(--ease-out), opacity var(--duration-base) var(--ease-out); }
 .ai-catalog-source[data-disabled] { opacity: .6; }
 .ai-catalog-source-head { display: flex; align-items: center; gap: .5rem; }
@@ -72,7 +107,7 @@
 .ai-catalog-source-head small { font-size: .75rem; color: var(--foreground-tertiary); }
 .ai-catalog-source-head small[data-tone=warning] { color: var(--danger); }
 
-.ai-catalog-advanced { border-top: 1px solid var(--fill-field); padding-top: 1rem; }
+.ai-catalog-advanced { border-top: 1px solid var(--fill-field); padding-top: .875rem; }
 .ai-catalog-advanced > summary { display: flex; align-items: center; gap: .375rem; cursor: pointer; list-style: none; font-size: .8125rem; font-weight: 600; color: var(--foreground); }
 .ai-catalog-advanced > summary::-webkit-details-marker { display: none; }
 .ai-catalog-advanced > summary svg { transition: rotate var(--duration-base) var(--ease-snap); }
@@ -88,23 +123,40 @@
 
 
 /* models.dev 目录建议：只读参考值，点「填入」才写进表单。 */
-.ai-catalog-lookup { display: flex; flex-direction: column; gap: .5rem; padding: .75rem; border: 1px dashed var(--border); border-radius: .625rem; }
+.ai-catalog-lookup { display: flex; flex-direction: column; gap: .375rem; padding: .5rem .625rem; border: 1px dashed var(--border); border-radius: .625rem; }
 .ai-catalog-lookup-head { display: flex; align-items: center; justify-content: space-between; gap: .75rem; font-size: .8125rem; font-weight: 500; color: var(--foreground); }
 .ai-catalog-lookup-head > span { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
 .ai-catalog-lookup-head small { font-size: .75rem; font-weight: 400; color: var(--foreground-tertiary); }
-.ai-catalog-lookup-list { display: flex; flex-direction: column; gap: .375rem; max-height: 13rem; overflow-y: auto; }
-.ai-catalog-lookup-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .25rem .75rem; padding: .5rem .625rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); }
+.ai-catalog-lookup-list { display: flex; flex-direction: column; gap: .25rem; max-height: 12rem; overflow-y: auto; overscroll-behavior: contain; }
+.ai-catalog-lookup-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: .125rem .75rem; padding: .375rem .625rem; border: 1px solid var(--border); border-radius: .5rem; background: var(--surface); }
 .ai-catalog-lookup-name { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
 .ai-catalog-lookup-name strong { overflow: hidden; font-size: .8125rem; font-weight: 500; white-space: nowrap; text-overflow: ellipsis; }
 .ai-catalog-lookup-name small { overflow: hidden; font-family: var(--font-mono); font-size: .6875rem; color: var(--foreground-tertiary); white-space: nowrap; text-overflow: ellipsis; }
 .ai-catalog-lookup-meta { grid-column: 1; font-size: .75rem; color: var(--foreground-secondary); }
+.ai-catalog-lookup-price { margin-left: .5rem; padding: 0 .375rem; border-radius: 999px; background: var(--fill-field); font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--foreground); }
 .ai-catalog-lookup-list li > button { grid-row: 1 / span 2; grid-column: 2; }
+
+/* 一键补全的结果清单。 */
+.ai-catalog-report { display: flex; flex-direction: column; gap: 1rem; }
+.ai-catalog-report h3 { margin-bottom: .375rem; font-size: .8125rem; font-weight: 600; color: var(--foreground); }
+.ai-catalog-report p { margin-bottom: .375rem; font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+.ai-catalog-report ul { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: .5rem; }
+.ai-catalog-report li { display: flex; flex-wrap: wrap; align-items: baseline; gap: .125rem .5rem; padding: .375rem .625rem; border-top: 1px solid var(--fill-field); font-size: .8125rem; }
+.ai-catalog-report li:first-child { border-top: 0; }
+.ai-catalog-report li strong { font-weight: 500; color: var(--foreground); }
+.ai-catalog-report li span { color: var(--foreground-secondary); }
+.ai-catalog-report li small { margin-left: auto; font-family: var(--font-mono); font-size: .6875rem; color: var(--foreground-tertiary); }
+.ai-catalog-report li[data-tone=danger] span { color: var(--danger); }
 
 @media (prefers-reduced-motion: reduce) {
   .ai-catalog-section, .ai-catalog-advanced > div, .ai-catalog-probe { animation: none; }
+  .ai-catalog-icon-trigger, .ai-catalog-icon-option { transition: none; }
 }
 @media (max-width: 767px) {
   .ai-catalog-grid { grid-template-columns: minmax(0, 1fr); }
+  .ai-catalog-grid[data-columns="4"] { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .ai-catalog-identity { grid-template-columns: auto minmax(0, 1fr); }
+  .ai-catalog-identity > :last-child { grid-column: 1 / -1; }
   .app-modal.ai-catalog-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
   .ai-catalog-row-meta { display: none; }
 }

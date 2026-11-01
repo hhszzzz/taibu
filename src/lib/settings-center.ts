@@ -4,6 +4,7 @@ export const SETTINGS_CENTER_TABS = [
   'general',
   'profile',
   'billing',
+  'usage-log',
   'shares',
   'personalization',
   'byok',
@@ -17,6 +18,7 @@ export const SETTINGS_CENTER_TABS = [
   'admin-billing',
   'admin-ai-services',
   'admin-agent-extensions',
+  'admin-logs',
   'help',
 ] as const;
 
@@ -62,7 +64,8 @@ export const SETTINGS_CENTER_GROUP_LABELS: Record<SettingsCenterTabGroup, string
 const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTabState, 'disabled'>> = {
   profile: { id: 'profile', label: '账户', group: 'account', description: '管理个人资料与登录安全。' },
   general: { id: 'general', label: '常规', group: 'account', description: '调整外观、阅读字号与提醒方式。' },
-  billing: { id: 'billing', label: '订阅与余额', group: 'account', description: '平台模型按实际用量计费，先扣订阅额度，再扣余额。' },
+  billing: { id: 'billing', label: '钱包', group: 'account', description: '余额、订阅、充值、兑换码与支付订单；可自选先扣订阅额度还是先扣余额。' },
+  'usage-log': { id: 'usage-log', label: '用量日志', group: 'account', description: '每次平台模型调用的用量与费用，以及充值、兑换、订阅等资金变动。' },
   shares: { id: 'shares', label: '分享链接', group: 'account', description: '你公开分享过的对话。删除后原链接立即失效。' },
   help: { id: 'help', label: '帮助', group: 'account', description: '常见问题与联系方式。' },
   personalization: { id: 'personalization', label: '个性化', group: 'extensions', description: '这些偏好会带入 AI 对话与结果页解读。' },
@@ -74,9 +77,10 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   'mcp-service': { id: 'mcp-service', label: 'Taibu MCP', group: 'extensions', description: '在支持 MCP 的客户端里直接调用太卜的排盘工具。' },
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
   'admin-features': { id: 'admin-features', label: '功能开关', group: 'management', description: '按模块关闭入口与接口，关闭后前后端同时失效。' },
-  'admin-billing': { id: 'admin-billing', label: '计费', group: 'management', description: '管理套餐、兑换码、用户余额与订单，查看全站用量日志。' },
-  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关，查看 Agent 任务和测评结果。' },
+  'admin-billing': { id: 'admin-billing', label: '计费', group: 'management', description: '管理用户余额、套餐、兑换码、订单与充值设置。' },
+  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关，查看 Agent 测评。' },
   'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', beta: true, description: '管理平台 MCP、联网搜索、技能与智能体角色，并设置用户扩展权限。' },
+  'admin-logs': { id: 'admin-logs', label: '日志', group: 'management', description: '全站用量、Agent 任务与定时任务的运行记录。' },
 };
 
 function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCenterFlags) {
@@ -84,6 +88,7 @@ function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCent
     case 'shares':
       return !flags.sharesEnabled;
     case 'billing':
+    case 'usage-log':
       return !flags.billingEnabled;
     case 'personalization':
       return !flags.personalizationEnabled;
@@ -132,7 +137,12 @@ export function getSettingsCenterDisabledState(
     case 'billing':
       return {
         title: '暂未开放',
-        description: '当前订阅与余额不可用。',
+        description: '当前钱包不可用。',
+      };
+    case 'usage-log':
+      return {
+        title: '暂未开放',
+        description: '当前用量日志不可用。',
       };
     case 'knowledge-base':
       return {

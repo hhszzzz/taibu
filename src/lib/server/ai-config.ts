@@ -39,6 +39,7 @@ interface DBModelRow {
   model_key: string;
   display_name: string;
   vendor: string;
+  icon: string | null;
   usage_type?: string;
   input_price: number | null;
   output_price: number | null;
@@ -93,6 +94,7 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
       id: row.model_key,
       name: row.display_name,
       vendor: row.vendor as AIVendor,
+      icon: row.icon,
       usageType: row.usage_type as AIModelConfig['usageType'],
       pricing: {
         input: row.input_price, output: row.output_price, cacheRead: row.cache_read_price,
@@ -125,7 +127,7 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
       const models = await trx
         .selectFrom('ai_models')
         .select([
-          'id', 'model_key', 'display_name', 'vendor', 'usage_type',
+          'id', 'model_key', 'display_name', 'vendor', 'icon', 'usage_type',
           'input_price', 'output_price', 'cache_read_price', 'cache_write_price', 'image_price',
           'is_reasoning_default', 'supports_vision',
           'default_max_tokens', 'default_reasoning_effort',

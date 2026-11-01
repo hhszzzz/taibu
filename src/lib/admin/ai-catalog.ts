@@ -8,6 +8,7 @@ import {
     type AIUsageType,
 } from '@/types';
 import { GATEWAY_KEY_PATTERN } from '@/lib/ai/source-runtime';
+import { isLobeIconId } from '@/lib/ai/lobe-icons';
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
 import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 
@@ -43,6 +44,8 @@ export interface AdminModelInput {
     modelKey: string;
     displayName: string;
     vendor: string;
+    /** lobehub 图标 ID；null 表示按供应商显示。 */
+    icon: string | null;
     usageType: AIUsageType;
     /** 美元单价：对话与视觉按每百万 token，生图按每张；未定价的模型平台不提供。 */
     pricing: AIModelPricing;
@@ -207,6 +210,8 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (!displayName || displayName.length > 80) return { error: '请填写显示名称（不超过 80 个字符）' };
     const vendor = text(body.vendor);
     if (!vendor || vendor.length > 40) return { error: '请选择或填写供应商' };
+    const icon = optionalText(body.icon);
+    if (icon !== null && !isLobeIconId(icon)) return { error: '图标不在可选范围内' };
     const usageType = body.usageType ?? 'chat';
     if (!USAGE_TYPES.some(item => item.value === usageType)) return { error: '模型用途无效' };
     const pricing = parsePricing(body.pricing, usageType as AIUsageType);
@@ -237,7 +242,7 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if ('error' in sources) return sources;
     return {
         value: {
-            modelKey, displayName, vendor,
+            modelKey, displayName, vendor, icon,
             usageType: usageType as AIUsageType,
             pricing: pricing.value,
             isEnabled: body.isEnabled !== false,

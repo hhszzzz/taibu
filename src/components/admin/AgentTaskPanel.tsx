@@ -3,6 +3,7 @@
  *
  * 管理员查看进行中或最近的 Agent 任务，以及按 Pi Durable 提交日志重建的任务树：模型生成、工具与脚本调用、
  * 协作成员与后台子分析的会话，含已结束的任务、耗时、等待关系与失败原因。面板可见时，进行中的列表与任务树定时刷新。
+ * 地址带 ?q=<任务 ID>（用量日志的「查看任务」）时直接查找并打开这个任务。
  *
  * 'use client' 标记说明：
  * - 需要 useState / useEffect 加载并轮询列表与任务树，维护筛选、搜索与选中项
@@ -11,11 +12,15 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { RefreshCw, Search, X } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { requestBrowserData } from '@/lib/browser-api';
 import { isValidUUID } from '@/lib/validation';
 import { AGENT_ACTIVE_STATUSES, type AgentRunStatus } from '@/lib/agent/types';
 import type { AgentAdminRun, AgentTaskConversation, AgentTaskNode, AgentTaskSubmission, AgentTaskTree } from '@/lib/agent/admin-tasks';
 import { formatAgentDuration } from '@/lib/agent/admin-metrics';
+import type { ReferenceCost } from '@/lib/billing/config';
+import { formatCount } from '@/lib/billing/format';
+import { formatUsd } from '@/lib/billing/money';
 import { AgentPerformancePanel } from '@/components/admin/AgentPerformancePanel';
 import { Button } from '@/components/ui/Button';
 import { FilterChip } from '@/components/ui/FilterChip';
@@ -26,7 +31,7 @@ import { Input } from '@/components/ui/Input';
 
 type Scope = 'active' | 'recent';
 type View = 'tasks' | 'performance';
-type RunDetail = { run: AgentAdminRun; tree: AgentTaskTree };
+type RunDetail = { run: AgentAdminRun; tree: AgentTaskTree; cost?: ReferenceCost | null };
 type Tone = { label: string; tone: string };
 
 const SCOPES: Array<{ id: Scope; label: string }> = [
@@ -246,7 +251,7 @@ function RunDetailView({ detail, now, onClose }: { detail: RunDetail; now: numbe
                 <Field label="配置">{runModes(run)}</Field>
                 <Field label="Worker">{`${run.workerId ?? '无'} · fence ${run.fence}`}{run.cancelRequested ? ' · 已请求停止' : ''}</Field>
                 <Field label="租约至">{formatTime(run.leaseUntil)}</Field>
-                <Field label="计费">{BILLING[run.billing]}</Field>
+                <Field label="计费">{BILLING[run.billing]}{detail.cost ? ` · ${formatUsd(detail.cost.spentMicros, { precise: true })}（${formatCount(detail.cost.calls)} 次调用）` : ''}</Field>
                 <Field label="创建 / 更新">{`${formatTime(run.createdAt)} / ${formatTime(run.updatedAt)}`}</Field>
             </dl>
             <div className="flex flex-wrap items-center justify-between gap-2">
@@ -286,6 +291,9 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
     // 只采用最近一次请求的结果：切换筛选或任务后，较早发出的请求不能覆盖新结果。
     const listSeq = useRef(0);
     const detailSeq = useRef(0);
+    // 从用量日志跳来的任务 ID：查到后自动打开它的任务树。
+    const focus = useRef<string | null>(null);
+    const linked = useSearchParams().get('q')?.trim() ?? '';
 
     const loadRuns = useCallback(async () => {
         const seq = ++listSeq.current;
@@ -297,8 +305,17 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
                 { fallbackMessage: '获取 Agent 任务失败' },
             );
             if (seq !== listSeq.current) return;
-            setRuns(data.runs ?? []);
+            const list = data.runs ?? [];
+            setRuns(list);
             setListError(null);
+            if (focus.current && focus.current === search) {
+                if (list.some(run => run.id === search)) {
+                    detailSeq.current++;
+                    setSelectedId(search);
+                    setDetailError(null);
+                }
+                focus.current = null;
+            }
         } catch (error) {
             if (seq !== listSeq.current) return;
             setListError(getErrorMessage(error, '获取 Agent 任务失败'));
@@ -326,6 +343,16 @@ export function AgentTaskPanel({ active = true }: { active?: boolean }) {
     }, []);
 
     const tasksActive = active && view === 'tasks';
+
+    useEffect(() => {
+        if (!linked || !isValidUUID(linked)) return;
+        void Promise.resolve().then(() => {
+            focus.current = linked;
+            setView('tasks');
+            setQuery(linked);
+            setSearch(linked);
+        });
+    }, [linked]);
 
     useEffect(() => {
         if (tasksActive) void Promise.resolve().then(loadRuns);

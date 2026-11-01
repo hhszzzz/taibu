@@ -1,0 +1,27 @@
+/* 详情弹窗：分区小标题 + 浅底块，字段名一列、值一列；可折叠分区默认收起。 */
+.app-modal.detail-dialog { width: min(36rem, calc(100vw - 32px)); }
+.detail-stack { display: flex; flex-direction: column; gap: 1rem; }
+.detail-section { display: flex; flex-direction: column; gap: .375rem; }
+.detail-section > h3, .detail-section > summary { display: flex; align-items: center; gap: .375rem; font-size: .75rem; font-weight: 500; color: var(--foreground-tertiary); }
+.detail-section dl { display: flex; flex-direction: column; gap: .375rem; padding: .625rem .75rem; border: 1px solid var(--border); border-radius: .625rem; background: var(--background-secondary); }
+.detail-row { display: grid; grid-template-columns: 7rem minmax(0, 1fr); align-items: baseline; gap: .75rem; font-size: .75rem; line-height: 1.5; }
+.detail-row > dt { color: var(--foreground-tertiary); }
+.detail-row > dd { display: flex; min-width: 0; flex-wrap: wrap; align-items: center; gap: .25rem .5rem; color: var(--foreground); font-variant-numeric: tabular-nums; }
+.detail-row[data-total] { margin-top: .125rem; padding-top: .375rem; border-top: 1px solid var(--border); font-weight: 500; }
+.detail-copy { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.25rem; height: 1.25rem; border-radius: .375rem; color: var(--foreground-tertiary);
+  transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
+.detail-copy:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.detail-copy:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.detail-collapsible > summary { cursor: pointer; list-style: none; }
+.detail-collapsible > summary::-webkit-details-marker { display: none; }
+.detail-collapsible > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: .25rem; }
+.detail-collapsible > summary svg { margin-left: auto; transition: rotate var(--duration-base) var(--ease-snap); }
+.detail-collapsible[open] > summary svg { rotate: 180deg; }
+.detail-collapsible > dl { margin-top: .375rem; }
+
+@media (max-width: 639px) {
+  .detail-row { grid-template-columns: 5.25rem minmax(0, 1fr); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .detail-collapsible > summary svg, .detail-copy { transition: none; }
+}

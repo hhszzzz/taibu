@@ -43,7 +43,10 @@ test('user menu uses registry icons and removes heavy account shortcuts', () => 
   assert.equal(source.includes('user-usage-menu'), true);
   assert.equal(source.includes('可用额度'), true);
   assert.equal(source.includes("openSettingsCenter('billing')"), true);
-  assert.equal(source.includes('订阅与余额'), true);
+  assert.equal(source.includes("openSettingsCenter('usage-log')"), true);
+  assert.equal(source.includes('<span>钱包</span>'), true);
+  assert.equal(source.includes('<span>用量日志</span>'), true);
+  assert.equal(source.includes('订阅与余额'), false);
   assert.equal(source.includes('usage-dialog'), false);
   assert.equal(source.includes('isUsageOpen'), false);
 });

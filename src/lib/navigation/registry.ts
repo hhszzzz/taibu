@@ -109,7 +109,7 @@ export const NAV_REGISTRY: readonly NavItemDef[] = [
   // ── User ────────────────────────────────────────────────────────────────
   { id: 'settings-profile', href: getSettingsCenterRouteTarget('profile'), label: '我的', icon: ProfileIcon, category: 'user' },
   { id: 'settings-general', href: getSettingsCenterRouteTarget('general'), label: '设置', icon: SettingsIcon, category: 'user' },
-  { id: 'settings-billing', href: getSettingsCenterRouteTarget('billing'), label: '订阅与余额', icon: BillingIcon, featureId: 'billing', category: 'user' },
+  { id: 'settings-billing', href: getSettingsCenterRouteTarget('billing'), label: '钱包', icon: BillingIcon, featureId: 'billing', category: 'user' },
   { id: 'settings-charts', href: getSettingsCenterRouteTarget('charts'), label: '命盘', icon: ChartsIcon, featureId: 'charts', category: 'user' },
   { id: 'notifications', href: '/user/notifications', label: '通知', icon: BellIcon, featureId: 'notifications', category: 'user' },
   { id: 'settings-personalization', href: getSettingsCenterRouteTarget('personalization'), label: '个性化', icon: PersonalizationIcon, featureId: 'ai-personalization', category: 'user' },
@@ -229,7 +229,7 @@ const adminLabelOverride: Record<string, string> = {
   shares: '分享链接',
   'annual-report': '年度报告',
   notifications: '消息通知',
-  billing: '订阅与余额',
+  billing: '钱包与用量',
   help: '帮助',
   charts: '我的命盘',
 };

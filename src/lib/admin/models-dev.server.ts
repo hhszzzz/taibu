@@ -2,7 +2,7 @@ import 'server-only';
 
 /**
  * models.dev 目录的服务端读取：整份 api.json 在内存里缓存一段时间，供管理端模型编辑器
- * 按模型 ID 查询公开的上下文窗口、输出上限与能力。目录不可用不影响手填。
+ * 按模型 ID 查询公开的上下文窗口、输出上限、能力与单价，以及一键补全整个目录。目录不可用不影响手填。
  */
 import { CatalogError } from '@/lib/admin/ai-catalog.server';
 import {
@@ -51,6 +51,9 @@ async function catalog(): Promise<ModelsDevSuggestion[]> {
         .finally(() => { pending = null; });
     return pending;
 }
+
+/** 整份目录（已摊平），一键补全逐个精确匹配用。 */
+export const allModelsDevModels = (): Promise<ModelsDevSuggestion[]> => catalog();
 
 export async function searchModelsDev(query: string, limit = 20): Promise<ModelsDevSuggestion[]> {
     if (!query.trim()) return [];

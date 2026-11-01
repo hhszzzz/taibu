@@ -36,6 +36,12 @@ test('model input keeps the thinking ladder in order and only allows a listed de
     assert.ok('value' in parseModelInput(model({ customParameters: { promptCacheKey: true } })));
     assert.match((parseModelInput(model({ modelKey: 'has space' })) as { error: string }).error, /空格/u);
 
+    // 图标只接受 lobehub 目录里的 ID；留空表示按供应商显示。
+    assert.equal((parseModelInput(model()) as { value: { icon: unknown } }).value.icon, null);
+    assert.equal((parseModelInput(model({ icon: 'OpenAI' })) as { value: { icon: unknown } }).value.icon, 'OpenAI');
+    assert.equal((parseModelInput(model({ icon: '' })) as { value: { icon: unknown } }).value.icon, null);
+    assert.match((parseModelInput(model({ icon: 'MysteryIcon' })) as { error: string }).error, /图标不在可选范围内/u);
+
     // 单价只保存该用途要填的字段：对话按 token，生图按张；留空表示未定价。
     const priced = parseModelInput(model({ pricing: { input: '0.5', output: 2, cacheRead: '', image: 9 } }));
     assert.ok('value' in priced);

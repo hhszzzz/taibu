@@ -38,6 +38,7 @@ import {
 
 const LazyGeneralSettingsContent = lazy(() => import('@/components/settings/panels/GeneralSettingsPanel'));
 const LazyBillingContent = lazy(() => import('@/components/settings/panels/BillingPanel'));
+const LazyUsageLogContent = lazy(() => import('@/components/settings/panels/UsageLogPanel'));
 const LazyAISettingsContent = lazy(() => import('@/components/settings/panels/AISettingsPanel'));
 const LazyBYOKContent = lazy(() => import('@/components/settings/panels/BYOKPanel'));
 const LazyChartsContent = lazy(() => import('@/components/settings/panels/ChartsPanel'));
@@ -62,6 +63,9 @@ const LazyAdminAIServicesContent = lazy(async () => ({
 }));
 const LazyAdminAgentExtensionsContent = lazy(async () => ({
   default: (await import('@/components/settings/AccountAdminPanels')).AdminAgentExtensionsContent,
+}));
+const LazyAdminLogsContent = lazy(async () => ({
+  default: (await import('@/components/settings/AccountAdminPanels')).AdminLogsContent,
 }));
 
 function SettingsPanelFallback() {
@@ -168,6 +172,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyGeneralSettingsContent />);
     case 'billing':
       return renderLazyPanel(<LazyBillingContent />);
+    case 'usage-log':
+      return renderLazyPanel(<LazyUsageLogContent />);
     case 'shares':
       return renderLazyPanel(<LazySharedLinksContent />);
     case 'personalization':
@@ -196,6 +202,8 @@ function renderSettingsCenterPanel(
       return renderLazyPanel(<LazyAdminAIServicesContent />);
     case 'admin-agent-extensions':
       return renderLazyPanel(<LazyAdminAgentExtensionsContent />);
+    case 'admin-logs':
+      return renderLazyPanel(<LazyAdminLogsContent />);
   }
 }
 

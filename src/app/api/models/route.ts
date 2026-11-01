@@ -26,6 +26,7 @@ export async function GET(request: NextRequest) {
             id: string;
             name: string;
             vendor: string;
+            icon: string | null;
             supportsReasoning: boolean;
             isReasoningDefault: boolean;
         }>();
@@ -37,6 +38,7 @@ export async function GET(request: NextRequest) {
                 id: modelId,
                 name: model.name,
                 vendor: model.vendor,
+                icon: model.icon ?? null,
                 supportsReasoning: model.supportsReasoning,
                 isReasoningDefault: model.isReasoningDefault ?? false,
             });
@@ -61,7 +63,9 @@ export async function GET(request: NextRequest) {
             id: m.id,
             name: m.name,
             vendor: m.vendor,
+            icon: m.icon ?? null,
             supportsReasoning: m.supportsReasoning,
+            supportsVision: m.supportsVision === true,
             thinkingLevels: m.supportsReasoning ? m.thinkingLevels ?? [] : [],
             defaultThinkingLevel: m.supportsReasoning ? m.defaultReasoningEffort ?? null : null,
             contextWindow: m.contextWindow ?? null,

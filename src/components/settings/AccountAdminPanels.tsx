@@ -1,6 +1,6 @@
 /**
- * 设置中心的管理页：公告、功能开关、计费（用量日志、用户账户、套餐、兑换码、订单、充值设置）、AI 服务（含 Agent 任务排障）、
- * Agent 扩展（MCP 服务、技能、智能体角色与用户扩展策略）
+ * 设置中心的管理页：公告、功能开关、计费（用户账户、套餐、兑换码、订单、充值设置）、AI 服务（模型、网关与 Agent 测评）、
+ * Agent 扩展（MCP 服务、技能、智能体角色、用户扩展策略与定时任务额度）、日志（用量日志、Agent 任务、定时任务）
  *
  * 'use client' 标记说明：
  * - 子页跟随路由切换，需要 useState / useEffect 记住访问过的子页并保留其状态
@@ -68,10 +68,14 @@ const LazyAgentExtensionsPolicyPanel = lazy(async () => ({
 const LazyAgentScheduleLimitsPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentScheduleLimitsPanel')).AgentScheduleLimitsPanel,
 }));
+const LazyAgentScheduleRunsPanel = lazy(async () => ({
+  default: (await import('@/components/admin/AgentScheduleRunsPanel')).AgentScheduleRunsPanel,
+}));
 
 type AdminBillingTab = AdminSubTabId<'admin-billing'>;
 type AdminAITab = AdminSubTabId<'admin-ai-services'>;
 type AdminExtensionsTab = AdminSubTabId<'admin-agent-extensions'>;
+type AdminLogsTab = AdminSubTabId<'admin-logs'>;
 
 function PanelFallback() {
   return (
@@ -87,6 +91,8 @@ const resolveAdminAITab = (value: string | null | undefined): AdminAITab =>
   resolveAdminSubTab('admin-ai-services', value);
 const resolveAdminExtensionsTab = (value: string | null | undefined): AdminExtensionsTab =>
   resolveAdminSubTab('admin-agent-extensions', value);
+const resolveAdminLogsTab = (value: string | null | undefined): AdminLogsTab =>
+  resolveAdminSubTab('admin-logs', value);
 
 function useResolvedSettingsCenterSubtab<T extends string>(
   owner: AdminSubtabOwner,
@@ -140,16 +146,18 @@ function AdminSubtabs<T extends string>({
 }
 
 const renderBillingPanel = (tab: AdminBillingTab, active: boolean) => (
-  tab === 'usage' ? <LazyBillingUsagePanel active={active} />
-    : tab === 'users' ? <LazyBillingUsersPanel />
-      : tab === 'plans' ? <LazyBillingPlansPanel />
-        : tab === 'codes' ? <LazyBillingCodesPanel />
-          : tab === 'orders' ? <LazyBillingOrdersPanel active={active} /> : <LazyBillingSettingsPanel />
+  tab === 'users' ? <LazyBillingUsersPanel />
+    : tab === 'plans' ? <LazyBillingPlansPanel />
+      : tab === 'codes' ? <LazyBillingCodesPanel />
+        : tab === 'orders' ? <LazyBillingOrdersPanel active={active} /> : <LazyBillingSettingsPanel />
 );
 const renderAIPanel = (tab: AdminAITab, active: boolean) => (
   tab === 'models' ? <LazyAIModelPanel />
-    : tab === 'gateways' ? <LazyAIGatewayPanel />
-      : tab === 'agent-tasks' ? <LazyAgentTaskPanel active={active} /> : <LazyAgentEvalPanel active={active} />
+    : tab === 'gateways' ? <LazyAIGatewayPanel /> : <LazyAgentEvalPanel active={active} />
+);
+const renderLogsPanel = (tab: AdminLogsTab, active: boolean) => (
+  tab === 'usage' ? <LazyBillingUsagePanel active={active} />
+    : tab === 'agent-tasks' ? <LazyAgentTaskPanel active={active} /> : <LazyAgentScheduleRunsPanel active={active} />
 );
 const renderExtensionsPanel = (tab: AdminExtensionsTab) => (
   tab === 'mcp' ? <LazyAgentMcpPanel />
@@ -200,6 +208,16 @@ export function AdminAgentExtensionsContent() {
       owner="admin-agent-extensions"
       resolveTab={resolveAdminExtensionsTab}
       renderPanel={renderExtensionsPanel}
+    />
+  );
+}
+
+export function AdminLogsContent() {
+  return (
+    <AdminSubtabs
+      owner="admin-logs"
+      resolveTab={resolveAdminLogsTab}
+      renderPanel={renderLogsPanel}
     />
   );
 }

@@ -6,7 +6,6 @@ import type { SettingsCenterTab } from '@/lib/settings-center';
  */
 export const ADMIN_SUBTABS = {
   'admin-billing': [
-    { id: 'usage', label: '用量日志' },
     { id: 'users', label: '用户账户' },
     { id: 'plans', label: '套餐' },
     { id: 'codes', label: '兑换码' },
@@ -16,7 +15,6 @@ export const ADMIN_SUBTABS = {
   'admin-ai-services': [
     { id: 'models', label: '模型管理' },
     { id: 'gateways', label: '网关管理' },
-    { id: 'agent-tasks', label: 'Agent 任务' },
     { id: 'agent-evals', label: 'Agent 测评' },
   ],
   'admin-agent-extensions': [
@@ -24,6 +22,11 @@ export const ADMIN_SUBTABS = {
     { id: 'skills', label: '技能' },
     { id: 'profiles', label: '角色' },
     { id: 'policy', label: '用户扩展' },
+    { id: 'schedules', label: '定时任务额度' },
+  ],
+  'admin-logs': [
+    { id: 'usage', label: '用量日志' },
+    { id: 'agent-tasks', label: 'Agent 任务' },
     { id: 'schedules', label: '定时任务' },
   ],
 } as const;

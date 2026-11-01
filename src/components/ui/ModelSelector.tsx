@@ -7,7 +7,8 @@ import { ChevronDown, Cpu } from 'lucide-react';
 import { KeyIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from './SoundWaveLoader';
 import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
-import { getVendorIcon } from '@/lib/ai/vendor-config';
+import { ModelIcon } from './ModelIcon';
+import { preloadLobeIcons } from './LobeIcon';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels, type AvailableModel } from '@/lib/hooks/useAvailableModels';
 import { CUSTOM_PROVIDER_CHANGED_EVENT, getCustomProvider, getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
@@ -18,7 +19,7 @@ import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import { formatTokenPrices } from '@/lib/billing/format';
 
 interface ClientModelConfig {
-    id: string; name: string; vendor: AIVendor; supportsReasoning: boolean;
+    id: string; name: string; vendor: AIVendor; icon?: string | null; supportsReasoning: boolean;
     thinkingLevels?: AIReasoningEffort[]; defaultThinkingLevel?: AIReasoningEffort | null;
     isReasoningDefault?: boolean; pricing?: AvailableModel['pricing'];
 }
@@ -71,6 +72,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     const [open, setOpen] = useState(false);
     const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange });
     const models = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
+    useEffect(() => { preloadLobeIcons(models.map(model => model.icon)); }, [models]);
     const collaborationPreset = useCollaborationPreset(userId ?? null);
     const [custom, setCustom] = useState<ReturnType<typeof getCustomProvider>>(null);
     useEffect(() => {
@@ -141,14 +143,14 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         <Menu open={open} onOpenChange={setOpen}>
             {toolbarStyle ? <MenuTrigger disabled={locked} className="chat-model-trigger" data-model-trigger
                 aria-label={label}>
-                {query.isLoading ? <SoundWaveLoader variant="inline" /> : null}
+                {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? <ModelIcon icon={current.icon} vendor={current.vendor} size={16} /> : null}
                 <span className="chat-model-name">{current?.name ?? (query.isLoading ? '正在加载模型' : '暂无可用模型')}</span>
                 {summary && <span className="chat-model-hint">{summary}</span>}
                 <ChevronDown size={14} aria-hidden="true" />
             </MenuTrigger> : <MenuTrigger disabled={locked} data-model-trigger
                 className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:text-foreground'}`}
                 aria-label={label}>
-                {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? getVendorIcon(current.vendor) : <Cpu size={16} />}
+                {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? <ModelIcon icon={current.icon} vendor={current.vendor} /> : <Cpu size={16} />}
                 <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? '暂无可用模型'}</span>
                 <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
             </MenuTrigger>}
@@ -157,6 +159,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                     {models.map(model => {
                         const price = formatTokenPrices(model.pricing);
                         return <MenuRadioItem key={model.id} value={model.id} closeOnClick>
+                            <ModelIcon icon={model.icon} vendor={model.vendor} size={16} />
                             <span className="chat-model-option-name">{model.name}</span>
                             {price && <span className="chat-model-option-price" title={price === '免费' ? undefined : '每百万 token：输入 / 输出（美元）'}>{price}</span>}
                         </MenuRadioItem>;
@@ -206,6 +209,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                             const full = collaborationFull && !checked;
                             return <MenuCheckboxItem key={model.id} checked={checked} closeOnClick={false} disabled={full}
                                 className="chat-model-action chat-collab-row" onCheckedChange={() => toggleCollaborator(model)}>
+                                <span className="chat-collab-icon"><ModelIcon icon={model.icon} vendor={model.vendor} size={16} /></span>
                                 <span className="chat-collab-name">{model.name}</span>
                                 {registered && <span className="chat-collab-registered" aria-hidden="true">{registered}</span>}
                             </MenuCheckboxItem>;

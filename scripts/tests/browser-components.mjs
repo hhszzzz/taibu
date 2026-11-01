@@ -42,6 +42,9 @@ import { openSettingsCenter } from '@/lib/settings-center';
 import { AIModelPanel } from '@/components/admin/AIModelPanel';
 import { AnnouncementManagementPanel } from '@/components/admin/AnnouncementManagementPanel';
 import { BillingCodesPanel } from '@/components/admin/billing/BillingCodesPanel';
+import { BillingUsagePanel } from '@/components/admin/billing/BillingUsagePanel';
+import { AgentScheduleRunsPanel } from '@/components/admin/AgentScheduleRunsPanel';
+import UsageLogPanel from '@/components/settings/panels/UsageLogPanel';
 import { AgentTaskPanel } from '@/components/admin/AgentTaskPanel';
 import { AgentProfilesPanel } from '@/components/admin/AgentProfilesPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
@@ -689,7 +692,11 @@ function Shell() {
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
       <button onClick={() => navigate('/billing-codes')}>Fixture Billing codes route</button>
+      <button onClick={() => navigate('/usage-log')}>Fixture Usage log route</button>
+      <button onClick={() => navigate('/admin-usage')}>Fixture Admin usage route</button>
+      <button onClick={() => navigate('/schedule-runs')}>Fixture Schedule runs route</button>
       <button onClick={() => navigate('/agent-tasks')}>Fixture Agent tasks route</button>
+      <button onClick={() => navigate('/agent-tasks?q=7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f')}>Fixture Linked Agent task route</button>
       <button onClick={() => navigate('/agent-profiles')}>Fixture Agent roles route</button>
       <button onClick={() => openSettingsCenter('general')}>Open actual settings</button>
       <button onClick={() => setUser('alice')}>Fixture Alice</button>
@@ -715,6 +722,9 @@ function Shell() {
     {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     {route === '/billing-codes' && <section data-testid="billing-codes"><BillingCodesPanel /></section>}
+    {route === '/usage-log' && <section data-testid="usage-log"><UsageLogPanel /></section>}
+    {route === '/admin-usage' && <section data-testid="admin-usage"><BillingUsagePanel /></section>}
+    {route === '/schedule-runs' && <section data-testid="schedule-runs"><AgentScheduleRunsPanel /></section>}
     {route === '/agent-tasks' && <section data-testid="agent-tasks"><AgentTaskPanel /></section>}
     {route === '/agent-profiles' && <section data-testid="agent-profiles"><AgentProfilesPanel /></section>}
     {composerMounted && <ComposerProbe />}
@@ -819,7 +829,7 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|UsageLogPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
@@ -1090,7 +1100,7 @@ export async function run(existingPage, bundlePath) {
   let failAnnouncementWrite = false;
   // Redemption codes and plans as /api/admin/billing/{codes,plans} return them.
   const billingPlan = { id: '7c0f4a7e-1b2c-4d3e-8f90-0a1b2c3d4e5f', title: '轻享月卡', subtitle: '', features: [], priceUsd: 5, durationUnit: 'month', durationValue: 1,
-    allowanceMicros: 6_000_000, resetPeriod: 'never', purchasable: true, enabled: true, maxPerUser: null, sortOrder: 0 };
+    limits: [{ period: 'total', allowanceMicros: 6_000_000 }], purchasable: true, enabled: true, maxPerUser: null, sortOrder: 0 };
   const billingCode = (id, code, extra) => ({ id, code, kind: 'balance', amountMicros: 10_000_000, planId: null, planTitle: null, status: 'unused',
     usedBy: null, usedAt: null, expiresAt: null, batchNote: null, createdAt: '2026-01-02T00:00:00Z', ...extra });
   let billingCodes = [
@@ -1098,6 +1108,30 @@ export async function run(existingPage, bundlePath) {
     billingCode('code-used', 'tb-fixture-used', { kind: 'subscription', amountMicros: null, planId: billingPlan.id, planTitle: billingPlan.title, status: 'used', usedBy: 'alice', usedAt: '2026-01-05T00:00:00Z' }),
   ];
   let failCodeCreate = false;
+  const ledgerLabel = { name: '分析模型', vendor: 'other', icon: null };
+  const ledgerTotals = { calls: 1, input: 398, output: 35, cacheRead: 0, cacheWrite: 0, images: 0, spentMicros: 1500 };
+  const ledgerEntry = { id: 'ledger-entry-1', kind: 'usage', amountMicros: -1500, walletMicros: 0,
+    subscriptionParts: [{ id: 'subscription-1', title: '轻享月卡', micros: -1500 }], walletAfterMicros: 5_000_000,
+    source: 'chat', modelKey: 'fixture-analysis', modelLabel: ledgerLabel,
+    usage: { input: 398, output: 35, cacheRead: 0, cacheWrite: 0, prices: { input: 1, output: 2, cacheRead: null, cacheWrite: null } },
+    referenceType: 'conversation', referenceId: '0c9b8a7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', description: '', createdAt: '2026-10-21T00:00:00.000Z' };
+  // A call the member made with their own key: in the log at $0, flagged as BYOK.
+  const byokEntry = { ...ledgerEntry, id: 'ledger-entry-byok', amountMicros: 0,
+    subscriptionParts: [], modelKey: 'fixture-own', modelLabel: { name: '自带模型', vendor: 'other', icon: null },
+    usage: { input: 210, output: 40, cacheRead: 0, cacheWrite: 0, byok: true, prices: { input: 0, output: 0, cacheRead: null, cacheWrite: null } },
+    referenceType: null, referenceId: null, description: '自带密钥调用', createdAt: '2026-10-20T00:00:00.000Z' };
+  const ledgerPage = { entries: [ledgerEntry, byokEntry], nextOffset: null, totals: ledgerTotals, byModel: [{ model: 'fixture-analysis', ...ledgerTotals, modelLabel: ledgerLabel }] };
+  const adminUsagePage = { ...ledgerPage, entries: [{ ...ledgerEntry, userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com' },
+    { ...byokEntry, userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com' }] };
+  const scheduleRun = { id: '9d8e7f6a-5b4c-4d3e-8f90-1a2b3c4d5e6f', scheduleId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
+    scheduleName: '每日事业运', template: 'custom', cadence: { kind: 'daily', time: '08:00' }, timezone: 'Asia/Shanghai', scheduleEnabled: true,
+    userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com', scheduledFor: '2026-10-21T00:00:00.000Z',
+    status: 'completed', skipReason: null, agentRunId: '7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f', conversationId: '0c9b8a7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', error: null,
+    createdAt: '2026-10-20T23:59:00.000Z', startedAt: '2026-10-21T00:00:01.000Z', finishedAt: '2026-10-21T00:00:05.000Z',
+    cost: { calls: 4, spentMicros: 1500 } };
+  const modelsDevFixture = { id: 'catalog-fixture', name: 'Catalog Fixture', provider: 'openai', providerName: 'OpenAI',
+    contextWindow: 200000, maxTokens: 64000, reasoning: true, thinkingLevels: ['low', 'medium', 'high'], vision: true,
+    pricing: { input: 2.5, output: 10, cacheRead: 1.25 } };
   // The admin Agent task routes answer raw payloads: { runs } and { run, tree }.
   const agentTaskRun = { id: '7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f', conversationId: '0c9b8a7d-6e5f-4a3b-8c2d-1e0f9a8b7c6d', userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d',
     userEmail: 'alice@example.com', status: 'running', billing: 'metered', title: '看事业', model: 'fixture-analysis',
@@ -1455,7 +1489,12 @@ export async function run(existingPage, bundlePath) {
       if (method === 'DELETE') { adminProfiles.splice(adminProfiles.indexOf(profile), 1); return ok({ deleted: true }, true); }
     }
     if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
-    if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree() }, true);
+    if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree(), cost: { calls: 4, spentMicros: 1500 } }, true);
+    if (url.pathname === '/api/billing/ledger' && method === 'GET') return ok(ledgerPage);
+    if (url.pathname === '/api/admin/billing/usage' && method === 'GET') return ok(adminUsagePage);
+    if (url.pathname === '/api/admin/agent-schedules/runs' && method === 'GET') return ok({
+      runs: [scheduleRun], nextOffset: null, counts: { pending: 0, running: 0, completed: 1, failed: 0, skipped: 0 },
+    });
     if (url.pathname === '/api/admin/agent-metrics' && method === 'GET') return ok({
       days: Number(url.searchParams.get('days') ?? 7), since: '2026-10-01T00:00:00Z',
       models: [{ modelId: 'fixture-model', runs: 4, p50TotalMs: 4000, p95TotalMs: 8000, p50FirstTokenMs: 800, p95FirstTokenMs: 2500, toolShare: 0.25, failureRate: 0.5, hangRate: 0.25 }],
@@ -1471,7 +1510,15 @@ export async function run(existingPage, bundlePath) {
       ],
       startedAt: '2026-10-27T02:59:56Z', endedAt: '2026-10-27T03:00:00Z',
     } }, true);
-    if (url.pathname === '/api/admin/models-dev') return ok({ models: [] });
+    if (url.pathname === '/api/admin/models-dev') {
+      const query = (url.searchParams.get('q') || '').toLowerCase();
+      const models = query.length < 2 ? [] : [modelsDevFixture].filter(model => model.id.toLowerCase().includes(query) || model.name.toLowerCase().includes(query));
+      return ok({ models });
+    }
+    if (url.pathname === '/api/admin/ai-models/autofill' && method === 'POST') return ok({
+      updated: [{ name: 'Fixture Model', changes: ['上下文', '输出上限'], source: 'OpenAI · fixture-model' }],
+      unchanged: 1, unmatched: ['孤儿模型'], failed: [{ name: '坏模型', error: '输出上限必须小于上下文窗口' }],
+    });
     if (url.pathname === '/api/admin/ai-gateways' && method === 'GET') return ok({ gateways });
     if (url.pathname === '/api/admin/ai-gateways/probe' && method === 'POST') return ok({ ok: true, models: ['fixture-model', 'upstream-fixture'], latencyMs: 12 });
     if (url.pathname === '/api/admin/ai-models') {
@@ -1723,6 +1770,10 @@ export async function run(existingPage, bundlePath) {
     await modelPanel.getByRole('button', { name: '添加模型', exact: true }).click();
     let editor = page.locator('dialog.ai-catalog-dialog');
     await editor.getByRole('heading', { name: '添加模型', exact: true }).waitFor();
+    await editor.getByRole('button', { name: /^模型图标：/u }).click();
+    await page.getByLabel('搜索图标', { exact: true }).fill('openai');
+    await page.getByRole('group', { name: '搜索结果', exact: true }).getByRole('button', { name: /OpenAI/u }).first().click();
+    check('The icon picker searches lobehub icons and records the choice', (await editor.getByRole('button', { name: /^模型图标：/u }).getAttribute('aria-label')).includes('OpenAI'));
     await editor.getByLabel('显示名称', { exact: true }).fill('Created Fixture');
     await editor.getByLabel('模型 ID', { exact: true }).fill('  created-fixture  ');
     check('The model ID drops surrounding spaces as it is typed', await editor.getByLabel('模型 ID', { exact: true }).inputValue() === 'created-fixture');
@@ -1749,11 +1800,30 @@ export async function run(existingPage, bundlePath) {
     await editor.getByRole('button', { name: '添加模型', exact: true }).click();
     await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Created Fixture' }).waitFor();
     const created = requests.find(item => item.pathname === '/api/admin/ai-models' && item.method === 'POST');
-    check('Creating a model submits the identity, window and trusted output default', created?.body.modelKey === 'created-fixture'
-      && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === null);
+    check('Creating a model submits the identity, icon, window and trusted output default', created?.body.modelKey === 'created-fixture'
+      && created.body.icon === 'OpenAI' && created.body.contextWindow === 1000000 && created.body.defaultMaxTokens === null);
     check('Creating a model submits the thinking ladder in order with a listed default', JSON.stringify(created?.body.thinkingLevels) === '["low","high","max"]'
       && created.body.defaultReasoningEffort === 'max');
     check('A new model starts on the first gateway and keeps the added backup in order', created?.body.sources.map(source => source.gatewayId).join(',') === '00000000-0000-4000-8000-0000000000a1,00000000-0000-4000-8000-0000000000a2');
+
+    // models.dev: an exact id fills only blanks; 「填入」 overwrites with catalog values.
+    await modelPanel.getByRole('button', { name: '添加模型', exact: true }).click();
+    editor = page.locator('dialog.ai-catalog-dialog');
+    await editor.getByRole('heading', { name: '添加模型', exact: true }).waitFor();
+    await editor.getByLabel('模型 ID', { exact: true }).fill('catalog-fixture');
+    await editor.getByText(/已补全空着的/u).waitFor();
+    check('An exact models.dev match fills the empty output limit, levels, vision and prices', await editor.getByLabel('输出上限', { exact: true }).inputValue() === '64000'
+      && await editor.getByRole('button', { name: '高', exact: true }).getAttribute('aria-pressed') === 'true'
+      && await editor.getByRole('switch', { name: '支持图片输入', exact: true }).isChecked()
+      && await editor.getByLabel('输入', { exact: true }).inputValue() === '2.5'
+      && await editor.getByLabel('输出', { exact: true }).inputValue() === '10'
+      && await editor.getByLabel('缓存读取', { exact: true }).inputValue() === '1.25');
+    await editor.getByRole('list', { name: 'models.dev 匹配结果' }).getByRole('button', { name: '填入', exact: true }).click();
+    check('Filling from the catalog overwrites the context window and the name', (await editor.getByRole('combobox', { name: '上下文窗口', exact: true }).textContent()) === '200K'
+      && await editor.getByLabel('显示名称', { exact: true }).inputValue() === 'Catalog Fixture');
+    await editor.getByRole('button', { name: '取消', exact: true }).click();
+    await page.getByRole('button', { name: '放弃修改', exact: true }).click();
+    await editor.waitFor({ state: 'detached' });
 
     await fixtureRow.getByRole('button', { name: '编辑 Fixture Model', exact: true }).click();
     editor = page.locator('dialog.ai-catalog-dialog');
@@ -1799,6 +1869,19 @@ export async function run(existingPage, bundlePath) {
     await modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Created Fixture' }).getByRole('switch', { name: '启用 Created Fixture', exact: true }).click();
     await toggled;
     check('The row switch only toggles the model', requests.some(item => item.pathname === '/api/admin/ai-models/created-model' && item.method === 'PATCH' && JSON.stringify(item.body) === '{"isEnabled":false}'));
+    await modelPanel.getByRole('button', { name: '从 models.dev 补全', exact: true }).click();
+    const autofillConfirm = page.getByRole('alertdialog', { name: '从 models.dev 补全模型信息？' });
+    await autofillConfirm.waitFor();
+    await autofillConfirm.getByRole('button', { name: '开始补全', exact: true }).click();
+    const autofillReport = page.getByRole('dialog', { name: 'models.dev 补全结果' });
+    await autofillReport.waitFor();
+    check('Batch autofill reports updated, unchanged, unmatched and failed models', await autofillReport.getByText(/补全 1 个，1 个没有空缺，1 个未匹配，1 个保存失败/u).isVisible()
+      && await autofillReport.getByText('Fixture Model', { exact: true }).isVisible()
+      && await autofillReport.getByText('孤儿模型', { exact: true }).isVisible()
+      && await autofillReport.getByText('输出上限必须小于上下文窗口', { exact: true }).isVisible()
+      && requests.some(item => item.pathname === '/api/admin/ai-models/autofill' && item.method === 'POST'));
+    await autofillReport.getByRole('button', { name: '知道了', exact: true }).click();
+    await autofillReport.waitFor({ state: 'detached' });
     await page.getByRole('button', { name: 'Fixture Announcements route', exact: true }).click();
     const announcementPanel = page.getByTestId('announcements');
     await announcementPanel.getByText('还没有任何公告', { exact: true }).waitFor();
@@ -1871,11 +1954,68 @@ export async function run(existingPage, bundlePath) {
     await until(() => !document.querySelector('[data-testid="billing-codes"] button[aria-label="作废兑换码 tb-fixture-unused"]'));
     check('Voiding a code confirms first and only that code turns void', requests.some(item => item.pathname === '/api/admin/billing/codes/code-unused' && item.method === 'DELETE')
       && await codeTable.getByText('已作废', { exact: true }).isVisible() && await codePanel.getByRole('button', { name: '作废兑换码 tb-fixture-created-0', exact: true }).isVisible());
+    const waitForRequest = async predicate => { for (let attempt = 0; attempt < 80 && !predicate(); attempt++) await page.waitForTimeout(100); return predicate(); };
+    // The member usage log: priced detail lines, a detail dialog and the per-model summary.
+    await page.getByRole('button', { name: 'Fixture Usage log route', exact: true }).click();
+    const usageLog = page.getByTestId('usage-log');
+    const usageList = usageLog.getByRole('table', { name: '用量日志', exact: true });
+    await usageList.getByText('分析模型', { exact: true }).first().waitFor();
+    check('The usage log lists priced model calls with their funding', await usageList.getByText(/输入 398 · 输出 35/u).isVisible()
+      && await usageList.getByText(/订阅「轻享月卡」 -\$0\.0015/u).isVisible()
+      && requests.some(item => item.pathname === '/api/billing/ledger' && item.search.includes('offset=0')));
+    await usageList.getByRole('button', { name: '查看', exact: true }).first().click();
+    const ledgerDetail = page.getByRole('dialog', { name: /流水详情/u });
+    await ledgerDetail.waitFor();
+    check('A usage detail itemises the charge at the prices it used', await ledgerDetail.getByText(/\$2\/百万 × 35 = \$0\.00007/u).isVisible()
+      && await ledgerDetail.getByText(/合计/u).isVisible());
+    await ledgerDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    await ledgerDetail.waitFor({ state: 'detached' });
+    check('A call made with the member\'s own key is logged at no charge', await usageList.getByText('自带密钥', { exact: true }).isVisible());
+    await usageList.getByRole('button', { name: /自带模型/u }).click();
+    const byokDetail = page.getByRole('dialog', { name: /流水详情/u });
+    await byokDetail.waitFor();
+    check('Its detail says the member\'s own key paid for it', await byokDetail.getByText('自带密钥，本站不扣费', { exact: true }).isVisible());
+    await byokDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    await byokDetail.waitFor({ state: 'detached' });
+
+    // The administrator usage log: every kind, the same details, and the email filter.
+    await page.getByRole('button', { name: 'Fixture Admin usage route', exact: true }).click();
+    const adminUsage = page.getByTestId('admin-usage');
+    const adminUsageTable = adminUsage.getByRole('table', { name: '用量明细', exact: true });
+    await adminUsageTable.getByText('alice@example.com', { exact: true }).waitFor();
+    check('The admin usage log lists every kind with the user and a details column', await adminUsageTable.getByText('消费 · 对话', { exact: true }).isVisible()
+      && await adminUsageTable.getByText('分析模型', { exact: true }).isVisible()
+      && await adminUsageTable.getByRole('button', { name: '查看', exact: true }).first().isVisible());
+    await adminUsageTable.getByRole('button', { name: 'alice@example.com', exact: true }).click();
+    check('Clicking a user filters the usage log by that email', await waitForRequest(() => requests.some(item => item.pathname === '/api/admin/billing/usage' && item.search.includes('email=alice%40example.com'))));
+    await adminUsageTable.getByRole('button', { name: '查看', exact: true }).first().click();
+    const adminLedgerDetail = page.getByRole('dialog', { name: /流水详情/u });
+    await adminLedgerDetail.waitFor();
+    check('A row details dialog opens from the admin log too', await adminLedgerDetail.getByText(/\$2\/百万 × 35/u).isVisible());
+    await adminLedgerDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    await adminLedgerDetail.waitFor({ state: 'detached' });
+
+    // Scheduled runs: status counts, the run table and the linked Agent task.
+    await page.getByRole('button', { name: 'Fixture Schedule runs route', exact: true }).click();
+    const schedulePanel = page.getByTestId('schedule-runs');
+    const scheduleTable = schedulePanel.getByRole('table', { name: '定时任务运行记录', exact: true });
+    await scheduleTable.getByText('每日事业运', { exact: true }).waitFor();
+    check('Scheduled runs show their schedule, user, status, duration and cost', await scheduleTable.getByText('已完成', { exact: true }).isVisible()
+      && await scheduleTable.getByText('alice@example.com', { exact: true }).isVisible()
+      && await scheduleTable.getByText('4.0 秒', { exact: true }).isVisible()
+      && await scheduleTable.getByText('$0.0015', { exact: true }).isVisible()
+      && await schedulePanel.getByRole('button', { name: '已完成 1', exact: true }).isVisible());
+    await scheduleTable.getByRole('button', { name: '详情', exact: true }).click();
+    const runDetail = page.getByRole('dialog', { name: /运行详情/u });
+    await runDetail.waitFor();
+    check('A scheduled run links to its Agent task', await runDetail.getByRole('link', { name: '查看任务', exact: true }).getAttribute('href') === `/settings/admin-logs/agent-tasks?q=${agentTaskRun.id}`);
+    await runDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    await runDetail.waitFor({ state: 'detached' });
+
     await page.getByRole('button', { name: 'Fixture Agent tasks route', exact: true }).click();
     const taskPanel = page.getByTestId('agent-tasks');
     const taskListReads = () => requests.filter(item => item.pathname === '/api/admin/agent-runs');
     const taskTreeReads = () => requests.filter(item => item.pathname === `/api/admin/agent-runs/${agentTaskRun.id}`).length;
-    const waitForRequest = async predicate => { for (let attempt = 0; attempt < 80 && !predicate(); attempt++) await page.waitForTimeout(100); return predicate(); };
     await taskPanel.getByRole('button', { name: /看事业/ }).waitFor();
     check('Agent task list reads active tasks with their status and user', taskListReads().some(item => item.search === '?scope=active')
       && await taskPanel.getByText('alice@example.com', { exact: true }).isVisible() && await taskPanel.locator('tbody').getByText('执行中', { exact: true }).isVisible());
@@ -1890,6 +2030,7 @@ export async function run(existingPage, bundlePath) {
       && await taskTree.getByText('后台回报 · 八字复核', { exact: true }).isVisible());
     check('Agent task tree shows why a task failed and which input went unanswered', await taskTree.locator('[data-agent-task="8"]').getByText('模型调用失败：超时', { exact: true }).isVisible()
       && await taskTree.getByText('command:3', { exact: true }).isVisible() && await taskTree.getByText('2.0 秒', { exact: true }).isVisible());
+    check('The task detail shows what its model calls cost', await taskPanel.getByRole('region', { name: '任务详情' }).getByText(/按量计费 · \$0\.0015（4 次调用）/u).isVisible());
     await taskPanel.getByLabel('只看未结束').check();
     check('Only-unfinished keeps the live graph: ended branches without live work drop out', await taskTree.locator('[data-agent-task="4"]').count() === 0
       && await taskTree.locator('[data-agent-task="7"]').count() === 0 && await taskTree.locator('[data-agent-task="6"]').isVisible() && await taskTree.locator('[data-agent-task="10"]').isVisible());
@@ -1926,6 +2067,11 @@ export async function run(existingPage, bundlePath) {
     check('A single run shows its phase timeline', await timeline.getByText('模型生成 · request', { exact: true }).isVisible()
       && await timeline.getByText('工具调用 · execute', { exact: true }).isVisible()
       && await timeline.getByText('1.2 秒', { exact: true }).first().isVisible());
+
+    await page.getByRole('button', { name: 'Fixture Linked Agent task route', exact: true }).click();
+    await taskPanel.getByRole('region', { name: '任务详情' }).waitFor();
+    check('A ?q= link searches and opens that task', requests.some(item => item.pathname === '/api/admin/agent-runs' && item.search === `?scope=active&q=${agentTaskRun.id}`)
+      && await taskPanel.getByRole('region', { name: '任务详情' }).getByText(/按量计费/u).isVisible());
 
     // Agent roles: a built-in one is only switched on or off; a custom one is written in the editor, grants and all.
     await page.getByRole('button', { name: 'Fixture Agent roles route', exact: true }).click();

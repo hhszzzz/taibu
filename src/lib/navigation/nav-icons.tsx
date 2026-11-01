@@ -291,11 +291,24 @@ export const SettingsIcon = createNavIcon('settings', <g className="ni-glyph">
     <circle cx="12" cy="12" r="2.8" />
 </g>);
 
-/** 订阅与余额：一张卡（横向关键线）——订阅额度和余额都落在这一张上；悬停时像抽出卡槽再插回。 */
+/** 钱包：一张卡（横向关键线）——订阅额度和余额都落在这一张上；悬停时像抽出卡槽再插回。 */
 export const BillingIcon = createNavIcon('billing', <g className="ni-card">
     <rect x="2.6" y="5" width="18.8" height="14" rx="2.2" />
     <path d="M2.6 9.2h18.8" />
     <path d="M6 15.2h4.2" />
+</g>);
+
+/** 钱包余额：带搭扣的开口钱包（横向关键线）。 */
+export const WalletIcon = createNavIcon('wallet', <g className="ni-glyph">
+    <rect x="3" y="6.5" width="18" height="12.5" rx="2.2" />
+    <path d="M3 9.5h18" />
+    <path d="M15.4 12.75h3" strokeWidth={2.2} />
+</g>);
+
+/** 订阅额度：循环箭头，一个订阅周期接着一个。 */
+export const SubscriptionIcon = createNavIcon('subscription', <g className="ni-glyph">
+    <path d="M20.2 12a8.2 8.2 0 1 1-2.4-5.8" />
+    <path d="M20.2 3.8v4.2h-4.2" />
 </g>);
 
 /**

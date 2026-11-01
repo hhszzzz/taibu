@@ -206,7 +206,11 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                             <div className="mx-1.5 my-1 h-px bg-border" />
                             <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
                               onClick={() => { setIsMenuOpen(false); openSettingsCenter('billing'); }}>
-                              <span>订阅与余额</span><ChevronRight size={14} aria-hidden="true" />
+                              <span>钱包</span><ChevronRight size={14} aria-hidden="true" />
+                            </MenuItem>
+                            <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
+                              onClick={() => { setIsMenuOpen(false); openSettingsCenter('usage-log'); }}>
+                              <span>用量日志</span><ChevronRight size={14} aria-hidden="true" />
                             </MenuItem>
                           </> : null}
                         </div>

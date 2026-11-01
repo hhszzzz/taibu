@@ -42,7 +42,7 @@ const EXTRA = [
 ];
 // 设置中心与账户菜单（与设置侧栏同一顺序）。
 const SETTINGS = [
-  ['账户', 'ProfileIcon'], ['常规', 'SettingsIcon'], ['订阅与余额', 'BillingIcon'], ['分享链接', 'ShareLinkIcon'], ['帮助', 'HelpIcon'],
+  ['账户', 'ProfileIcon'], ['常规', 'SettingsIcon'], ['钱包', 'BillingIcon'], ['用量日志', 'GaugeIcon'], ['分享链接', 'ShareLinkIcon'], ['帮助', 'HelpIcon'],
   ['个性化', 'PersonalizationIcon'], ['自定义模型', 'KeyIcon'], ['命盘', 'ChartsIcon'], ['知识库', 'KnowledgeIcon'],
   ['技能', 'SkillIcon'], ['连接器', 'ConnectorsIcon'], ['MCP', 'McpIcon'],
   ['公告', 'MegaphoneIcon'], ['功能开关', 'FeatureFlagsIcon'], ['AI 服务', 'ServerIcon'], ['Agent 扩展', 'PluginIcon'],

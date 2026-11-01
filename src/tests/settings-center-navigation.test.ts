@@ -48,11 +48,15 @@ const ENABLED_FLAGS = {
 // Unit tests below retain fast route/registry contracts and unique UI/security guards.
 
 
-test('settings center exposes the billing tab and rejects removed legacy credits hash', () => {
+test('settings center exposes the wallet and usage log tabs and rejects removed legacy credits hash', () => {
   const tabs = getSettingsCenterTabs(ENABLED_FLAGS);
 
   assert.equal(tabs.some((tab) => tab.id === 'billing' && tab.disabled === false), true);
+  assert.equal(tabs.find(tab => tab.id === 'billing')?.label, '钱包');
+  assert.equal(tabs.find(tab => tab.id === 'usage-log')?.label, '用量日志');
+  assert.equal(tabs.findIndex((tab) => tab.id === 'usage-log'), tabs.findIndex((tab) => tab.id === 'billing') + 1);
   assert.equal(getNavItemById('settings-billing')?.href, getSettingsCenterRouteTarget('billing'));
+  assert.equal(getSettingsCenterRouteTarget('usage-log'), '/settings/usage-log');
   assert.equal(parseSettingsCenterHash('#settings/credits'), null);
   assert.equal(
     getSettingsCenterRouteTarget('billing', { search: '?payment=paid' }),
@@ -101,11 +105,16 @@ test('settings page addresses and legacy hashes resolve to the same categories',
   assert.equal(getSettingsCenterRouteTarget('admin-ai-services', { subpath: 'gateways' }), '/settings/admin-ai-services/gateways');
 });
 
-test('disabled billing is unavailable in both tab projection and explanation', () => {
+test('disabled billing disables both the wallet and the usage log with their own explanations', () => {
   const flags = { ...ENABLED_FLAGS, billingEnabled: false };
-  assert.equal(getSettingsCenterTabs(flags).find(tab => tab.id === 'billing')?.disabled, true);
+  const tabs = getSettingsCenterTabs(flags);
+  assert.equal(tabs.find(tab => tab.id === 'billing')?.disabled, true);
+  assert.equal(tabs.find(tab => tab.id === 'usage-log')?.disabled, true);
   assert.deepEqual(getSettingsCenterDisabledState('billing', flags), {
-    title: '暂未开放', description: '当前订阅与余额不可用。',
+    title: '暂未开放', description: '当前钱包不可用。',
+  });
+  assert.deepEqual(getSettingsCenterDisabledState('usage-log', flags), {
+    title: '暂未开放', description: '当前用量日志不可用。',
   });
 });
 
@@ -179,6 +188,17 @@ test('settings page renders disabled categories as locked non-clickable controls
   assert.equal(hostSource.includes('border-amber-400/60'), false);
   assert.equal(hostSource.includes('bg-amber-500/5'), false);
   assert.equal(hostSource.includes('rounded-md border border-border px-1.5 py-0.5 text-[10px] text-foreground/50'), false);
+});
+
+test('the administrator 日志 category owns usage, Agent tasks and schedules; management subpages stay ordered', () => {
+  const tabs = getSettingsCenterTabs({ ...ENABLED_FLAGS, isAdmin: true });
+  assert.equal(getSettingsCenterTabs(ENABLED_FLAGS).some(tab => tab.id === 'admin-logs'), false);
+  assert.deepEqual([tabs.find(tab => tab.id === 'admin-logs')?.label, tabs.find(tab => tab.id === 'admin-logs')?.group], ['日志', 'management']);
+  assert.equal(tabs.findIndex(tab => tab.id === 'admin-logs'), tabs.findIndex(tab => tab.id === 'help') - 1);
+  assert.deepEqual(ADMIN_SUBTABS['admin-logs'].map(option => option.label), ['用量日志', 'Agent 任务', '定时任务']);
+  assert.deepEqual(ADMIN_SUBTABS['admin-billing'].map(option => option.id), ['users', 'plans', 'codes', 'orders', 'settings']);
+  assert.deepEqual(ADMIN_SUBTABS['admin-ai-services'].map(option => option.id), ['models', 'gateways', 'agent-evals']);
+  assert.equal(ADMIN_SUBTABS['admin-agent-extensions'].find(option => option.id === 'schedules')?.label, '定时任务额度');
 });
 
 test('mcp settings tab follows the public service feature toggle', () => {

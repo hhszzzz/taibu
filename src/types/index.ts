@@ -333,6 +333,8 @@ export interface AIModelConfig {
     id: string;                  // 唯一 ID: deepseek-v3, deepseek-pro, etc
     name: string;                // 显示名称
     vendor: AIVendor;            // 供应商
+    /** lobehub 图标 ID；为空时按供应商显示。 */
+    icon?: string | null;
     usageType?: AIUsageType;     // 模型用途
     /** 美元单价；未定价的模型平台不提供。 */
     pricing?: AIModelPricing;

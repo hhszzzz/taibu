@@ -9,7 +9,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { ChevronDown, Eye, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import { getVendorIcon } from '@/lib/ai/vendor-config';
+import { ModelIcon } from '@/components/ui/ModelIcon';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
 import { getVendorName } from '@/lib/ai/vendor-labels';
@@ -89,7 +89,7 @@ export function VisionModelSelector({
                             {loading ? (
                                 <SoundWaveLoader variant="inline" />
                             ) : currentModel ? (
-                                getVendorIcon(currentModel.vendor)
+                                <ModelIcon icon={currentModel.icon} vendor={currentModel.vendor} />
                             ) : (
                                 <Eye className="w-4 h-4" />
                             )}
@@ -103,7 +103,7 @@ export function VisionModelSelector({
                             <ChevronDown className={`h-4 w-4 shrink-0 text-foreground-tertiary transition-transform lg:h-3.5 lg:w-3.5 ${dropdownOpen ? 'rotate-180' : ''}`} />
                         </MenuTrigger>
 
-                        <MenuContent side="bottom" align="start" className="w-64 overflow-hidden p-0" aria-label="视觉分析模型">
+                        <MenuContent side="bottom" align="start" className="w-72 overflow-hidden p-0" aria-label="视觉分析模型">
                             <div className="border-b border-border bg-background-secondary/50 px-3 py-2 text-xs font-medium text-foreground-secondary">
                                 视觉分析模型
                             </div>
@@ -115,9 +115,9 @@ export function VisionModelSelector({
                                             key={model.id}
                                             value={model.id}
                                             closeOnClick
-                                            className="flex items-center gap-2 rounded-none px-3 py-2.5 text-sm data-checked:bg-accent/10 data-checked:text-accent"
+                                            className="flex items-center gap-2 rounded-none py-2.5 pl-3 pr-8 text-sm data-checked:bg-accent/10 data-checked:text-accent"
                                         >
-                                            {getVendorIcon(model.vendor)}
+                                            <ModelIcon icon={model.icon} vendor={model.vendor} />
                                             <div className="min-w-0 flex-1">
                                                 <div className="truncate font-medium">{model.name}</div>
                                                 <div className="text-xs text-foreground-secondary">

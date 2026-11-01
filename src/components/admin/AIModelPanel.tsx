@@ -4,13 +4,15 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Boxes, Eye, Plus, Search } from 'lucide-react';
+import { Boxes, Eye, Plus, Search, Sparkles } from 'lucide-react';
 import { requestBrowserData } from '@/lib/browser-api';
 import { Button } from '@/components/ui/Button';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { Dialog } from '@/components/ui/Dialog';
+import { ModelIcon } from '@/components/ui/ModelIcon';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { SettingsSwitch } from '@/components/settings/SettingsControls';
-import { getVendorIcon } from '@/lib/ai/vendor-config';
 import { useListMotion } from '@/lib/motion/list';
 import { THINKING_LEVEL_LABELS, USAGE_TYPES, formatTokenCount, priceFieldsFor, type AdminGateway, type AdminModel } from '@/lib/admin/ai-catalog';
 import { formatPrice } from '@/lib/billing/money';
@@ -52,6 +54,33 @@ function ModelMeta({ model, gateways }: { model: AdminModel; gateways: ReadonlyM
     </span>;
 }
 
+type AutofillResult = {
+    updated: Array<{ name: string; changes: string[]; source: string }>;
+    unchanged: number;
+    unmatched: string[];
+    failed: Array<{ name: string; error: string }>;
+};
+
+/** What one-click fill changed, and which models it could not match or save. */
+function AutofillReport({ result, onClose }: { result: AutofillResult; onClose: () => void }) {
+    const failed = result.failed.length ? `，${result.failed.length} 个保存失败` : '';
+    return <Dialog open onClose={onClose} className="max-w-lg" title="models.dev 补全结果"
+        description={`补全 ${result.updated.length} 个，${result.unchanged} 个没有空缺，${result.unmatched.length} 个未匹配${failed}。`}
+        footer={<Button size="md" onClick={onClose}>知道了</Button>}>
+        <div className="ai-catalog-report">
+            {result.updated.length > 0 && <section><h3>已补全</h3><ul>
+                {result.updated.map((item, index) => <li key={`${item.name}-${index}`}><strong>{item.name}</strong><span>{item.changes.join('、')}</span><small>{item.source}</small></li>)}
+            </ul></section>}
+            {result.failed.length > 0 && <section><h3>保存失败</h3><ul>
+                {result.failed.map((item, index) => <li key={`${item.name}-${index}`} data-tone="danger"><strong>{item.name}</strong><span>{item.error}</span></li>)}
+            </ul></section>}
+            {result.unmatched.length > 0 && <section><h3>models.dev 里没找到</h3><p>按模型 ID、上游模型 ID 与显示名精确匹配；可以在编辑器里查询相近的条目后填入。</p><ul>
+                {result.unmatched.map((name, index) => <li key={`${name}-${index}`}><strong>{name}</strong></li>)}
+            </ul></section>}
+        </div>
+    </Dialog>;
+}
+
 export function AIModelPanel() {
     const [models, setModels] = useState<AdminModel[] | null>(null);
     const [gateways, setGateways] = useState<AdminGateway[]>([]);
@@ -59,6 +88,8 @@ export function AIModelPanel() {
     const [query, setQuery] = useState('');
     const [editing, setEditing] = useState<{ model: AdminModel | null } | null>(null);
     const [updating, setUpdating] = useState<string | null>(null);
+    const [autofill, setAutofill] = useState<'confirm' | 'running' | null>(null);
+    const [report, setReport] = useState<AutofillResult | null>(null);
     const { showToast } = useToast();
     const listRef = useRef<HTMLDivElement>(null);
 
@@ -104,12 +135,29 @@ export function AIModelPanel() {
         }
     };
 
+    const runAutofill = async () => {
+        setAutofill('running');
+        try {
+            const result = await requestBrowserData<AutofillResult>('/api/admin/ai-models/autofill', { method: 'POST' }, { fallbackMessage: '从 models.dev 补全失败' });
+            showToast('success', result.updated.length ? `已补全 ${result.updated.length} 个模型` : '没有可从 models.dev 补全的空缺');
+            if (result.updated.length || result.unmatched.length || result.failed.length) setReport(result);
+            void load();
+        } catch (e) {
+            showToast('error', e instanceof Error ? e.message : '从 models.dev 补全失败');
+        } finally {
+            setAutofill(null);
+        }
+    };
+
     if (!models && !error) return <div className="flex min-h-[200px] items-center justify-center"><SoundWaveLoader variant="inline" /></div>;
     return <div className="ai-catalog">
         <div className="ai-catalog-toolbar">
             <Input className="ai-catalog-search"  type="search" aria-label="搜索模型" value={query}
                 placeholder={`搜索 ${models?.length ?? 0} 个模型`} onChange={event => setQuery(event.target.value)} />
             <span style={{ flex: 1 }} />
+            <Button variant="secondary" size="sm" disabled={!models?.length || autofill === 'running'} onClick={() => setAutofill('confirm')}>
+                <Sparkles size={14} aria-hidden="true" />从 models.dev 补全
+            </Button>
             <Button size="sm" onClick={() => setEditing({ model: null })}>
                 <Plus size={14} aria-hidden="true" />添加模型
             </Button>
@@ -121,7 +169,7 @@ export function AIModelPanel() {
         </div></div> : <div className="ai-catalog-list" ref={listRef}>
             {rows.map(({ key, item: model }) => <div key={key} data-motion-key={key} className="ai-catalog-row" data-disabled={!model.isEnabled || undefined}>
                 <Button unstyled type="button" className="ai-catalog-row-main" onClick={() => setEditing({ model })} aria-label={`编辑 ${model.displayName}`}>
-                    <span className="ai-catalog-row-icon">{getVendorIcon(model.vendor, 16)}</span>
+                    <span className="ai-catalog-row-icon"><ModelIcon icon={model.icon} vendor={model.vendor} size={16} /></span>
                     <span className="ai-catalog-row-text">
                         <span className="ai-catalog-row-title"><strong>{model.displayName}</strong><span className="ai-catalog-mono">{model.modelKey}</span></span>
                         <ModelMeta model={model} gateways={gatewayById} />
@@ -135,5 +183,10 @@ export function AIModelPanel() {
         </div>}
         {editing && <AIModelEditor key={editing.model?.id ?? 'new'} model={editing.model} gateways={gateways}
             onClose={() => setEditing(null)} onSaved={() => { setEditing(null); void load(); }} />}
+        <ConfirmDialog isOpen={autofill !== null} onClose={() => setAutofill(null)} loading={autofill === 'running'} variant="default"
+            title="从 models.dev 补全模型信息？"
+            description="逐个对话模型按 ID 精确匹配 models.dev，只填空着的上下文、输出上限、思考等级、图片输入与单价，已填的值不变；目录价格全为 0 的不补单价。"
+            confirmText="开始补全" onConfirm={() => void runAutofill()} />
+        {report && <AutofillReport result={report} onClose={() => setReport(null)} />}
     </div>;
 }

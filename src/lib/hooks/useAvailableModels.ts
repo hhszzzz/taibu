@@ -13,7 +13,10 @@ export type AvailableModel = {
   id: string;
   name: string;
   vendor: AIVendor;
+  /** lobehub 图标 ID；为空时按供应商显示。 */
+  icon?: string | null;
   supportsReasoning: boolean;
+  supportsVision?: boolean;
   /** Levels the model can think at; empty when thinking only switches on and off. */
   thinkingLevels?: AIReasoningEffort[];
   defaultThinkingLevel?: AIReasoningEffort | null;
@@ -62,11 +65,7 @@ export function useAvailableModels(userId?: string | null, options?: { vision?: 
     queryFn: loadAvailableModels,
     enabled,
     staleTime: 10 * 60_000,
-    select: (models) => (
-      vision
-        ? models.filter((model) => model.vendor === 'qwen-vl' || model.vendor === 'gemini-vl')
-        : models
-    ),
+    select: (models) => (vision ? models.filter((model) => model.supportsVision) : models),
   });
 
   useEffect(() => {

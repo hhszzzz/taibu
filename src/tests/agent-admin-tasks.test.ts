@@ -283,6 +283,7 @@ test('a task tree reads the whole log page by page, and reports a missing task o
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.run.id, RUN);
+  assert.equal(body.cost, null, 'a failed billing lookup does not hide the task');
   assert.deepEqual([body.tree.commits, body.tree.truncated, body.tree.conversations.map((conversation: AgentTaskConversation) => conversation.role)], [201, false, ['main']]);
   assert.deepEqual(f.rpcs.filter(rpc => rpc.name === 'agent_admin_task_log').map(rpc => rpc.args), [{ p_run_id: RUN, p_after: 0 }, { p_run_id: RUN, p_after: 200 }]);
   assert.deepEqual(f.calls.filter(call => call.method === 'where').map(call => call.args), [['id', '=', RUN]]);
@@ -294,4 +295,17 @@ test('a task tree reads the whole log page by page, and reports a missing task o
   f.state.logError = { message: 'AGENT_ADMIN_REQUIRED' };
   const failed = await treeRoute(...treeRequest(RUN));
   assert.deepEqual([failed.status, (await failed.json()).error], [500, '读取任务树失败']);
+});
+
+test('the task detail reports what its model calls cost', async t => {
+  const f = adminFixture(t);
+  f.state.logPages = [[]];
+  const ledger = require('../lib/billing/ledger.server') as typeof import('../lib/billing/ledger.server');
+  const costs = t.mock.method(ledger, 'referenceCosts', async () => new Map([[RUN, { calls: 4, spentMicros: 15_000 }]]));
+  const response = await treeRoute(...treeRequest(RUN));
+  assert.equal(response.status, 200);
+  assert.deepEqual((await response.json()).cost, { calls: 4, spentMicros: 15_000 });
+  const args = costs.mock.calls[0]?.arguments;
+  assert.deepEqual(args?.slice(0, 2), ['agent_run', [RUN]]);
+  assert.ok(args?.[2], 'the cost is read through the caller scoped database');
 });

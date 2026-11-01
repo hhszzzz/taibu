@@ -53,8 +53,9 @@
 		import app
 	}
 
+	# HSTS covers this host only: other subdomains (mail link tracking, say) may lack HTTPS.
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=31536000"
 		-Server
 	}
 

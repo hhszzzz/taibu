@@ -18,6 +18,7 @@ example.com {
 		max_size 12MB
 	}
 
+	# The caddy user must reach the switch: /opt/taibu needs o+x, maintenance/ o+rx.
 	root * /opt/taibu
 
 	@maintenance file maintenance/on
@@ -48,8 +49,9 @@ example.com {
 		}
 	}
 
+	# HSTS covers this host only: other subdomains (mail link tracking, say) may lack HTTPS.
 	header {
-		Strict-Transport-Security "max-age=31536000; includeSubDomains"
+		Strict-Transport-Security "max-age=31536000"
 		-Server
 	}
 

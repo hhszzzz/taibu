@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { MICROS_PER_USD, formatPrice, formatUsd, microsToUsd, usdToMicros } from '../lib/billing/money';
+import { MICROS_PER_USD, formatPrice, formatUsd, isCentAmount, microsToUsd, usdToMicros } from '../lib/billing/money';
 import {
   DEFAULT_BILLING_SETTINGS,
   cnyForUsd,
@@ -121,6 +121,12 @@ test('billing settings fall back field by field and strict mode names the first 
   assert.deepEqual(normalizeBillingSettings({ topupOptionsUsd: [0] }, true), { error: '充值档位需要是 1 到 8 个大于 0、最多两位小数的美元金额' });
   assert.deepEqual(normalizeBillingSettings({ topupOptionsUsd: [5], minTopupUsd: 0 }, true), { error: '最低充值需要是大于 0、最多两位小数的美元金额' });
   assert.deepEqual(normalizeBillingSettings({ topupOptionsUsd: [5], minTopupUsd: 1, cnyPerUsd: 0 }, true), { error: '汇率需要在 0.01 到 100 之间' });
+  // 0.29 * 100 is 28.999… in binary floating point; a valid cent amount must still pass.
+  assert.equal(isCentAmount(0.29), true);
+  assert.equal(isCentAmount(9.99), true);
+  assert.equal(isCentAmount(1.005), false);
+  assert.equal(isCentAmount(Number.NaN), false);
+  assert.equal(isCentAmount(10), true);
   assert.equal(cnyForUsd(10, { ...DEFAULT_BILLING_SETTINGS, cnyPerUsd: 7.3 }), 73);
   assert.equal(cnyForUsd(9.9, { ...DEFAULT_BILLING_SETTINGS, cnyPerUsd: 7.2 }), 71.28);
 });
@@ -132,6 +138,7 @@ test('token usage is priced per million tokens, cached input defaults to the inp
   assert.equal(usageCostMicros({ ...PRICED, cacheRead: null }, { ...noUsage, cacheRead: 1_000_000 }), 2_000_000);
   assert.equal(usageCostMicros(PRICED, { ...noUsage, cacheWrite: 1_000_000 }), 2_000_000);
   assert.equal(usageCostMicros({ ...PRICED, input: 0.0001 }, { ...noUsage, input: 1 }), 1, 'a fraction of a micro-dollar rounds up');
+  assert.equal(usageCostMicros(PRICED, { ...noUsage, output: 1_000_000, reasoning: 1_000_000 }), 4_000_000, 'reasoning is already inside output and is never billed twice');
   assert.equal(usageCostMicros(null, { ...noUsage, input: 1_000_000 }), 0);
   assert.equal(imageCostMicros(PRICED, 2), 40_000);
   assert.equal(imageCostMicros(null, 2), 0);

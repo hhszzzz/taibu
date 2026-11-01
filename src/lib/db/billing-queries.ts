@@ -41,6 +41,7 @@ export const BILLING_LEDGER_TOTALS = [
     sql<string>`coalesce(sum((usage->>'output')::numeric), 0)`.as('output'),
     sql<string>`coalesce(sum((usage->>'cacheRead')::numeric), 0)`.as('cache_read'),
     sql<string>`coalesce(sum((usage->>'cacheWrite')::numeric), 0)`.as('cache_write'),
+    sql<string>`coalesce(sum((usage->>'reasoning')::numeric), 0)`.as('reasoning'),
     sql<string>`coalesce(sum((usage->>'images')::numeric), 0)`.as('images'),
     sql<string>`coalesce(-sum(amount_micros), 0)`.as('spent'),
 ] as const;

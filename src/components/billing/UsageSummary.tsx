@@ -20,6 +20,7 @@ export function UsageTotalsCard({ totals }: { totals: UsageTotals }) {
         { label: '调用', value: formatCount(totals.calls) },
         { label: '输入 token', value: formatCount(totals.input) },
         { label: '输出 token', value: formatCount(totals.output) },
+        ...(totals.reasoning ? [{ label: '其中推理', value: formatCount(totals.reasoning) }] : []),
         { label: '缓存读 / 写', value: `${formatCount(totals.cacheRead)} / ${formatCount(totals.cacheWrite)}` },
         ...(totals.images ? [{ label: '图片', value: formatCount(totals.images) }] : []),
     ];

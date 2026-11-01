@@ -14,6 +14,16 @@ export function microsToUsd(micros: number): number {
     return micros / MICROS_PER_USD;
 }
 
+/**
+ * True when `usd` is a whole number of cents. Binary floats cannot compare `usd * 100` with an integer exactly
+ * (`0.29 * 100` is 28.999…), so allow the rounding error instead of rejecting a valid amount.
+ */
+export function isCentAmount(usd: number): boolean {
+    if (!Number.isFinite(usd)) return false;
+    const cents = usd * 100;
+    return Math.abs(cents - Math.round(cents)) < 1e-6;
+}
+
 function trimmed(value: number, minDigits: number, maxDigits: number) {
     return value.toLocaleString('en-US', { minimumFractionDigits: minDigits, maximumFractionDigits: maxDigits, useGrouping: false });
 }

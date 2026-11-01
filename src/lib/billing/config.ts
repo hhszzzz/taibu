@@ -2,7 +2,7 @@
  * Plans, ledger entries, orders and the billing settings as the API and the settings center see them, with the
  * validation of what an administrator writes. Pure data: no database, React or server-only imports.
  */
-import { usdToMicros } from './money';
+import { isCentAmount, usdToMicros } from './money';
 
 /** A subscription's allowances, one window each; a charge spends the shortest window first. */
 export const SUBSCRIPTION_WINDOWS = ['five_hour', 'daily', 'weekly', 'monthly', 'total'] as const;
@@ -140,6 +140,8 @@ export type UsageTotals = {
     output: number;
     cacheRead: number;
     cacheWrite: number;
+    /** Already counted in `output`; shown as its own line. */
+    reasoning: number;
     images: number;
     spentMicros: number;
 };
@@ -255,7 +257,7 @@ export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } 
     const title = text(raw.title, 60);
     if (!title) return { error: '请填写套餐名称（最多 60 字）' };
     const priceUsd = Number(raw.priceUsd);
-    if (!Number.isFinite(priceUsd) || priceUsd < 0 || priceUsd > 100_000 || Math.round(priceUsd * 100) !== priceUsd * 100) {
+    if (!Number.isFinite(priceUsd) || priceUsd < 0 || priceUsd > 100_000 || !isCentAmount(priceUsd)) {
         return { error: '价格需要是 0 到 100000 之间、最多两位小数的美元金额' };
     }
     const limits = parsePlanLimits(raw.limits);
@@ -324,7 +326,7 @@ export const DEFAULT_BILLING_SETTINGS: BillingSettings = { topupOptionsUsd: [5, 
 
 const MAX_TOPUP_USD = 10_000;
 const isUsd = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
-    && value <= MAX_TOPUP_USD && Math.round(value * 100) === value * 100;
+    && value <= MAX_TOPUP_USD && isCentAmount(value);
 
 /** Stored settings, each field falling back to its default; `strict` reports the first invalid field instead. */
 export function normalizeBillingSettings(value: unknown): BillingSettings;

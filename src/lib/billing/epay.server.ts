@@ -5,7 +5,7 @@ import { systemDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { parseConfiguredOrigin } from '@/lib/runtime-env';
 import { cnyForUsd } from './config';
-import { usdToMicros } from './money';
+import { isCentAmount, usdToMicros } from './money';
 import { getBillingSettings } from './settings.server';
 
 /**
@@ -75,7 +75,7 @@ export async function createEpayCheckout(userId: string, input: EpayCheckoutInpu
     let planId: string | null = null;
     if (input.kind === 'topup') {
         usd = input.amountUsd;
-        if (!Number.isFinite(usd) || Math.round(usd * 100) !== usd * 100 || usd < settings.minTopupUsd || usd > 10_000) {
+        if (!isCentAmount(usd) || usd < settings.minTopupUsd || usd > 10_000) {
             throw new EpayError(`充值金额需要在 $${settings.minTopupUsd} 到 $10000 之间，最多两位小数`, 400, 'AMOUNT_INVALID');
         }
         creditMicros = usdToMicros(usd);

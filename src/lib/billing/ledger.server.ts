@@ -119,12 +119,13 @@ export async function listLedger(userId: string, db: ScopedDb = systemDb(), page
 
 const TOTALS = BILLING_LEDGER_TOTALS;
 
-type TotalsRow = { calls: unknown; input: unknown; output: unknown; cache_read: unknown; cache_write: unknown; images: unknown; spent: unknown };
+type TotalsRow = { calls: unknown; input: unknown; output: unknown; cache_read: unknown; cache_write: unknown; reasoning: unknown; images: unknown; spent: unknown };
 
 function usageTotals(row: TotalsRow | undefined): UsageTotals {
     return {
         calls: Number(row?.calls ?? 0), input: Number(row?.input ?? 0), output: Number(row?.output ?? 0),
         cacheRead: Number(row?.cache_read ?? 0), cacheWrite: Number(row?.cache_write ?? 0),
+        reasoning: Number(row?.reasoning ?? 0),
         images: Number(row?.images ?? 0), spentMicros: Number(row?.spent ?? 0),
     };
 }

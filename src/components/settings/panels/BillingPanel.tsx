@@ -25,7 +25,7 @@ import {
     type BillingOverview, type BillingSummary, type DeductOrder, type PaymentOrderView, type SubscriptionPlanView,
 } from '@/lib/billing/config';
 import { formatBillingDay, formatBillingTime, windowLabel } from '@/lib/billing/format';
-import { formatUsd, usdToMicros } from '@/lib/billing/money';
+import { formatUsd, isCentAmount, usdToMicros } from '@/lib/billing/money';
 
 const SECTION_HEADING = 'text-[13px] font-medium text-foreground-tertiary';
 const CARD = 'rounded-2xl border border-border bg-surface';
@@ -200,7 +200,7 @@ function Orders({ orders }: { orders: PaymentOrderView[] }) {
 function topupError(value: string, minimum: number): string | null {
     const usd = Number(value);
     if (!value.trim() || !Number.isFinite(usd)) return '请输入充值金额';
-    if (Math.round(usd * 100) !== usd * 100) return '最多两位小数';
+    if (!isCentAmount(usd)) return '最多两位小数';
     if (usd < minimum || usd > MAX_TOPUP_USD) return `金额需要在 $${minimum} 到 $${MAX_TOPUP_USD} 之间`;
     return null;
 }

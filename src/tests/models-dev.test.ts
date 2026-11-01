@@ -47,7 +47,7 @@ const catalog: ModelsDevCatalog = {
 
 function model(overrides: Partial<AdminModelInput> = {}): AdminModelInput {
   return {
-    modelKey: 'fixture', displayName: 'Fixture', vendor: 'other', icon: null, usageType: 'chat',
+    modelKey: 'fixture', displayName: 'Fixture', description: '', vendor: 'other', icon: null, usageType: 'chat',
     pricing: { input: null, output: null, cacheRead: null, cacheWrite: null, image: null },
     isEnabled: true, sortOrder: 0, supportsVision: false, isReasoningDefault: false,
     thinkingLevels: [], defaultReasoningEffort: null, contextWindow: null, defaultMaxTokens: null,

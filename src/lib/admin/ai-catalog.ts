@@ -43,6 +43,8 @@ export interface AdminModelSource {
 export interface AdminModelInput {
     modelKey: string;
     displayName: string;
+    /** 一句话说明，显示在模型选择里；空串表示不显示。 */
+    description: string;
     vendor: string;
     /** lobehub 图标 ID；null 表示按供应商显示。 */
     icon: string | null;
@@ -208,6 +210,7 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (!modelKey || modelKey.length > 200 || /\s/u.test(modelKey)) return { error: '模型 ID 不能为空，也不能含空格' };
     const displayName = text(body.displayName);
     if (!displayName || displayName.length > 80) return { error: '请填写显示名称（不超过 80 个字符）' };
+    const description = text(body.description).slice(0, 200);
     const vendor = text(body.vendor);
     if (!vendor || vendor.length > 40) return { error: '请选择或填写供应商' };
     const icon = optionalText(body.icon);
@@ -242,7 +245,7 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if ('error' in sources) return sources;
     return {
         value: {
-            modelKey, displayName, vendor, icon,
+            modelKey, displayName, description, vendor, icon,
             usageType: usageType as AIUsageType,
             pricing: pricing.value,
             isEnabled: body.isEnabled !== false,

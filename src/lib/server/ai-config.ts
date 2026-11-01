@@ -38,6 +38,7 @@ interface DBModelRow {
   id?: string;
   model_key: string;
   display_name: string;
+  description?: string | null;
   vendor: string;
   icon: string | null;
   usage_type?: string;
@@ -93,6 +94,7 @@ function mapDbModelRows(rows: DBModelRow[]): AIModelConfig[] {
     const baseModel: AIModelConfig = {
       id: row.model_key,
       name: row.display_name,
+      ...(row.description ? { description: row.description } : {}),
       vendor: row.vendor as AIVendor,
       icon: row.icon,
       usageType: row.usage_type as AIModelConfig['usageType'],
@@ -127,7 +129,7 @@ async function loadModelsFromDB(): Promise<AIModelConfig[]> {
       const models = await trx
         .selectFrom('ai_models')
         .select([
-          'id', 'model_key', 'display_name', 'vendor', 'icon', 'usage_type',
+          'id', 'model_key', 'display_name', 'description', 'vendor', 'icon', 'usage_type',
           'input_price', 'output_price', 'cache_read_price', 'cache_write_price', 'image_price',
           'is_reasoning_default', 'supports_vision',
           'default_max_tokens', 'default_reasoning_effort',

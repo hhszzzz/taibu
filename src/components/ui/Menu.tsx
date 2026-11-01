@@ -158,13 +158,13 @@ export function MenuRadioGroup(props: MenuPrimitive.RadioGroup.Props) {
     return <MenuPrimitive.RadioGroup {...props} />;
 }
 
-export function MenuRadioItem({ className, children, ...props }: MenuPrimitive.RadioItem.Props) {
+export function MenuRadioItem({ className, children, hideIndicator = false, ...props }: MenuPrimitive.RadioItem.Props & { hideIndicator?: boolean }) {
     return (
-        <MenuPrimitive.RadioItem className={cn(menuItemClass, 'pr-8', className)} {...props}>
+        <MenuPrimitive.RadioItem className={cn(menuItemClass, hideIndicator ? 'pr-2.5' : 'pr-8', className)} {...props}>
             {children}
-            <MenuPrimitive.RadioItemIndicator className="pointer-events-none absolute right-2.5 flex text-accent">
+            {hideIndicator ? null : <MenuPrimitive.RadioItemIndicator className="pointer-events-none absolute right-2.5 flex text-accent">
                 <Check aria-hidden="true" />
-            </MenuPrimitive.RadioItemIndicator>
+            </MenuPrimitive.RadioItemIndicator>}
         </MenuPrimitive.RadioItem>
     );
 }

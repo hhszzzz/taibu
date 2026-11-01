@@ -48,7 +48,8 @@ const text = (value: number | null | undefined) => (value === null || value === 
 
 function draftOf(model: AdminModel | null, gateways: readonly AdminGateway[]): Draft {
     return {
-        modelKey: model?.modelKey ?? '', displayName: model?.displayName ?? '', vendor: model?.vendor ?? 'openai',
+        modelKey: model?.modelKey ?? '', displayName: model?.displayName ?? '', description: model?.description ?? '',
+        vendor: model?.vendor ?? 'openai',
         icon: model?.icon ?? null,
         usageType: model?.usageType ?? 'chat', isEnabled: model?.isEnabled ?? true,
         pricing: Object.fromEntries(PRICE_FIELDS.map(field => [field.key, text(model?.pricing?.[field.key])])) as Record<PriceField, string>,
@@ -348,6 +349,11 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                             onChange={event => patch({ modelKey: event.target.value.trim() })} />
                     </label>
                 </div>
+                <label className="ai-catalog-field">
+                    <span>简介</span>
+                    <Input size="sm" value={draft.description} maxLength={200} placeholder="一句话说明它擅长什么，显示在模型选择里"
+                        onChange={event => patch({ description: event.target.value })} />
+                </label>
                 <div className="ai-catalog-meta-row">
                     <label className="ai-catalog-field"><span>供应商</span>
                         <Select ariaLabel="供应商" value={vendorMode} className={SELECT_SM} onChange={value => {

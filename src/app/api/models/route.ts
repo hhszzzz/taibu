@@ -62,6 +62,7 @@ export async function GET(request: NextRequest) {
         models: models.map(m => ({
             id: m.id,
             name: m.name,
+            description: m.description ?? null,
             vendor: m.vendor,
             icon: m.icon ?? null,
             supportsReasoning: m.supportsReasoning,
@@ -69,6 +70,7 @@ export async function GET(request: NextRequest) {
             thinkingLevels: m.supportsReasoning ? m.thinkingLevels ?? [] : [],
             defaultThinkingLevel: m.supportsReasoning ? m.defaultReasoningEffort ?? null : null,
             contextWindow: m.contextWindow ?? null,
+            maxTokens: m.defaultMaxTokens ?? null,
             isReasoningDefault: m.isReasoningDefault,
             pricing: {
                 input: m.pricing?.input ?? 0,

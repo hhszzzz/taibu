@@ -12,6 +12,8 @@ import type { GeneratedImageSize } from '@/lib/images/generated';
 export type AvailableModel = {
   id: string;
   name: string;
+  /** 管理员写的一句话简介；没有时不显示。 */
+  description?: string | null;
   vendor: AIVendor;
   /** lobehub 图标 ID；为空时按供应商显示。 */
   icon?: string | null;
@@ -21,6 +23,8 @@ export type AvailableModel = {
   thinkingLevels?: AIReasoningEffort[];
   defaultThinkingLevel?: AIReasoningEffort | null;
   contextWindow?: number | null;
+  /** 输出上限（token）。 */
+  maxTokens?: number | null;
   isReasoningDefault?: boolean;
   /** USD per million tokens; a null cache price charges the input price. */
   pricing?: { input: number; output: number; cacheRead: number | null; cacheWrite: number | null };

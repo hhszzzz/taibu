@@ -129,6 +129,7 @@ export async function listModels(): Promise<AdminModel[]> {
         id: row.id,
         modelKey: row.model_key,
         displayName: row.display_name,
+        description: row.description ?? '',
         vendor: row.vendor,
         icon: row.icon,
         usageType: row.usage_type as AIUsageType,
@@ -153,7 +154,8 @@ export async function listModels(): Promise<AdminModel[]> {
 
 function modelColumns(input: AdminModelInput) {
     return {
-        model_key: input.modelKey, display_name: input.displayName, vendor: input.vendor, icon: input.icon,
+        model_key: input.modelKey, display_name: input.displayName, description: input.description || null,
+        vendor: input.vendor, icon: input.icon,
         usage_type: input.usageType, is_enabled: input.isEnabled, sort_order: input.sortOrder,
         input_price: input.pricing.input, output_price: input.pricing.output, cache_read_price: input.pricing.cacheRead,
         cache_write_price: input.pricing.cacheWrite, image_price: input.pricing.image,

@@ -3,7 +3,7 @@
 
 import { useMemo, useEffect, useState, type ReactNode } from 'react';
 import { BetaBadge } from '@/components/ui/BetaBadge';
-import { ChevronDown, Cpu } from 'lucide-react';
+import { ChevronDown, Cpu, Info } from 'lucide-react';
 import { KeyIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from './SoundWaveLoader';
 import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
@@ -16,12 +16,14 @@ import type { AIVendor, AIReasoningEffort } from '@/types';
 import { resolveThinkingLevel } from '@/lib/ai/thinking';
 import { type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
 import { useCollaborationPreset } from '@/lib/chat/collaboration-preset';
-import { formatTokenPrices } from '@/lib/billing/format';
+import { formatPrice } from '@/lib/billing/money';
+import { Popover, PopoverContent, PopoverTrigger } from './Popover';
 
 interface ClientModelConfig {
-    id: string; name: string; vendor: AIVendor; icon?: string | null; supportsReasoning: boolean;
+    id: string; name: string; description?: string | null; vendor: AIVendor; icon?: string | null; supportsReasoning: boolean;
     thinkingLevels?: AIReasoningEffort[]; defaultThinkingLevel?: AIReasoningEffort | null;
     isReasoningDefault?: boolean; pricing?: AvailableModel['pricing'];
+    contextWindow?: number | null; maxTokens?: number | null; supportsVision?: boolean;
 }
 /** 多模型协作的成员上限：0–4 个，主模型不占名额。 */
 const MAX_COLLABORATORS = 4;
@@ -34,6 +36,52 @@ interface ModelSelectorProps extends ModelSettingsProps {
     extra?: ReactNode;
     /** Offers the bring-your-own-model dialog from the menu. */
     onCustomProvider?: () => void;
+}
+
+/** `1M` / `128K` / `8,000`: how a capacity reads in the model details. */
+function formatCapacity(value: number | null | undefined): string {
+    if (!value) return '未设置';
+    if (value >= 1_000_000) return `${Number((value / 1_000_000).toFixed(1))}M`;
+    if (value >= 1_000) return `${Math.round(value / 1000)}K`;
+    return String(value);
+}
+
+/** The card behind a model row's info icon: context, limits, prices and abilities. */
+function ModelDetails({ model }: { model: ClientModelConfig }) {
+    const pricing = model.pricing;
+    const priceRows = pricing ? [
+        { label: '输入', value: pricing.input },
+        { label: '输出', value: pricing.output },
+        { label: '缓存读', value: pricing.cacheRead },
+        { label: '缓存写', value: pricing.cacheWrite },
+    ].filter(row => row.value !== null && row.value !== undefined) : [];
+    const free = !!pricing && priceRows.every(row => !row.value);
+    return (
+        <div className="chat-model-details">
+            <div className="chat-model-details-head">
+                <ModelIcon icon={model.icon} vendor={model.vendor} size={18} />
+                <div className="min-w-0">
+                    <p className="chat-model-details-name">{model.name}</p>
+                    <p className="chat-model-details-id">{model.id}</p>
+                </div>
+            </div>
+            {model.description ? <p className="chat-model-details-desc">{model.description}</p> : null}
+            <dl className="chat-model-details-grid">
+                <div><dt>上下文</dt><dd>{formatCapacity(model.contextWindow)}</dd></div>
+                <div><dt>输出上限</dt><dd>{formatCapacity(model.maxTokens)}</dd></div>
+                <div><dt>图片输入</dt><dd>{model.supportsVision ? '支持' : '不支持'}</dd></div>
+                <div><dt>思考等级</dt><dd>{model.thinkingLevels?.length ? model.thinkingLevels.map(level => level === 'minimal' ? '最低' : level === 'low' ? '低' : level === 'medium' ? '中等' : level === 'high' ? '高' : level === 'xhigh' ? '超高' : '最高').join(' / ') : '不支持'}</dd></div>
+            </dl>
+            <div className="chat-model-details-prices">
+                <p className="chat-model-details-label">每百万 token 的美元单价</p>
+                {priceRows.length ? (
+                    <dl className="chat-model-details-grid">
+                        {priceRows.map(row => <div key={row.label}><dt>{row.label}</dt><dd>{free ? '免费' : formatPrice(row.value as number)}</dd></div>)}
+                    </dl>
+                ) : <p className="chat-model-details-desc">未定价</p>}
+            </div>
+        </div>
+    );
 }
 
 /** 努力程度档位（claude 同构）；菜单只列出当前模型支持的档位，「推荐」标在模型的默认档上。 */
@@ -156,14 +204,23 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             </MenuTrigger>}
             <MenuContent side="top" align={toolbarStyle ? 'end' : 'start'} sideOffset={6} className="chat-model-menu" aria-label="模型与分析设置">
                 <MenuRadioGroup className="chat-model-options" aria-label="选择模型" value={selectedModel ?? ''} onValueChange={value => onModelChange?.(value)}>
-                    {models.map(model => {
-                        const price = formatTokenPrices(model.pricing);
-                        return <MenuRadioItem key={model.id} value={model.id} closeOnClick>
-                            <ModelIcon icon={model.icon} vendor={model.vendor} size={16} />
+                    {models.map(model => <MenuRadioItem key={model.id} value={model.id} closeOnClick hideIndicator className="chat-model-option-row">
+                        <ModelIcon icon={model.icon} vendor={model.vendor} size={16} />
+                        <span className="chat-model-option-text" title={model.description || undefined}>
                             <span className="chat-model-option-name">{model.name}</span>
-                            {price && <span className="chat-model-option-price" title={price === '免费' ? undefined : '每百万 token：输入 / 输出（美元）'}>{price}</span>}
-                        </MenuRadioItem>;
-                    })}
+                            {model.description ? <span className="chat-model-option-desc">{model.description}</span> : null}
+                        </span>
+                        {/* 详情弹层：点图标只开卡片，不选中这一行。 */}
+                        <Popover>
+                            <PopoverTrigger className="chat-model-info" aria-label={`「${model.name}」的详情`}
+                                onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
+                                <Info size={13} aria-hidden="true" />
+                            </PopoverTrigger>
+                            <PopoverContent side="right" align="start" sideOffset={8} className="chat-model-details-popover">
+                                <ModelDetails model={model} />
+                            </PopoverContent>
+                        </Popover>
+                    </MenuRadioItem>)}
                 </MenuRadioGroup>
                 {!models.length && !query.isLoading && <p className="chat-model-note">暂无可用模型。</p>}
                 {reasoningSupported && <MenuSeparator className="chat-model-separator" />}

@@ -321,6 +321,7 @@ export interface AiModels {
   cache_write_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
   image_price: ColumnType<number | null, number | null | undefined, number | null | undefined>;
   icon: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  description: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface Announcements {

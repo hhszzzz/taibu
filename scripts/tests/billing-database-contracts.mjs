@@ -302,6 +302,21 @@ export async function billingDatabaseContracts(t, { sql, asActor, asOwner, admin
     await assert.rejects(order(`T-${randomUUID()}`, 'topup', null, 0, '1.00'), /23514/);
   });
 
+  await t.test('an image prepayment needs its money up front and never leaves the wallet negative', async () => {
+    const user = await member();
+    const imageCharge = (micros, debt = false) => parsed(`SELECT public.billing_charge(${quote(user)},${micros},${debt},'image','image-model',
+      '{"images":1,"prices":{"image":0.02}}'::jsonb,'conversation','conv-1',NULL,'生成 1 张图片');`);
+    await assert.rejects(imageCharge(20_000), /INSUFFICIENT_BALANCE/);
+    assert.deepEqual([await wallet(user), await ledgerCount(user)], [0, 0], 'a refused prepayment changes nothing');
+    await credit(user, 30_000);
+    const paid = await imageCharge(20_000);
+    assert.deepEqual([paid.source, paid.amount_micros, paid.wallet_micros, await wallet(user)], ['image', -20_000, -20_000, 10_000]);
+    await assert.rejects(imageCharge(20_000), /INSUFFICIENT_BALANCE/, 'the wallet may not be overdrawn for something not yet generated');
+    assert.equal(await wallet(user), 10_000);
+    const debt = await imageCharge(20_000, true);
+    assert.deepEqual([debt.wallet_after_micros, await wallet(user)], [-10_000, -10_000], 'usage that already happened may be owed instead');
+  });
+
   await t.test('maintenance marks ended subscriptions, and spending ignores them before it does', async () => {
     const user = await member();
     const sub = await grant(user, await plan({ title: '到期', allowance_micros: 1_000_000 }));

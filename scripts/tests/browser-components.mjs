@@ -45,6 +45,7 @@ import { BillingCodesPanel } from '@/components/admin/billing/BillingCodesPanel'
 import { BillingUsagePanel } from '@/components/admin/billing/BillingUsagePanel';
 import { AgentScheduleRunsPanel } from '@/components/admin/AgentScheduleRunsPanel';
 import UsageLogPanel from '@/components/settings/panels/UsageLogPanel';
+import BillingPanel from '@/components/settings/panels/BillingPanel';
 import { AgentTaskPanel } from '@/components/admin/AgentTaskPanel';
 import { AgentProfilesPanel } from '@/components/admin/AgentProfilesPanel';
 import { ConversationListProvider, useConversationList } from '@/lib/chat/ConversationListContext';
@@ -692,6 +693,7 @@ function Shell() {
       <button onClick={() => navigate('/models')}>Fixture Models route</button>
       <button onClick={() => navigate('/announcements')}>Fixture Announcements route</button>
       <button onClick={() => navigate('/billing-codes')}>Fixture Billing codes route</button>
+      <button onClick={() => navigate('/billing')}>Fixture Billing route</button>
       <button onClick={() => navigate('/usage-log')}>Fixture Usage log route</button>
       <button onClick={() => navigate('/admin-usage')}>Fixture Admin usage route</button>
       <button onClick={() => navigate('/schedule-runs')}>Fixture Schedule runs route</button>
@@ -722,6 +724,7 @@ function Shell() {
     {route === '/models' && <section data-testid="models"><AIModelPanel key={modelMountKey} /></section>}
     {route === '/announcements' && <section data-testid="announcements"><AnnouncementManagementPanel /></section>}
     {route === '/billing-codes' && <section data-testid="billing-codes"><BillingCodesPanel /></section>}
+    {route === '/billing' && <section data-testid="billing"><BillingPanel /></section>}
     {route === '/usage-log' && <section data-testid="usage-log"><UsageLogPanel /></section>}
     {route === '/admin-usage' && <section data-testid="admin-usage"><BillingUsagePanel /></section>}
     {route === '/schedule-runs' && <section data-testid="schedule-runs"><AgentScheduleRunsPanel /></section>}
@@ -829,7 +832,7 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|UsageLogPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|UsageLogPanel|BillingPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
@@ -1101,6 +1104,16 @@ export async function run(existingPage, bundlePath) {
   // Redemption codes and plans as /api/admin/billing/{codes,plans} return them.
   const billingPlan = { id: '7c0f4a7e-1b2c-4d3e-8f90-0a1b2c3d4e5f', title: '轻享月卡', subtitle: '', features: [], priceUsd: 5, durationUnit: 'month', durationValue: 1,
     limits: [{ period: 'total', allowanceMicros: 6_000_000 }], purchasable: true, enabled: true, maxPerUser: null, sortOrder: 0 };
+  // The member wallet; the endpoints below move it the way the server would.
+  let billingSummary = { walletMicros: 5_000_000, subscriptionMicros: 2_250_000, spendableMicros: 7_250_000, deductOrder: 'subscription',
+    subscriptions: [{ id: '8f6e5d4c-3b2a-4190-8f7e-6d5c4b3a2918', planId: billingPlan.id, title: '轻享月卡', source: 'admin',
+      startsAt: '2026-10-01T00:00:00.000Z', endsAt: '2026-11-01T00:00:00.000Z', limits: [
+        { period: 'daily', allowanceMicros: 1_000_000, usedMicros: 250_000, nextResetAt: '2026-10-22T00:00:00.000Z' },
+        { period: 'total', allowanceMicros: 1_250_000, usedMicros: 0, nextResetAt: null },
+      ] }] };
+  const billingOverview = () => ({ summary: billingSummary, plans: [billingPlan],
+    settings: { topupOptionsUsd: [5, 10], minTopupUsd: 1, cnyPerUsd: 7.3 },
+    payment: { enabled: true, methods: [{ id: 'alipay', label: '支付宝' }] } });
   const billingCode = (id, code, extra) => ({ id, code, kind: 'balance', amountMicros: 10_000_000, planId: null, planTitle: null, status: 'unused',
     usedBy: null, usedAt: null, expiresAt: null, batchNote: null, createdAt: '2026-01-02T00:00:00Z', ...extra });
   let billingCodes = [
@@ -1493,6 +1506,23 @@ export async function run(existingPage, bundlePath) {
     });
     if (url.pathname === '/api/admin/agent-runs' && method === 'GET') return ok({ runs: [agentTaskRun] }, true);
     if (url.pathname === `/api/admin/agent-runs/${agentTaskRun.id}` && method === 'GET') return ok({ run: agentTaskRun, tree: agentTaskTree(), cost: { calls: 4, spentMicros: 1500 } }, true);
+    if (url.pathname === '/api/billing' && method === 'GET') return ok(billingOverview());
+    if (url.pathname === '/api/billing/orders' && method === 'GET') return ok({ orders: [], nextOffset: null });
+    if (url.pathname === '/api/billing/preferences' && method === 'PATCH') {
+      billingSummary = { ...billingSummary, deductOrder: body.deductOrder };
+      return ok({ summary: billingSummary });
+    }
+    if (url.pathname === '/api/billing/redeem' && method === 'POST') {
+      billingSummary = { ...billingSummary, walletMicros: billingSummary.walletMicros + 2_000_000, spendableMicros: billingSummary.spendableMicros + 2_000_000 };
+      return ok({ result: { kind: 'balance', amountMicros: 2_000_000, planTitle: null }, summary: billingSummary });
+    }
+    if (url.pathname === `/api/billing/plans/${billingPlan.id}/buy` && method === 'POST') {
+      billingSummary = { ...billingSummary, walletMicros: Math.max(0, billingSummary.walletMicros - 5_000_000), spendableMicros: Math.max(0, billingSummary.spendableMicros - 5_000_000) };
+      return ok({ summary: billingSummary });
+    }
+    if (url.pathname === '/api/billing/epay/checkout' && method === 'POST') return ok({
+      url: 'https://pay.example/submit.php', params: { pid: '1001', out_trade_no: 'T-fixture', money: '73.00', sign: 'x', sign_type: 'MD5' },
+    });
     if (url.pathname === '/api/billing/ledger' && method === 'GET') return ok(ledgerPage);
     if (url.pathname === '/api/admin/billing/usage' && method === 'GET') return ok(adminUsagePage);
     if (url.pathname === '/api/admin/agent-schedules/runs' && method === 'GET') return ok({
@@ -1963,6 +1993,67 @@ export async function run(existingPage, bundlePath) {
     check('Voiding a code confirms first and only that code turns void', requests.some(item => item.pathname === '/api/admin/billing/codes/code-unused' && item.method === 'DELETE')
       && await codeTable.getByText('已作废', { exact: true }).isVisible() && await codePanel.getByRole('button', { name: '作废兑换码 tb-fixture-created-0', exact: true }).isVisible());
     const waitForRequest = async predicate => { for (let attempt = 0; attempt < 80 && !predicate(); attempt++) await page.waitForTimeout(100); return predicate(); };
+
+    // The member wallet: what can be spent, each window, redeeming, buying and the gateway checkout.
+    await page.getByRole('button', { name: 'Fixture Billing route', exact: true }).click();
+    const billing = page.getByTestId('billing');
+    await billing.getByText('可用额度', { exact: true }).waitFor();
+    const balanceCard = billing.getByRole('region', { name: '可用额度', exact: true });
+    check('The wallet shows the spendable sum, its purses and each subscription window', await balanceCard.getByText('$7.25', { exact: true }).isVisible()
+      && await balanceCard.getByText('$5.00', { exact: true }).isVisible()
+      && await balanceCard.getByText('$2.25', { exact: true }).isVisible()
+      && await billing.getByRole('progressbar', { name: '「轻享月卡」每天已用额度', exact: true }).getAttribute('aria-valuenow') === '25'
+      && await billing.getByRole('button', { name: '先扣订阅额度', exact: true }).getAttribute('aria-pressed') === 'true');
+    await billing.getByRole('button', { name: '先扣余额', exact: true }).click();
+    await until(() => [...document.querySelectorAll('[data-testid="billing"] button')]
+      .some(button => button.textContent === '先扣余额' && button.getAttribute('aria-pressed') === 'true'));
+    check('Choosing the wallet first saves it and updates the summary', requests.some(item => item.pathname === '/api/billing/preferences'
+      && item.method === 'PATCH' && item.body.deductOrder === 'wallet')
+      && await billing.getByRole('button', { name: '先扣余额', exact: true }).getAttribute('aria-pressed') === 'true');
+
+    await billing.getByRole('textbox', { name: '兑换码', exact: true }).fill('tb-fixture-redeem');
+    await billing.getByRole('button', { name: '兑换', exact: true }).click();
+    await page.getByText('已到账 $2.00', { exact: true }).waitFor();
+    await billing.getByText('$9.25', { exact: true }).waitFor();
+    check('Redeeming a code posts it and updates the balance', await billing.getByText('$9.25', { exact: true }).isVisible()
+      && requests.some(item => item.pathname === '/api/billing/redeem' && item.method === 'POST' && item.body.code === 'tb-fixture-redeem'));
+
+    await billing.getByRole('button', { name: '用余额购买', exact: true }).click();
+    const buyDialog = page.getByRole('alertdialog').filter({ hasText: '确认购买' });
+    await buyDialog.waitFor();
+    await buyDialog.getByRole('button', { name: '确认购买', exact: true }).click();
+    await page.getByText('已开通「轻享月卡」', { exact: true }).waitFor();
+    await billing.getByText('$4.25', { exact: true }).waitFor();
+    check('Buying a plan with the wallet asks first and takes its price', await billing.getByText('$4.25', { exact: true }).isVisible()
+      && requests.some(item => item.pathname === `/api/billing/plans/${billingPlan.id}/buy` && item.method === 'POST'));
+
+    // The gateway is a signed form post; the fixture records it instead of leaving the page.
+    await page.evaluate(() => {
+      window.fixture.checkoutForms = [];
+      window.fixture.restoreFormSubmit = HTMLFormElement.prototype.submit;
+      HTMLFormElement.prototype.submit = function () {
+        window.fixture.checkoutForms.push({ action: this.action, fields: Object.fromEntries(new FormData(this).entries()) });
+      };
+    });
+    await billing.getByRole('group', { name: '充值金额' }).getByRole('button', { name: '$10', exact: true }).click();
+    await billing.getByRole('region', { name: '充值', exact: true }).getByRole('button', { name: '支付宝', exact: true }).click();
+    await until(() => window.fixture.checkoutForms.length === 1);
+    check('A top-up asks for a signed gateway form with the chosen amount', requests.some(item => item.pathname === '/api/billing/epay/checkout'
+      && item.method === 'POST' && item.body.kind === 'topup' && item.body.amountUsd === 10 && item.body.method === 'alipay')
+      && await page.evaluate(() => window.fixture.checkoutForms.length === 1
+        && window.fixture.checkoutForms[0].action === 'https://pay.example/submit.php'
+        && window.fixture.checkoutForms[0].fields.out_trade_no === 'T-fixture'
+        && window.fixture.checkoutForms[0].fields.sign_type === 'MD5'));
+    await page.evaluate(() => { HTMLFormElement.prototype.submit = window.fixture.restoreFormSubmit; });
+
+    // Back from the gateway: the page says what happened, clears the parameter and reloads.
+    const billingReads = () => requests.filter(item => item.pathname === '/api/billing' && item.method === 'GET').length;
+    const readsBeforeReturn = billingReads();
+    await page.evaluate(() => { history.pushState(null, '', '/billing?payment=success'); window.dispatchEvent(new Event('fixture:navigate')); });
+    await page.getByText('支付成功，已到账', { exact: true }).waitFor();
+    check('Returning from the gateway reports the result and cleans the address', new URL(page.url()).search === ''
+      && await waitForRequest(() => billingReads() > readsBeforeReturn));
+
     // The member usage log: priced detail lines, a detail dialog and the per-model summary.
     await page.getByRole('button', { name: 'Fixture Usage log route', exact: true }).click();
     const usageLog = page.getByTestId('usage-log');
@@ -2781,18 +2872,17 @@ export async function run(existingPage, bundlePath) {
     await settingsTrigger.click();
     const modelSettings = page.getByRole('menu', { name: '模型与分析设置', exact: true });
     await modelSettings.waitFor();
-    check('A priced model shows its input and output prices beside its name', (await modelSettings.getByRole('menuitemradio', { name: /计价模型/ }).innerText()).includes('$3 / $15'));
-    await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).focus();
+    await modelSettings.getByRole('menuitemradio', { name: /^分析模型/u }).focus();
     await page.keyboard.press('End');
     check('Model keyboard navigation reaches the last row', await modelSettings.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).evaluate(item => item === document.activeElement));
-    await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
+    await modelSettings.getByRole('menuitemradio', { name: /^仅支持推理开关/u }).click();
     await settingsTrigger.click();
     await modelSettings.waitFor();
     check('Models with only a reasoning switch do not offer unsupported effort levels', await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).count() === 1 &&
       await modelSettings.getByRole('menuitem', { name: '努力程度', exact: true }).count() === 0);
     await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).click();
     check('The reasoning switch turns on from the model menu', await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).getAttribute('aria-checked') === 'true');
-    await modelSettings.getByRole('menuitemradio', { name: '分析模型', exact: true }).click();
+    await modelSettings.getByRole('menuitemradio', { name: /^分析模型/u }).click();
     await settingsTrigger.click();
     await modelSettings.waitFor();
     await modelSettings.getByRole('menuitem', { name: /^努力程度/ }).click();
@@ -2810,7 +2900,7 @@ export async function run(existingPage, bundlePath) {
     await modelSettings.waitFor();
     check('The chosen effort level reads on the model menu row', await modelSettings.getByRole('menuitem', { name: /^努力程度/ }).innerText().then(text => text.includes('最高')));
     // 主模型不参与协作成员：切到第三个模型，再勾选分析/复核两个子模型。
-    await modelSettings.getByRole('menuitemradio', { name: '仅支持推理开关', exact: true }).click();
+    await modelSettings.getByRole('menuitemradio', { name: /^仅支持推理开关/u }).click();
     await settingsTrigger.click();
     await modelSettings.waitFor();
     await modelSettings.getByRole('menuitem', { name: /多模型协作/ }).click();
@@ -2821,8 +2911,13 @@ export async function run(existingPage, bundlePath) {
     await until(() => window.fixture.agentChat.state.collaborators.length === 2);
     check('Collaboration is a checkable second-level entry in the model menu', await collabMenu.getByRole('menuitemcheckbox', { name: '分析模型', exact: true }).getAttribute('aria-checked') === 'true' &&
       await collabMenu.getByRole('menuitemcheckbox', { name: '复核模型', exact: true }).getAttribute('aria-checked') === 'true');
+    await modelSettings.getByRole('button', { name: '「计价模型」的详情', exact: true }).click();
+    const modelDetails = page.locator('.chat-model-details');
+    await modelDetails.waitFor();
+    check('A priced model shows its input and output prices in its details', /输入\s*\$3/u.test(await modelDetails.innerText())
+      && /输出\s*\$15/u.test(await modelDetails.innerText()));
     await page.keyboard.press('Escape');
-    await page.keyboard.press('Escape');
+    if (await modelSettings.isVisible()) await page.keyboard.press('Escape');
     await modelSettings.waitFor({ state: 'hidden' });
     check('Closing the model menu restores model trigger focus', await settingsTrigger.evaluate(button => button === document.activeElement));
     // 成员配置在设置页编辑（验收走设置界面）；这里通过公开状态写入并验证会话配置持久化。

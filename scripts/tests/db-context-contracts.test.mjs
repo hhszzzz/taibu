@@ -235,6 +235,39 @@ RESET ROLE;`);
       assert.equal(stored.total_ms, 2000);
       assert.deepEqual(stored.phases, phases);
     });
+
+    await t.test('an Agent task costs what its calls charged, net of the images it refunded', async () => {
+      // The calls the runtime makes for a run: every Pi request and every image carries the run as its reference.
+      const { chargeUsage, getSpendableMicros, prepayImages, refundImages } = require('../../src/lib/billing/account.server.ts');
+      const { referenceCosts } = require('../../src/lib/billing/ledger.server.ts');
+      const user = randomUUID();
+      const run = randomUUID();
+      const other = randomUUID();
+      await sql(`insert into identity.users (id) values (${quote(user)});`);
+      await systemDb().rpc('billing_adjust_wallet', { p_user_id: user, p_amount: 1_000_000, p_description: '测试加款' });
+      const text = { id: 'agent-model', pricing: { input: 2, output: 4, cacheRead: null, cacheWrite: null, image: null } };
+      const charge = (runId, step, input, output) => chargeUsage({
+        userId: user, model: text, usage: { input, output, cacheRead: 0, cacheWrite: 0 }, source: 'agent',
+        referenceType: 'agent_run', referenceId: runId, idempotencyKey: `agent:${runId}:${step}`,
+      });
+      // A retried Pi request reuses its key; the other run is billed apart.
+      await charge(run, 1, 1000, 500);
+      await charge(run, 1, 1000, 500);
+      await charge(run, 2, 500, 250);
+      await charge(other, 1, 500, 250);
+      const prepayment = await prepayImages({
+        userId: user, model: { id: 'image-model', pricing: { input: null, output: null, cacheRead: null, cacheWrite: null, image: 0.02 } },
+        images: 2, referenceType: 'agent_run', referenceId: run,
+      });
+      // Two images asked for, one delivered: the other comes back, once even when the refund is retried.
+      assert.equal(await refundImages(prepayment, 1), true);
+      assert.equal(await refundImages(prepayment, 1), true);
+      assert.deepEqual(Object.fromEntries(await referenceCosts('agent_run', [run, other, randomUUID()])), {
+        [run]: { calls: 3, spentMicros: 26_000 },
+        [other]: { calls: 1, spentMicros: 2000 },
+      }, 'each run counts its calls once, net of the refund; a run with no charge is left out');
+      assert.equal(await getSpendableMicros(user), 1_000_000 - 28_000, 'the wallet moved by exactly what the runs report');
+    });
   } finally {
     try {
       await closeDb?.();

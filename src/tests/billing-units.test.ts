@@ -298,6 +298,33 @@ test('a redemption batch writes one row per code with its amount, plan, expiry a
   );
 });
 
+test('an agent charge keeps its run reference and retries under one idempotency key', async (t) => {
+  const { chargeUsage } = require('../lib/billing/account.server') as typeof import('../lib/billing/account.server');
+  const context = require('../lib/db/context.server') as { systemDb: unknown };
+  const original = context.systemDb;
+  const attempts: Array<{ name: string; args: Record<string, unknown> }> = [];
+  let failures = 1;
+  context.systemDb = () => ({ rpc: async (name: string, args: Record<string, unknown>) => {
+    attempts.push({ name, args });
+    if (failures-- > 0) throw Object.assign(new Error('deadlock detected'), { code: '40P01' });
+    return null;
+  } });
+  t.after(() => { context.systemDb = original; });
+
+  const micros = await chargeUsage({
+    userId: 'user-1', model: { id: 'agent-model', pricing: { input: 2, output: 4, cacheRead: null, cacheWrite: null, image: null } },
+    usage: { input: 1000, output: 500, cacheRead: 0, cacheWrite: 0 }, source: 'agent',
+    referenceType: 'agent_run', referenceId: 'run-1', idempotencyKey: 'agent:run-1:1',
+  });
+  assert.equal(micros, 4000);
+  assert.deepEqual(attempts.map(attempt => attempt.args.p_idempotency_key), ['agent:run-1:1', 'agent:run-1:1'],
+    'a retry replays the same key instead of writing a second entry');
+  assert.deepEqual({
+    source: attempts[0]!.args.p_source, reference: [attempts[0]!.args.p_reference_type, attempts[0]!.args.p_reference_id],
+    debt: attempts[0]!.args.p_allow_debt, amount: attempts[0]!.args.p_amount,
+  }, { source: 'agent', reference: ['agent_run', 'run-1'], debt: true, amount: 4000 });
+});
+
 test('a signed gateway settlement credits once, ignores other states and rejects tampering', async (t) => {
   const env = { EPAY_API_URL: 'https://pay.example', EPAY_PID: '1001', EPAY_KEY: 'secret' };
   const saved = Object.fromEntries(Object.keys(env).map(key => [key, process.env[key]]));

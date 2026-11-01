@@ -16,7 +16,7 @@ concurrency:
 jobs:
   verify:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     env:
       DOTENV_CONFIG_PATH: /dev/null
       NEXT_TELEMETRY_DISABLED: '1'
@@ -39,6 +39,11 @@ jobs:
 
       - name: Install isolated browser runtime
         run: pnpm exec playwright install --with-deps --only-shell chromium
+
+      # The auth and Agent notification contracts run against the local stack
+      # (Better Auth, Mailpit, PostgreSQL NOTIFY); a fresh runner has none.
+      - name: Start the local stack
+        run: pnpm local:update
 
       - name: Verify all layers with one package build
         run: pnpm verify

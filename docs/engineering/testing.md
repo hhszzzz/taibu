@@ -21,7 +21,7 @@
 | `pnpm test:auth` | 本地栈中的 Better Auth 与邮件验收 | 需要本地栈/Mailpit |
 | `pnpm test:browser` | 真实 Chromium 中的组件行为，使用合成 API/模型夹具 | 不加载完整应用 CSS，不能证明布局/截图正确 |
 | `pnpm build` | Core、Agent worker 与 Next.js 生产构建 | 构建通过不等于业务验收完成 |
-| `pnpm verify` | lint、类型、单测、构建、DB、认证、Redis、浏览器等完整序列 | 需要 Docker 与 Playwright 浏览器，耗时更长 |
+| `pnpm verify` | lint、类型、单测、构建、DB、认证、Redis、通知、浏览器等完整序列 | 需要 Docker、Playwright 浏览器与运行中的本地栈（认证与通知契约用；CI 先执行 `pnpm local:update`），耗时更长 |
 
 修改 package 源码后使用上述命令自动构建，不手工复用过期 dist。类型检查和大型测试顺序执行，避免资源竞争导致看似代码故障的假失败。
 

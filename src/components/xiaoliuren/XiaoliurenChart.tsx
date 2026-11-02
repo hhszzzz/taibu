@@ -46,7 +46,7 @@ const NATURE_CHIP: Record<string, string> = {
 export function XiaoliurenChart({ chart, interaction, action }: {
   chart: XiaoliurenCanonicalJSON;
   interaction?: ChartInteraction;
-  /** 右栏底部的操作区（结果页放「让太卜结合所问解读」）；对话命盘不传。 */
+  /** 右栏底部的操作区（结果页放「问太卜」）；对话命盘不传。 */
   action?: ReactNode;
 }) {
   const [view, setView] = useState<BoardView>('palm');

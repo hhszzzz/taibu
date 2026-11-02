@@ -11,7 +11,7 @@ export interface ResultSaveControl {
 }
 
 export interface ResultAskControl {
-    /** 如「问太卜解卦」「问太卜断局」。 */
+    /** 结果页统一的「问太卜」。 */
     label: string;
     onClick: () => void;
     disabled?: boolean;

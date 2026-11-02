@@ -50,6 +50,20 @@ export function takeChatHandoff(): ChatHandoffPayload | null {
   }
 }
 
+/** 同一结果页的写入只跑一次：「问太卜」可复用自动保存或手动保存中正在进行的写入。 */
+export function createSaveOnce() {
+  let inFlight: Promise<unknown> | null = null;
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    if (!inFlight) {
+      const current = task();
+      inFlight = current;
+      const clear = () => { if (inFlight === current) inFlight = null; };
+      void current.then(clear, clear);
+    }
+    return inFlight as Promise<T>;
+  };
+}
+
 export function openChatWithResult(
   router: ChatHandoffRouter,
   payload: ChatHandoffPayload,

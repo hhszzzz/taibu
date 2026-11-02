@@ -26,13 +26,13 @@ import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/di
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 
 type XiaoliurenSession = { resultData?: XiaoliurenWebBundle; divinationId?: string; recordOwnerId?: string | null };
 type LoadedSession = XiaoliurenSession & { resultData: XiaoliurenWebBundle };
 
 const SESSION_KEY = 'xiaoliuren_result';
-const ASK_LABEL = '让太卜结合所问解读';
+const ASK_LABEL = '问太卜';
 const MENU_ICON_CLASS = 'h-4 w-4';
 
 /** `YYYY-MM-DDTHH:mm:ss` → `YYYY-MM-DD HH:mm`（仅展示，不做时区换算）。 */
@@ -92,6 +92,7 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
   const [copied, setCopied] = useState(false);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const hasAutoSavedRef = useRef(false);
+  const saveOnce = useMemo(() => createSaveOnce(), []);
   const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(bundle.canonicalJson);
 
   /** 只回写仍属于本课的会话：原地换课后，旧课迟到的记录 / 会话 id 不能串到新课上。 */
@@ -126,10 +127,10 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     hasAutoSavedRef.current = true;
     const run = async () => {
       await Promise.resolve();
-      await saveRecord();
+      await saveOnce(saveRecord);
     };
     void run();
-  }, [divinationId, saveRecord, sessionLoading, userId]);
+  }, [divinationId, saveOnce, saveRecord, sessionLoading, userId]);
 
   const handleCopy = useCallback(async () => {
     try {
@@ -150,19 +151,21 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
       return;
     }
     hasAutoSavedRef.current = true;
-    const savedId = await saveRecord();
+    const savedId = await saveOnce(saveRecord);
     if (!isCurrent()) return;
     showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
   };
 
-  /** 让太卜解读：进入 AI 对话，已保存的课盘会用 mention 一起带过去。 */
-  const handleAsk = () => {
+  /** 让太卜解读：未保存时先落库，再把课盘带进 AI 对话。 */
+  const handleAsk = async () => {
     const question = result.question?.trim();
+    const savedId = divinationId ?? (userId ? await saveOnce(saveRecord) : null);
+    if (userId && !savedId) showToast('error', '保存失败，课盘未能带入对话');
     openChatWithResult(router, {
       text: `${question ? `我问的是「${question}」。` : ''}请结合这次小六壬课盘，解读落宫、掐数过程与应期。`,
-      mentions: divinationId ? [{
+      mentions: savedId ? [{
         type: 'xiaoliuren_divination',
-        id: divinationId,
+        id: savedId,
         name: `小六壬 · ${result.result.name} · ${result.input.shichen}`,
         preview: question || `${result.result.name}（${result.result.nature}）`,
       }] : [],

@@ -40,6 +40,7 @@ import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, wr
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 
 const PRIMARY_BUTTON_CLASS = 'inline-flex items-center justify-center gap-1.5 rounded-xl bg-accent px-4 py-2 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover';
@@ -79,6 +80,7 @@ function ZiweiResultContent() {
     const { user, loading: sessionLoading } = useSessionSafe();
     const userId = user?.id ?? null;
     const { pending: saving, run: runSave } = useChartMutation(userId);
+    const saveOnce = useMemo(() => createSaveOnce(), []);
     const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
     const [savedState, setSaved] = useState(false);
     const saved = savedState && !searchParams.has('timezone') && !searchParams.has('disambiguation');
@@ -289,36 +291,63 @@ function ZiweiResultContent() {
         router.push(`/ziwei?${params.toString()}`);
     }, [resolvedFormData, chartId, router]);
 
-    const handleSave = useCallback(async () => {
-        if (saving || !output || !resolvedFormData) return;
-        if (!userId) { showToast('warning', '请先登录后再保存命盘'); setShowAuthModal(true); return; }
-        await runSave(async (scope) => {
-            const payload = {
-                name: resolvedFormData.name,
-                gender: resolvedFormData.gender,
-                birth_date: `${resolvedFormData.birthYear}-${String(resolvedFormData.birthMonth).padStart(2, '0')}-${String(resolvedFormData.birthDay).padStart(2, '0')}`,
-                birth_time: formatClock(resolvedFormData.birthHour, resolvedFormData.birthMinute || 0),
-                calendar_type: resolvedFormData.calendarType,
-                is_leap_month: resolvedFormData.isLeapMonth ?? false,
-                birth_place: resolvedFormData.birthPlace || null,
-                longitude: resolvedFormData.longitude ?? null,
-                ...resolveBirthTimeOptions(resolvedFormData),
-            };
+    /** 落库（不带提示）：「保存」与「问太卜」共用，返回记录 ID。 */
+    const persistChart = useCallback(async (): Promise<string | null> => {
+        if (!output || !resolvedFormData || !userId) return null;
+        const payload = {
+            name: resolvedFormData.name,
+            gender: resolvedFormData.gender,
+            birth_date: `${resolvedFormData.birthYear}-${String(resolvedFormData.birthMonth).padStart(2, '0')}-${String(resolvedFormData.birthDay).padStart(2, '0')}`,
+            birth_time: formatClock(resolvedFormData.birthHour, resolvedFormData.birthMinute || 0),
+            calendar_type: resolvedFormData.calendarType,
+            is_leap_month: resolvedFormData.isLeapMonth ?? false,
+            birth_place: resolvedFormData.birthPlace || null,
+            longitude: resolvedFormData.longitude ?? null,
+            ...resolveBirthTimeOptions(resolvedFormData),
+        };
+        const savedId = await runSave(async (scope) => {
             if (chartId) {
                 await updateSavedChart('ziwei', chartId, payload, scope);
                 return chartId;
             }
             return createSavedChart('ziwei', payload, scope);
-        }, (savedId) => {
+        }, () => {
             setSaved(true);
             setChartFromDb(resolvedFormData);
             setLoadedForUserId(userId);
-            router.replace(`/ziwei/result?chart=${savedId}`);
         }, (error) => {
             console.error('保存失败:', error);
-            showToast('error', '保存失败，请重试');
         });
-    }, [saving, output, resolvedFormData, chartId, router, showToast, userId, runSave]);
+        return savedId ?? null;
+    }, [chartId, output, resolvedFormData, runSave, userId]);
+
+    const handleSave = useCallback(async () => {
+        if (saving || !output || !resolvedFormData) return;
+        if (!userId) { showToast('warning', '请先登录后再保存命盘'); setShowAuthModal(true); return; }
+        const savedId = await saveOnce(persistChart);
+        if (!savedId) {
+            showToast('error', '保存失败，请重试');
+            return;
+        }
+        router.replace(`/ziwei/result?chart=${savedId}`);
+    }, [output, persistChart, resolvedFormData, router, saveOnce, saving, showToast, userId]);
+
+    /** 问太卜：未保存时先落库，再带上命盘进入 AI 对话。 */
+    const handleAsk = useCallback(async () => {
+        if (!resolvedFormData || !output) return;
+        const savedId = chartId ?? (userId ? await saveOnce(persistChart) : null);
+        if (userId && !savedId) showToast('error', '保存失败，命盘未能带入对话');
+        const birth = `${resolvedFormData.birthYear}-${String(resolvedFormData.birthMonth).padStart(2, '0')}-${String(resolvedFormData.birthDay).padStart(2, '0')}`;
+        openChatWithResult(router, {
+            text: '请结合这张紫微斗数命盘，分析命宫、三方四正与当前大限，并给出可执行建议。',
+            mentions: savedId ? [{
+                type: 'ziwei_chart',
+                id: savedId,
+                name: `${resolvedFormData.name}的紫微命盘`,
+                preview: `${resolvedFormData.name} · ${birth}`,
+            }] : [],
+        });
+    }, [chartId, output, persistChart, resolvedFormData, router, saveOnce, showToast, userId]);
 
     // 分享
     const handleShare = useCallback(async () => {
@@ -449,6 +478,7 @@ function ZiweiResultContent() {
                     status={hourStatus}
                     mode={mode}
                     onModeChange={setMode}
+                    onAsk={handleAsk}
                     actions={desktopActions}
                 />
 
@@ -518,7 +548,7 @@ function ZiweiResultContent() {
                 </div>
             </div>
 
-            <ResultMobileActions saving={saving} saved={saved} onSave={() => { void handleSave(); }} />
+            <ResultMobileActions saving={saving} saved={saved} onSave={() => { void handleSave(); }} ask={{ label: '问太卜', onClick: handleAsk }} />
             <CopyTextModal
                 isOpen={showCopyModal}
                 value={copyDetailLevel}

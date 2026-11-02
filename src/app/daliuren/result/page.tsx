@@ -22,7 +22,7 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { saveDivinationAction } from '@/lib/divination/save-client';
@@ -34,7 +34,7 @@ import {
 
 const PILLAR_LABELS = ['年', '月', '日', '时'] as const;
 const MENU_ICON_CLASS = 'h-4 w-4';
-const ASK_LABEL = '问太卜断课';
+const ASK_LABEL = '问太卜';
 
 type DaliurenSessionParams = Record<string, unknown> & {
     date?: string;
@@ -61,6 +61,7 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const [sessionParams, setSessionParams] = useState<DaliurenSessionParams | null>(null);
     const [saving, setSaving] = useState(false);
     const hasAutoSavedRef = useRef(false);
+    const saveOnce = useMemo(() => createSaveOnce(), []);
 
     const { userId, sessionLoading } = useSessionBalance();
     const canonicalResult = useMemo(
@@ -107,12 +108,12 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                 if (!isCurrent()) return;
                 if (payload?.data) {
                     setResult(payload.data); setSessionParams(params); if (params.divinationId) setDivinationId(params.divinationId);
-                    if (!params.divinationId && userId && !hasAutoSavedRef.current) { hasAutoSavedRef.current = true; await saveDivinationRecord(params, payload.data); }
+                    if (!params.divinationId && userId && !hasAutoSavedRef.current) { hasAutoSavedRef.current = true; await saveOnce(() => saveDivinationRecord(params, payload.data)); }
                 }
             } catch (e) { if (isCurrent()) console.error(e); } finally { if (isCurrent()) setIsLoading(false); }
         };
         void init();
-    }, [router, saveDivinationRecord, sessionLoading, userId, isCurrent]);
+    }, [router, saveDivinationRecord, saveOnce, sessionLoading, userId, isCurrent]);
 
     const handleConfirmCopy = async (level: ChartTextDetailLevel) => {
         if (!result) return;
@@ -155,19 +156,21 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
             return;
         }
         hasAutoSavedRef.current = true;
-        const savedId = await saveDivinationRecord(sessionParams, result);
+        const savedId = await saveOnce(() => saveDivinationRecord(sessionParams, result));
         if (!isCurrent()) return;
         showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
     };
 
-    /** 「问太卜断课」：带上已保存的课盘进入 AI 对话。 */
-    const handleAskTaibu = () => {
+    /** 「问太卜」：未保存时先落库，再带上课盘进入 AI 对话。 */
+    const handleAskTaibu = async () => {
         const question = canonicalResult?.基本信息.占事?.trim();
+        const savedId = divinationId ?? (userId && sessionParams && result ? await saveOnce(() => saveDivinationRecord(sessionParams, result)) : undefined);
+        if (userId && sessionParams && result && !savedId) showToast('error', '保存失败，课盘未能带入对话');
         openChatWithResult(router, {
             text: `${question ? `我问的是「${question}」。` : ''}请结合三传、四课与本命行年，说明这件事的来龙去脉、吉凶与应期。`,
-            mentions: divinationId ? [{
+            mentions: savedId ? [{
                 type: 'daliuren_divination',
-                id: divinationId,
+                id: savedId,
                 name: `大六壬 · ${canonicalResult?.基本信息.课式 ?? ''}`,
                 preview: question || '大六壬起课',
             }] : [],

@@ -15,8 +15,8 @@ interface LiuyaoResultHeaderProps {
 }
 
 /**
- * 六爻结果页标题区：所问 · 用神，「本卦 之 变卦」，桌面端右侧为更多 · 保存 · 问太卜解卦。
- * 移动端卦名由顶栏承担（useHeaderTitle），所问居中；保存与解卦在底部操作栏。
+ * 六爻结果页标题区：所问 · 用神，「本卦 之 变卦」，桌面端右侧为更多 · 保存 · 问太卜。
+ * 移动端卦名由顶栏承担（useHeaderTitle），所问居中；保存与问太卜在底部操作栏。
  */
 export function LiuyaoResultHeader({ question, yongShenTargets, hexagramName, changedHexagramName, actions, save, onAsk, askDisabled }: LiuyaoResultHeaderProps) {
     return (
@@ -33,7 +33,7 @@ export function LiuyaoResultHeader({ question, yongShenTargets, hexagramName, ch
                     {changedHexagramName && <> <span className="text-[1.375rem] text-foreground-secondary">之</span> {changedHexagramName}</>}
                 </h1>
             </div>
-            <ResultHeaderActions actions={actions} actionsLabel="卦盘操作" save={save} ask={{ label: '问太卜解卦', onClick: onAsk, disabled: askDisabled }} />
+            <ResultHeaderActions actions={actions} actionsLabel="卦盘操作" save={save} ask={{ label: '问太卜', onClick: onAsk, disabled: askDisabled }} />
         </header>
     );
 }

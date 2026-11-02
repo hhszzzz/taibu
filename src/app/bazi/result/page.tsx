@@ -36,7 +36,7 @@ import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, wr
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
-import { openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 
@@ -72,6 +72,7 @@ function BaziResultContent() {
     const { showToast } = useToast();
     const { userId, sessionLoading } = useSessionBalance();
     const { pending: saving, run: runSave } = useChartMutation(userId);
+    const saveOnce = useMemo(() => createSaveOnce(), []);
     const [loadedForUserId, setLoadedForUserId] = useState<string | null | undefined>(undefined);
 
     type SavedBaziChartRow = BirthTimeResolution & {
@@ -299,6 +300,36 @@ function BaziResultContent() {
         if (!activeLiuYue) setSelectedLiuRiDate('');
     }
 
+    /** 落库（不带提示）：「保存」与「问太卜」共用，返回记录 ID。 */
+    const persistChart = async (): Promise<string | null> => {
+        if (!baziOutput || isUnknownTime || !userId) return null;
+        const payload = {
+            name: formData.name,
+            gender: formData.gender,
+            birth_date: `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`,
+            birth_time: `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
+            birth_place: formData.birthPlace || null,
+            longitude: formData.longitude ?? null,
+            ...resolveBirthTimeOptions(formData),
+            calendar_type: formData.calendarType,
+            is_leap_month: formData.isLeapMonth || false,
+        };
+        const savedId = await runSave(async (scope) => {
+            if (chartId) {
+                await updateSavedChart('bazi', chartId, payload, scope);
+                return chartId;
+            }
+            return createSavedChart('bazi', payload, scope);
+        }, () => {
+            setSaved(true);
+            setChartFromDb(formData);
+            setLoadedForUserId(userId);
+        }, (error) => {
+            console.error('保存失败:', error);
+        });
+        return savedId ?? null;
+    };
+
     // 保存命盘
     const handleSave = async () => {
         if (saving) return;
@@ -317,32 +348,12 @@ function BaziResultContent() {
             return;
         }
 
-        await runSave(async (scope) => {
-            const payload = {
-                name: formData.name,
-                gender: formData.gender,
-                birth_date: `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`,
-                birth_time: `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
-                birth_place: formData.birthPlace || null,
-                longitude: formData.longitude ?? null,
-                ...resolveBirthTimeOptions(formData),
-                calendar_type: formData.calendarType,
-                is_leap_month: formData.isLeapMonth || false,
-            };
-            if (chartId) {
-                await updateSavedChart('bazi', chartId, payload, scope);
-                return chartId;
-            }
-            return createSavedChart('bazi', payload, scope);
-        }, (savedId) => {
-            setSaved(true);
-            setChartFromDb(formData);
-            setLoadedForUserId(userId);
-            router.replace(`/bazi/result?chart=${savedId}`);
-        }, (error) => {
-            console.error('保存失败:', error);
+        const savedId = await saveOnce(persistChart);
+        if (!savedId) {
             showToast('error', '保存失败，请重试');
-        });
+            return;
+        }
+        router.replace(`/bazi/result?chart=${savedId}`);
     };
 
     // 分享
@@ -544,15 +555,17 @@ function BaziResultContent() {
 
     const dayMasterDescription = getDayMasterDescription(canonicalBazi.基本信息.日主 as Parameters<typeof getDayMasterDescription>[0]);
 
-    /** 问太卜：带上已保存的命盘进入 AI 对话；未保存时只预填问题。 */
-    const handleAsk = () => {
+    /** 问太卜：未保存时先落库，再带上命盘进入 AI 对话。 */
+    const handleAsk = async () => {
         const name = formData.name?.trim() || '未命名';
         const birth = `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`;
+        const savedId = chartId ?? (userId && !isUnknownTime ? await saveOnce(persistChart) : null);
+        if (userId && !isUnknownTime && !savedId) showToast('error', '保存失败，命盘未能带入对话');
         openChatWithResult(router, {
             text: '请结合这张八字命盘，分析五行旺衰、格局与用神，并给出可执行的建议。',
-            mentions: chartId ? [{
+            mentions: savedId ? [{
                 type: 'bazi_chart',
-                id: chartId,
+                id: savedId,
                 name: `${name}的八字命盘`,
                 preview: `${name} · ${birth}`,
             }] : [],

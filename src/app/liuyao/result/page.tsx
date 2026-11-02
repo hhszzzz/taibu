@@ -1,12 +1,12 @@
 /**
  * 六爻解卦结果页面
  *
- * 标题区「本卦 之 变卦」+ 保存 / 问太卜解卦，四柱旬空、卦盘、卦辞与盘面要点、用神分析；解读统一进入 AI 对话。
+ * 标题区「本卦 之 变卦」+ 保存 / 问太卜，四柱旬空、卦盘、卦辞与盘面要点、用神分析；解读统一进入 AI 对话。
  * 'use client'：结果来自 sessionStorage，且含多处交互状态。
  */
 'use client';
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { RotateCw, BookOpen, Copy, Check, BookOpenText, X, Album, ChevronLeft } from 'lucide-react';
@@ -36,7 +36,7 @@ import {
 } from '@/lib/divination/liuyao-result-state';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { AuthModal } from '@/components/auth/AuthModal';
@@ -82,6 +82,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const [copied, setCopied] = useState(false);
     const [saving, setSaving] = useState(false);
     const yongShenPickerRef = useRef<HTMLElement>(null);
+    const saveOnce = useMemo(() => createSaveOnce(), []);
     const { showToast } = useToast();
     const { user, userId, sessionLoading } = useSessionBalance();
 
@@ -180,15 +181,10 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         }
     };
 
-    /** 保存起卦记录：起卦时未登录或保存失败的结果可在此补存；已有记录 ID 即视为已保存。 */
-    const handleSave = async () => {
-        if (!result || divinationId || saving || sessionLoading) return;
-        if (!user) { setShowAuthModal(true); return; }
-        if (missingYongShenTargets) {
-            showToast('error', '请先选择分析目标');
-            yongShenPickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            return;
-        }
+    /** 落库（不带提示）：「保存」与「问太卜」共用，返回记录 ID。 */
+    const persistResult = useCallback(async (): Promise<string | null> => {
+        if (!result || divinationId || saving || sessionLoading || missingYongShenTargets) return divinationId;
+        if (!user) return null;
         setSaving(true);
         try {
             const saved = await saveDivinationAction({
@@ -203,22 +199,33 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                 idKey: 'divinationId',
                 fallbackMessage: '保存起卦记录失败',
             });
-            if (!isCurrent()) return;
-            if (!saved.ok || !saved.id) {
-                showToast('error', saved.ok ? '保存起卦记录失败' : saved.error.message || '保存起卦记录失败');
-                return;
-            }
-            const savedId = saved.id;
-            setDivinationId(savedId);
-            updateSessionJSON('liuyao_result', (prev: LiuyaoResultSession | null) => ({ ...(prev || {}), divinationId: savedId } as LiuyaoResultSession));
-            showToast('success', '已保存到命理记录');
+            if (!isCurrent() || !saved.ok || !saved.id) return null;
+            setDivinationId(saved.id);
+            updateSessionJSON('liuyao_result', (prev: LiuyaoResultSession | null) => ({ ...(prev || {}), divinationId: saved.id } as LiuyaoResultSession));
+            return saved.id;
+        } catch {
+            return null;
         } finally {
             if (isCurrent()) setSaving(false);
         }
+    }, [appliedYongShenTargets, divinationId, isCurrent, missingYongShenTargets, result, saving, sessionLoading, user]);
+
+    /** 保存起卦记录：起卦时未登录或保存失败的结果可在此补存；已有记录 ID 即视为已保存。 */
+    const handleSave = async () => {
+        if (!result || divinationId || saving || sessionLoading) return;
+        if (!user) { setShowAuthModal(true); return; }
+        if (missingYongShenTargets) {
+            showToast('error', '请先选择分析目标');
+            yongShenPickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            return;
+        }
+        const id = await saveOnce(persistResult);
+        if (!isCurrent()) return;
+        showToast(id ? 'success' : 'error', id ? '已保存到命理记录' : '保存起卦记录失败');
     };
 
-    /** 问太卜解卦：带上已保存的卦进入 AI 对话；无问题或未选用神时先在页内补齐。 */
-    const handleAskTaibu = () => {
+    /** 问太卜：未保存时先落库，再带上卦象进入 AI 对话；无问题或未选用神时先在页内补齐。 */
+    const handleAskTaibu = async () => {
         if (sessionLoading) return;
         if (!requiresYongShenTargets) { showToast('error', '起卦时未填写所问之事，无法解卦'); return; }
         if (missingYongShenTargets) {
@@ -226,12 +233,14 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
             yongShenPickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
             return;
         }
+        const id = divinationId ?? (user ? await saveOnce(persistResult) : null);
+        if (user && !id) showToast('error', '保存失败，卦象未能带入对话');
         const question = result?.question?.trim();
         openChatWithResult(router, {
             text: `${question ? `我问的是「${question}」。` : ''}请结合这一卦的用神与动变，解读卦象与应期。`,
-            mentions: divinationId ? [{
+            mentions: id ? [{
                 type: 'liuyao_divination',
-                id: divinationId,
+                id,
                 name: `六爻 · ${result?.hexagram.name ?? ''}${hasChangedHexagram && result?.changedHexagram ? `之${result.changedHexagram.name}` : ''}`,
                 preview: question || '六爻起卦',
             }] : [],
@@ -372,7 +381,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                 saved={saveState.saved}
                 saveDisabled={saveState.disabled}
                 onSave={saveState.onSave}
-                ask={{ label: '问太卜解卦', onClick: handleAskTaibu, disabled: askDisabled }}
+                ask={{ label: '问太卜', onClick: handleAskTaibu, disabled: askDisabled }}
             />
 
             <AuthModal isOpen={showAuthModal} onClose={() => setShowAuthModal(false)} />

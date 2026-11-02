@@ -24,7 +24,7 @@ import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components
 import { readSessionJSON, scopeResultSession, updateSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
@@ -39,7 +39,7 @@ import {
 
 const PILLAR_LABELS = ['年', '月', '日', '时'] as const;
 const MENU_ICON_CLASS = 'h-4 w-4';
-const ASK_LABEL = '问太卜断局';
+const ASK_LABEL = '问太卜';
 
 function pad2(value: number): string {
     return Number.isFinite(value) ? String(value).padStart(2, '0') : '--';
@@ -102,6 +102,7 @@ export default function QimenResultPage() {
     const [selectedPalace, setSelectedPalace] = useState<number | null>(null);
     const [isSaving, setIsSaving] = useState(false);
     const hasSavedRef = useRef<string | null>(null);
+    const saveOnce = useMemo(() => createSaveOnce(), []);
     const { user, userId, sessionLoading } = useSessionBalance();
     const captureIdentity = useIdentityGuard(userId);
     const result = storedResult?.recordOwnerId === userId ? storedResult : null;
@@ -118,9 +119,9 @@ export default function QimenResultPage() {
     );
     const { isAdmin, jsonCopied, copyJson } = useAdminJsonCopy(canonicalResult);
 
-    /** 保存起局记录（进入页面时自动保存与「保存」按钮共用），成功后回写 chartId */
-    const saveChartRecord = useCallback(async (record: QimenSessionData): Promise<boolean> => {
-        if (!userId || record.recordOwnerId !== userId) return false;
+    /** 保存起局记录（进入页面时自动保存、手动保存与「问太卜」共用），返回记录 ID。 */
+    const saveChartRecord = useCallback(async (record: QimenSessionData): Promise<string | undefined> => {
+        if (!userId || record.recordOwnerId !== userId) return undefined;
         const isCurrent = captureIdentity();
         setIsSaving(true);
         try {
@@ -130,7 +131,7 @@ export default function QimenResultPage() {
                 idKey: 'chartId',
                 fallbackMessage: '保存奇门记录失败',
             });
-            if (!isCurrent()) return false;
+            if (!isCurrent()) return undefined;
             if (!saveResult.ok) {
                 throw new Error(saveResult.error.message || '保存奇门记录失败');
             }
@@ -139,10 +140,10 @@ export default function QimenResultPage() {
                 updateSessionJSON('qimen_result', (prev) => ({ ...(prev || {}), recordOwnerId: userId, chartId: savedChartId }));
                 setResult(prev => prev ? { ...prev, chartId: savedChartId } : prev);
             }
-            return true;
+            return savedChartId ?? undefined;
         } catch (e) {
             console.error(e);
-            return false;
+            return undefined;
         } finally {
             if (isCurrent()) setIsSaving(false);
         }
@@ -178,12 +179,12 @@ export default function QimenResultPage() {
             const saveKey = `${userId}:${nextResult.createdAt}`;
             if (!nextResult.chartId && userId && hasSavedRef.current !== saveKey) {
                 hasSavedRef.current = saveKey;
-                await saveChartRecord(nextResult);
+                await saveOnce(() => saveChartRecord(nextResult));
             }
         };
         void init();
         return () => { cancelled = true; };
-    }, [userId, router, saveChartRecord, sessionLoading, captureIdentity]);
+    }, [userId, router, saveChartRecord, saveOnce, sessionLoading, captureIdentity]);
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加重新起局）
     // 收藏到知识库依赖已保存的 chartId，保存完成前不出现
@@ -225,15 +226,17 @@ export default function QimenResultPage() {
         setShowCopyModal(false);
     };
 
-    /** 「问太卜断局」：带上已保存的盘进入 AI 对话；未保存时只预填问题。 */
-    const handleAskTaibu = () => {
+    /** 「问太卜」：未保存时先落库，再带上排盘进入 AI 对话。 */
+    const handleAskTaibu = async () => {
         if (!result) return;
         const question = result.question?.trim();
+        const chartId = result.chartId ?? (userId ? await saveOnce(() => saveChartRecord(result)) : undefined);
+        if (userId && !chartId) showToast('error', '保存失败，排盘未能带入对话');
         openChatWithResult(router, {
             text: `${question ? `我问的是「${question}」。` : ''}请结合这一局奇门遁甲，解读用神、门星神仪的旺衰与格局，并给出应期与行动建议。`,
-            mentions: result.chartId ? [{
+            mentions: chartId ? [{
                 type: 'qimen_chart',
-                id: result.chartId,
+                id: chartId,
                 name: `奇门遁甲 · ${juLabel}`,
                 preview: question || `${qimenOutput?.dunType === 'yang' ? '阳遁' : '阴遁'}${qimenOutput?.juNumber ?? ''}局`,
             }] : [],
@@ -249,9 +252,9 @@ export default function QimenResultPage() {
         }
         hasSavedRef.current = `${userId}:${result.createdAt}`;
         const isCurrent = captureIdentity();
-        const saved = await saveChartRecord(result);
+        const savedId = await saveOnce(() => saveChartRecord(result));
         if (!isCurrent()) return;
-        showToast(saved ? 'success' : 'error', saved ? '已保存到命理记录' : '保存失败，请重试');
+        showToast(savedId ? 'success' : 'error', savedId ? '已保存到命理记录' : '保存失败，请重试');
     };
 
     if (!result || !qimenOutput) return (

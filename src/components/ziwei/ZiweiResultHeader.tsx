@@ -35,6 +35,8 @@ interface ZiweiResultHeaderProps {
     status?: ReactNode;
     mode: ZiweiChartMode;
     onModeChange: (mode: ZiweiChartMode) => void;
+    /** 带上当前命盘进入 AI 对话；缺省时跳转 AI 对话「问太卜」。 */
+    onAsk?: () => void;
     /** 桌面端「更多」菜单项；移动端同一组操作由顶栏三点菜单承载。 */
     actions: HeaderMenuItem[];
 }
@@ -91,7 +93,7 @@ function ModeTabs({ mode, onModeChange }: { mode: ZiweiChartMode; onModeChange: 
     );
 }
 
-export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode, onModeChange, actions }: ZiweiResultHeaderProps) {
+export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode, onModeChange, onAsk, actions }: ZiweiResultHeaderProps) {
     return (
         <header className="flex flex-col gap-3.5 lg:flex-row lg:flex-wrap lg:items-end lg:justify-between lg:gap-4">
             <div className="flex min-w-0 flex-col gap-1.5">
@@ -110,12 +112,20 @@ export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode,
                 <div className="hidden items-center gap-2 lg:flex">
                     <ResultMoreActions actions={actions} label="命盘操作" />
                     <AIFeatureGate>
-                        <Link
-                            href={ASK_TAIBU_HREF}
-                            className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
-                        >
-                            问太卜
-                        </Link>
+                        {onAsk ? (
+                            <Button unstyled type="button" onClick={onAsk}
+                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                            >
+                                问太卜
+                            </Button>
+                        ) : (
+                            <Link
+                                href={ASK_TAIBU_HREF}
+                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                            >
+                                问太卜
+                            </Link>
+                        )}
                     </AIFeatureGate>
                 </div>
             </div>

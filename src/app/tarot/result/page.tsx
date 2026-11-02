@@ -33,7 +33,7 @@ import {
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -44,7 +44,7 @@ import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 
 const MENU_ICON_CLASS = 'h-4 w-4';
-const ASK_LABEL = '问太卜解读';
+const ASK_LABEL = '问太卜';
 const NUMEROLOGY_SLOTS = [
     { key: 'personalityCard', label: '人格牌' },
     { key: 'soulCard', label: '灵魂牌' },
@@ -198,11 +198,13 @@ function TarotResultContent() {
     }, [birthDate, drawnCards, numerology, question, seed, selectedSpread, showToast]);
 
     const saved = resultOwnerId === userId && Boolean(readingId);
+    const saveOnce = useMemo(() => createSaveOnce(), []);
 
-    /** 「保存」：未登录先登录；已登录则把本次抽牌写入命理记录 */
-    const handleSave = useCallback(async () => {
-        if (!selectedSpread || drawnCards.length === 0 || saved || saving || sessionLoading) return;
-        if (!user) { setShowAuthModal(true); return; }
+    /** 落库（不带提示）：「保存」与「问太卜」共用，返回记录 ID。 */
+    const persistReading = useCallback(async (): Promise<string | null> => {
+        if (!selectedSpread || drawnCards.length === 0 || sessionLoading) return null;
+        if (readingId) return readingId;
+        if (!user) return null;
         const isCurrent = captureIdentity();
         setSaving(true);
         try {
@@ -212,17 +214,23 @@ function TarotResultContent() {
                 idKey: 'readingId',
                 fallbackMessage: '保存塔罗记录失败',
             });
-            if (!isCurrent()) return;
-            if (result.ok && result.id) {
-                setReadingId(result.id);
-                showToast('success', '已保存到命理记录');
-            } else {
-                showToast('error', result.ok ? '保存失败，请重试' : result.error.message || '保存失败，请重试');
-            }
+            if (!isCurrent() || !result.ok || !result.id) return null;
+            setReadingId(result.id);
+            return result.id;
+        } catch {
+            return null;
         } finally {
             if (isCurrent()) setSaving(false);
         }
-    }, [birthDate, drawnCards, numerology, question, saved, saving, seed, selectedSpread, sessionLoading, showToast, user, captureIdentity]);
+    }, [birthDate, captureIdentity, drawnCards, numerology, question, readingId, seed, selectedSpread, sessionLoading, user]);
+
+    /** 「保存」：未登录先登录；已登录则把本次抽牌写入命理记录 */
+    const handleSave = useCallback(async () => {
+        if (!selectedSpread || drawnCards.length === 0 || saved || saving || sessionLoading) return;
+        if (!user) { setShowAuthModal(true); return; }
+        const id = await saveOnce(persistReading);
+        showToast(id ? 'success' : 'error', id ? '已保存到命理记录' : '保存失败，请重试');
+    }, [drawnCards.length, persistReading, saveOnce, saved, saving, selectedSpread, sessionLoading, showToast, user]);
 
     // 次要操作：桌面端收进标题区「更多」，移动端进顶栏三点菜单（另加保存；重新洗牌在底栏）
     const resultActions = useMemo((): HeaderMenuItem[] => {
@@ -250,15 +258,17 @@ function TarotResultContent() {
     // 移动端顶栏标题为牌阵名，桌面端由页内标题承担
     useHeaderTitle(selectedSpread?.name ?? null);
 
-    /** 「问太卜解读」：先把牌面全部翻开，再带上已保存的牌阵进入 AI 对话。 */
-    const handleAskTaibu = () => {
+    /** 「问太卜」：先把牌面全部翻开；未保存时先落库，再带上牌阵进入 AI 对话。 */
+    const handleAskTaibu = async () => {
         if (drawnCards.length === 0) return;
         setRevealedCards(drawnCards.map((_, i) => i));
+        const id = readingId ?? (user ? await saveOnce(persistReading) : null);
+        if (user && !id) showToast('error', '保存失败，牌阵未能带入对话');
         openChatWithResult(router, {
             text: `${question ? `我问的是「${question}」。` : ''}请结合这个${selectedSpread?.name ?? ''}牌阵与牌义，解读牌面与建议。`,
-            mentions: readingId ? [{
+            mentions: id ? [{
                 type: 'tarot_reading',
-                id: readingId,
+                id,
                 name: `塔罗 · ${selectedSpread?.name ?? '牌阵'}`,
                 preview: question || '塔罗牌阵',
             }] : [],

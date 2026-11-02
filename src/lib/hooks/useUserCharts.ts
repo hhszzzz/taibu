@@ -78,8 +78,10 @@ export function useChartMutation(userId?: string | null) {
     try {
       const result = await operation({ expectedUserId: current.userId, signal: current.controller.signal });
       if (isCurrent()) onSuccess(result);
+      return result;
     } catch (error) {
       if (isCurrent()) onError(error);
+      return undefined;
     } finally {
       if (isCurrent()) {
         current.pending = false;

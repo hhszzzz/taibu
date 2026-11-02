@@ -260,7 +260,7 @@ export function PhotoReadingResult<T extends PhotoReadingSession>({
                 </div>
             </div>
 
-            <MobileActionBar ask={conversationId ? { label: '继续对话', onClick: () => router.push(`/chat?id=${conversationId}`) } : undefined}>
+            <MobileActionBar ask={conversationId ? { label: '继续对话', onClick: () => router.push(`/chat?id=${conversationId}`) } : null}>
                 <Link href={entryPath} className={`${MOBILE_SECONDARY_ACTION_CLASS} text-foreground`}>再次分析</Link>
             </MobileActionBar>
 

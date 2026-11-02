@@ -14,7 +14,7 @@ const MOBILE_ASK_CLASS = 'flex h-12 flex-1 items-center justify-center rounded-x
 /** 移动端底栏左侧的次要操作按钮（保存、重新洗牌等）。 */
 export const MOBILE_SECONDARY_ACTION_CLASS = 'flex h-12 min-w-[76px] items-center justify-center rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-[15px] transition-colors duration-150 hover:bg-background-secondary only:flex-1';
 
-/** 打开 AI 对话的入口（与页脚「AI 对话」链接同一目的地）。 */
+/** 打开 AI 对话的兜底入口；各结果页应传入 ask 以带上盘面。 */
 export const ASK_TAIBU_HREF = '/chat';
 
 export function ResultHeader({
@@ -142,13 +142,13 @@ export function ResultHeader({
  */
 export function MobileActionBar({ children, ask }: {
     children: ReactNode;
-    /** 页内主操作（如六爻「问太卜解卦」直接发起解读）；缺省时跳转 AI 对话「问太卜」。 */
-    ask?: { label: string; onClick: () => void; disabled?: boolean };
+    /** 页内主操作（如六爻「问太卜」直接发起解读）；缺省时跳转 AI 对话「问太卜」，null 表示不显示。 */
+    ask?: { label: string; onClick: () => void; disabled?: boolean } | null;
 }) {
     return (
         <div className="fixed inset-x-0 bottom-[calc(4rem+var(--sab))] z-30 flex gap-2 border-t-[0.5px] border-border bg-background px-4 py-3 sm:px-6 lg:hidden">
             {children}
-            <AIFeatureGate>
+            {ask !== null && <AIFeatureGate>
                 {ask ? (
                     <Button unstyled
                         type="button"
@@ -163,7 +163,7 @@ export function MobileActionBar({ children, ask }: {
                         问太卜
                     </Link>
                 )}
-            </AIFeatureGate>
+            </AIFeatureGate>}
         </div>
     );
 }

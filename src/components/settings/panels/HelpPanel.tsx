@@ -11,10 +11,13 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { ChevronDown, Github, Mail } from 'lucide-react';
 import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 
 interface FAQItem {
   question: string;
   answer: string;
+  /** 答案指向钱包页；钱包关闭时不展示。 */
+  billingOnly?: boolean;
 }
 
 const FAQ_LIST: FAQItem[] = [
@@ -25,6 +28,7 @@ const FAQ_LIST: FAQItem[] = [
   {
     question: '余额用完了怎么办？',
     answer: '在「设置 › 钱包」里兑换兑换码、购买订阅，开启在线支付时也可以直接充值。费用在每次调用结束后结算，最后一次调用可能让余额略低于零，下次充值时抵扣。也可以改用免费模型，或在模型菜单里使用自己的 API。',
+    billingOnly: true,
   },
   {
     question: 'AI 分析结果为什么有时不够准确？',
@@ -52,6 +56,9 @@ const FOOTER_LINK = 'text-foreground-secondary underline decoration-border-hover
 
 export default function HelpPanel() {
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
+  const { isFeatureEnabled } = useFeatureToggles();
+  const billingEnabled = isFeatureEnabled('billing');
+  const faqs = billingEnabled ? FAQ_LIST : FAQ_LIST.filter(item => !item.billingOnly);
   // The running release is for administrators only.
   const isAdmin = useCurrentUserProfile().profile?.is_admin === true;
 
@@ -64,7 +71,7 @@ export default function HelpPanel() {
         </div>
         <div className="settings-section-body">
           <div className="overflow-hidden rounded-2xl border border-border bg-surface">
-            {FAQ_LIST.map((faq, index) => {
+            {faqs.map((faq, index) => {
               const expanded = expandedFAQ === index;
               const answerId = `help-faq-answer-${index}`;
               return (

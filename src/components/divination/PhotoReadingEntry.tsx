@@ -18,6 +18,7 @@ import { AlertTriangle, Camera, ImageIcon, KeyRound, Lock, X } from 'lucide-reac
 import type { NavIcon } from '@/lib/navigation/registry';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { Dialog } from '@/components/ui/Dialog';
 import { VisionModelSelector } from '@/components/ui/VisionModelSelector';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
@@ -203,6 +204,7 @@ export function PhotoReadingEntry({
 }) {
     const router = useRouter();
     const { showToast } = useToast();
+    const { isFeatureEnabled } = useFeatureToggles();
     const { user } = useSessionSafe();
     const customProvider = useCustomProvider();
     const cameraInputRef = useRef<HTMLInputElement>(null);
@@ -314,7 +316,7 @@ export function PhotoReadingEntry({
 
             if (result.error !== undefined) {
                 if (result.code === 'INSUFFICIENT_BALANCE') {
-                    showToast('info', result.error || '余额不足，请充值、兑换或订阅后再试', TOP_UP_TOAST);
+                    showToast('info', result.error || '余额不足，请充值、兑换或订阅后再试', isFeatureEnabled('billing') ? TOP_UP_TOAST : undefined);
                     return;
                 }
                 showToast('error', result.error);

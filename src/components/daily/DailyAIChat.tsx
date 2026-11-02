@@ -14,6 +14,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { getCalendarAlmanac } from '@/lib/divination/calendar';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { BrandMark } from '@/components/brand/BrandMark';
 import { buildDailyChatContext, requestDailyChat } from '@/lib/chat/daily-chat';
@@ -55,6 +56,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
     // 移动端无对话时只保留底部输入框（建议问题与说明仅桌面端展示）
     const hasConversation = messages.length > 0 || isLoading || Boolean(error);
     const { refreshBalance } = useSessionBalance();
+    const { isFeatureEnabled } = useFeatureToggles();
 
     const almanac = useMemo(() => getCalendarAlmanac(date), [date]);
     const personalFortuneData = personalFortune?.fortune ?? null;
@@ -85,7 +87,10 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
             const response = await requestDailyChat(contextMessage);
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({})) as { code?: string; error?: string };
-                fail(errorData.code === 'INSUFFICIENT_BALANCE' ? '余额不足，请先充值或兑换' : errorData.error || '请求失败');
+                const insufficient = errorData.code === 'INSUFFICIENT_BALANCE';
+                fail(insufficient
+                    ? (isFeatureEnabled('billing') ? '余额不足，请先充值或兑换' : '余额不足')
+                    : errorData.error || '请求失败');
                 return;
             }
             const data = await response.json() as { content: string };
@@ -99,7 +104,7 @@ export function DailyAIChat({ date, userId, onRequireLogin, personalFortune = nu
         } finally {
             setPendingKey((current) => (current === key ? null : current));
         }
-    }, [isLoading, userId, onRequireLogin, dateKey, session, date, almanac, personalFortuneData, refreshBalance]);
+    }, [isLoading, userId, onRequireLogin, dateKey, session, date, almanac, personalFortuneData, refreshBalance, isFeatureEnabled]);
 
     // 新消息或等待中：对话列表滚到底部，并把卡片带入视口（移动端卡片在页尾、底部被输入框遮挡）
     const messageCount = messages.length;

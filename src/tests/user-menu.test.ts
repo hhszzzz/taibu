@@ -46,6 +46,9 @@ test('user menu uses registry icons and removes heavy account shortcuts', () => 
   assert.equal(source.includes("openSettingsCenter('usage-log')"), true);
   assert.equal(source.includes('<span>钱包</span>'), true);
   assert.equal(source.includes('<span>用量日志</span>'), true);
+  // 关闭「钱包与用量」后，账户行与「余额」二级菜单一起隐藏。
+  assert.equal(source.includes('{index === 0 && billingEnabled ? ('), true);
+  assert.equal(source.includes('{billingEnabled ? <>'), true);
   assert.equal(source.includes('订阅与余额'), false);
   assert.equal(source.includes('usage-dialog'), false);
   assert.equal(source.includes('isUsageOpen'), false);

@@ -41,6 +41,7 @@ export default function ProfilePanel() {
   const { user, loading: sessionLoading } = useSessionSafe();
   const { profile, balance, loading: profileLoading, resolved: profileResolved, error: profileError, refresh: refreshProfile } = useCurrentUserProfile({ enabled: !!user });
   const { isFeatureEnabled } = useFeatureToggles();
+  const billingEnabled = isFeatureEnabled('billing');
   const [nickname, setNickname] = useState('');
   const [originalNickname, setOriginalNickname] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
@@ -199,14 +200,16 @@ export default function ProfilePanel() {
           </div>
           <div className="settings-group">
             <SettingsRow label="电子邮箱" control={<span className="text-sm text-foreground-secondary">{displayEmail}</span>} />
-            <SettingsRow
-              label="余额"
-              control={isFeatureEnabled('billing') ? (
-                <Link href={getSettingsCenterRouteTarget('billing')} className="inline-flex items-center gap-1 text-sm tabular-nums text-accent hover:text-accent-hover">
-                  {balanceText}<ChevronRight size={15} aria-hidden="true" />
-                </Link>
-              ) : <span className="text-sm tabular-nums text-foreground-secondary">{balanceText}</span>}
-            />
+            {billingEnabled ? (
+              <SettingsRow
+                label="余额"
+                control={
+                  <Link href={getSettingsCenterRouteTarget('billing')} className="inline-flex items-center gap-1 text-sm tabular-nums text-accent hover:text-accent-hover">
+                    {balanceText}<ChevronRight size={15} aria-hidden="true" />
+                  </Link>
+                }
+              />
+            ) : null}
           </div>
         </div>
       </section>

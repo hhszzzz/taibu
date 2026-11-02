@@ -155,8 +155,10 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                 {/* claude 侧栏底账户行实测：头像 24、单行「名 · 计划」+ 12px chevron；整行留出 40px 呼吸。 */}
                 <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
                   <span className="truncate font-medium text-foreground">{displayName}</span>
-                  <span aria-hidden="true" className="text-foreground-tertiary">·</span>
-                  <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
+                  {billingEnabled ? <>
+                    <span aria-hidden="true" className="text-foreground-tertiary">·</span>
+                    <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
+                  </> : null}
                 </span>
                 <ChevronsUpDown size={12} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
               </>
@@ -173,8 +175,10 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
               <>
                 <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
                   <span className="truncate font-medium text-foreground">{displayName}</span>
-                  <span aria-hidden="true" className="text-foreground-tertiary">·</span>
-                  <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
+                  {billingEnabled ? <>
+                    <span aria-hidden="true" className="text-foreground-tertiary">·</span>
+                    <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
+                  </> : null}
                 </span>
                 <ChevronsUpDown size={13} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
               </>
@@ -188,7 +192,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
               {shortcuts.map((item, index) => (
                 <Fragment key={item.tab}>
                   <UserMenuShortcutLink {...item} onClick={() => setIsMenuOpen(false)} />
-                  {index === 0 ? (
+                  {index === 0 && billingEnabled ? (
                     <MenuSub open={balanceOpen} onOpenChange={setBalanceOpen}>
                       <MenuSubTrigger onPointerEnter={keepBalanceOpen} className={`${MENU_ITEM_CLASS} justify-between`}>
                         <span className="flex items-center gap-2.5">
@@ -211,17 +215,15 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
                             <span className="tabular-nums text-foreground-tertiary">{balance ? formatUsd(balance.subscriptionMicros) : '—'}</span>
                           </div>
                           <p className="px-1.5 pb-1 pt-1 text-[11px] leading-[1.5] text-foreground-tertiary">平台模型按实际用量计费，先扣订阅额度再扣余额；使用自己的 API 不计费。</p>
-                          {billingEnabled ? <>
-                            <div className="mx-1.5 my-1 h-px bg-border" />
-                            <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
-                              onClick={() => { setIsMenuOpen(false); openSettingsCenter('billing'); }}>
-                              <span>钱包</span><ChevronRight size={14} aria-hidden="true" />
-                            </MenuItem>
-                            <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
-                              onClick={() => { setIsMenuOpen(false); openSettingsCenter('usage-log'); }}>
-                              <span>用量日志</span><ChevronRight size={14} aria-hidden="true" />
-                            </MenuItem>
-                          </> : null}
+                          <div className="mx-1.5 my-1 h-px bg-border" />
+                          <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
+                            onClick={() => { setIsMenuOpen(false); openSettingsCenter('billing'); }}>
+                            <span>钱包</span><ChevronRight size={14} aria-hidden="true" />
+                          </MenuItem>
+                          <MenuItem className="flex w-full items-center justify-between gap-3 px-1.5 py-1.5 text-xs text-foreground-secondary"
+                            onClick={() => { setIsMenuOpen(false); openSettingsCenter('usage-log'); }}>
+                            <span>用量日志</span><ChevronRight size={14} aria-hidden="true" />
+                          </MenuItem>
                         </div>
                       </MenuSubContent>
                     </MenuSub>

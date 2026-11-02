@@ -32,7 +32,7 @@ TaiBu turns traditional Chinese metaphysics into reproducible, checkable tools, 
 - **Open to any AI client.** The same implementation is available over MCP, as an offline Skill and as npm packages for Claude, Cursor, Cherry Studio and others.
 - **Fully self-hosted.** A Docker Compose stack of Next.js, PostgreSQL and Redis; one image runs both the web app and the worker.
 
-The current version is **v1.0.0**, TaiBu's first stable release. See the [changelog](CHANGELOG.md).
+The current version is **v1.0.1**; the first stable release was v1.0.0. See the [changelog](CHANGELOG.md).
 
 The product UI and most documentation are in Chinese.
 
@@ -78,7 +78,7 @@ See the [Agent manual](docs/manual/Agent.md) for the full behaviour and limits.
 - Email and password, email codes, password reset and Linux.do sign-in.
 - US dollar wallet and subscriptions with 5-hour, daily, weekly, monthly or whole-term allowances; redemption codes, admin credits and plans bought from the balance; Epay (Alipay, WeChat Pay) once merchant settings are configured.
 - Admin console: announcements, feature switches, billing, AI services (gateways, models, models.dev catalog fill), Agent extensions (MCP services, skills, roles, user extension policy) and a log center (usage, Agent tasks, schedules, deployments).
-- The sidebar shows the running version; administrators can update in one click when a release is published.
+- Administrators see the running version in the sidebar and can update in one click when a release is published.
 - Community, notifications, records and a knowledge base; the web app works on desktop and phones, and there are Android and iOS clients (Capacitor).
 
 ## MCP, Skill and SDK
@@ -202,8 +202,8 @@ Production runs `deploy/compose.base.yml` + `deploy/compose.prod.yml` with image
 
 ```bash
 # /opt/taibu/source holds the repository; /opt/taibu/env/ holds compose.env and the per-container secrets
-EDGE_MODE=host deploy/deploy.sh v1.0.0   # an existing Caddy or Nginx owns 80/443
-deploy/deploy.sh v1.0.0                  # the stack's own Caddy owns 80/443
+EDGE_MODE=host deploy/deploy.sh v1.0.1   # an existing Caddy or Nginx owns 80/443
+deploy/deploy.sh v1.0.1                  # the stack's own Caddy owns 80/443
 ```
 
 The script backs up the database, runs database setup and migrations, then rolls out with a health check and rolls back on failure. [`.env.example`](.env.example) lists every variable; mail, backups, billing and one-click updates are covered in the [self-hosting manual](docs/manual/Self-Hosting.md), and upgrades from older deployments in the [upgrade guide](docs/UPGRADE.md).

@@ -2,6 +2,17 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.0.1 · 2026-11-02
+
+### 修复
+
+- 版本号只对管理员显示：侧栏品牌旁的版本标签与「设置 › 帮助」页脚的版本链接，此前对访客和普通用户也可见。版本号仍包含在前端资源里，这项修复只调整界面显示。([f9e7a31](https://github.com/hhszzzz/taibu/commit/f9e7a3183de0d9c456835e591202f2b77bd872d3))
+- 新克隆的仓库首次执行 `pnpm local:update` 不再因为缺少 `.taibu-local` 目录而失败。([639ccf8](https://github.com/hhszzzz/taibu/commit/639ccf864c72551952adb90850151f1e756c5664))
+
+### 升级须知
+
+无。没有数据库结构与配置变更，后台一键更新或执行 `deploy/deploy.sh v1.0.1` 即可。
+
 ## v1.0.0 · 2026-11-02
 
 太卜的首个正式版本。太卜是一个开源、可自托管的命理术数平台：自研的 `taibu-core` 负责排盘与规范输出，AI 对话与后台 Agent 负责解读，MCP、离线 Skill 与 npm 包把同一套工具开放给任何 AI 客户端。全部服务以 Docker Compose 运行在自有的 PostgreSQL 与 Redis 上，不再依赖 Supabase、Vercel 或 Dify。

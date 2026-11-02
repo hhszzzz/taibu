@@ -32,7 +32,7 @@
 - **工具对外开放**：同一套实现经 MCP、离线 Skill 与 npm 包提供给 Claude、Cursor、Cherry Studio 等任意 AI 客户端。
 - **完全自托管**：Next.js + PostgreSQL + Redis 的 Docker Compose 栈，一个镜像同时运行 Web 与 worker。
 
-当前版本 **v1.0.0**，是太卜的首个正式版本，变更见 [更新日志](CHANGELOG.md)。
+当前版本 **v1.0.1**，首个正式版本是 v1.0.0，变更见 [更新日志](CHANGELOG.md)。
 
 ## 功能
 
@@ -76,7 +76,7 @@ Agent 的完整行为与边界见 [Agent 手册](docs/manual/Agent.md)。
 - 邮箱密码、邮箱验证码、找回密码与 Linux.do 登录。
 - 美元钱包与订阅：按 5 小时、天、周、月或整期发放额度，兑换码、管理员加款、余额购买套餐；配置商户参数后开启易支付（支付宝、微信）。
 - 管理后台：公告、功能开关、计费、AI 服务（网关、模型、models.dev 目录补全）、Agent 扩展（MCP 服务、技能、角色、用户扩展权限）与日志中心（用量、Agent 任务、定时任务、部署日志）。
-- 侧栏显示当前版本，管理员可在新版本发布后一键更新。
+- 管理员在侧栏看到当前版本，新版本发布后可以一键更新。
 - 社区、站内通知、记录与知识库；Web 适配桌面与手机，另有 Android / iOS 客户端（Capacitor）。
 
 ## MCP、Skill 与 SDK
@@ -200,8 +200,8 @@ pnpm selfhost down --project taibu-v2   # 停止，保留数据卷
 
 ```bash
 # /opt/taibu/source 是仓库，/opt/taibu/env/ 保存 compose.env 与按容器拆分的私有配置
-EDGE_MODE=host deploy/deploy.sh v1.0.0   # 宿主已有 Caddy / Nginx 时
-deploy/deploy.sh v1.0.0                  # 由本栈的 Caddy 接管 80/443
+EDGE_MODE=host deploy/deploy.sh v1.0.1   # 宿主已有 Caddy / Nginx 时
+deploy/deploy.sh v1.0.1                  # 由本栈的 Caddy 接管 80/443
 ```
 
 脚本会先备份数据库，再执行数据库初始化与迁移，成功后滚动更新并检查健康，失败自动回退。环境变量以 [`.env.example`](.env.example) 为准，邮件、备份、计费与一键更新见 [自托管手册](docs/manual/Self-Hosting.md)，旧部署升级见 [升级说明](docs/UPGRADE.md)。

@@ -221,6 +221,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     skillsEnabled: !featureTogglesLoaded || isFeatureEnabled('skills'),
     connectorsEnabled: !featureTogglesLoaded || isFeatureEnabled('connectors'),
     billingEnabled: !featureTogglesLoaded || isFeatureEnabled('billing'),
+    usageLogEnabled: !featureTogglesLoaded || isFeatureEnabled('usage-log'),
     chartsEnabled: !featureTogglesLoaded || isFeatureEnabled('charts'),
     knowledgeBaseEnabled: !featureTogglesLoaded || isFeatureEnabled('knowledge-base'),
     mcpServiceEnabled: !featureTogglesLoaded || isFeatureEnabled('mcp-service'),

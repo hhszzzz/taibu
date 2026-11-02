@@ -4039,6 +4039,7 @@ export async function run(existingPage, bundlePath) {
     await walletOffSidebar.getByRole('button').filter({ hasText: 'alice' }).first().click();
     await page.getByRole('menu').first().waitFor();
     check('With the wallet off the account menu has no balance entry', await page.getByRole('menuitem').filter({ hasText: '余额' }).count() === 0);
+    check('With the wallet off the account menu still offers the usage log', await page.getByRole('menu').first().getByText('用量日志', { exact: true }).count() >= 1);
     await page.keyboard.press('Escape');
     await page.evaluate(() => { window.fixtureFeatures = undefined; window.fixture.mount.sidebar(false); });
 

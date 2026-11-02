@@ -101,8 +101,20 @@ export async function updateBillingDeductOrder(request: NextRequest) {
     }
 }
 
+async function usageReader(request: NextRequest): Promise<Member | Response> {
+    const [usage, billing] = await Promise.all([
+        readFeatureModuleStateFresh('usage-log'),
+        readFeatureModuleStateFresh('billing'),
+    ]);
+    if (usage.status === 'unavailable' || billing.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
+    if (usage.status !== 'enabled' && billing.status !== 'enabled') return jsonError('用量日志当前未开放', 403, { code: 'FEATURE_DISABLED' });
+    const auth = await requireUserContext(request);
+    if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+    return { db: auth.db, userId: auth.user.id };
+}
+
 export async function readBillingLedger(request: NextRequest) {
-    const who = await member(request);
+    const who = await usageReader(request);
     if (who instanceof Response) return who;
     const params = request.nextUrl.searchParams;
     const filters = parseLedgerFilters(params);

@@ -69,7 +69,7 @@ const PROJECT_REPO_URL = 'https://github.com/hhszzzz/taibu';
 const PROJECT_ISSUES_URL = 'https://docs.qq.com/smartsheet/DS3JSQ0dHTUdrVWFh';
 
 type UserMenuShortcut = {
-  tab: Extract<SettingsCenterTab, 'general' | 'personalization' | 'charts' | 'help'>;
+  tab: Extract<SettingsCenterTab, 'general' | 'usage-log' | 'personalization' | 'charts' | 'help'>;
   label: string;
 };
 
@@ -100,6 +100,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
   const chartsEnabled = isFeatureEnabled('charts');
   const helpEnabled = isFeatureEnabled('help');
   const billingEnabled = isFeatureEnabled('billing');
+  const usageLogEnabled = isFeatureEnabled('usage-log');
 
   const avatarUrl = profile?.avatar_url ?? null;
   const displayName = profile?.nickname || user.email?.split('@')[0] || '用户';
@@ -134,6 +135,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
 
   const shortcuts: UserMenuShortcut[] = [
     { tab: 'general', label: '设置' },
+    ...(usageLogEnabled && !billingEnabled ? [{ tab: 'usage-log', label: '用量日志' } as const] : []),
     ...(personalizationEnabled ? [{ tab: 'personalization', label: '个性化' } as const] : []),
     ...(chartsEnabled ? [{ tab: 'charts', label: '命盘' } as const] : []),
   ];

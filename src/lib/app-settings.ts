@@ -28,7 +28,7 @@ export const FEATURE_MODULE_IDS = [
   'face', 'palm', 'mbti', 'chat', 'daily', 'monthly',
   'records', 'community', 'knowledge-base', 'mcp-service',
   'charts', 'ai-personalization',
-  'notifications', 'billing', 'help', 'agent',
+  'notifications', 'billing', 'usage-log', 'help', 'agent',
   // Agent 的细粒度能力：各自可关，关掉后接口与入口一起失效。
   'skills', 'connectors', 'schedules', 'memory',
   'shares', 'annual-report',

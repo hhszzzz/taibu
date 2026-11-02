@@ -24,6 +24,7 @@
 
 ### 调整
 
+- 用量日志与钱包分开控制：关闭「钱包」后用量日志仍可查看，由新增的「用量日志」开关单独控制；账户菜单在钱包关闭时保留用量日志入口。
 - 每日运势页的「问问这一天」改为「问太卜」，在对话里回答当天的宜忌。([b822b1b](https://github.com/hhszzzz/taibu/commit/b822b1bd2ee122a9d26040046e9841848582f9fc))
 - 八字结果页去掉重复的 AI 对话入口。([4c810e4](https://github.com/hhszzzz/taibu/commit/4c810e4645132cbdafdca5e1f84c95ae34569939))
 

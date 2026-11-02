@@ -39,7 +39,7 @@ const { NAV_REGISTRY, getFeatureModules, getNavItemById, getSidebarToolItems } =
 
 const ENABLED_FLAGS = {
   sharesEnabled: true, skillsEnabled: true, connectorsEnabled: true,
-  billingEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
+  billingEnabled: true, usageLogEnabled: true, chartsEnabled: true, knowledgeBaseEnabled: true,
   mcpServiceEnabled: true, agentEnabled: true, personalizationEnabled: true, byokEnabled: true, helpEnabled: true, isAdmin: false,
 };
 
@@ -107,17 +107,27 @@ test('settings page addresses and legacy hashes resolve to the same categories',
   assert.equal(getSettingsCenterRouteTarget('admin-ai-services', { subpath: 'gateways' }), '/settings/admin-ai-services/gateways');
 });
 
-test('disabled billing disables both the wallet and the usage log with their own explanations', () => {
+test('disabled billing hides the wallet but keeps the usage log available', () => {
   const flags = { ...ENABLED_FLAGS, billingEnabled: false };
   const tabs = getSettingsCenterTabs(flags);
   assert.equal(tabs.find(tab => tab.id === 'billing')?.disabled, true);
-  assert.equal(tabs.find(tab => tab.id === 'usage-log')?.disabled, true);
+  assert.equal(tabs.find(tab => tab.id === 'usage-log')?.disabled, false);
   assert.deepEqual(getSettingsCenterDisabledState('billing', flags), {
     title: '暂未开放', description: '当前钱包不可用。',
   });
+  assert.equal(getSettingsCenterDisabledState('usage-log', flags), null);
+});
+
+test('the usage log has its own switch', () => {
+  const flags = { ...ENABLED_FLAGS, usageLogEnabled: false };
+  const tabs = getSettingsCenterTabs(flags);
+  assert.equal(tabs.find(tab => tab.id === 'billing')?.disabled, false);
+  assert.equal(tabs.find(tab => tab.id === 'usage-log')?.disabled, true);
   assert.deepEqual(getSettingsCenterDisabledState('usage-log', flags), {
     title: '暂未开放', description: '当前用量日志不可用。',
   });
+  assert.equal(getFeatureModules().find(item => item.id === 'usage-log')?.label, '用量日志');
+  assert.equal(getFeatureModules().find(item => item.id === 'billing')?.label, '钱包');
 });
 
 test('checkin is removed from default user-facing tool orders', () => {

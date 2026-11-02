@@ -30,6 +30,7 @@ export type SettingsCenterFlags = {
   skillsEnabled: boolean;
   connectorsEnabled: boolean;
   billingEnabled: boolean;
+  usageLogEnabled: boolean;
   chartsEnabled: boolean;
   knowledgeBaseEnabled: boolean;
   mcpServiceEnabled: boolean;
@@ -89,8 +90,9 @@ function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCent
     case 'shares':
       return !flags.sharesEnabled;
     case 'billing':
-    case 'usage-log':
       return !flags.billingEnabled;
+    case 'usage-log':
+      return !flags.usageLogEnabled;
     case 'personalization':
       return !flags.personalizationEnabled;
     case 'byok':

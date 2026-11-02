@@ -226,7 +226,8 @@ const adminLabelOverride: Record<string, string> = {
   shares: '分享链接',
   'annual-report': '年度报告',
   notifications: '消息通知',
-  billing: '钱包与用量',
+  billing: '钱包',
+  'usage-log': '用量日志',
   help: '帮助',
   charts: '我的命盘',
   byok: '自定义模型',
@@ -235,6 +236,7 @@ const adminLabelOverride: Record<string, string> = {
 /** Features that only appear in the admin toggle panel. */
 const ADMIN_ONLY_FEATURES: { id: string; label: string }[] = [
   { id: 'mcp-service', label: 'MCP 服务' },
+  { id: 'usage-log', label: '用量日志' },
   { id: 'agent', label: 'Agent 任务' },
   { id: 'skills', label: '技能' },
   { id: 'connectors', label: '连接器' },

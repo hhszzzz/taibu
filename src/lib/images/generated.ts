@@ -19,6 +19,12 @@ export const GENERATED_IMAGE_SIZE_LABELS: Readonly<Record<string, string>> = {
 /** One image generation request never produces more than this many images. */
 export const GENERATED_IMAGE_MAX_COUNT = 4;
 
+/** Maximum encoded image size accepted from providers, uploads and object storage. */
+export const GENERATED_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
+
+/** Existing platform-generated image rows allow up to 50 MiB. */
+export const GENERATED_IMAGE_STORAGE_MAX_BYTES = 50 * 1024 * 1024;
+
 /** What a message or tool result keeps about one image: no bytes, no prompt, no owner. */
 export type GeneratedImageRef = {
   id: string;

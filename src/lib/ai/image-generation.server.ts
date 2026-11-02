@@ -18,11 +18,13 @@ import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runt
 import { createImageModelFromConfig } from '@/lib/ai/providers/ai-sdk-provider';
 import {
   GENERATED_IMAGE_MAX_COUNT,
+  GENERATED_IMAGE_STORAGE_MAX_BYTES,
   generatedImageUrl,
   isGeneratedImageSize,
   type GeneratedImageDto,
   type GeneratedImageSize,
 } from '@/lib/images/generated';
+import { readBoundedStream } from '@/lib/streams/read-bounded';
 
 /**
  * v1 is text-to-image only. The AI SDK can send reference images (`/images/edits`), but whether the NewAPI/Octopus
@@ -125,6 +127,7 @@ async function storeImages(
       const mimeType = file.mediaType;
       const extension = EXTENSION[mimeType];
       if (!extension) throw new Error(`unsupported image type ${mimeType}`);
+      if (bytes.byteLength > GENERATED_IMAGE_STORAGE_MAX_BYTES) throw new Error('generated image exceeds the size limit');
       const id = randomUUID();
       const size = file.size ?? request.size;
       const objectPath = `${request.userId}/${id}.${extension}`;
@@ -336,9 +339,13 @@ export type GeneratedImageLocation = { object_path: string; mime_type: string; b
 
 /** Re-reads an image and checks it against the row's size and digest before serving it. */
 export async function generatedImageBytes(location: GeneratedImageLocation): Promise<Uint8Array> {
+  if (!Number.isSafeInteger(location.bytes) || location.bytes <= 0 || location.bytes > GENERATED_IMAGE_STORAGE_MAX_BYTES)
+    throw new ImageGenerationError('图片大小无效', 'FAILED');
   const stored = await getObjectStore().get(GENERATED_IMAGE_BUCKET, location.object_path);
   if (!stored) throw new ImageGenerationError('图片不存在', 'FAILED');
-  const bytes = new Uint8Array(await new Response(stored.stream).arrayBuffer());
+  if (Number.isFinite(stored.size) && stored.size > GENERATED_IMAGE_STORAGE_MAX_BYTES)
+    throw new ImageGenerationError('图片超过大小限制', 'FAILED');
+  const bytes = await readBoundedStream(stored.stream, GENERATED_IMAGE_STORAGE_MAX_BYTES);
   if (bytes.length !== location.bytes || createHash('sha256').update(bytes).digest('hex') !== location.sha256) {
     throw new ImageGenerationError('图片完整性校验失败', 'FAILED');
   }

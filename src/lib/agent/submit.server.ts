@@ -269,7 +269,10 @@ export async function submitAgentTask(
       requestedModelId: modelId,
       reasoningEnabled: reasoning,
     },
-    { deferKnowledgeSearch: true },
+    {
+      deferKnowledgeSearch: true,
+      ...(ownMain ? { modelWindow: { contextWindow: ownMain.contextWindow, maxOutput: ownMain.maxOutput } } : {}),
+    },
   );
   const previous = body.replaceFromMessageId ? null : await store.currentRun(body.conversationId, ctx.userId);
   const replay =

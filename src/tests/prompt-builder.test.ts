@@ -674,3 +674,14 @@ test('prepared budget and personality preserve standalone output with one model 
     assert.equal(lookup.mock.callCount(), 2);
     assert.deepEqual(prepared, standalone);
 });
+
+test('BYOK prompt budgets honor configured context and output limits without exceeding tiny windows', async () => {
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const model = 'byok:00000000-0000-4000-8000-0000000000b1';
+    const window = await pb.resolveChatModelWindow(model, false, { contextWindow: 16_000, maxOutput: 2_000 });
+    assert.equal(window.config.maxContext, 16_000);
+    assert.equal(window.config.reserveOutput, 2_000);
+    assert.equal(window.defaultMaxTokens, 2_000);
+    assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 20_000, maxOutput: 200 }), 200);
+    assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 5_000, maxOutput: 12_000 }), 0);
+});

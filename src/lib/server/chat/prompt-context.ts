@@ -96,7 +96,7 @@ function applyUserSettingsOverrides(
  */
 export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
-  options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean },
+  options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean; modelWindow?: { contextWindow?: number | null; maxOutput?: number | null } },
 ): Promise<ChatPromptContextResult> {
   const { body, userId, requestedModelId, reasoningEnabled } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
@@ -120,7 +120,7 @@ export async function buildChatPromptContext(
     ? mergedMentions
     : mergedMentions.filter((mention) => mention.type !== 'knowledge_base');
 
-  const mentionBudget = await calculatePromptBudget(requestedModelId, reasoningEnabled);
+  const mentionBudget = await calculatePromptBudget(requestedModelId, reasoningEnabled, options?.modelWindow);
   const userSettings = userId ? await loadUserSettingsContext(userId) : {
     expressionStyle: 'direct' as const,
     chartPromptDetailLevel: 'default' as const,
@@ -193,6 +193,7 @@ export async function buildChatPromptContext(
   const promptBuild = await buildPromptWithSources({
     modelId: requestedModelId,
     reasoningEnabled,
+    modelWindow: options?.modelWindow,
     userMessage: userQuestionForSearch,
     mentions: resolvedMentions,
     knowledgeHits,

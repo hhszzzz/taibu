@@ -87,9 +87,12 @@ export function byokPiModel(model: ByokRequestModel, thinking: ByokThinking): Mo
   } as Model<Api>;
 }
 
-/** Transport options for the thinking mode; OpenAI-compatible requests carry no output limit (the provider's default). */
+/** Transport options for thinking and the model's configured output cap. */
 function thinkingOptions(model: ByokRequestModel, piModel: Model<Api>, thinking: ByokThinking): Record<string, unknown> {
-  if (model.protocol === 'openai') return thinking.mode === 'level' ? { reasoningEffort: thinking.level } : {};
+  if (model.protocol === 'openai') return {
+    ...(model.maxOutput ? { maxTokens: model.maxOutput } : {}),
+    ...(thinking.mode === 'level' ? { reasoningEffort: thinking.level } : {}),
+  };
   const output = model.maxOutput ?? ANTHROPIC_DEFAULT_OUTPUT;
   if (thinking.mode === 'auto') return { maxTokens: output };
   if (thinking.mode === 'off') return { maxTokens: output, thinkingEnabled: false };

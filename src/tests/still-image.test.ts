@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import sharp from 'sharp';
 import { readStillImage } from '../lib/images/still-image';
+import { GENERATED_IMAGE_MAX_BYTES } from '../lib/images/generated';
 
 const image = (width: number, height: number, channels: 3 | 4 = 3) =>
   sharp({ create: { width, height, channels, background: { r: 10, g: 20, b: 30, alpha: 0.5 } } });
@@ -49,4 +50,5 @@ test('animations, sizes the table cannot hold, cut-off files and other formats a
   assert.equal(readStillImage(Buffer.from('GIF89a\x01\x00\x01\x00')), null);
   assert.equal(readStillImage(Buffer.from('<svg xmlns="http://www.w3.org/2000/svg"/>')), null);
   assert.equal(readStillImage(new Uint8Array()), null);
+  assert.equal(readStillImage(new Uint8Array(GENERATED_IMAGE_MAX_BYTES + 1)), null, 'oversized images are rejected before header parsing');
 });

@@ -32,6 +32,7 @@ type BaziChartInput = BaziPromptInput & {
 export interface PromptContext {
     modelId: string;
     reasoningEnabled?: boolean;
+    modelWindow?: { contextWindow?: number | null; maxOutput?: number | null };
     userMessage: string;
     mentions: Array<Mention & { resolvedContent?: string }>;
     knowledgeHits: KnowledgeHit[];
@@ -78,13 +79,32 @@ export interface ChatModelWindow {
  * The context window set for the model in the catalog, else the known limit for its ID. The catalog is cached by the
  * time a prompt is built; when it cannot be read, the known limit stands.
  */
-export async function resolveChatModelWindow(modelId: string, reasoningEnabled?: boolean): Promise<ChatModelWindow> {
+export async function resolveChatModelWindow(
+    modelId: string,
+    reasoningEnabled?: boolean,
+    override?: { contextWindow?: number | null; maxOutput?: number | null },
+): Promise<ChatModelWindow> {
     const model = await getModelConfigAsync(modelId).catch(() => undefined);
-    return { config: resolveModelContextConfig(model ?? modelId, reasoningEnabled), defaultMaxTokens: model?.defaultMaxTokens };
+    const hasOverride = override !== undefined;
+    const contextWindow = hasOverride ? override.contextWindow : model?.contextWindow;
+    const defaultMaxTokens = hasOverride ? override.maxOutput : model?.defaultMaxTokens;
+    const windowedModel = {
+        id: modelId,
+        ...(contextWindow ? { contextWindow } : {}),
+        ...(defaultMaxTokens ? { defaultMaxTokens } : {}),
+    };
+    return {
+        config: resolveModelContextConfig(hasOverride ? windowedModel : model ?? modelId, reasoningEnabled),
+        defaultMaxTokens: defaultMaxTokens ?? undefined,
+    };
 }
 
-export async function calculatePromptBudget(modelId: string, reasoningEnabled?: boolean): Promise<number> {
-    return promptBudget(await resolveChatModelWindow(modelId, reasoningEnabled));
+export async function calculatePromptBudget(
+    modelId: string,
+    reasoningEnabled?: boolean,
+    modelWindow?: PromptContext['modelWindow'],
+): Promise<number> {
+    return promptBudget(await resolveChatModelWindow(modelId, reasoningEnabled, modelWindow));
 }
 
 function promptBudget({ config, defaultMaxTokens }: ChatModelWindow): number {
@@ -103,10 +123,9 @@ function promptBudget({ config, defaultMaxTokens }: ChatModelWindow): number {
     const ratioCapped = Math.min(ratioBudget, capLimit);
     // 预算上限约束：输出上限约束不超过 capLimit
     const outputCapped = Math.min(Math.floor(defaultMax * capRatio), capLimit);
-    // 最终取两种约束的更小值
-    const budget = Math.min(ratioCapped, outputCapped);
-    // 在上下限内截断，避免过低/过高
-    return Math.min(Math.max(budget, minLimit), capLimit);
+    // 最小预算不能突破输出上限，也不能超过输入窗口里实际可用的空间。
+    const upperLimit = Math.min(outputCapped, capLimit, Math.max(available, 0));
+    return Math.min(Math.max(ratioCapped, Math.min(minLimit, upperLimit)), upperLimit);
 }
 
 // 通用准则（所有场景共用）
@@ -367,7 +386,7 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
 }> {
     // One catalog lookup serves both the prompt budget and an attached file's share of the window.
     let window: Promise<ChatModelWindow> | undefined;
-    const chatWindow = () => (window ??= resolveChatModelWindow(context.modelId, context.reasoningEnabled));
+    const chatWindow = () => (window ??= resolveChatModelWindow(context.modelId, context.reasoningEnabled, context.modelWindow));
     const budget = prepared?.budget ?? promptBudget(await chatWindow());
     const tracker = createSourceTracker();
     let remaining = budget;

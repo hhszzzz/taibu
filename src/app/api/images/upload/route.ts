@@ -7,13 +7,10 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { IMAGE_GENERATION_RATE_LIMIT, ImageGenerationError, storeByokImages } from '@/lib/ai/image-generation.server';
 import { byokGate } from '@/lib/byok/api.server';
 import { resolveByokModel } from '@/lib/byok/store.server';
-import { GENERATED_IMAGE_MAX_COUNT, isGeneratedImageSize } from '@/lib/images/generated';
+import { GENERATED_IMAGE_MAX_BYTES, GENERATED_IMAGE_MAX_COUNT, isGeneratedImageSize } from '@/lib/images/generated';
 import { readStillImage } from '@/lib/images/still-image';
 
 export const runtime = 'nodejs';
-
-/** One uploaded image may take this many bytes; a 1792×1024 PNG stays well under it. */
-const UPLOAD_IMAGE_MAX_BYTES = 10 * 1024 * 1024;
 
 /** 自定义生图模型（Key 只在浏览器里）：浏览器直连生成后把图片交给本站保存，写入当前对话；按 $0 记用量。 */
 export async function POST(request: NextRequest) {
@@ -27,7 +24,7 @@ export async function POST(request: NextRequest) {
     return jsonError('请求过于频繁，请稍后再试', 429);
   }
 
-  const parsed = await readMultipartForm(request, UPLOAD_IMAGE_MAX_BYTES * GENERATED_IMAGE_MAX_COUNT);
+  const parsed = await readMultipartForm(request, GENERATED_IMAGE_MAX_BYTES * GENERATED_IMAGE_MAX_COUNT);
   if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
   const { form } = parsed;
   const field = (name: string) => {
@@ -48,8 +45,8 @@ export async function POST(request: NextRequest) {
 
   const files: Array<{ uint8Array: Uint8Array; mediaType: string; size: string }> = [];
   for (const upload of uploads as File[]) {
-    if (!upload.size || upload.size > UPLOAD_IMAGE_MAX_BYTES) {
-      return jsonError(`每张图片须小于 ${UPLOAD_IMAGE_MAX_BYTES / 1024 / 1024}MB`, 413);
+    if (!upload.size || upload.size > GENERATED_IMAGE_MAX_BYTES) {
+      return jsonError(`每张图片须小于 ${GENERATED_IMAGE_MAX_BYTES / 1024 / 1024}MB`, 413);
     }
     const bytes = new Uint8Array(await upload.arrayBuffer());
     const image = readStillImage(bytes);

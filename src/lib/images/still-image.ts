@@ -4,6 +4,8 @@
  * cannot hold (each side 100–9999 pixels). Plain code, so the Agent worker bundle needs no native image library.
  */
 
+import { GENERATED_IMAGE_MAX_BYTES } from './generated';
+
 export type StillImage = { mediaType: 'image/png' | 'image/jpeg' | 'image/webp'; size: string };
 
 /** Stored sizes are `{width}x{height}` with 3–4 digit sides, as the table allows. */
@@ -62,6 +64,7 @@ function webpSize(bytes: Uint8Array): [number, number] | null {
 }
 
 export function readStillImage(bytes: Uint8Array): StillImage | null {
+  if (bytes.length > GENERATED_IMAGE_MAX_BYTES) return null;
   const [mediaType, dimensions] = PNG_SIGNATURE.every((byte, index) => bytes[index] === byte) ? ['image/png' as const, pngSize(bytes)]
     : bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff ? ['image/jpeg' as const, jpegSize(bytes)]
       : bytes.length >= 12 && ascii(bytes, 0, 4) === 'RIFF' && ascii(bytes, 8, 4) === 'WEBP' ? ['image/webp' as const, webpSize(bytes)]

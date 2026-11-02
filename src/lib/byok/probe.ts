@@ -8,6 +8,7 @@ import {
   type ByokFailure, type ByokProtocol,
 } from './config';
 import { byokContext, collectByokStream, streamByok, type ByokRequestModel } from './pi-model';
+import { BYOK_RESPONSE_BODY_TOO_LARGE, readByokResponseText } from './response';
 
 export interface ByokProbeOptions {
   fetch: typeof globalThis.fetch;
@@ -20,6 +21,8 @@ export type ByokListedModel = { id: string; name?: string };
 export type ByokModelList = { ok: true; models: ByokListedModel[] } | { ok: false; failure: ByokFailure };
 
 const LIST_LIMIT = 2000;
+const MODEL_LIST_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
+const PROVIDER_ERROR_MAX_BYTES = 64 * 1024;
 const PROBE_TIMEOUT_MS = 30_000;
 
 function failureOf(error: unknown, signal?: AbortSignal): ByokFailure {
@@ -41,7 +44,15 @@ export async function listByokModels(protocol: ByokProtocol, address: string, ap
   } catch (error) {
     return { ok: false, failure: failureOf(error, signal) };
   }
-  const body = await response.text().catch(() => '');
+  let body: string;
+  try {
+    body = await readByokResponseText(response, response.ok ? MODEL_LIST_RESPONSE_MAX_BYTES : PROVIDER_ERROR_MAX_BYTES);
+  } catch (error) {
+    if (signal.aborted) return { ok: false, failure: failureOf(error, signal) };
+    if (error instanceof RangeError && error.message === BYOK_RESPONSE_BODY_TOO_LARGE)
+      return { ok: false, failure: { status: 413, text: '服务商响应超过大小限制' } };
+    return { ok: false, failure: failureOf(error, signal) };
+  }
   if (!response.ok) return { ok: false, failure: { status: response.status, text: body } };
   let parsed: unknown;
   try {

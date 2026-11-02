@@ -6,6 +6,8 @@ import { generateByokImages } from '../lib/byok/images';
 import { byokBrowserFetch, byokContext, collectByokStream, streamByok, type ByokRequestModel } from '../lib/byok/pi-model';
 import { listByokModels, probeByokConnection, testByokModel } from '../lib/byok/probe';
 import { ByokKeyError, openByokKey, sealByokKey } from '../lib/byok/secrets.server';
+import { GENERATED_IMAGE_MAX_BYTES } from '../lib/images/generated';
+import { readByokResponse } from '../lib/byok/response';
 
 type Sent = { url: string; method: string; headers: Headers; body: Record<string, unknown> | null };
 type Answer = (request: Sent) => Response | Promise<Response>;
@@ -91,6 +93,27 @@ test('the model list reads OpenAI, Anthropic and bare-array answers, and reports
   assert.equal(!offline.ok && offline.failure.kind, 'network');
 });
 
+test('BYOK provider response bodies are bounded before JSON or image decoding', async () => {
+  const oversizedList = await listByokModels('openai', 'https://api.example.com', 'k', {
+    fetch: provider(() => new Response('x'.repeat(2 * 1024 * 1024 + 1))).fetch,
+  });
+  assert.equal(!oversizedList.ok && oversizedList.failure.status, 413);
+
+  const base = { baseUrl: 'https://api.openai.com/v1', apiKey: 'sk-img', prompt: '橘猫', size: '1024x1024', count: 1 };
+  const fetch = provider(json({ data: [{ url: 'https://cdn.example/image.png' }] }), () => new Response(new ReadableStream<Uint8Array>({
+    start() {},
+  }), { headers: { 'content-type': 'image/png', 'content-length': String(GENERATED_IMAGE_MAX_BYTES + 1) } })).fetch;
+  await assert.rejects(generateByokImages({ ...base, modelId: 'dall-e-3', fetch }), /超过 10MB/u);
+
+  let utilityCanceled = false;
+  const response = new Response(new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new Uint8Array([1, 2, 3, 4])); },
+    cancel() { utilityCanceled = true; },
+  }));
+  await assert.rejects(readByokResponse(response, 3), /size limit/u);
+  assert.equal(utilityCanceled, true);
+});
+
 test('a connection test offers the address with /v1 toggled when only that one answers', async () => {
   const toggled = provider(text('not found', 404), json({ data: [{ id: 'm' }] }));
   const result = await probeByokConnection('openai', 'https://relay.example', 'k', { fetch: toggled.fetch });
@@ -128,6 +151,9 @@ test('own-model requests carry each format\'s thinking parameters, no temperatur
   const level = await send(OPENAI, { mode: 'level', level: 'high' });
   assert.equal(level.request.url, 'https://relay.example/v1/chat/completions');
   assert.equal(level.request.body?.reasoning_effort, 'high');
+  const capped = await send({ ...OPENAI, maxOutput: 4096 }, { mode: 'auto' });
+  assert.equal(capped.request.body?.max_completion_tokens ?? capped.request.body?.max_tokens, 4096, 'the configured output cap reaches the provider');
+  assert.equal(capped.request.body?.temperature, undefined);
   assert.equal(level.request.body?.temperature, undefined);
   assert.deepEqual(level.request.body?.stream_options, { include_usage: true });
   assert.deepEqual((level.request.body?.messages as Array<{ role: string }>).map(item => item.role), ['system', 'user'], 'a relay gets a plain system message');

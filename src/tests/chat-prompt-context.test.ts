@@ -48,6 +48,7 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
 
   let budgetCalls = 0;
+  let capturedModelWindow: unknown = null;
   const resolvePersonality = t.mock.method(promptBuilderModule, 'resolvePersonalities');
   let capturedVisualizationSettings: unknown = null;
 
@@ -68,6 +69,7 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     assert.equal(prepared?.budget, 1024);
     assert.ok(prepared?.personalityResolution);
     capturedVisualizationSettings = context.userSettings?.visualizationSettings;
+    capturedModelWindow = context.modelWindow;
     return {
       systemPrompt: '',
       userMessagePrefix: '',
@@ -104,7 +106,7 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     metered: true,
     requestedModelId: 'deepseek-chat',
     reasoningEnabled: false,
-  });
+  }, { modelWindow: { contextWindow: 128_000, maxOutput: 8_192 } });
 
   assert.equal(budgetCalls, 1);
   assert.equal(resolvePersonality.mock.callCount(), 1);
@@ -113,6 +115,7 @@ test('buildChatPromptContext should load visualization_settings from user_settin
     dayunDisplayCount: 6,
     chartStyle: 'classic-chinese',
   });
+  assert.deepEqual(capturedModelWindow, { contextWindow: 128_000, maxOutput: 8_192 });
 });
 
 test('buildChatPromptContext searches the prompt knowledge bases as the caller, whoever they are', async (t) => {

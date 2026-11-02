@@ -24,6 +24,9 @@ import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 import { normalizeVisualizationSettings } from '@/lib/visualization/settings';
 import { parseReasoningEffort } from '@/lib/chat/model-settings';
 import { isChatAttachment } from '@/lib/ai/document-formats';
+import { getByokPolicy } from '@/lib/app-settings';
+import { isByokRef } from '@/lib/byok/config';
+import { resolveByokModel } from '@/lib/byok/store.server';
 
 const INTERNAL_SECRET = process.env.INTERNAL_API_SECRET;
 const MANAGED_CHAT_RATE_LIMIT_KEY = '/api/chat';
@@ -196,7 +199,13 @@ export async function prepareBrowserDirectChatRequest(
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {
-        return await buildChatPromptContext(withRequestContext(resolved, body), { webSearch: resolved.input.webSearch === true });
+        const modelWindow = isByokRef(resolved.requestedModelId)
+          ? await resolveByokModel(auth.db, auth.user.id, resolved.requestedModelId, await getByokPolicy())
+          : null;
+        return await buildChatPromptContext(withRequestContext(resolved, body), {
+          webSearch: resolved.input.webSearch === true,
+          ...(modelWindow?.usage === 'chat' ? { modelWindow: { contextWindow: modelWindow.contextWindow, maxOutput: modelWindow.maxOutput } } : {}),
+        });
       } catch (error) {
         observation?.fail('prompt');
         throw error;

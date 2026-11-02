@@ -150,7 +150,8 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     }, [current, collaborators, subCollaborators, onCollaboratorsChange]);
     if (!onModelChange && !onReasoningChange) return null;
     if (custom && !toolbarStyle) return <div className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-sm text-foreground-secondary"><Cpu size={16} /><span>{getCustomProviderDisplayName(custom) || custom.modelId}</span></div>;
-    const locked = disabled || query.isLoading || !current;
+    // 没有平台模型时仍然可以打开菜单：用自己的模型 API（BYOK）不依赖平台模型目录。
+    const locked = disabled || query.isLoading;
     const summary = reasoningSummary(current, reasoningEnabled, reasoningEffort, !!onReasoningEffortChange);
     const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
     const close = () => setOpen(false);

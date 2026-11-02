@@ -22,7 +22,7 @@ import { newChatHref, useCurrentChatMode } from '@/lib/chat/mode-control-store';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
 import { DEFAULT_MOBILE_MAIN_ITEMS, DEFAULT_MOBILE_DRAWER_ORDER } from '@/lib/user/settings';
-import { filterNavItems, getNavItemById, groupDivinationItems, toFeatureId, visibleNavItems, type NavItemDef } from '@/lib/navigation/registry';
+import { filterNavItems, getNavItemById, groupDivinationItems, toFeatureId, type NavItemDef } from '@/lib/navigation/registry';
 import { isMobileNavPinnable, resolveMobileNavPin, useMobileNavPins } from '@/lib/navigation/mobile-nav-pins';
 import {
     getSettingsCenterTabFromRouteTarget,
@@ -158,8 +158,8 @@ export function MobileNav() {
         return pinnedItem ? [pinnedItem, ...fixedItems] : fixedItems;
     }, [pinnedItem, isFeatureEnabled]);
 
-    // 未登录不显示命理记录等个人数据入口。
-    const drawerNavItems = useMemo(() => visibleNavItems(resolveEnabledItems(DEFAULT_MOBILE_DRAWER_ORDER, isFeatureEnabled), !!user), [isFeatureEnabled, user]);
+    // 所有入口都展示；未登录时打开需要账号的页面会提示登录。
+    const drawerNavItems = useMemo(() => resolveEnabledItems(DEFAULT_MOBILE_DRAWER_ORDER, isFeatureEnabled), [isFeatureEnabled]);
     const activeSiblings = useMemo(() => [...mainNavItems, ...drawerNavItems], [mainNavItems, drawerNavItems]);
 
     const divinationGroups = useMemo(

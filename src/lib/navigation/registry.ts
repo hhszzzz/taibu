@@ -176,9 +176,6 @@ export function getSidebarToolItems() {
 }
 
 /** Nav rows a guest may see: personal-data entries disappear until sign-in. */
-export function visibleNavItems<T extends Pick<NavItemDef, 'requiresAuth'>>(items: readonly T[], signedIn: boolean): T[] {
-  return signedIn ? [...items] : items.filter(item => !item.requiresAuth);
-}
 
 /** FeatureTogglePanel — modules list with admin-specific labels. */
 export function getFeatureModules(): { id: string; label: string }[] {

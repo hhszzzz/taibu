@@ -103,6 +103,8 @@ interface ComposerToolbarProps extends ModelSettingsProps {
     addButtonRef?: React.RefObject<HTMLButtonElement | null>;
     /** Agent 技能：从 + 菜单选中后填入 `/skill:名称 `。 */
     onSkillSelect?: (name: string) => void;
+    /** 未登录时点击需要账号的条目：提示先登录。 */
+    onLoginRequired?: () => void;
     /** 普通对话里选技能时切到 Agent 对话。 */
     onEnableAgent?: () => void;
     polish: { available: boolean; busy: boolean; run: () => void; undo?: () => void };
@@ -152,7 +154,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         <Paperclip size={16} aria-hidden="true" /><span className="chat-plus-label">上传或添加文件</span><kbd>⌘U</kbd>
                     </MenuItem>
                     <MenuSeparator className="chat-plus-divider" />
-                    {!!userId && <MenuSub>
+                    {userId ? <MenuSub>
                         <MenuSubTrigger><SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge /></MenuSubTrigger>
                         <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="技能">
                             {extensions.skills.length > 0 ? extensions.skills.map(skill => (
@@ -167,8 +169,10 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理技能</span>
                             </MenuItem>
                         </MenuSubContent>
-                    </MenuSub>}
-                    {!!userId && <MenuSub>
+                    </MenuSub> : <MenuItem onClick={() => props.onLoginRequired?.()}>
+                        <SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge />
+                    </MenuItem>}
+                    {userId ? <MenuSub>
                         <MenuSubTrigger><ConnectorsIcon size={18} /><span className="chat-plus-label">连接器</span><BetaBadge /></MenuSubTrigger>
                         <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="连接器">
                             {extensions.connectors.length > 0
@@ -184,8 +188,10 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理连接器</span>
                             </MenuItem>
                         </MenuSubContent>
-                    </MenuSub>}
-                    {!!userId && props.knowledgeBase.enabled && <MenuSub onOpenChange={open => { if (open) props.knowledgeBase.onLoad(); }}>
+                    </MenuSub> : <MenuItem onClick={() => props.onLoginRequired?.()}>
+                        <ConnectorsIcon size={18} /><span className="chat-plus-label">连接器</span><BetaBadge />
+                    </MenuItem>}
+                    {props.knowledgeBase.enabled && (userId ? <MenuSub onOpenChange={open => { if (open) props.knowledgeBase.onLoad(); }}>
                         <MenuSubTrigger disabled={!props.knowledgeBase.allowed}>
                             <KnowledgeIcon size={18} /><span className="chat-plus-label">知识库</span>
                             {knowledgeChecked && <Check size={14} className="chat-plus-check" aria-hidden="true" />}
@@ -205,7 +211,9 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                                 <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理知识库</span>
                             </MenuItem>
                         </MenuSubContent>
-                    </MenuSub>}
+                    </MenuSub> : <MenuItem onClick={() => props.onLoginRequired?.()}>
+                        <KnowledgeIcon size={18} /><span className="chat-plus-label">知识库</span>
+                    </MenuItem>)}
                     {!!onChatModeChange && styles.length > 1 && <MenuSub>
                         <MenuSubTrigger>
                             <SlidersHorizontal size={16} aria-hidden="true" /><span className="chat-plus-label">分析风格</span>

@@ -25,7 +25,7 @@ import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButt
 import { VersionChip } from '@/components/layout/VersionChip';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { getSidebarNavItems, getSidebarToolItems, visibleNavItems, type NavItemDef } from '@/lib/navigation/registry';
+import { getSidebarNavItems, getSidebarToolItems, type NavItemDef } from '@/lib/navigation/registry';
 import { resolveSidebarPinnedIds, useSidebarPins } from '@/lib/navigation/sidebar-pins';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
@@ -100,10 +100,11 @@ function Brand() {
     );
 }
 
-function SidebarNavLink({ item, active, title }: { item: NavItemDef; active: boolean; title?: string }) {
+function SidebarNavLink({ item, active, title, onRequireLogin }: { item: NavItemDef; active: boolean; title?: string; onRequireLogin?: () => void }) {
     const Icon = item.icon;
     return (
-        <Link href={item.href} title={title} aria-current={active ? 'page' : undefined} className={`${ITEM_BASE} ${active ? ITEM_ACTIVE : ITEM_IDLE}`}>
+        <Link href={item.href} title={title} aria-current={active ? 'page' : undefined} className={`${ITEM_BASE} ${active ? ITEM_ACTIVE : ITEM_IDLE}`}
+            onClick={onRequireLogin ? event => { event.preventDefault(); onRequireLogin(); } : undefined}>
             <span className="flex w-7 flex-shrink-0 items-center justify-center">
                 <Icon className={`w-5 h-5 ${active ? 'text-foreground' : 'text-foreground-secondary'}`} />
             </span>
@@ -211,9 +212,9 @@ function SidebarInner() {
     const chatItem = useMemo(() => toolItems
         .find((item) => item.id === 'chat' && isFeatureEnabled('chat')), [isFeatureEnabled]);
 
-    // 未登录不显示命理记录等个人数据入口；其余工具照常。
-    const filteredToolItems = useMemo(() => visibleNavItems(toolItems, !!user)
-        .filter((item) => item.id !== 'chat' && isFeatureEnabled(item.id)), [isFeatureEnabled, user]);
+    // 所有入口都展示；未登录时点开需要账号的页面会先提示登录。
+    const filteredToolItems = useMemo(() => toolItems
+        .filter((item) => item.id !== 'chat' && isFeatureEnabled(item.id)), [isFeatureEnabled]);
 
     if (isNavLoading) {
         return <SidebarSkeleton />;
@@ -275,7 +276,8 @@ function SidebarInner() {
                         </Link>
                     ) : null}
                     {filteredToolItems.map((item) => (
-                        <SidebarNavLink key={item.href} item={item} active={pathname === item.href} />
+                        <SidebarNavLink key={item.href} item={item} active={pathname === item.href}
+                            onRequireLogin={item.requiresAuth && !user ? () => setShowAuthModal(true) : undefined} />
                     ))}
                 </div>
 

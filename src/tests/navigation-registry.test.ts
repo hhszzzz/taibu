@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { NAV_REGISTRY, filterNavItems, getFeatureLabel, getNavItemById, getSidebarToolItems, groupDivinationItems, visibleNavItems, type NavItemDef } from '../lib/navigation/registry';
+import { NAV_REGISTRY, filterNavItems, getFeatureLabel, getNavItemById, getSidebarToolItems, groupDivinationItems, type NavItemDef } from '../lib/navigation/registry';
 import { DEFAULT_MOBILE_DRAWER_ORDER } from '../lib/user/settings';
 
 const divinations = NAV_REGISTRY.filter(item => item.category === 'divination');
@@ -42,10 +42,9 @@ test('getFeatureLabel resolves feature-toggle ids, including explicit featureId 
   assert.equal(getFeatureLabel('unknown-feature'), null);
 });
 
-test('personal-data rows disappear for guests and stay for a signed-in account', () => {
+test('personal-data rows stay visible to guests and say they need an account', () => {
   assert.equal(getNavItemById('records')?.requiresAuth, true, '命理记录 is account data');
-  const tools = getSidebarToolItems();
-  assert.deepEqual(ids(visibleNavItems(tools, true)), ids(tools), 'signing in keeps every row');
-  assert.deepEqual(ids(visibleNavItems(tools, false)), ids(tools).filter(id => id !== 'records' && id !== 'scheduled'));
-  assert.ok(ids(visibleNavItems(NAV_REGISTRY, false)).every(id => !NAV_REGISTRY.find(item => item.id === id)?.requiresAuth));
+  assert.equal(getNavItemById('scheduled')?.requiresAuth, true, '定时任务 is account data');
+  const toolIds = ids(getSidebarToolItems());
+  assert.ok(toolIds.includes('records') && toolIds.includes('scheduled'));
 });

@@ -231,6 +231,10 @@ export function ChatComposer({
         commands.remember();
         onSend();
     };
+    // 未登录时点到需要账号的条目：右下角提示先登录，并提供登录入口。
+    const requireLogin = () => {
+        showToast('info', '请先登录后使用', onAuthRequired ? { action: { label: '去登录', onClick: onAuthRequired } } : undefined);
+    };
 
     // 长期记忆开关（与设置中心「记忆」同一份用户偏好）：+ 菜单可勾选。
     const [memoryEnabled, setMemoryEnabled] = useState<boolean | null>(null);
@@ -613,10 +617,10 @@ export function ChatComposer({
         imageMode,
         memory: agentMode ? {
             enabled: memoryEnabled === true,
-            disabled: !userId || !memoryFeatureEnabled || memoryEnabled === null,
+            disabled: !memoryFeatureEnabled || (!!userId && memoryEnabled === null),
             busy: memoryBusy,
-            title: !memoryFeatureEnabled ? '个性化功能已关闭' : memoryEnabled === null ? '正在读取记忆设置' : '允许 Agent 使用长期记忆：记住你说过的偏好、检索以往对话、按原话记录你讲述的经历',
-            onToggle: () => void toggleMemory(),
+            title: !memoryFeatureEnabled ? '个性化功能已关闭' : !userId ? '登录后可用' : memoryEnabled === null ? '正在读取记忆设置' : '允许 Agent 使用长期记忆：记住你说过的偏好、检索以往对话、按原话记录你讲述的经历',
+            onToggle: () => { if (!userId) { requireLogin(); return; } void toggleMemory(); },
         } : undefined,
         fileInputRef,
         hasFile,
@@ -630,6 +634,7 @@ export function ChatComposer({
             onRemove: (id: string) => void toggleKnowledgeBaseSearch(id),
         },
         onEnableAgent,
+        onLoginRequired: requireLogin,
         onSkillSelect: (name: string) => {
             if (!agentMode) onEnableAgent?.();
             onInputChange(`/skill:${name} `);

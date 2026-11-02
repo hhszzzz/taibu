@@ -104,6 +104,7 @@ import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuShortcut, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
 import { Tooltip } from '@/components/ui/Tooltip';
+import { ModelSelector } from '@/components/ui/ModelSelector';
 import { useToast } from '@/components/ui/Toast';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
@@ -502,6 +503,27 @@ function ImageComposerProbe() {
   </section>;
 }
 
+// 未登录的输入框：`+` 菜单仍列全需要账号的条目，点按时提示登录。
+function GuestComposerProbe() {
+  const [value, setValue] = useState('');
+  const [loginAsked, setLoginAsked] = useState(0);
+  return <section data-testid="guest-composer">
+    <ChatComposer draftKey="guest-fixture" inputValue={value} onInputChange={setValue} onSend={() => {}} isLoading={false}
+      userId={null} onAuthRequired={() => setLoginAsked(asked => asked + 1)} disabled={false} />
+    <output data-testid="guest-login">{loginAsked}</output>
+  </section>;
+}
+// 平台模型目录为空时，模型菜单仍要能打开并给出自带 API 的入口。
+function ModelSelectorProbe() {
+  const [model, setModel] = useState('fixture-analysis');
+  const [providerOpen, setProviderOpen] = useState(0);
+  return <section data-testid="model-selector">
+    <ModelSelector selectedModel={model} onModelChange={setModel} userId="alice" onCustomProvider={() => setProviderOpen(open => open + 1)} toolbarStyle />
+    <output data-testid="model-selector-picked">{model}</output>
+    <output data-testid="model-selector-provider">{providerOpen}</output>
+  </section>;
+}
+
 // The composer's slash menu in Agent mode: the member's skills join the built-in commands.
 function SkillCommandsProbe() {
   const { user } = useSessionSafe();
@@ -632,6 +654,8 @@ function Shell() {
   const [postMounted, setPostMounted] = useState(false);
   const [skillCommandsMounted, setSkillCommandsMounted] = useState(false);
   const [imageComposerMounted, setImageComposerMounted] = useState(false);
+  const [guestComposerMounted, setGuestComposerMounted] = useState(false);
+  const [modelSelectorMounted, setModelSelectorMounted] = useState(false);
   const [scheduledMounted, setScheduledMounted] = useState(false);
   const [castMounted, setCastMounted] = useState(null);
   const [uiPrimitivesMounted, setUiPrimitivesMounted] = useState(false);
@@ -660,6 +684,7 @@ function Shell() {
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
     annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted, scheduled: setScheduledMounted,
+    guestComposer: setGuestComposerMounted, modelSelector: setModelSelectorMounted,
     visualization: setVisualizationMounted, quote: setQuoteMounted, uiPrimitives: setUiPrimitivesMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
@@ -734,6 +759,8 @@ function Shell() {
     {composerMounted && <ComposerProbe />}
     {skillCommandsMounted && <SkillCommandsProbe />}
     {imageComposerMounted && <ImageComposerProbe />}
+    {guestComposerMounted && <GuestComposerProbe />}
+    {modelSelectorMounted && <ModelSelectorProbe />}
     {scheduledMounted && <section data-testid="scheduled-page"><ScheduledTasksPage /></section>}
     {selectedMounted && <SelectedChartProbe />}
     {agentMounted && <AgentChatProbe />}
@@ -890,7 +917,7 @@ export async function build(outputDirectory) {
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
         if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; } export function useAnnouncementCenterSafe() { return { openAnnouncementCenter() { window.fixture.announcementCenter = (window.fixture.announcementCenter ?? 0) + 1; }, closeAnnouncementCenter() {}, announcementPromptCount: 0 }; }';
-        if (args.path.endsWith('/useFeatureToggles')) contents = 'const enabled = () => true; export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: enabled }; }';
+        if (args.path.endsWith('/useFeatureToggles')) contents = "const disabledIds = () => window.fixtureFeatures?.disabled ?? []; const isEnabled = id => !disabledIds().includes(id); export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: isEnabled }; }";
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AuthModal')) contents = 'export function AuthModal() { return null; }';
         if (args.path.endsWith('/AccountAdminPanels')) contents = "export { AIModelPanel as AdminAIServicesContent } from '@/components/admin/AIModelPanel'; export const AdminAnnouncementsContent = () => null; export const AdminFeaturesContent = () => null;";
@@ -1247,12 +1274,15 @@ export async function run(existingPage, bundlePath) {
     if (url.pathname === '/api/app/bootstrap' && method === 'GET') return ok({ viewerLoaded: true,
       viewerSummary: { userId: await page.evaluate(() => window.fixtureAuth.cookieUser), isAdmin: false, nickname: 'fixture' },
       billing: { walletMicros: 5_000_000, subscriptionMicros: 0, spendableMicros: 5_000_000 }, featureToggles: {}, featureTogglesLoaded: true, unreadCount: 0, unreadCountLoaded: true });
-    if (url.pathname === '/api/models' && method === 'GET') return ok({ models: [
+    if (url.pathname === '/api/models' && method === 'GET') {
+      if (await page.evaluate(() => window.fixture.emptyModels === true)) return ok({ models: [] });
+      return ok({ models: [
       { id: 'fixture-analysis', name: '分析模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'medium' },
       { id: 'fixture-review', name: '复核模型', vendor: 'other', supportsReasoning: true, thinkingLevels: ['low', 'medium', 'high', 'xhigh', 'max'], defaultThinkingLevel: 'high' },
       { id: 'fixture-priced', name: '计价模型', vendor: 'other', supportsReasoning: false, pricing: { input: 3, output: 15, cacheRead: 0.3, cacheWrite: null } },
       { id: 'fixture-toggle', name: '仅支持推理开关', vendor: 'other', supportsReasoning: true },
     ] });
+    }
     if (url.pathname === '/api/user/profile' && method === 'GET') return ok({ profile: { id: await page.evaluate(() => window.fixtureAuth.cookieUser), is_admin: false } });
     if (url.pathname === '/api/annual-report' && method === 'GET') {
       const userId = await page.evaluate(() => window.fixtureAuth.cookieUser);
@@ -2461,6 +2491,39 @@ export async function run(existingPage, bundlePath) {
       && (await galleryImage.getAttribute('style') ?? '').includes('aspect-ratio'));
     await page.evaluate(() => window.fixture.mount.imageComposer(false));
     await page.getByTestId('image-composer').waitFor({ state: 'detached' });
+
+    // 未登录的 + 菜单：需要账号的条目照常列出，点按只在右下角提示登录。
+    await page.evaluate(() => window.fixture.mount.guestComposer(true));
+    const guestComposer = page.getByTestId('guest-composer');
+    await guestComposer.getByRole('button', { name: '添加附件', exact: true }).click();
+    const guestPlusMenu = page.getByRole('menu', { name: '添加附件', exact: true });
+    await guestPlusMenu.waitFor();
+    check('The guest + menu keeps the account-only entries', await guestPlusMenu.getByRole('menuitem').filter({ hasText: '技能' }).count() === 1
+      && await guestPlusMenu.getByRole('menuitem').filter({ hasText: '连接器' }).count() === 1
+      && await guestPlusMenu.getByRole('menuitem').filter({ hasText: '知识库' }).count() === 1);
+    await guestPlusMenu.getByRole('menuitem').filter({ hasText: '技能' }).click();
+    await page.getByText('请先登录后使用', { exact: true }).waitFor();
+    check('A guest entry asks for a login from the bottom-right toast', await page.getByRole('button', { name: '去登录', exact: true }).count() === 1);
+    await page.getByRole('button', { name: '去登录', exact: true }).click();
+    await until(() => document.querySelector('[data-testid="guest-login"]').textContent === '1');
+    check('The login prompt asks the page to open the auth dialog', true);
+    await page.evaluate(() => window.fixture.mount.guestComposer(false));
+
+    // 平台没有可用模型时，模型菜单仍要能打开，并保留自带 API 的入口。
+    await page.evaluate(() => { window.fixture.emptyModels = true; window.fixture.client.removeQueries({ queryKey: ['models'] }); window.fixture.mount.modelSelector(true); });
+    await page.waitForFunction(() => document.querySelector('[data-testid="model-selector"] [data-model-trigger]')?.innerText.includes('暂无可用模型'));
+    const modelSelector = page.getByTestId('model-selector');
+    const modelTrigger = modelSelector.locator('[data-model-trigger]');
+    check('The model menu opens with no platform models', await modelTrigger.isEnabled());
+    await modelTrigger.click();
+    const modelMenu = page.getByRole('menu', { name: '模型与分析设置', exact: true });
+    await modelMenu.waitFor();
+    check('An empty catalog still offers the member’s own API', await modelMenu.getByText('暂无可用模型。', { exact: true }).count() === 1
+      && await modelMenu.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).count() === 1);
+    await modelMenu.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).click();
+    await until(() => document.querySelector('[data-testid="model-selector-provider"]').textContent === '1');
+    check('Choosing the own API opens the provider dialog', true);
+    await page.evaluate(() => { window.fixture.mount.modelSelector(false); window.fixture.emptyModels = false; window.fixture.client.removeQueries({ queryKey: ['models'] }); });
 
     // 引用：选中助手回答中的文字浮出「引用」按钮，消息菜单可引用整条；发送后引用卡在用户气泡上方。
     await page.evaluate(() => window.fixture.mount.quote(true));
@@ -3844,7 +3907,33 @@ export async function run(existingPage, bundlePath) {
     }
     await page.evaluate(() => window.fixtureAuth.change('alice'));
     await until(() => window.fixture.user === 'alice');
-    await page.evaluate(() => window.fixture.mount.sidebar(false));
+    // 访客也看到需要账号的入口；点击时停在本页，由登录弹窗接手。
+    await page.evaluate(() => window.fixtureAuth.change(null));
+    await until(() => window.fixture.user === null);
+    await sidebar.getByRole('radiogroup', { name: '对话方式' }).waitFor();
+    await renderBarrier();
+    const visitorScheduled = sidebar.getByRole('link', { name: /定时任务/ });
+    check('Visitors keep the account-only sidebar entries', await visitorScheduled.count() === 1 && await sidebar.getByRole('link', { name: /命理记录/ }).count() === 1);
+    const visitorUrl = page.url();
+    await visitorScheduled.click();
+    await renderBarrier();
+    check('Opening an account-only entry while signed out stays on the page for the login prompt', page.url() === visitorUrl);
+    await page.evaluate(() => window.fixtureAuth.change('alice'));
+    await until(() => window.fixture.user === 'alice');
+    // 关闭钱包后，账户行与账户菜单里都不再出现余额。
+    await page.evaluate(() => { window.fixtureFeatures = { disabled: ['billing'] }; window.fixture.mount.sidebar(false); });
+    await page.evaluate(() => window.fixture.mount.sidebar(true));
+    await page.addStyleTag({ content: 'aside[class*="lg:flex"] { display: flex !important; }' });
+    const walletOffSidebar = page.getByRole('complementary');
+    await walletOffSidebar.getByRole('radiogroup', { name: '对话方式' }).waitFor();
+    await renderBarrier();
+    const walletOffText = await walletOffSidebar.innerText();
+    check('With the wallet off the account row keeps the name but drops the balance', walletOffText.includes('alice') && !walletOffText.includes('$'));
+    await walletOffSidebar.getByRole('button').filter({ hasText: 'alice' }).first().click();
+    await page.getByRole('menu').first().waitFor();
+    check('With the wallet off the account menu has no balance entry', await page.getByRole('menuitem').filter({ hasText: '余额' }).count() === 0);
+    await page.keyboard.press('Escape');
+    await page.evaluate(() => { window.fixtureFeatures = undefined; window.fixture.mount.sidebar(false); });
 
     // 侧栏切换点 Agent：进入 /chat 时带 ?mode=agent（夹具里只看 URL 与选中态）。
     await page.evaluate(() => window.fixture.mount.sidebar(true));

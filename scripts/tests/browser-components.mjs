@@ -10,7 +10,7 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/browser-components.mjs');
  *   return run(page, '/tmp/taibu-browser/fixture.js');
  *
- * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel/CollaborationSettings,
+ * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel/HelpPanel/CollaborationSettings,
  * ShareConversationMenu, AIModelPanel, AnnouncementManagementPanel, BillingCodesPanel, AgentTaskPanel, AgentProfilesPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, useComposerCommands, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
@@ -827,12 +827,12 @@ export async function build(outputDirectory) {
     stdin: { contents: entry.replace('DALIUREN_RESULT_FIXTURE', JSON.stringify(await executeTool('daliuren', { date: '2026-10-23', hour: 12, timezone: 'Asia/Shanghai' }))).replace('QIMEN_RESULT_FIXTURE', JSON.stringify(await executeTool('qimen', { year: 2024, month: 6, day: 1, hour: 12, timezone: 'Asia/Shanghai' }))).replace('AGENT_TOOL_FIXTURE_PARTS', JSON.stringify(toolParts)).replace('TRADITIONAL_TAIYI_FIXTURE_PART', JSON.stringify(traditionalPart)).replace('REVISED_BAZI_FIXTURE_RESULT', JSON.stringify(revisedBazi.structuredContent)).replace('AGENT_DAYUN_FIXTURE_PART', JSON.stringify(dayunPart)).replace('HEPAN_FIXTURE_PART', JSON.stringify(hepanPart)).replace('ALMANAC_CLASH_FIXTURE_PART', JSON.stringify(clashPart)).replace('HOUR_CANDIDATES_FIXTURE_PART', JSON.stringify(hourPart)).replace('BAZI_DRILLDOWN_FIXTURE_PARTS_JSON', JSON.stringify(drilldownParts)).replace('BAZI_METHOD_FIXTURE', JSON.stringify({ ...baziMethod, whenToUse: baziMethod.description, instructions: renderMethodGuide('bazi') })), loader: 'jsx', resolveDir: root, sourcefile: 'browser-components-entry.jsx' },
     outfile, bundle: true, format: 'iife', platform: 'browser', jsx: 'automatic',
     tsconfig: resolve(root, 'tsconfig.json'),
-    define: { 'process.env.NODE_ENV': '"development"', 'process.env': '{}' },
+    define: { 'process.env.NODE_ENV': '"development"', 'process.env.NEXT_PUBLIC_APP_VERSION': '"0.0.0"', 'process.env': '{}' },
     plugins: [{ name: 'explicit-fixture-boundaries', setup(plugin) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|UsageLogPanel|BillingPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|UsageLogPanel|BillingPanel|HelpPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
@@ -1797,6 +1797,17 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixtureAuth.change('alice'));
     await (await aliceSettings).finished();
     check('Signing back in reloads account panels without remounting the settings host', settingsReads >= readsAfterBob + 2);
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/help'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    const helpFooter = page.locator('.settings-help-footer');
+    await helpFooter.waitFor();
+    check('An administrator finds the running version in the help footer', await helpFooter.getByRole('link', { name: '版本 0.0.0，查看更新记录', exact: true }).count() === 1);
+    await page.evaluate(() => window.fixtureAuth.change('bob'));
+    await until(() => window.fixture.user === 'bob');
+    await renderBarrier();
+    check('Other members see the help footer without the version', await helpFooter.getByRole('link', { name: '隐私政策', exact: true }).count() === 1 &&
+      await helpFooter.getByText('0.0.0').count() === 0);
+    await page.evaluate(() => window.fixtureAuth.change('alice'));
+    await until(() => window.fixture.user === 'alice');
     await page.getByRole('button', { name: 'Fixture Models route', exact: true }).click();
     const modelPanel = page.getByTestId('models');
     const fixtureRow = modelPanel.locator('.ai-catalog-row').filter({ hasText: 'Fixture Model' });
@@ -3798,6 +3809,15 @@ export async function run(existingPage, bundlePath) {
     await sidebar.getByRole('button', { name: '搜索', exact: true }).click();
     check('搜索 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
     await page.keyboard.press('Escape');
+    for (const viewer of ['bob', null]) {
+      await page.evaluate(id => window.fixtureAuth.change(id), viewer);
+      await until(id => window.fixture.user === id, viewer);
+      await sidebar.getByRole('radiogroup', { name: '对话方式' }).waitFor();
+      await renderBarrier();
+      check(`The sidebar hides the version from ${viewer ? 'other members' : 'visitors'}`, await sidebar.getByText('0.0.0', { exact: true }).count() === 0);
+    }
+    await page.evaluate(() => window.fixtureAuth.change('alice'));
+    await until(() => window.fixture.user === 'alice');
     await page.evaluate(() => window.fixture.mount.sidebar(false));
 
     // 侧栏切换点 Agent：进入 /chat 时带 ?mode=agent（夹具里只看 URL 与选中态）。

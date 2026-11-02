@@ -10,6 +10,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { ChevronDown, Github, Mail } from 'lucide-react';
+import { useCurrentUserProfile } from '@/lib/hooks/useCurrentUserProfile';
 
 interface FAQItem {
   question: string;
@@ -51,6 +52,8 @@ const FOOTER_LINK = 'text-foreground-secondary underline decoration-border-hover
 
 export default function HelpPanel() {
   const [expandedFAQ, setExpandedFAQ] = useState<number | null>(null);
+  // The running release is for administrators only.
+  const isAdmin = useCurrentUserProfile().profile?.is_admin === true;
 
   return (
     <div>
@@ -113,7 +116,7 @@ export default function HelpPanel() {
       <footer className="settings-help-footer">
         <Link href="/privacy" className={FOOTER_LINK}>隐私政策</Link>
         <Link href="/terms" className={FOOTER_LINK}>服务条款</Link>
-        {APP_VERSION && (
+        {isAdmin && APP_VERSION && (
           <a href={`${PROJECT_REPO_URL}/releases`} target="_blank" rel="noreferrer" className={FOOTER_LINK} aria-label={`版本 ${APP_VERSION}，查看更新记录`}>
             v{APP_VERSION}
           </a>

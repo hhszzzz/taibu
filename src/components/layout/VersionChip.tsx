@@ -1,7 +1,6 @@
 /**
- * Version chip next to the brand.
- * Everyone sees the running version; admins additionally get an update dot and
- * the update dialog once GitHub reports a newer release.
+ * Version chip next to the brand, for administrators only.
+ * It adds an update dot and the update dialog once GitHub reports a newer release.
  */
 'use client';
 
@@ -90,7 +89,7 @@ export function VersionChip({ className }: VersionChipProps) {
   }, [isAdmin]);
 
   const latest = versionInfo?.latest ?? null;
-  const showUpdateDot = isAdmin && versionInfo?.needsUpdate === true && latest !== null && latest !== ignoredVersion;
+  const showUpdateDot = versionInfo?.needsUpdate === true && latest !== null && latest !== ignoredVersion;
 
   const chip = (
     <>
@@ -101,7 +100,9 @@ export function VersionChip({ className }: VersionChipProps) {
     </>
   );
 
-  if (!isAdmin || !versionInfo) {
+  if (!isAdmin) return null;
+
+  if (!versionInfo) {
     return (
       <span
         className={`inline-flex items-center gap-1 px-2 py-1 text-xs text-foreground-secondary ${className ?? ''}`}

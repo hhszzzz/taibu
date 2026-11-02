@@ -18,6 +18,8 @@ import {
 } from "../lib/agent/api.server";
 import type { AIModelConfig } from "../types";
 import { DEFAULT_AGENT_EXTENSIONS_POLICY } from "../lib/agent/mcp/config";
+import { DEFAULT_BYOK_POLICY } from "../lib/byok/config";
+import type { ResolvedByokModel } from "../lib/byok/store.server";
 
 const model: AIModelConfig = {
   id: "fixture",
@@ -28,6 +30,30 @@ const model: AIModelConfig = {
   supportsReasoning: true,
   pricing: { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null },
 };
+const OWN_CONNECTION = "00000000-0000-4000-8000-0000000000c1";
+function ownModel(id: string, overrides: Partial<ResolvedByokModel> = {}): ResolvedByokModel {
+  return {
+    id, ref: `byok:${id}`, modelId: "deepseek-chat", displayName: "我的 DeepSeek", usage: "chat", supportsVision: false,
+    thinkingLevels: [], defaultEffort: "medium", contextWindow: null, maxOutput: null,
+    connection: { id: OWN_CONNECTION, name: "DeepSeek", protocol: "openai", baseUrl: "https://api.deepseek.com", keyHint: null, updatedAt: "2026-11-02T00:00:00Z" },
+    serverKey: false, openKey: () => null, ...overrides,
+  };
+}
+const OWN_CHAT = ownModel("00000000-0000-4000-8000-0000000000b1");
+const OWN_IMAGE = ownModel("00000000-0000-4000-8000-0000000000b2", { modelId: "gpt-image-1", displayName: "gpt-image-1", usage: "image", defaultEffort: "auto" });
+const OWN_STORED = ownModel("00000000-0000-4000-8000-0000000000b3", {
+  serverKey: true, openKey: () => "sk-stored",
+  connection: { ...OWN_CHAT.connection, id: "00000000-0000-4000-8000-0000000000c2", keyHint: "sk-…ored" },
+});
+/** The member's own models the account has; the references a task names resolve against these. */
+function ownModels(t: TestContext, models: ResolvedByokModel[] = [OWN_CHAT, OWN_IMAGE, OWN_STORED]) {
+  const store = require("../lib/byok/store.server") as typeof import("../lib/byok/store.server");
+  const settings = require("../lib/app-settings") as typeof import("../lib/app-settings");
+  t.mock.method(settings, "getByokPolicy", async () => DEFAULT_BYOK_POLICY);
+  return t.mock.method(store, "resolveByokModels", async (_db: unknown, _user: string, refs: readonly string[]) =>
+    new Map(models.filter(model => refs.includes(model.ref)).map(model => [model.ref, model])));
+}
+
 function setup(t: TestContext, messages: unknown[] = []) {
   const owner = randomUUID(),
     conversation = randomUUID(),
@@ -216,7 +242,8 @@ test("Agent admission honors a denied rate-limit result for platform and BYOK wi
     assert.equal(endpoint, "/api/chat");
     return { allowed: false, remaining: 0, resetAt: new Date(Date.now() + 60000) };
   });
-  for (const extra of [{}, { customProvider: { apiUrl: "https://model.example/v1", apiKey: "fixture", modelId: "fixture" } }]) {
+  ownModels(t);
+  for (const extra of [{}, { model: OWN_CHAT.ref, byokKeys: { [OWN_CONNECTION]: "sk-user" } }]) {
     const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })));
     assert.equal(response.status, 429);
     assert.equal((await response.json()).code, "RATE_LIMITED");
@@ -418,7 +445,7 @@ test('image capability is enforced before charging and when adding input to an e
   t.mock.method(attachments,'validateAttachmentIds',async()=>[{id:attachmentId,user_id:fixture.owner,name:'diagram.png',kind:'image',mime_type:'image/png',status:'ready'}] as Awaited<ReturnType<typeof attachments.validateAttachmentIds>>);
   const body={...fixture.body,message:{...fixture.body.message,attachments:{ids:[attachmentId]}}};
   const denied=await agentEndpoint(()=>createAgentTask(fixture.request(body)));
-  assert.equal(denied.status,400); assert.match((await denied.json()).error,/视觉模型/); assert.equal(fixture.writes.length,0);
+  assert.equal(denied.status,400); assert.match((await denied.json()).error,/识图/); assert.equal(fixture.writes.length,0);
   t.mock.method(configs,'getModelConfigAsync',async()=>({...model,supportsVision:true}));
   assert.equal((await agentEndpoint(()=>createAgentTask(fixture.request(body)))).status,201);
   const run={id,user_id:fixture.owner,conversation_id:fixture.conversation,input:{model:'fixture'},checkpoint:{},status:'running',event_cursor:1,created_at:'now',public_message:{id:'assistant',role:'assistant',content:'',createdAt:'now',agent:{version:1,runId:id,status:'running',parts:[]}}} as unknown as AgentRunRow;
@@ -461,7 +488,7 @@ test("Agent create uses server history and one metered create RPC; supplied assi
   assert.equal(view.checkpoint, undefined);
 });
 
-test("Agent BYOK is encrypted, exempt and omitted from every public result and execution checkpoint", async (t) => {
+test("own models with browser keys run exempt, and their keys are sealed to the task and never shown", async (t) => {
   const fixture = setup(t),
     previous = process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
   process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY =
@@ -471,35 +498,68 @@ test("Agent BYOK is encrypted, exempt and omitted from every public result and e
       delete process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
     else process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY = previous;
   });
+  ownModels(t);
   fixture.balance.mock.mockImplementation(async () => 0);
   const key = "fixture-BYOK-secret";
   const response = await agentEndpoint(() =>
-    createAgentTask(
-      fixture.request({
-        ...fixture.body,
-        customProvider: {
-          apiUrl: "https://model.example/v1",
-          apiKey: key,
-          modelId: "fixture",
-          imageModelId: " gpt-image-1 ",
-        },
-      }),
-    ),
+    createAgentTask(fixture.request({
+      ...fixture.body, model: OWN_CHAT.ref, imageModel: OWN_IMAGE.ref, byokKeys: { [OWN_CONNECTION]: ` ${key} ` },
+    })),
   );
   assert.equal(response.status, 201);
   const write = fixture.writes[0];
-  assert.equal(write.args.p_billing, "exempt");
-  assert.ok(write.args.p_credential);
+  assert.equal(write.args.p_billing, "exempt", "a task of only own models is never charged");
+  const credential = write.args.p_credential as { version: number; keys: Record<string, unknown> };
+  assert.equal(credential.version, 2);
+  assert.deepEqual(Object.keys(credential.keys), [OWN_CONNECTION], "one sealed key per connection, whatever uses it");
   assert.ok(!JSON.stringify(write.args).includes(key));
   assert.ok(!(await response.text()).includes(key));
-  assert.deepEqual(
-    (write.args.p_input as AgentRunRow["input"]).customProvider,
-    { apiUrl: "https://model.example/v1", modelId: "fixture", imageModelId: "gpt-image-1" },
-    "the image model goes with the task so its image tool uses the member's own model",
-  );
+  const input = write.args.p_input as AgentRunRow["input"];
+  assert.equal(input.model, OWN_CHAT.ref);
+  assert.equal(input.imageModel, OWN_IMAGE.ref, "generate_image uses the member's own image model");
+  assert.equal("byokKeys" in input, false);
+  assert.equal((write.args.p_message as { modelName: string }).modelName, "我的 DeepSeek");
+
+  // A platform member makes the task metered again, and a stored key needs nothing from the browser.
+  fixture.writes.length = 0;
+  const member = { id: "first", name: "分析", model: "fixture", focus: "", reasoning: false, reasoningEffort: null };
+  const mixed = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, model: OWN_STORED.ref, collaborators: [member] })));
+  assert.equal(mixed.status, 402, "the platform member needs a balance");
+  fixture.balance.mock.mockImplementation(async () => 10_000_000);
+  const metered = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID(), model: OWN_STORED.ref, collaborators: [member] })));
+  assert.equal(metered.status, 201);
+  assert.equal(fixture.writes[0].args.p_billing, "metered");
+  assert.equal(fixture.writes[0].args.p_credential, null, "a stored key is opened by the worker, not carried by the task");
 });
 
-test("Agent malformed inputs, private custom URLs, authentication and cross-user control fail before mutation", async (t) => {
+test("own models are refused before mutation when missing, misused, keyless or switched off", async (t) => {
+  const fixture = setup(t);
+  ownModels(t);
+  const keys = { byokKeys: { [OWN_CONNECTION]: "sk-user" } };
+  const cases: Array<[Record<string, unknown>, RegExp]> = [
+    [{ model: "byok:00000000-0000-4000-8000-0000000000ff", ...keys }, /不存在/],
+    [{ model: OWN_IMAGE.ref, ...keys }, /只用于生图/],
+    [{ imageModel: OWN_CHAT.ref, ...keys }, /不是生图模型/],
+    [{ model: OWN_CHAT.ref }, /需要先在本设备填写 API Key/],
+    [{ model: OWN_CHAT.ref, byokKeys: { [OWN_CONNECTION]: "has space" } }, /需要先在本设备填写 API Key/],
+    [{ model: OWN_CHAT.ref, byokKeys: [] }, /无效/],
+    [{ model: OWN_CHAT.ref, byokKeys: { "not-a-connection": "sk-user" } }, /Key 无效/],
+    [{ imageModel: 3 }, /生图模型无效/],
+    [{ collaborators: [{ id: "first", name: "分析", model: OWN_IMAGE.ref, focus: "", reasoning: false, reasoningEffort: null }], ...keys }, /只用于生图/],
+  ];
+  for (const [extra, message] of cases) {
+    const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, ...extra })));
+    assert.equal(response.status, 400, JSON.stringify(extra));
+    assert.match((await response.json()).error, message);
+  }
+  t.mock.method(fixture.features, "readFeatureModuleStateFresh", async (id: string) => ({ status: id === "byok" ? "disabled" : "enabled" }) as never);
+  const closed = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, model: OWN_STORED.ref })));
+  assert.equal(closed.status, 403);
+  assert.equal((await closed.json()).code, "BYOK_UNAVAILABLE");
+  assert.equal(fixture.writes.length, 0);
+});
+
+test("Agent malformed inputs, authentication and cross-user control fail before mutation", async (t) => {
   const fixture = setup(t);
   for (const body of [
     null,
@@ -510,16 +570,7 @@ test("Agent malformed inputs, private custom URLs, authentication and cross-user
         { type: "bazi_chart", id: "not-uuid", name: "x", preview: "x" },
       ],
     },
-    {
-      ...fixture.body,
-      customProvider: {
-        apiUrl: "https://127.0.0.1/v1",
-        apiKey: "key",
-        modelId: "x",
-      },
-    },
-    { ...fixture.body, customProvider: { apiUrl: "https://model.example/v1", apiKey: "key", modelId: "x", imageModelId: 3 } },
-    { ...fixture.body, customProvider: { apiUrl: "https://model.example/v1", apiKey: "key", modelId: "x", imageModelId: "m".repeat(129) } },
+    { ...fixture.body, imageModel: "m".repeat(201) },
   ]) {
     const response = await agentEndpoint(() =>
       createAgentTask(fixture.request(body)),

@@ -362,22 +362,6 @@ export interface AIModelConfig {
     sources?: AIModelSourceConfig[]; // 非空来源清单为权威配置，可含禁用项；空清单兼容旧顶层配置
 }
 
-/** 自定义Provider (BYOK) 请求配置 */
-export interface CustomProviderRequest {
-    apiUrl: string;
-    apiKey: string;
-    modelId: string;
-    /** 生图用的模型；留空时生图走本站模型并按张计费。 */
-    imageModelId?: string;
-}
-
-/** 自定义Provider (BYOK) 客户端配置 */
-export interface CustomProviderConfig extends CustomProviderRequest {
-    providerKey?: AIVendor | 'other';
-    providerLabel?: string;
-    modelName?: string;
-}
-
 // ===== 每日运势相关类型 =====
 
 /** 运势等级 */

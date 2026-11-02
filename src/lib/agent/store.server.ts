@@ -1,9 +1,8 @@
 import "server-only";
 import type { ScopedDb } from "@/lib/db/context.server";
 import { json, jsonPath, jsonPathText } from "@/lib/db/sql-helpers";
-import type { ChatMessage, CustomProviderRequest, AIReasoningEffort } from "@/types";
+import type { ChatMessage, AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
-import type { EncryptedAgentCredential } from "./credentials.server";
 import type { AgentCheckpoint, AgentRunStatus, AgentRunView } from "./types";
 import { AGENT_ENGINE } from "./engine";
 import { AGENT_DRILLDOWN_BASES } from "./tool-catalog";
@@ -35,7 +34,8 @@ export interface AgentRunRow {
     /** A `/compact` task: it compacts the conversation's context for the next task and answers nothing. */
     compact?: { instructions: string | null };
     systemPrompt: string;
-    customProvider?: Omit<CustomProviderRequest, "apiKey">;
+    /** The image model the user picked for generate_image: a platform image model or their own (`byok:`). */
+    imageModel?: string;
     userMessage: ChatMessage;
     title: string;
     knowledgeBaseIds?: string[];
@@ -243,7 +243,7 @@ export class AgentStore {
       .select("ciphertext")
       .where("run_id", "=", run.id)
       .executeTakeFirst());
-    return row?.ciphertext as EncryptedAgentCredential | undefined;
+    return row?.ciphertext as unknown;
   }
   async artifact(run: AgentRunRow, callId: string) {
     const row = await this.db.tx((trx) => trx

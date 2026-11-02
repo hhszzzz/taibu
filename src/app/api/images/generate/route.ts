@@ -6,16 +6,26 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import {
   IMAGE_GENERATION_RATE_LIMIT,
   ImageGenerationError,
+  generateByokImageSet,
   generateImages,
   imagePriceMicros,
   resolveImageModel,
+  type ImageGenerationResult,
 } from '@/lib/ai/image-generation.server';
+import { MODEL_REQUEST_USER_AGENT } from '@/lib/ai/providers/ai-sdk-provider';
+import { agentSafeFetch } from '@/lib/agent/safe-fetch.server';
+import { isByokRef } from '@/lib/byok/config';
+import { byokGate } from '@/lib/byok/api.server';
+import { serverByokModel } from '@/lib/byok/chat.server';
 import { GENERATED_IMAGE_MAX_COUNT, isGeneratedImageSize } from '@/lib/images/generated';
 
 export const runtime = 'nodejs';
 export const maxDuration = 120;
 
-/** 输入框直接生图：不经过对话模型，生成后由客户端写入当前对话。 */
+/**
+ * 输入框直接生图：不经过对话模型，生成后由客户端写入当前对话。`model` 可选平台生图模型，或 Key 保存在本站的
+ * 自定义生图模型（`byok:`，由本站代发、按 $0 记用量）。
+ */
 export async function POST(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
@@ -27,7 +37,7 @@ export async function POST(request: NextRequest) {
     return jsonError('请求过于频繁，请稍后再试', 429);
   }
 
-  let body: { prompt?: unknown; size?: unknown; count?: unknown; conversationId?: unknown };
+  let body: { prompt?: unknown; size?: unknown; count?: unknown; conversationId?: unknown; model?: unknown };
   try {
     body = await request.json();
   } catch {
@@ -45,9 +55,30 @@ export async function POST(request: NextRequest) {
   if (conversationId !== undefined && (typeof conversationId !== 'string' || !isValidUUID(conversationId))) {
     return jsonError('对话 ID 无效', 400);
   }
+  const requested = body?.model;
+  if (requested !== undefined && requested !== null && (typeof requested !== 'string' || !requested || requested.length > 200)) {
+    return jsonError('生图模型无效', 400);
+  }
 
-  const model = await resolveImageModel();
-  if (!model) return jsonError('当前没有可用的生图模型', 403);
+  let generate: () => Promise<ImageGenerationResult>;
+  let model: { id: string; name: string; priceMicros: number };
+  const target = {
+    userId: auth.user.id, prompt, size, count: Number(count),
+    conversationId: (conversationId as string | undefined) ?? null, abortSignal: request.signal,
+  };
+  if (isByokRef(requested)) {
+    const gate = await byokGate();
+    if (gate) return gate;
+    const own = await serverByokModel(auth.db, auth.user.id, requested, 'image');
+    if ('error' in own) return jsonError(own.error, 400, { code: 'BYOK_UNAVAILABLE' });
+    model = { id: own.model.ref, name: own.model.displayName || own.model.modelId, priceMicros: 0 };
+    generate = () => generateByokImageSet({ ...target, ...own }, { fetch: agentSafeFetch, userAgent: MODEL_REQUEST_USER_AGENT });
+  } else {
+    const platform = await resolveImageModel(typeof requested === 'string' ? requested : null);
+    if (!platform) return jsonError(requested ? '这个生图模型当前不可用' : '当前没有可用的生图模型', 403);
+    model = { id: platform.id, name: platform.name, priceMicros: imagePriceMicros(platform) };
+    generate = () => generateImages({ ...target, model: platform });
+  }
 
   if (conversationId) {
     const conversation = await auth.db.tx(trx => trx.selectFrom('conversations').select('id')
@@ -56,20 +87,8 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const result = await generateImages({
-      userId: auth.user.id,
-      prompt,
-      size,
-      count: Number(count),
-      model,
-      conversationId: (conversationId as string | undefined) ?? null,
-      abortSignal: request.signal,
-    });
-    return jsonOk({
-      images: result.images,
-      model: { id: model.id, name: model.name, priceMicros: imagePriceMicros(model) },
-      costMicros: result.costMicros,
-    });
+    const result = await generate();
+    return jsonOk({ images: result.images, model, costMicros: result.costMicros });
   } catch (error) {
     if (error instanceof ImageGenerationError) {
       if (error.code === 'INSUFFICIENT_BALANCE') return jsonError(error.message, 402, { code: 'INSUFFICIENT_BALANCE' });

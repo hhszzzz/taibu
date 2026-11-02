@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
 import { mockAIFeatureState } from './helpers/route-mock';
+import { matchModelIcon } from '../lib/ai/lobe-icons';
 
 const PRICED = { input: 1, output: 2, cacheRead: null, cacheWrite: null, image: null };
 
@@ -100,94 +101,22 @@ test('/api/models exposes only offered chat models with their public capabilitie
   assert.equal('tier' in body.models[0], false);
 });
 
-test('/api/models?catalog=byok should expose chat models without membership filtering', async (t) => {
+test('/api/models keeps an administrator\'s icon and otherwise names one from the model ID', async (t) => {
   mockAIFeatureState(t);
   const aiConfigServerModule = require('../lib/server/ai-config') as any;
-  const apiUtilsModule = require('../lib/api-utils') as any;
-
   const originalGetModelsAsync = aiConfigServerModule.getModelsAsync;
-  const originalGetAuthContext = apiUtilsModule.getAuthContext;
-
   aiConfigServerModule.getModelsAsync = async () => [
-    {
-      id: 'deepseek-v3.2',
-      name: 'DeepSeek',
-      vendor: 'deepseek',
-      usageType: 'chat',
-      modelId: 'deepseek-chat',
-      apiUrl: '',
-      supportsReasoning: false,
-      isReasoningDefault: false,
-    },
-    {
-      id: 'gemini-2.5-pro',
-      name: 'Gemini 2.5 Pro',
-      vendor: 'gemini',
-      usageType: 'chat',
-      modelId: 'gemini-2.5-pro',
-      apiUrl: '',
-      supportsReasoning: true,
-      isReasoningDefault: false,
-    },
-    {
-      id: 'duplicate-deepseek',
-      name: 'DeepSeek duplicate source',
-      vendor: 'deepseek',
-      usageType: 'chat',
-      modelId: 'deepseek-chat',
-      apiUrl: '',
-      supportsReasoning: false,
-      isReasoningDefault: false,
-    },
-    {
-      id: 'qwen-vl-plus',
-      name: 'Qwen VL',
-      vendor: 'qwen-vl',
-      usageType: 'chat',
-      modelId: 'qwen-vl-plus',
-      apiUrl: '',
-      supportsReasoning: true,
-      supportsVision: true,
-    },
+    { id: 'deepseek-v3.2', name: 'DeepSeek', vendor: 'deepseek', usageType: 'chat', modelId: 'deepseek-v3.2', apiUrl: '', supportsReasoning: false, pricing: PRICED },
+    { id: 'house-model', name: 'House', vendor: 'other', usageType: 'chat', modelId: 'claude-sonnet-4-5', icon: 'Qwen', apiUrl: '', supportsReasoning: false, pricing: PRICED },
+    { id: 'mystery', name: 'Mystery', vendor: 'other', usageType: 'chat', modelId: 'mystery-model', apiUrl: '', supportsReasoning: false, pricing: PRICED },
   ];
-  apiUtilsModule.getAuthContext = async () => {
-    throw new Error('auth should not be required for BYOK catalog');
-  };
-
-  t.after(() => {
-    aiConfigServerModule.getModelsAsync = originalGetModelsAsync;
-    apiUtilsModule.getAuthContext = originalGetAuthContext;
-  });
+  t.after(() => { aiConfigServerModule.getModelsAsync = originalGetModelsAsync; });
 
   const { GET } = await import('../app/api/models/route');
-  const response = await GET(new NextRequest('http://localhost/api/models?catalog=byok'));
-  const body = await response.json();
-
-  assert.equal(response.status, 200);
-  assert.deepEqual(body.models, [
-    {
-      id: 'deepseek-chat',
-      name: 'DeepSeek',
-      vendor: 'deepseek',
-      icon: null,
-      supportsReasoning: false,
-      isReasoningDefault: false,
-    },
-    {
-      id: 'gemini-2.5-pro',
-      name: 'Gemini 2.5 Pro',
-      vendor: 'gemini',
-      icon: null,
-      supportsReasoning: true,
-      isReasoningDefault: false,
-    },
-    {
-      id: 'qwen-vl-plus',
-      name: 'Qwen VL',
-      vendor: 'qwen-vl',
-      icon: null,
-      supportsReasoning: true,
-      isReasoningDefault: false,
-    },
-  ]);
+  const body = await (await GET(new NextRequest('http://localhost/api/models'))).json();
+  assert.ok(matchModelIcon('deepseek-v3.2'), 'a known model ID names its icon');
+  assert.deepEqual(body.models.map((model: { icon: string | null }) => model.icon), [matchModelIcon('deepseek-v3.2'), 'Qwen', null]);
+  // The catalog the browser-only custom model used is gone: the parameter changes nothing.
+  const legacy = await (await GET(new NextRequest('http://localhost/api/models?catalog=byok'))).json();
+  assert.deepEqual(legacy.models.map((model: { id: string }) => model.id), body.models.map((model: { id: string }) => model.id));
 });

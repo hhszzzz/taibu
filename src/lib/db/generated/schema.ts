@@ -849,6 +849,36 @@ export interface UserAgentMemory {
   updated_at: Generated<string>;
 }
 
+export interface UserAiConnections {
+  id: Generated<string>;
+  user_id: ColumnType<string, string, string>;
+  name: ColumnType<string, string, string>;
+  protocol: Generated<string>;
+  base_url: ColumnType<string, string, string>;
+  api_key_secret: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
+  api_key_hint: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  sort_order: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
+export interface UserAiModels {
+  id: Generated<string>;
+  connection_id: ColumnType<string, string, string>;
+  user_id: ColumnType<string, string, string>;
+  model_id: ColumnType<string, string, string>;
+  display_name: ColumnType<string, string, string>;
+  usage: Generated<string>;
+  supports_vision: Generated<boolean>;
+  thinking_levels: Generated<unknown>;
+  default_effort: Generated<string>;
+  context_window: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  max_output: ColumnType<number | null, number | null | undefined, number | null | undefined>;
+  sort_order: Generated<number>;
+  created_at: Generated<string>;
+  updated_at: Generated<string>;
+}
+
 export interface UserOauthProviders {
   id: Generated<string>;
   user_id: ColumnType<string, string, string>;
@@ -1010,6 +1040,8 @@ export interface DB {
   "subscription_plans": SubscriptionPlans;
   "tarot_readings": TarotReadings;
   "user_agent_memory": UserAgentMemory;
+  "user_ai_connections": UserAiConnections;
+  "user_ai_models": UserAiModels;
   "user_oauth_providers": UserOauthProviders;
   "user_settings": UserSettings;
   "user_subscription_limits": UserSubscriptionLimits;

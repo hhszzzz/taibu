@@ -25,9 +25,11 @@ import {
   AGENT_UNSUPPORTED_TOOLS_MESSAGE,
   PROGRESS_TURN_NUDGE,
   SILENT_TURN_NUDGE,
+  createByokModelStream,
   createPiModelStream,
   isProgressOnlyTurn,
 } from "../lib/agent/pi-stream.server";
+import type { ByokRequestModel } from '../lib/byok/pi-model';
 import { MODEL_REQUEST_USER_AGENT } from '../lib/ai/providers/ai-sdk-provider';
 import { promptCacheKey } from '../lib/ai/prompt-cache.server';
 import type { AIModelConfig } from "../types";
@@ -413,21 +415,54 @@ test('the request time limit and a user stop both end the stream after partial o
   }
 });
 
-test('a user key goes only to the user URL, and images reach a vision model as image parts', async () => {
+test('images reach a vision model as image parts, and a text model never loads them', async () => {
   const image = { type: 'image' as const, data: Buffer.from('png').toString('base64'), mimeType: 'image/png' };
   let resolved = 0;
   const gw = gateway(reply('看到了'));
   await createPiModelStream(sourced('platform'), {
-    apiKey: 'ephemeral-fixture', fetch: gw.fetch,
+    fetch: gw.fetch,
     resolveImages: async messages => { resolved++; return messages.map(message => message.role === 'user' ? { ...message, content: [{ type: 'text', text: '看图' }, image] } : message); },
   })({ ...piModel, input: ['text', 'image'] }, context()).result();
   const [request] = gw.requests;
   assert.equal(resolved, 1);
-  assert.equal(request.url, 'https://model.example/v1/chat/completions');
-  assert.equal(request.headers.get('authorization'), 'Bearer ephemeral-fixture');
+  assert.equal(request.url, 'https://platform.example/v1/chat/completions');
   assert.deepEqual(request.body.messages.at(-1)?.content, [{ type: 'text', text: '看图' }, { type: 'image_url', image_url: { url: `data:image/png;base64,${image.data}` } }]);
   // A text model never loads them.
   await createPiModelStream(config, { fetch: gateway(reply('ok')).fetch, resolveImages: async () => { throw new Error('text model must not load images'); } })(piModel, context()).result();
+});
+
+test('an own model goes only to its own address with its key, without temperature, and shows the provider\'s failure', async () => {
+  const own: ByokRequestModel = { protocol: 'openai', baseUrl: 'https://own.example/v1', modelId: 'deepseek-chat', supportsVision: false, contextWindow: null, maxOutput: null };
+  const taskModel = { ...piModel, id: 'byok:00000000-0000-4000-8000-0000000000b1' } as Model<Api>;
+  const recorded: unknown[] = [];
+  const gw = gateway(reply('自己的模型'));
+  const message = await createByokModelStream(own, {
+    apiKey: 'ephemeral-fixture', levels: [], off: 'auto', fetch: gw.fetch, record: async usage => { recorded.push(usage); },
+  })(taskModel, context(), { reasoning: 'high' }).result();
+  const [request] = gw.requests;
+  assert.equal(message.stopReason, 'stop');
+  assert.equal(request.url, 'https://own.example/v1/chat/completions');
+  assert.equal(request.headers.get('authorization'), 'Bearer ephemeral-fixture');
+  assert.equal(request.headers.get('user-agent'), MODEL_REQUEST_USER_AGENT);
+  assert.equal(request.body.model, 'deepseek-chat', 'the provider is asked for its own model ID');
+  assert.equal(message.model, taskModel.id, 'the transcript keeps the task\'s name for the model, so its thinking is replayed');
+  assert.equal(request.body.temperature, undefined);
+  assert.equal(request.body.reasoning_effort, 'high');
+  assert.equal(recorded.length, 1, 'each request\'s usage is recorded at $0');
+
+  const plain = gateway(reply('ok'));
+  await createByokModelStream(own, { apiKey: 'k', levels: ['low', 'high'], off: 'auto', fetch: plain.fetch })(taskModel, context()).result();
+  assert.equal(plain.requests[0].body.reasoning_effort, undefined, '「模型默认」 sends no thinking parameters');
+  const clamped = gateway(reply('ok'));
+  await createByokModelStream(own, { apiKey: 'k', levels: ['low', 'medium'], off: 'auto', fetch: clamped.fetch })(taskModel, context(), { reasoning: 'xhigh' }).result();
+  assert.equal(clamped.requests[0].body.reasoning_effort, 'medium', 'a level the model lacks moves to the nearest it has');
+
+  const refused = gateway(failure(401, '{"error":{"message":"Invalid API key provided"}}'));
+  const failed = await createByokModelStream(own, { apiKey: 'wrong', levels: [], off: 'auto', fetch: refused.fetch })(taskModel, context()).result();
+  assert.equal(failed.stopReason, 'error');
+  assert.match(failed.errorMessage ?? '', /401/);
+  assert.match(failed.errorMessage ?? '', /Invalid API key provided/);
+  assert.equal(refused.requests.length, 1, 'an own model has no other source to move on to');
 });
 
 test('summaries keep guarded source fallback and send no thinking fields', async () => {

@@ -226,6 +226,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     mcpServiceEnabled: !featureTogglesLoaded || isFeatureEnabled('mcp-service'),
     agentEnabled: !featureTogglesLoaded || isFeatureEnabled('agent'),
     personalizationEnabled: featureTogglesLoaded && isFeatureEnabled('chat') && isFeatureEnabled('ai-personalization'),
+    byokEnabled: !featureTogglesLoaded || isFeatureEnabled('byok'),
     helpEnabled: !featureTogglesLoaded || isFeatureEnabled('help'), isAdmin,
   }), [featureTogglesLoaded, isAdmin, isFeatureEnabled]);
   const tabs = useMemo(() => getSettingsCenterTabs(flags).map(tab => ({ ...tab, icon: SETTINGS_CENTER_TAB_ICONS[tab.id] })), [flags]);

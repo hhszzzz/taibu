@@ -70,6 +70,10 @@ function resolveInvalidationKeys(pathname: string): ReadonlyArray<readonly unkno
     return [queryKeys.modelsPrefix()];
   }
 
+  if (pathname.startsWith('/api/byok/connections') || pathname.startsWith('/api/admin/byok-policy')) {
+    return [queryKeys.byokPrefix()];
+  }
+
   return [];
 }
 

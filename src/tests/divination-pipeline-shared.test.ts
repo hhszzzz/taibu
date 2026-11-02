@@ -6,6 +6,8 @@ import { mockAIFeatureState } from './helpers/route-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import type { DivinationRouteConfig, InterpretPromptContext } from '../lib/api/divination-pipeline';
 
+const OWN_REF = 'byok:00000000-0000-4000-8000-0000000000b1';
+
 type MutableModule = Record<string, (...args: never[]) => unknown>;
 
 function createUIChunkStream(chunks: Array<Record<string, unknown>>): ReadableStream<Record<string, unknown>> {
@@ -329,7 +331,10 @@ test('direct prepare skips platform model and balance gates, and persist adds no
   assert.deepEqual(state.events, ['parse', 'precheck', 'ownership', 'limit', 'prompt']);
   assert.deepEqual(state.billers, []);
   state.events.length = 0;
-  const saved = await handlers.handleDirectPersist(createTestRequest(), { content: 'browser output', customModelId: 'private-model' });
+  const missing = await handlers.handleDirectPersist(createTestRequest(), { content: 'browser output', model: 'private-model' });
+  assert.equal(missing.status, 400, 'only an own model reference is saved as the reading\'s model');
+  state.events.length = 0;
+  const saved = await handlers.handleDirectPersist(createTestRequest(), { content: 'browser output', model: OWN_REF });
   assert.equal(saved.status, 200);
   assert.deepEqual(state.events, ['parse', 'ownership', 'save']);
   assert.deepEqual(state.billers, []);
@@ -458,7 +463,7 @@ test('divination preserves the caller scoped database identity', async (t) => {
         assert.equal(balance.mock.calls[0]?.arguments[2], callerScoped);
         const direct = pipeline.createDirectInterpretHandlers(config);
         assert.equal((await direct.handleDirectPrepare(createTestRequest(), {})).status, 200);
-        assert.equal((await direct.handleDirectPersist(createTestRequest(), { content: 'direct analysis' })).status, 200);
+        assert.equal((await direct.handleDirectPersist(createTestRequest(), { content: 'direct analysis', model: OWN_REF })).status, 200);
         const saved = await pipeline.saveUserOwnedDivinationRecord({
           request: createTestRequest(), tag: 'test-divination', tableName: 'test_records',
           responseKey: 'recordId', input: {}, buildInsertPayload: (_input, userId) => ({ user_id: userId }),
@@ -739,7 +744,7 @@ test('divination direct persist reuses server context without rerunning precheck
     id: 'input-1',
     content: 'analysis',
     reasoningText: 'reason',
-    customModelId: 'gpt-4.1-mini',
+    model: OWN_REF.toUpperCase().replace('BYOK:', 'byok:'),
   });
   const persistPayload = await persistResponse.json();
 
@@ -750,8 +755,7 @@ test('divination direct persist reuses server context without rerunning precheck
   assert.equal(promptContextCalls, 2);
   assert.equal(createCalls.length, 1);
   assert.equal((createCalls[0]?.sourceData as Record<string, unknown>)?.promptOwner, 'server');
-  assert.equal((createCalls[0]?.sourceData as Record<string, unknown>)?.custom_provider, true);
-  assert.equal((createCalls[0]?.sourceData as Record<string, unknown>)?.custom_provider_model_id, 'gpt-4.1-mini');
+  assert.equal((createCalls[0]?.sourceData as Record<string, unknown>)?.modelId, OWN_REF, 'the reading names the own model by its reference');
   assert.equal((createCalls[0]?.sourceData as Record<string, unknown>)?.reasoning_text, 'reason');
 });
 

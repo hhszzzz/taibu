@@ -140,7 +140,7 @@ function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: Worksp
             <span className="agent-ws-status-count">{members.length}</span>
         </div>
         {open && <div className="agent-rail-body">
-            <div className="agent-rail-row"><ModelAvatar member={{ model: data?.runtime?.model.id }} size={15} /><span>{main}</span><span className="agent-rail-meta">主模型</span></div>
+            <div className="agent-rail-row"><ModelAvatar member={{ model: data?.runtime?.model.id, icon: data?.runtime?.model.icon }} size={15} /><span>{main}</span><span className="agent-rail-meta">主模型</span></div>
             {members.map(member => <div key={member.id} className="agent-rail-row">
                 <ModelAvatar member={{ model: member.model }} size={15} />
                 <span>{member.name || '未命名成员'}</span>

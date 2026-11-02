@@ -10,7 +10,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import { generateText, streamText, type CoreMessage, type ImageModel, type LanguageModel, type ProviderOptions, type JSONValue } from 'ai';
 import type { AIModelConfig } from '@/types';
 import type { ChatMessage, AIReasoningEffort } from '@/types';
-import { normalizeCustomProviderBaseUrl } from '@/lib/ai/custom-provider-url';
+import { normalizeGatewayBaseUrl } from '@/lib/ai/gateway-url';
 import { resolveSourceApiKey } from '@/lib/ai/gateway-secrets.server';
 import { resolveThinkingLevel, thinkingRequestFields, THINKING_REQUEST_FIELDS } from '@/lib/ai/thinking';
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
@@ -380,5 +380,5 @@ export function gatewayFetch(url: string | URL | Request, init?: RequestInit): P
  * - 如果 URL 不含 /v1，补上（NewAPI 等网关需要 /v1 前缀）
  */
 function normalizeBaseUrl(apiUrl: string): string {
-    return normalizeCustomProviderBaseUrl(apiUrl);
+    return normalizeGatewayBaseUrl(apiUrl);
 }

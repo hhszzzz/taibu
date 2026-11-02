@@ -41,13 +41,17 @@ import {
   type CompleteManagedAnalysis,
   type ManagedAnalysisOutcome,
 } from '@/lib/server/analysis';
-import type { AIPersonality } from '@/types';
+import type { AIPersonality, AIReasoningEffort } from '@/types';
 import type { ChartType } from '@/lib/visualization/chart-types';
 import { buildVisualizationPromptSection } from '@/lib/visualization/prompt';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 import { getBalanceGuardResponse } from '@/lib/api/balance-guard';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
+import { parseReasoningEffort } from '@/lib/chat/model-settings';
+import { ByokRequestError, byokFailureFromMessage, byokRef, byokThinking, isByokRef, parseByokRef } from '@/lib/byok/config';
+import { byokGate } from '@/lib/byok/api.server';
+import { runServerByok, serverByokModel } from '@/lib/byok/chat.server';
 
 // ─── Types ───
 
@@ -416,13 +420,10 @@ export function createPersistentStreamResponse({
   });
 }
 
-function resolveDirectPersistModelId(value: unknown): string {
-  if (typeof value === 'string' && value.trim().length > 0) {
-    return value.trim();
-  }
-  return 'custom-provider';
-}
-
+/**
+ * Readings on the member's own model whose key stays in their browser: this site prepares the prompts and saves the
+ * result, the browser sends the photo to the provider.
+ */
 export function createDirectInterpretHandlers<
   T extends InterpretInput,
   TContext extends InterpretPromptContext = InterpretPromptContext,
@@ -463,7 +464,7 @@ export function createDirectInterpretHandlers<
     },
   ): Promise<Response | ResolvedPreparedBase | ResolvedPreparedWithPrompts> => {
     const { runPrecheck, includePrompts } = options;
-    const featureGuardResponse = await getGlobalAIFeatureGuardResponse();
+    const featureGuardResponse = await getGlobalAIFeatureGuardResponse() ?? await byokGate();
     if (featureGuardResponse) return featureGuardResponse;
 
     const parsed = parseInput(body);
@@ -504,7 +505,7 @@ export function createDirectInterpretHandlers<
       };
     }
 
-    // BYOK runs on the member's own model: no platform model or balance gate.
+    // The member's own model: no platform model or balance gate.
     const prepared = await prepareAdmittedInterpretAnalysis(
       config, request, input, authContext.userId, promptContext, true, options.observation,
     );
@@ -526,19 +527,16 @@ export function createDirectInterpretHandlers<
     promptContext,
     content,
     reasoningText,
-    customModelId,
+    modelRef,
   }: {
     input: T;
     userId: string;
     promptContext?: TContext;
     content: string;
     reasoningText: string | null;
-    customModelId: string;
+    modelRef: string;
   }): Promise<string> => {
-    const persistedModelId = `custom:${customModelId}`;
-    const sourceData = buildSourceData(input, persistedModelId, false, promptContext);
-    sourceData.custom_provider = true;
-    sourceData.custom_provider_model_id = customModelId;
+    const sourceData = buildSourceData(input, modelRef, false, promptContext);
     if (reasoningText) {
       sourceData.reasoning_text = reasoningText;
     }
@@ -621,6 +619,8 @@ export function createDirectInterpretHandlers<
         if (prepared instanceof Response) {
           return prepared;
         }
+        const modelId = parseByokRef(body.model);
+        if (!modelId) return jsonError('缺少自定义模型', 400, { success: false });
 
         const content = typeof body.content === 'string' ? body.content : '';
         const reasoningText = typeof body.reasoningText === 'string'
@@ -637,7 +637,7 @@ export function createDirectInterpretHandlers<
             promptContext: prepared.promptContext,
             content: output.content,
             reasoningText: output.reasoning ?? null,
-            customModelId: resolveDirectPersistModelId(body.customModelId),
+            modelRef: byokRef(modelId),
           }));
         observation.finish(outcome);
         if (outcome.status === 'empty') {
@@ -746,6 +746,9 @@ export function createInterpretHandler<
       const modelId = (body.modelId as string | undefined);
       const reasoning = (body.reasoning as boolean | undefined);
       const stream = (body.stream as boolean | undefined);
+      if (isByokRef(modelId)) {
+        return await handleByokAnalysis(request, body, modelId, input, user.id, authContext.db, promptContext, observation);
+      }
       const access = await resolveModelAccessAsync(modelId, defaultModelId, reasoning, modelAccessOptions);
       if ('error' in access) {
         observation.fail('admission');
@@ -828,6 +831,68 @@ export function createInterpretHandler<
       if (!completionOwnsTerminal) observation.finish();
     }
   };
+
+  /**
+   * A photo reading on the member's own vision model whose key is stored here: sent from this server with the photo,
+   * no balance needed, usage recorded at $0. Text routes keep to platform models.
+   */
+  async function handleByokAnalysis(
+    request: NextRequest, body: Record<string, unknown>, ref: string, input: T, userId: string, db: ScopedDb,
+    promptContext: TContext | undefined, observation: RequestObservation,
+  ): Promise<Response> {
+    if (!isVision || !buildVisionOptions) {
+      observation.fail('admission');
+      return jsonError('这里不能使用自定义模型', 400, { success: false });
+    }
+    const gate = await byokGate();
+    if (gate) {
+      observation.fail('admission');
+      return gate;
+    }
+    let effort: AIReasoningEffort | null;
+    try { effort = parseReasoningEffort(body.reasoningEffort); } catch { return jsonError('推理档位无效', 400, { success: false }); }
+    const resolved = await serverByokModel(db, userId, ref);
+    if ('error' in resolved) {
+      observation.fail('admission');
+      return jsonError(resolved.error, 400, { success: false });
+    }
+    if (!resolved.model.supportsVision) {
+      observation.fail('admission');
+      return jsonError('这个模型没有开启图片输入，请在「设置 → 自定义模型」里打开「识图」', 400, { success: false });
+    }
+    observation.update({ billing: 'not-applicable' });
+    const prepared = await prepareAdmittedInterpretAnalysis(config, request, input, userId, promptContext, false, observation);
+    if (prepared instanceof Response) return prepared;
+    const { prompts: { systemPrompt, userPrompt } } = prepared;
+    const reasoningEnabled = body.reasoning === true;
+    const complete = createManagedAnalysisCompletion('vision', {
+      observation: { ...observation, finish: state => observation.update(state ?? {}) },
+      persist: async ({ content, reasoning }) => {
+        const conversationId = await persistConversation(input, userId, ref, reasoningEnabled, content, reasoning ?? null, promptContext);
+        if (persistRecord) await persistRecord(input, userId, conversationId, promptContext);
+        return conversationId;
+      },
+      isPersistenceError: (error) => error instanceof AIAnalysisConversationPersistenceError,
+    });
+    observation.phase('generation');
+    try {
+      const outcome = await runManagedAnalysis(async () => {
+        const photo = buildVisionOptions(input);
+        const result = await runServerByok(resolved.model, {
+          userId, key: resolved.key, systemPrompt, source: 'analysis', signal: request.signal,
+          messages: [{ role: 'user', content: [{ type: 'image', data: photo.imageBase64, mimeType: photo.imageMimeType }, { type: 'text', text: userPrompt }] }],
+          thinking: byokThinking(reasoningEnabled, effort, resolved.model.thinkingLevels),
+        });
+        if (result.error) throw new ByokRequestError(byokFailureFromMessage(result.error));
+        return { content: result.content, reasoning: result.reasoning || null };
+      }, complete);
+      return formatManagedOutcome(outcome, true);
+    } catch (error) {
+      await complete({ kind: 'inference-failed', error });
+      if (error instanceof AIAnalysisConversationPersistenceError) return jsonError('保存结果失败，请稍后重试', 500, { success: false });
+      return jsonError(extractAIErrorMessage(error), 500, { success: false });
+    }
+  }
 
   function formatManagedOutcome(outcome: ManagedAnalysisOutcome, vision: boolean): Response {
     if (outcome.status === 'saved') {

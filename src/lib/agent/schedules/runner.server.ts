@@ -1,7 +1,9 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
-import { readFeatureModuleStateFresh } from '@/lib/app-settings';
+import { getByokPolicy, readFeatureModuleStateFresh } from '@/lib/app-settings';
+import { isByokRef } from '@/lib/byok/config';
+import { byokServerUnavailable, resolveByokModel } from '@/lib/byok/store.server';
 import { getDefaultModelConfigAsync, getModelConfigAsync } from '@/lib/server/ai-config';
 import { isModelOffered } from '@/lib/ai/ai-access';
 import { getSpendableMicros } from '@/lib/billing/account.server';
@@ -59,6 +61,12 @@ async function skipReason(db: ScopedDb, schedule: ScheduleView): Promise<{ reaso
     return { reason: 'feature_disabled', message: '功能已关闭，本次运行已跳过。' };
   if (chat.status === 'unavailable' || agent.status === 'unavailable' || schedules.status === 'unavailable')
     throw new AgentScheduleError('功能状态暂时无法确认', 503, 'FEATURE_STATE_UNAVAILABLE');
+  // The member's own models run here only with the key they stored here; members are checked when the task is submitted.
+  if (isByokRef(schedule.options.model)) {
+    const usable = (await readFeatureModuleStateFresh('byok')).status === 'enabled'
+      && byokServerUnavailable(await resolveByokModel(db, schedule.userId, schedule.options.model, await getByokPolicy())) === null;
+    return usable ? null : { reason: 'model_unavailable', message: BYOK_SCHEDULE_UNAVAILABLE_MESSAGE };
+  }
   const config = schedule.options.model
     ? await getModelConfigAsync(schedule.options.model)
     : await getDefaultModelConfigAsync('chat');
@@ -69,10 +77,13 @@ async function skipReason(db: ScopedDb, schedule: ScheduleView): Promise<{ reaso
   return null;
 }
 
-function failureOutcome(error: unknown): { kind: 'skipped'; reason: SkipReason } | { kind: 'failed'; message: string } {
+const BYOK_SCHEDULE_UNAVAILABLE_MESSAGE = '自定义模型不可用（已删除，或 Key 没有保存到本站），本次运行已跳过。';
+
+function failureOutcome(error: unknown): { kind: 'skipped'; reason: SkipReason; message?: string } | { kind: 'failed'; message: string } {
   if (error instanceof AgentApiError) {
     if (error.code === 'INSUFFICIENT_BALANCE') return { kind: 'skipped', reason: 'insufficient_balance' };
     if (error.code === 'MODEL_UNPRICED' || error.code === 'PROFILE_UNAVAILABLE') return { kind: 'skipped', reason: 'model_unavailable' };
+    if (error.code === 'BYOK_UNAVAILABLE' || error.code === 'BYOK_KEY_UNAVAILABLE') return { kind: 'skipped', reason: 'model_unavailable', message: BYOK_SCHEDULE_UNAVAILABLE_MESSAGE };
     if (error.code === 'FEATURE_DISABLED') return { kind: 'skipped', reason: 'feature_disabled' };
     if (error.code === 'CONVERSATION_NOT_FOUND') return { kind: 'skipped', reason: 'conversation_missing' };
     if (error.code === 'CONVERSATION_BUSY') return { kind: 'skipped', reason: 'conversation_busy' };
@@ -148,7 +159,7 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
   } catch (error) {
     const outcome = failureOutcome(error);
     if (outcome.kind === 'skipped') {
-      await settle(db, run.id, 'skipped', { skipReason: outcome.reason }).catch(() => logFailure('SCHEDULE_SETTLE_FAILED', { runId: run.id }));
+      await settle(db, run.id, 'skipped', { skipReason: outcome.reason, error: outcome.message }).catch(() => logFailure('SCHEDULE_SETTLE_FAILED', { runId: run.id }));
       return 'skipped';
     }
     logFailure('SCHEDULE_SUBMIT_FAILED', { runId: run.id });

@@ -13,6 +13,8 @@ export const queryKeys = {
   chatBootstrapPrefix: () => ['chat', 'bootstrap'] as const,
   models: (userId?: string | null, options?: { vision?: boolean }) => ['models', userId ?? 'visitor', options?.vision === true ? 'vision' : 'chat'] as const,
   modelsPrefix: () => ['models'] as const,
+  byok: (userId?: string | null) => ['byok', userId ?? 'visitor'] as const,
+  byokPrefix: () => ['byok'] as const,
   agentArchive: (runId: string, callId: string) => ['agent', 'archive', runId, callId] as const,
   agentProfiles: (userId?: string | null) => ['agent', 'profiles', userId ?? 'visitor'] as const,
 } as const;

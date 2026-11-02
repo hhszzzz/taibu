@@ -16,6 +16,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
 import { isFreeTokenPricing } from '@/lib/billing/format';
+import { isByokRef } from '@/lib/byok/config';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useChatBootstrap } from '@/lib/chat/use-chat-bootstrap';
 import { useChatState } from '@/lib/chat/use-chat-state';
@@ -60,9 +61,9 @@ export default function ChatPage() {
 
     const state = useChatState({ userId, sessionLoading, bootstrapLoading, router, searchParams });
     const models = useAvailableModels(userId, { enabled: !!userId });
-    // 免费模型和自带 API 不需要余额；余额不足只在发起平台模型时提示，输入框始终可用。
+    // 免费模型和自定义模型不需要余额；余额不足只在发起平台模型时提示，输入框始终可用。
     const freeModel = isFreeTokenPricing(models.data?.find(model => model.id === state.selectedModel)?.pricing);
-    const balanceInsufficient = !!models.data && !!balance && balance.spendableMicros <= 0 && !freeModel && !state.customProviderActive;
+    const balanceInsufficient = !!models.data && !!balance && balance.spendableMicros <= 0 && !freeModel && !isByokRef(state.selectedModel);
 
     const messaging = useChatMessaging({
         state, userId, user,
@@ -126,9 +127,8 @@ export default function ChatPage() {
                 onReasoningEffortChange={state.setReasoningEffort}
                 collaborators={state.collaborators}
                 onCollaboratorsChange={state.setCollaborators}
-                customProviderActive={state.customProviderActive}
-                customProviderLabel={state.customProviderLabel}
-                customImageModelId={state.customProviderConfig?.imageModelId}
+                imageModel={state.imageModel}
+                onImageModelChange={state.setImageModel}
                 userId={userId}
                 attachmentState={state.attachmentState}
                 onAttachmentChange={state.setAttachmentState}

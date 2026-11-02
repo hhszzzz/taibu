@@ -23,7 +23,7 @@ const currentSql = () => Object.fromEntries(DATABASE_SQL_FILES.map(name => [name
 test('current SQL includes native identities and explicit access boundaries', () => {
   const definitions = parseDatabaseSql(currentSql());
   const columns = name => definitions.tables.find(table => table.name === name).columns.map(column => column.name);
-  assert.equal(definitions.tables.length, 73);
+  assert.equal(definitions.tables.length, 75);
   assert.ok(columns('identity.users').includes('email'));
   assert.ok(columns('public.notifications').includes('is_read'));
   assert.deepEqual(columns('public.deployment_logs'), ['id', 'version_from', 'version_to', 'triggered_by', 'status', 'log_output', 'started_at', 'completed_at', 'created_at']);

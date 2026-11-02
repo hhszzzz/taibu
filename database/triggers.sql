@@ -51,6 +51,10 @@ CREATE TRIGGER ai_model_gateway_bindings_updated_at BEFORE UPDATE ON public.ai_m
 
 CREATE TRIGGER ai_models_updated_at BEFORE UPDATE ON public.ai_models FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
 
+CREATE TRIGGER user_ai_connections_updated_at BEFORE UPDATE ON public.user_ai_connections FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
+
+CREATE TRIGGER user_ai_models_updated_at BEFORE UPDATE ON public.user_ai_models FOR EACH ROW EXECUTE FUNCTION public.update_ai_model_updated_at();
+
 CREATE TRIGGER attachment_ref_removed AFTER DELETE ON public.agent_attachment_refs FOR EACH ROW EXECUTE FUNCTION public.orphan_agent_attachment();
 
 CREATE TRIGGER command_attachment_refs AFTER INSERT OR UPDATE OF message, delivery_state ON public.agent_run_commands FOR EACH ROW EXECUTE FUNCTION public.sync_agent_attachment_refs();

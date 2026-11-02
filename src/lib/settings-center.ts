@@ -35,6 +35,7 @@ export type SettingsCenterFlags = {
   mcpServiceEnabled: boolean;
   agentEnabled: boolean;
   personalizationEnabled: boolean;
+  byokEnabled: boolean;
   helpEnabled: boolean;
   isAdmin: boolean;
 };
@@ -69,7 +70,7 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   shares: { id: 'shares', label: '分享链接', group: 'account', description: '你公开分享过的对话。删除后原链接立即失效。' },
   help: { id: 'help', label: '帮助', group: 'account', description: '常见问题与联系方式。' },
   personalization: { id: 'personalization', label: '个性化', group: 'extensions', description: '这些偏好会带入 AI 对话与结果页解读。' },
-  byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '用你自己的 API Key 调用模型，不消耗本站余额。' },
+  byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '接入自己的模型服务，在对话、识图、生图、多模型协作和定时任务中使用，不消耗本站余额。' },
   charts: { id: 'charts', label: '命盘', group: 'extensions', description: '保存过的命盘都在这里。默认八字命盘会用于日运、月运和每日早报。' },
   'knowledge-base': { id: 'knowledge-base', label: '知识库', group: 'extensions', description: '把命盘、解读和资料归档到知识库，AI 对话时可以检索引用。' },
   skills: { id: 'skills', label: '技能', group: 'extensions', beta: true, description: '添加自己的 Agent 技能，在相关任务中自动加载，或用 /skill:名称 调用。' },
@@ -78,7 +79,7 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   'admin-announcements': { id: 'admin-announcements', label: '公告', group: 'management', description: '发布和编辑站内公告，支持 Markdown，保存后立即生效。' },
   'admin-features': { id: 'admin-features', label: '功能开关', group: 'management', description: '按模块关闭入口与接口，关闭后前后端同时失效。' },
   'admin-billing': { id: 'admin-billing', label: '计费', group: 'management', description: '管理用户余额、套餐、兑换码、订单与充值设置。' },
-  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关，查看 Agent 测评。' },
+  'admin-ai-services': { id: 'admin-ai-services', label: 'AI 服务', group: 'management', description: '管理模型、来源与网关和自定义模型策略，查看 Agent 测评。' },
   'admin-agent-extensions': { id: 'admin-agent-extensions', label: 'Agent 扩展', group: 'management', beta: true, description: '管理平台 MCP、联网搜索、技能与智能体角色，并设置用户扩展权限。' },
   'admin-logs': { id: 'admin-logs', label: '日志', group: 'management', description: '全站用量、Agent 任务与定时任务的运行记录。' },
 };
@@ -93,7 +94,7 @@ function isSettingsCenterTabDisabled(tab: SettingsCenterTab, flags: SettingsCent
     case 'personalization':
       return !flags.personalizationEnabled;
     case 'byok':
-      return !flags.personalizationEnabled;
+      return !flags.byokEnabled;
     case 'charts':
       return !flags.chartsEnabled;
     case 'knowledge-base':
@@ -177,7 +178,7 @@ export function getSettingsCenterDisabledState(
     case 'byok':
       return {
         title: '暂未开放',
-        description: '当前 BYOK 不可用。',
+        description: '管理员已关闭自定义模型。',
       };
     case 'help':
       return {

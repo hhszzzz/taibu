@@ -15,7 +15,6 @@ import {
   defineMcpTool, mcpToolName, mcpToolOutput, mcpToolParameters, mcpToolPrefix, truncateMiddle, type McpToolSpec,
 } from '../lib/agent/mcp/tools.server';
 import { openAgentMcp } from '../lib/agent/mcp/session.server';
-import { decryptAgentCredential, encryptAgentCredential } from '../lib/agent/credentials.server';
 import { fakeMcpServer, fixtureTool, mcpServerRow } from './helpers/mcp-fixture';
 import { row as runRow } from './helpers/agent-runtime-fixture';
 
@@ -107,14 +106,6 @@ test('MCP secrets open only for the server, owner, field and key they were seale
   assert.deepEqual(applyMcpSecretChanges(scope, 'header', next, {}), next, 'names left out keep their stored value');
   useKey(t);
   assert.throws(() => openMcpSecrets(scope, 'header', next), /AGENT_MCP_SECRET_INVALID/, 'another master key cannot open it');
-});
-
-test('Agent credentials keep their stored format and run binding', (t) => {
-  useKey(t);
-  const sealed = encryptAgentCredential('sk-test', 'user-1', 'run-1');
-  assert.deepEqual(Object.keys(sealed).sort(), ['data', 'iv', 'tag', 'version']);
-  assert.equal(decryptAgentCredential(sealed, 'user-1', 'run-1'), 'sk-test');
-  assert.throws(() => decryptAgentCredential(sealed, 'user-1', 'run-2'));
 });
 
 test('a resolved server sends its secrets only with the request and scrubs every form of them', (t) => {

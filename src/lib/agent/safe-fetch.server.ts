@@ -2,7 +2,7 @@ import "server-only";
 import { lookup } from "node:dns/promises";
 import ipaddr from "ipaddr.js";
 import { Agent as HttpAgent, fetch as undiciFetch } from "undici";
-import { validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
+import { byokAddressError } from "@/lib/byok/config";
 
 /** VPN 的 fake-IP 网段：不是内网，外部域名被本地解析器映射到这里，再经隧道转发。 */
 function isVirtualAddress(parsed: ipaddr.IPv4 | ipaddr.IPv6) {
@@ -32,16 +32,21 @@ function isPrivateHostname(url: URL) {
     host.endsWith(".local") ||
     (ipaddr.isValid(host) && !isPublicAgentAddress(host));
 }
+/** The address of an own model whose calls this site makes: public HTTPS, without credentials, query or fragment. */
 export function validateAgentProviderUrl(url: string) {
-  const errors = validateCustomProviderInput({
-    apiUrl: url,
-    apiKey: "validation",
-    modelId: "validation",
-  });
-  if (errors.apiUrl) throw new Error(errors.apiUrl);
+  const error = byokAddressError(url);
+  if (error) throw new Error(error);
   if (isPrivateHostname(new URL(url))) {
     throw new Error("模型服务地址必须指向公开 HTTPS 服务");
   }
+}
+/** Each request an own model makes from here; the SDK may add a query (Anthropic's `?beta=true`). */
+function validateProviderRequestUrl(url: string) {
+  let parsed: URL;
+  try { parsed = new URL(url); } catch { throw new Error("模型服务地址格式无效"); }
+  if (parsed.protocol !== "https:" || !parsed.hostname) throw new Error("仅支持 HTTPS 地址");
+  if (parsed.username || parsed.password) throw new Error("模型服务地址不应包含认证信息");
+  if (isPrivateHostname(parsed)) throw new Error("模型服务地址必须指向公开 HTTPS 服务");
 }
 /** An MCP endpoint may carry query parameters (some services take their key or tool list there). */
 export function validateMcpServerUrl(url: string) {
@@ -90,12 +95,15 @@ const dispatcher = new HttpAgent({
 export function createAgentSafeFetch(
   transport: typeof undiciFetch = undiciFetch,
   {
-    validate = validateAgentProviderUrl, redirectMessage = "模型服务重定向被拒绝，请配置最终 HTTPS 地址", resolveAddresses = true,
+    validate = validateProviderRequestUrl, redirectMessage = "模型服务重定向被拒绝，请配置最终 HTTPS 地址", resolveAddresses = true,
+    timeoutMs = 120_000,
   }: {
     validate?: (url: string) => void;
     redirectMessage?: string;
     /** False for addresses an administrator chose: the socket resolver is skipped, so no DNS preflight at all. */
     resolveAddresses?: boolean;
+    /** Bounds the whole exchange, the streamed body included. */
+    timeoutMs?: number;
   } = {},
 ): typeof globalThis.fetch {
   return async (input, init) => {
@@ -111,7 +119,7 @@ export function createAgentSafeFetch(
       duplex: "half",
       ...(resolveAddresses ? { dispatcher } : {}),
       redirect: "manual",
-      signal: AbortSignal.any([request.signal, AbortSignal.timeout(120_000)]),
+      signal: AbortSignal.any([request.signal, AbortSignal.timeout(timeoutMs)]),
     });
     if (response.status >= 300 && response.status < 400) {
       await response.body?.cancel();
@@ -120,7 +128,8 @@ export function createAgentSafeFetch(
     return response as unknown as Response;
   };
 }
-export const agentSafeFetch = createAgentSafeFetch();
+/** Own models' calls from this site: a long answer may stream for minutes. */
+export const agentSafeFetch = createAgentSafeFetch(undiciFetch, { timeoutMs: 600_000 });
 export const mcpSafeFetch = createAgentSafeFetch(undiciFetch, {
   validate: validateMcpServerUrl,
   redirectMessage: "MCP 服务重定向被拒绝，请填写最终地址",

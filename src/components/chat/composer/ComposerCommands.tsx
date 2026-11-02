@@ -6,25 +6,26 @@ import { Button } from '@/components/ui/Button';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { useToast } from '@/components/ui/Toast';
 import { requestBrowserJson } from '@/lib/browser-api';
-import { normalizeBrowserDirectError, streamBrowserDirectProvider } from '@/lib/ai/browser-direct-provider';
-import { getCustomProvider } from '@/lib/chat/custom-provider';
-import { PROMPT_ENHANCEMENT_MAX_LENGTH, PROMPT_ENHANCEMENT_MAX_TOKENS, PROMPT_ENHANCEMENT_SYSTEM_PROMPT } from '@/lib/chat/prompt-enhancement';
+import { useOwnModels, type OwnModel } from '@/lib/byok/client';
+import { missingKeyMessage, runBrowserByok } from '@/lib/byok/browser';
+import { isByokRef } from '@/lib/byok/config';
+import { PROMPT_ENHANCEMENT_MAX_LENGTH, PROMPT_ENHANCEMENT_SYSTEM_PROMPT } from '@/lib/chat/prompt-enhancement';
 import { CHAT_NEW_EVENT } from '@/lib/chat/ConversationListContext';
 import { requestConversationExport } from '@/lib/chat/conversation-export';
 import { fetchSkillCommands } from '@/lib/agent/skills/client';
 import type { SkillCommand } from '@/lib/agent/skills/config';
 type Command = { id: string; label: string; run: () => void };
-/** 自定义模型的润色由浏览器直连，不占每日次数、不计费。 */
-async function enhanceDirect(provider: NonNullable<ReturnType<typeof getCustomProvider>>, text: string): Promise<{ text?: string; error?: string }> {
+/** 自定义模型（Key 只在本设备）的润色由浏览器直连，不占每日次数、不计费；不展开思考，尽快给出结果。 */
+async function enhanceInBrowser(model: OwnModel, text: string): Promise<{ text?: string; error?: string }> {
     if (text.length > PROMPT_ENHANCEMENT_MAX_LENGTH) return { error: `润色内容须为 1–${PROMPT_ENHANCEMENT_MAX_LENGTH} 个字符` };
     try {
-        const result = await streamBrowserDirectProvider({
-            provider, maxTokens: PROMPT_ENHANCEMENT_MAX_TOKENS,
-            messages: [{ role: 'system', content: PROMPT_ENHANCEMENT_SYSTEM_PROMPT }, { role: 'user', content: text }],
+        const result = await runBrowserByok(model, {
+            systemPrompt: PROMPT_ENHANCEMENT_SYSTEM_PROMPT, messages: [{ role: 'user', content: text }],
+            thinking: { mode: 'auto' }, source: 'enhance',
         });
         return result.content.trim() ? { text: result.content.trim() } : { error: '模型没有返回润色结果' };
     } catch (error) {
-        return { error: normalizeBrowserDirectError(error).message };
+        return { error: error instanceof Error ? error.message : '润色失败' };
     }
 }
 export function useComposerCommands({ userId, draftKey, text, change, textarea, mentionsOpen, model, agentMode = false }: {
@@ -33,6 +34,7 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
     agentMode?: boolean;
 }) {
     const { showToast } = useToast();
+    const own = useOwnModels(userId);
     const [selected, setSelected] = useState(0);
     const [dismissed, setDismissed] = useState(false);
     const historyCursor = useRef(-1);
@@ -53,9 +55,11 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         const owner = userId; const before = text; const key = draftKey;
         setPolishing(true);
         try {
-            const provider = getCustomProvider();
-            const result = provider ? await enhanceDirect(provider, before) : await requestBrowserJson<{ text: string }>('/api/chat/enhance', { method: 'POST', body: JSON.stringify({ text: before, model }) })
-                .then(response => (response.error || !response.data ? { error: response.error?.message ?? '润色失败' } : { text: response.data.text }));
+            const ownModel = isByokRef(model) ? own.models.find(item => item.ref === model) : undefined;
+            const result = ownModel && !ownModel.serverKey
+                ? ownModel.ready ? await enhanceInBrowser(ownModel, before) : { error: missingKeyMessage(ownModel) }
+                : await requestBrowserJson<{ text: string }>('/api/chat/enhance', { method: 'POST', body: JSON.stringify({ text: before, model }) })
+                    .then(response => (response.error || !response.data ? { error: response.error?.message ?? '润色失败' } : { text: response.data.text }));
             if (scope.current.userId !== owner || scope.current.draftKey !== key || scope.current.text !== before) return;
             if (result.text === undefined) showToast('error', result.error ?? '润色失败');
             else setPreview({ owner, draftKey: key, before, after: result.text });

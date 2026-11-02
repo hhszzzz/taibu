@@ -1,10 +1,12 @@
 import type { NextRequest } from 'next/server';
 import { jsonError, jsonOk, readRequestBytes, requireUserContext } from '@/lib/api-utils';
-import { recordDirectUsage } from '@/lib/billing/account.server';
+import { recordDirectUsage, type BillingSource } from '@/lib/billing/account.server';
+import { byokGate } from '@/lib/byok/api.server';
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from '@/lib/rate-limit';
 
 const RATE_LIMIT_KEY = '/api/chat/direct/usage';
 const MAX_COUNT = 100_000_000;
+const SOURCES: readonly BillingSource[] = ['chat', 'analysis', 'enhance'];
 
 function count(value: unknown): number {
     return typeof value === 'number' && Number.isInteger(value) && value > 0 ? Math.min(value, MAX_COUNT) : 0;
@@ -12,6 +14,8 @@ function count(value: unknown): number {
 
 /** What the browser reports after a call it made with the member's own key: recorded at $0 in the usage log. */
 export async function POST(request: NextRequest) {
+    const gate = await byokGate();
+    if (gate) return gate;
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
     if (!(await checkRateLimit(auth.user.id, RATE_LIMIT_KEY, AI_RATE_LIMIT_CONFIG)).allowed) {
@@ -33,8 +37,9 @@ export async function POST(request: NextRequest) {
         ...(count(body.reasoning) ? { reasoning: count(body.reasoning) } : {}),
     };
     const conversationId = typeof body.conversationId === 'string' ? body.conversationId.trim() : '';
+    const source = SOURCES.find(item => item === body.source) ?? 'chat';
     await recordDirectUsage({
-        userId: auth.user.id, model, usage,
+        userId: auth.user.id, model, usage, source,
         ...(conversationId ? { referenceType: 'conversation', referenceId: conversationId } : {}),
     });
     return jsonOk({ ok: true });

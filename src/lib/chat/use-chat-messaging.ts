@@ -2,115 +2,65 @@
  * 消息发送、流式响应、中止、重试逻辑 hook
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { ChatAttachment, ChatMessage, ConversationListItem, Mention, AIMessageMetadata, DreamInterpretationInfo } from '@/types';
+import type { AIReasoningEffort, ChatAttachment, ChatMessage, ConversationListItem, Mention, AIMessageMetadata, DreamInterpretationInfo } from '@/types';
 import { extractPlainAttachment } from '@/lib/chat/composer-files';
 import { ANONYMOUS_DISPLAY_NAME } from '@/types';
 import { createConversation, deleteConversation, DEFAULT_CONVERSATION_TITLE } from '@/lib/chat/conversation';
 import { buildDraftTitle } from '@/lib/chat/draft-title';
 import { isNearBottom } from '@/lib/chat/chat-scroll';
-import { chatStreamManager } from '@/lib/chat/chat-stream-manager';
+import { chatStreamManager, ChatRunnerError, type ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
-import {
-    BrowserDirectProviderError,
-    buildBrowserDirectMessages,
-    streamBrowserDirectProvider,
-} from '@/lib/ai/browser-direct-provider';
-import {
-    getCustomProvider,
-    getCustomProviderDisplayName,
-} from '@/lib/chat/custom-provider';
+import { byokThinking, isByokRef } from '@/lib/byok/config';
+import { useOwnModels, type OwnModel } from '@/lib/byok/client';
+import { generateImagesInBrowser, missingKeyMessage, runBrowserByok, type GeneratedImagesPayload } from '@/lib/byok/browser';
+import type { ByokChatMessage } from '@/lib/byok/pi-model';
+import { requestByokKey } from '@/lib/byok/key-request';
 import type { ChatStateReturn } from '@/lib/chat/use-chat-state';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import { selectPrimarySavedBaziChart } from '@/lib/user/charts-client';
 import { filterMentionsByFeature, getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
-import type { ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
 import { useAgentChat } from '@/lib/agent/use-agent-chat';
 import { parseAgentCompactCommand } from '@/lib/agent/compaction';
 import { browserTimeZone } from '@/lib/ai/prompt-time';
 import { captureCurrentBranch, switchToVersion, withPendingVersion } from '@/lib/chat/message-versions';
 import { normalizeMessageQuotes, type MessageQuote } from '@/lib/chat/quotes';
-import { requestBrowserJson, type BrowserApiPayload } from '@/lib/browser-api';
-import { generateBrowserDirectImages } from '@/lib/ai/browser-direct-images';
+import { requestBrowserJson } from '@/lib/browser-api';
 import { AgentHttpError } from '@/lib/agent/browser-client';
 import { TOP_UP_TOAST } from '@/lib/billing/client';
-import type { GeneratedImageDto } from '@/lib/images/generated';
 
-function shouldShowCheckKeyAction(message?: string): boolean {
-    if (!message) return false;
-    return message.includes('API Key') || message.includes('认证失败');
-}
-
-function createCustomProviderChatRunner(customProvider: NonNullable<ReturnType<typeof getCustomProvider>>): ChatStreamTaskRunner {
-    return async ({
-        requestHeaders,
-        requestBody,
-        signal,
-        fetcher,
-        appendContentDelta,
-        appendReasoningDelta,
-        setMetadata,
-    }) => {
+/** An own model with the key on this device: the site prepares the prompt, this browser calls the provider. */
+function createOwnModelRunner(model: OwnModel): ChatStreamTaskRunner {
+    return async ({ requestHeaders, requestBody, signal, fetcher, appendContentDelta, appendReasoningDelta, setMetadata }) => {
         const prepareResponse = await fetcher.call(globalThis, '/api/chat/direct/prepare', {
             method: 'POST',
             headers: requestHeaders,
             body: JSON.stringify(requestBody),
             signal,
         });
-
         if (!prepareResponse.ok) {
-            let errorMessage = '生成直连上下文失败，请稍后重试';
-            try {
-                const data = await prepareResponse.json() as { error?: string };
-                if (typeof data.error === 'string' && data.error.trim()) {
-                    errorMessage = data.error;
-                }
-            } catch {
-                // ignore
-            }
-            throw new BrowserDirectProviderError(errorMessage, {
-                status: prepareResponse.status,
-                code: 'PREPARE_FAILED',
-            });
+            const data = await prepareResponse.json().catch(() => null) as { error?: unknown } | null;
+            const message = typeof data?.error === 'string' && data.error.trim() ? data.error : '生成对话上下文失败，请稍后重试';
+            throw new ChatRunnerError(message, prepareResponse.status);
         }
-
         const prepared = await prepareResponse.json() as {
             systemPrompt: string;
             sanitizedMessages: Array<{ role: 'system' | 'user' | 'assistant'; content: string }>;
             metadata?: AIMessageMetadata;
         };
-
-        if (prepared.metadata) {
-            setMetadata(prepared.metadata);
-        }
-
-        await streamBrowserDirectProvider({
-            provider: customProvider,
-            messages: buildBrowserDirectMessages(prepared.systemPrompt, prepared.sanitizedMessages),
+        if (prepared.metadata) setMetadata(prepared.metadata);
+        await runBrowserByok(model, {
+            systemPrompt: prepared.systemPrompt,
+            messages: prepared.sanitizedMessages.filter((message): message is ByokChatMessage & { content: string } => message.role !== 'system'),
+            thinking: byokThinking(requestBody.reasoning === true, requestBody.reasoningEffort as AIReasoningEffort | null | undefined, model.thinkingLevels),
+            source: 'chat',
             conversationId: typeof requestBody.conversationId === 'string' ? requestBody.conversationId : undefined,
             signal,
-            onContentDelta: appendContentDelta,
-            onReasoningDelta: appendReasoningDelta,
+            onText: appendContentDelta,
+            onReasoning: appendReasoningDelta,
         });
     };
-}
-
-type GeneratedImagesPayload = { images: GeneratedImageDto[]; model: { id: string; name: string } };
-
-/** 自定义生图模型：浏览器直连生成，再交给本站保存进当前对话；不计费。 */
-async function generateCustomImages(
-    provider: NonNullable<ReturnType<typeof getCustomProvider>> & { imageModelId: string },
-    request: { conversationId: string; prompt: string; size: string; count: number },
-): Promise<BrowserApiPayload<GeneratedImagesPayload>> {
-    const blobs = await generateBrowserDirectImages({ provider, prompt: request.prompt, size: request.size, count: request.count });
-    const form = new FormData();
-    form.append('prompt', request.prompt);
-    form.append('size', request.size);
-    form.append('modelId', provider.imageModelId);
-    form.append('conversationId', request.conversationId);
-    blobs.forEach((blob, index) => form.append('images', blob, `image-${index + 1}`));
-    return requestBrowserJson<GeneratedImagesPayload>('/api/images/upload', { method: 'POST', body: form });
 }
 
 /** Local-only failure notice: never saved, so it offers no fork. */
@@ -152,7 +102,7 @@ export function useChatMessaging({
         messageScrollContainerRef, shouldAutoScrollRef,
         chatMode,
         selectedModel, reasoningEnabled,
-        customProviderConfig,
+        imageModel,
         attachmentState,
         mentions,
         dreamContextLoading,
@@ -179,6 +129,52 @@ export function useChatMessaging({
         () => (featureToggleLoading ? [] : getEnabledDataSourceTypes(isFeatureEnabled)),
         [featureToggleLoading, isFeatureEnabled]
     );
+
+    const own = useOwnModels(userId);
+    const findOwnModel = useCallback((ref: string | null | undefined) => (ref ? own.models.find(model => model.ref === ref) ?? null : null), [own.models]);
+
+    /**
+     * Whether these models can be used now: an own model must still exist, and its key must be stored on the site or
+     * kept on this device. Tells the reader why not (with a way to fill the key in) and returns false.
+     */
+    const ownModelsUsable = (refs: Array<string | null | undefined>): boolean => {
+        for (const ref of refs) {
+            if (!isByokRef(ref)) continue;
+            const model = findOwnModel(ref);
+            if (!model) {
+                showToast('info', own.loading ? '自定义模型加载中，请稍后再试' : '这个自定义模型已不存在，请重新选择模型');
+                return false;
+            }
+            if (!model.ready) {
+                showToast('info', missingKeyMessage(model), { action: { label: '填写 Key', onClick: () => requestByokKey(model.ref) } });
+                return false;
+            }
+        }
+        return true;
+    };
+
+    /** The keys this device hands an Agent task for the own models it uses whose calls the site cannot make itself. */
+    const agentByokKeys = (refs: Array<string | null | undefined>): Record<string, string> => {
+        const keys: Record<string, string> = {};
+        for (const ref of refs) {
+            const model = findOwnModel(ref);
+            if (model?.deviceKey) keys[model.connection.id] = model.deviceKey;
+        }
+        return keys;
+    };
+
+    /** The models a send uses: an Agent task also takes its members and image model. */
+    const usedModels = () => (agent.mode === 'agent' ? [selectedModel, ...state.collaborators.map(member => member.model), imageModel] : [selectedModel]);
+
+    /** How a reply from the selected model is labelled and run. */
+    const replyModel = (ref: string) => {
+        const model = findOwnModel(ref);
+        return {
+            model: ref,
+            modelName: model?.displayName ?? resolveClientModelName(ref, ref),
+            runner: model && !model.serverKey ? createOwnModelRunner(model) : undefined,
+        };
+    };
 
     const refreshViewerStateTimerRef = useRef<NodeJS.Timeout | null>(null);
     const debouncedRefreshViewerState = useCallback(() => {
@@ -305,18 +301,15 @@ export function useChatMessaging({
                     event.errorCode !== 'INSUFFICIENT_BALANCE' &&
                     event.task.content.trim().length === 0
                 ) {
+                    // An own model's failure carries the provider's status and text; its settings are one click away.
                     const errorMessage: ChatMessage = {
                         id: `chat-error-${Date.now()}`,
                         role: 'assistant',
                         content: event.errorMessage || '抱歉，服务暂时不可用。请稍后再试。',
                         createdAt: new Date().toISOString(),
-                        model: customProviderConfig ? `custom:${customProviderConfig.modelId}` : undefined,
-                        modelName: customProviderConfig
-                            ? (customProviderConfig.modelName || customProviderConfig.modelId)
-                            : undefined,
-                        metadata: customProviderConfig && shouldShowCheckKeyAction(event.errorMessage)
-                            ? { unsaved: true, customProviderErrorAction: 'check-key' }
-                            : { unsaved: true },
+                        model: event.task.model,
+                        modelName: event.task.modelName,
+                        metadata: isByokRef(event.task.model) ? { unsaved: true, byokErrorAction: 'settings' } : { unsaved: true },
                     };
                     setMessages([...event.task.messages, errorMessage]);
                 } else {
@@ -352,7 +345,7 @@ export function useChatMessaging({
             }
         });
         return unsubscribe;
-    }, [cacheConversationMessages, markBalanceExhausted, debouncedRefreshViewerState, refreshConversationList, showToast, activeConversationIdRef, hasLoadedConversationsRef, setMessages, setStreamingConversationIds, setDreamContext, customProviderConfig]);
+    }, [cacheConversationMessages, markBalanceExhausted, debouncedRefreshViewerState, refreshConversationList, showToast, activeConversationIdRef, hasLoadedConversationsRef, setMessages, setStreamingConversationIds, setDreamContext]);
 
     const handleArchiveMessage = useCallback((message: ChatMessage) => {
         if (!activeConversationId || !knowledgeBaseEnabled) return;
@@ -432,11 +425,13 @@ export function useChatMessaging({
 
     /**
      * 输入框直接生图：先建好对话，再调用生图接口，成功后把用户消息和助手消息一起写入。
-     * 失败时不留下空对话；预扣的费用由服务端按没生成的张数退回。自定义配置带生图模型时由浏览器直连生成。
+     * 失败时不留下空对话；预扣的费用由服务端按没生成的张数退回。Key 只在本设备的自定义生图模型由浏览器直连生成。
      */
     const handleImageGenerate = async (options: { prompt: string; size: string; count: number }) => {
         const prompt = options.prompt.trim();
         if (!userId || !prompt || isLoading || isSendingToList) return;
+        if (!ownModelsUsable([imageModel])) return;
+        const ownImage = findOwnModel(imageModel);
         let isCurrent = agent.captureConversation();
         const clearSubmittedDraft = state.captureSubmittedDraft(true);
         setIsSendingToList(true);
@@ -467,12 +462,11 @@ export function useChatMessaging({
                 metadata: { sources: [], pending: true },
             };
             if (isCurrent()) setMessages(prev => [...prev, userMessage, pendingMessage]);
-            const imageModelId = customProviderConfig?.imageModelId;
-            const response = customProviderConfig && imageModelId
-                ? await generateCustomImages({ ...customProviderConfig, imageModelId }, { conversationId, prompt, size: options.size, count: options.count })
+            const response = ownImage && !ownImage.serverKey
+                ? await generateImagesInBrowser(ownImage, { conversationId, prompt, size: options.size, count: options.count })
                 : await requestBrowserJson<GeneratedImagesPayload>('/api/images/generate', {
                     method: 'POST', headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ conversationId, prompt, size: options.size, count: options.count }),
+                    body: JSON.stringify({ conversationId, prompt, size: options.size, count: options.count, ...(imageModel ? { model: imageModel } : {}) }),
                 });
             const images = response.data?.images ?? [];
             if (response.status === 402) { insufficientBalance = true; markViewerBalanceExhausted(); }
@@ -525,6 +519,8 @@ export function useChatMessaging({
         if (!trimmedInput || isLoading || isSendingToList) return;
         if (attachmentState.uploaded?.length && agent.mode !== 'agent') { showToast('info', '私有图片和文本资料请使用 Agent 模式发送'); return; }
         if (isDreamMode && dreamContextLoading) return;
+        const modelRefs = usedModels();
+        if (!ownModelsUsable(modelRefs)) return;
         if (!(await guardBalance())) return;
         let isCurrent = agent.captureConversation();
         const clearSubmittedDraft = state.captureSubmittedDraft(true);
@@ -577,13 +573,10 @@ export function useChatMessaging({
                 dreamInfo,
             };
             const newMessages = [...messages, userMessage];
-            const activeCustomProvider = getCustomProvider();
-            const customProviderLabel = getCustomProviderDisplayName(activeCustomProvider);
-            const effectiveModelId = activeCustomProvider ? `custom:${activeCustomProvider.modelId}` : selectedModel;
             if (agent.mode === 'agent') {
                 if (isCurrent()) setMessages(newMessages);
                 try {
-                    await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: activeCustomProvider, attachment });
+                    await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, attachment, imageModel, byokKeys: agentByokKeys(modelRefs) });
                     clearSubmittedDraft();
                 } catch (error) {
                     if (isCurrent()) {
@@ -596,9 +589,9 @@ export function useChatMessaging({
                 return;
             }
             const assistantMessageId = (Date.now() + 1).toString();
+            const reply = replyModel(selectedModel);
             const initialAssistantMessage: ChatMessage = {
-                id: assistantMessageId, role: 'assistant', content: '', createdAt: new Date().toISOString(), model: effectiveModelId,
-                modelName: activeCustomProvider ? (customProviderLabel || activeCustomProvider.modelId) : resolveClientModelName(selectedModel, selectedModel),
+                id: assistantMessageId, role: 'assistant', content: '', createdAt: new Date().toISOString(), model: reply.model, modelName: reply.modelName,
             };
             const optimisticMessages = [...newMessages, initialAssistantMessage];
             setMessages(optimisticMessages);
@@ -623,10 +616,10 @@ export function useChatMessaging({
                     personality: 'general',
                     conversationId,
                     stream: true,
-                    model: activeCustomProvider ? activeCustomProvider.modelId : selectedModel,
+                    model: selectedModel,
                     mangpaiMode: isMangpaiMode || undefined,
-                    reasoning: activeCustomProvider ? false : reasoningEnabled,
-                    reasoningEffort: activeCustomProvider ? null : state.reasoningEffort,
+                    reasoning: reasoningEnabled,
+                    reasoningEffort: state.reasoningEffort,
                     attachment,
                     webSearch: attachmentState.webSearchEnabled || undefined,
                     mentions: messageMentions.map(m => ({ ...m })),
@@ -634,8 +627,7 @@ export function useChatMessaging({
                     visualizationSettings,
                     timezone: browserTimeZone(),
                 },
-                baseMessages: newMessages, assistantMessage: initialAssistantMessage,
-                runner: activeCustomProvider ? createCustomProviderChatRunner(activeCustomProvider) : undefined,
+                baseMessages: newMessages, assistantMessage: initialAssistantMessage, runner: reply.runner,
             });
             if (!startResult.ok) {
                 if (conversationId === activeConversationIdRef.current) setMessages(newMessages);
@@ -659,6 +651,8 @@ export function useChatMessaging({
         if (agent.active) { showToast('info', '请先停止当前任务，再编辑历史消息'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
+        const modelRefs = usedModels();
+        if (!ownModelsUsable(modelRefs)) return;
         if (!(await guardBalance())) return;
         const isTargetActive = agent.captureConversation(targetConversationId);
         const originalSnapshot = messages;
@@ -683,7 +677,7 @@ export function useChatMessaging({
             const pending = withPendingVersion(branch, newContent, { attachments: originalMessage.attachments, mentions: updatedUserMessage.mentions });
             const runningUserMessage: ChatMessage = { ...updatedUserMessage, versions: pending.versions, currentVersionIndex: pending.index };
             if (isTargetActive()) setMessages([...previousMessages, runningUserMessage]);
-            try { await agent.start(targetConversationId, runningUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: originalMessage.id }); }
+            try { await agent.start(targetConversationId, runningUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, replaceFromMessageId: originalMessage.id, imageModel, byokKeys: agentByokKeys(modelRefs) }); }
             catch (error) {
                 if (isTargetActive()) setMessages(originalSnapshot);
                 if (error instanceof AgentHttpError && error.status === 402) markBalanceExhausted(error.message);
@@ -694,16 +688,14 @@ export function useChatMessaging({
         if (isTargetActive()) setMessages(newMessages);
 
         const assistantMessageId = (Date.now() + 1).toString();
-        const activeCustomProvider = getCustomProvider();
-        const customProviderLabel = getCustomProviderDisplayName(activeCustomProvider);
-        const effectiveModelId = activeCustomProvider ? `custom:${activeCustomProvider.modelId}` : selectedModel;
+        const reply = replyModel(selectedModel);
         const initialAssistantMessage: ChatMessage = {
             id: assistantMessageId,
             role: 'assistant',
             content: '',
             createdAt: new Date().toISOString(),
-            model: effectiveModelId,
-            modelName: activeCustomProvider ? (customProviderLabel || activeCustomProvider.modelId) : resolveClientModelName(selectedModel, selectedModel),
+            model: reply.model,
+            modelName: reply.modelName,
         };
         if (isTargetActive()) setMessages([...newMessages, initialAssistantMessage]);
 
@@ -724,17 +716,16 @@ export function useChatMessaging({
                     personality: 'general',
                     conversationId: targetConversationId,
                     stream: true,
-                    model: activeCustomProvider ? activeCustomProvider.modelId : selectedModel,
+                    model: selectedModel,
                     mangpaiMode: isMangpaiMode || undefined,
-                    reasoning: activeCustomProvider ? false : reasoningEnabled,
-                    reasoningEffort: activeCustomProvider ? null : state.reasoningEffort,
+                    reasoning: reasoningEnabled,
+                    reasoningEffort: state.reasoningEffort,
                     mentions: messageMentions,
                     dreamMode: isDreamMode || undefined,
                     visualizationSettings: readLocalVisualizationSettings(localStorage),
                     timezone: browserTimeZone(),
                 },
-                baseMessages: newMessages, assistantMessage: initialAssistantMessage, onBeforeSave,
-                runner: activeCustomProvider ? createCustomProviderChatRunner(activeCustomProvider) : undefined,
+                baseMessages: newMessages, assistantMessage: initialAssistantMessage, onBeforeSave, runner: reply.runner,
             });
             if (!startResult.ok) {
                 if (isTargetActive()) setMessages(originalSnapshot);
@@ -752,6 +743,8 @@ export function useChatMessaging({
         if (agent.active) { showToast('info', '请先停止当前任务，再重新生成'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
+        const modelRefs = usedModels();
+        if (!ownModelsUsable(modelRefs)) return;
         if (!(await guardBalance())) return;
         const isTargetActive = agent.captureConversation(targetConversationId);
         const originalSnapshot = messages;
@@ -771,7 +764,7 @@ export function useChatMessaging({
             const pending = withPendingVersion(captureCurrentBranch(lastUserMessage, oldAiMessage, subsequentMessages), lastUserMessage.content, { attachments: lastUserMessage.attachments, mentions: lastUserMessage.mentions });
             const runningUserMessage: ChatMessage = { ...lastUserMessage, versions: pending.versions, currentVersionIndex: pending.index };
             if (isTargetActive()) setMessages(previousMessages.map(message => message.id === lastUserMessage.id ? runningUserMessage : message));
-            try { await agent.start(targetConversationId, lastUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: lastUserMessage.id }); }
+            try { await agent.start(targetConversationId, lastUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, replaceFromMessageId: lastUserMessage.id, imageModel, byokKeys: agentByokKeys(modelRefs) }); }
             catch (error) {
                 if (isTargetActive()) setMessages(originalSnapshot);
                 if (error instanceof AgentHttpError && error.status === 402) markBalanceExhausted(error.message);
@@ -798,16 +791,14 @@ export function useChatMessaging({
         }
 
         const assistantMessageId = (Date.now() + 1).toString();
-        const activeCustomProvider = getCustomProvider();
-        const customProviderLabel = getCustomProviderDisplayName(activeCustomProvider);
-        const effectiveModelId = activeCustomProvider ? `custom:${activeCustomProvider.modelId}` : selectedModel;
+        const reply = replyModel(selectedModel);
         const initialAssistantMessage: ChatMessage = {
             id: assistantMessageId,
             role: 'assistant',
             content: '',
             createdAt: new Date().toISOString(),
-            model: effectiveModelId,
-            modelName: activeCustomProvider ? (customProviderLabel || activeCustomProvider.modelId) : resolveClientModelName(selectedModel, selectedModel),
+            model: reply.model,
+            modelName: reply.modelName,
         };
         if (isTargetActive()) setMessages([...updatedPreviousMessages, initialAssistantMessage]);
 
@@ -835,17 +826,16 @@ export function useChatMessaging({
                     personality: 'general',
                     conversationId: targetConversationId,
                     stream: true,
-                    model: activeCustomProvider ? activeCustomProvider.modelId : selectedModel,
+                    model: selectedModel,
                     mangpaiMode: isMangpaiMode || undefined,
-                    reasoning: activeCustomProvider ? false : reasoningEnabled,
-                    reasoningEffort: activeCustomProvider ? null : state.reasoningEffort,
+                    reasoning: reasoningEnabled,
+                    reasoningEffort: state.reasoningEffort,
                     mentions: messageMentions,
                     dreamMode: isDreamMode || undefined,
                     visualizationSettings: readLocalVisualizationSettings(localStorage),
                     timezone: browserTimeZone(),
                 },
-                baseMessages: updatedPreviousMessages, assistantMessage: initialAssistantMessage, onBeforeSave,
-                runner: activeCustomProvider ? createCustomProviderChatRunner(activeCustomProvider) : undefined,
+                baseMessages: updatedPreviousMessages, assistantMessage: initialAssistantMessage, onBeforeSave, runner: reply.runner,
             });
             if (!startResult.ok) {
                 if (isTargetActive()) setMessages(originalSnapshot);

@@ -6,6 +6,8 @@ const MODEL_NAME_CACHE_KEY = 'taibu.model_name_map';
 const LEGACY_MODEL_NAME_CACHE_KEY = 'mingai.model_name_map';
 
 let memoryModelNameMap: ClientModelNameMap | null = null;
+/** Icons an ID does not tell (own models are `byok:<id>`); kept for the page's lifetime. */
+const memoryModelIcons = new Map<string, string>();
 
 function loadClientModelNameMap(): ClientModelNameMap {
     if (memoryModelNameMap) {
@@ -46,4 +48,12 @@ export function resolveClientModelName(modelId: string, fallback?: string): stri
     }
     const cached = loadClientModelNameMap();
     return cached[modelId] || fallback || modelId;
+}
+
+export function registerClientModelIcons(models: Array<{ id: string; icon: string | null }>) {
+    for (const model of models) if (model.icon) memoryModelIcons.set(model.id, model.icon);
+}
+
+export function registeredClientModelIcon(modelId: string | null | undefined): string | null {
+    return modelId ? memoryModelIcons.get(modelId) ?? null : null;
 }

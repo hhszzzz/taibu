@@ -1,11 +1,14 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
-import { getAgentScheduleLimits, readFeatureModuleStateFresh, setAgentScheduleLimits } from '@/lib/app-settings';
+import { getAgentScheduleLimits, getByokPolicy, readFeatureModuleStateFresh, setAgentScheduleLimits } from '@/lib/app-settings';
 import { isValidUUID } from '@/lib/validation';
+import type { ScopedDb } from '@/lib/db/context.server';
+import { isByokRef } from '@/lib/byok/config';
+import { byokServerUnavailable, resolveByokModels } from '@/lib/byok/store.server';
 import {
   AGENT_SCHEDULE_LIMIT_MAX, AgentScheduleInputError, parseAgentScheduleInput, parseAgentScheduleLimit,
-  type AgentScheduleLimits,
+  type AgentScheduleInput, type AgentScheduleLimits,
 } from './config';
 import {
   AgentScheduleError, agentScheduleAllowance, createAgentSchedule, deleteAgentSchedule, getAgentScheduleRow,
@@ -28,6 +31,17 @@ function failure(error: unknown): Response {
   if (error instanceof AgentScheduleError) return jsonError(error.message, error.status, { code: error.code });
   console.error('[agent-schedules-api]', { code: 'AGENT_SCHEDULE_FAILED' });
   return jsonError('定时任务服务暂时不可用', 500, { code: 'AGENT_SCHEDULE_FAILED' });
+}
+
+/** A schedule runs with nobody's browser open: the member's own models it names must have their key stored here. */
+async function checkOwnModels(db: ScopedDb, userId: string, options: AgentScheduleInput['options']) {
+  const refs = [options.model, ...options.collaborators.map(member => member.model)].filter(isByokRef);
+  if (!refs.length) return;
+  const models = await resolveByokModels(db, userId, refs, await getByokPolicy());
+  for (const ref of refs) {
+    const reason = byokServerUnavailable(models.get(ref) ?? null);
+    if (reason) throw new AgentScheduleInputError(`定时任务只能使用平台模型或 Key 保存在本站的自定义模型：${reason}`);
+  }
 }
 
 async function member(request: NextRequest) {
@@ -61,6 +75,7 @@ export async function createSchedule(request: NextRequest) {
   if ('response' in context) return context.response;
   try {
     const input = parseAgentScheduleInput(await readBody(request));
+    await checkOwnModels(context.auth.db, context.auth.user.id, input.options);
     const schedule = await createAgentSchedule(context.auth.db, context.auth.user.id, input);
     return jsonOk({ schedule, allowance: await agentScheduleAllowance(context.auth.db, context.auth.user.id) }, 201);
   } catch (error) {
@@ -93,6 +108,7 @@ export async function updateSchedule(request: NextRequest, id: string) {
       options: body.options ?? current.options,
     };
     const input = parseAgentScheduleInput(merged);
+    if (body.options !== undefined) await checkOwnModels(context.auth.db, context.auth.user.id, input.options);
     const schedule = await updateAgentSchedule(context.auth.db, id, {
       name: current.name, prompt: current.prompt, cadence: input.cadence, timezone: input.timezone,
       options: input.options, enabled: current.enabled,

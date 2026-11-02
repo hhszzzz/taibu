@@ -204,3 +204,7 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_xiaoliuren_divinations_owner_id
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_ziwei_charts_owner_idx ON public.ziwei_charts USING btree (user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS user_agent_memory_source_run_idx ON public.user_agent_memory USING btree (source_run_id) WHERE (source_run_id IS NOT NULL);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS user_ai_connections_user_idx ON public.user_ai_connections USING btree (user_id, sort_order, created_at);
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS user_ai_models_user_idx ON public.user_ai_models USING btree (user_id);

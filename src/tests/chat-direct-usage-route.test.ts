@@ -8,9 +8,11 @@ function setup(t: TestContext) {
   const apiUtils = require('../lib/api-utils') as { requireUserContext: unknown };
   const rateLimit = require('../lib/rate-limit') as { checkRateLimit: unknown };
   const account = require('../lib/billing/account.server') as { recordDirectUsage: unknown };
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
 
   const state = {
     authenticated: true as boolean,
+    feature: 'enabled' as 'enabled' | 'disabled' | 'unavailable',
     allowed: true as boolean,
     recorded: [] as unknown[],
     buckets: [] as string[],
@@ -28,6 +30,7 @@ function setup(t: TestContext) {
     return { allowed: state.allowed, remaining: 9, resetAt: new Date() };
   };
   account.recordDirectUsage = async (input: unknown) => { state.recorded.push(input); };
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: state.feature }) as never);
   t.after(() => {
     apiUtils.requireUserContext = originals.requireUserContext;
     rateLimit.checkRateLimit = originals.checkRateLimit;
@@ -42,8 +45,13 @@ const post = (body: string | unknown) => new NextRequest('http://localhost/api/c
   body: typeof body === 'string' ? body : JSON.stringify(body),
 });
 
-test('direct usage reporting needs a session, a free rate-limit slot and a model', async (t) => {
+test('direct usage reporting needs the feature, a session, a free rate-limit slot and a model', async (t) => {
   const { state, route } = setup(t);
+  state.feature = 'disabled';
+  assert.equal((await route.POST(post({ model: 'own-model', input: 10 }))).status, 403);
+  state.feature = 'unavailable';
+  assert.equal((await route.POST(post({ model: 'own-model', input: 10 }))).status, 503);
+  state.feature = 'enabled';
   state.authenticated = false;
   const anonymous = await route.POST(post({ model: 'own-model', input: 10 }));
   assert.equal(anonymous.status, 401);
@@ -75,20 +83,21 @@ test('reported tokens are whole, capped and recorded against the model and conve
   const { state, route } = setup(t);
   const response = await route.POST(post({
     model: '  own-model  ', input: 1_200, output: 300, cacheRead: 80, cacheWrite: 0, reasoning: 40,
-    conversationId: '  conversation-1  ',
+    conversationId: '  conversation-1  ', source: 'enhance',
   }));
   assert.equal(response.status, 200);
   assert.deepEqual(await response.json(), { ok: true });
   assert.deepEqual(state.recorded, [{
-    userId: 'user-1', model: 'own-model',
+    userId: 'user-1', model: 'own-model', source: 'enhance',
     usage: { input: 1_200, output: 300, cacheRead: 80, cacheWrite: 0, reasoning: 40 },
     referenceType: 'conversation', referenceId: 'conversation-1',
   }]);
 
   await route.POST(post({
-    model: 'm'.repeat(500), input: 5_000_000_000, output: 1.5, cacheRead: -3, cacheWrite: '9', reasoning: 0,
+    model: 'm'.repeat(500), input: 5_000_000_000, output: 1.5, cacheRead: -3, cacheWrite: '9', reasoning: 0, source: 'billing',
   }));
-  const sloppy = state.recorded[1] as { model: string; usage: Record<string, number>; referenceId?: string };
+  const sloppy = state.recorded[1] as { model: string; source: string; usage: Record<string, number>; referenceId?: string };
+  assert.equal(sloppy.source, 'chat', 'an unknown source is recorded as chat');
   assert.equal(sloppy.model.length, 200);
   assert.deepEqual(sloppy.usage, { input: 100_000_000, output: 0, cacheRead: 0, cacheWrite: 0 },
     'only positive whole numbers survive, and a huge count is capped');

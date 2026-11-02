@@ -26,6 +26,8 @@ export type ParallelAnalysisResult = {
   model?: string;
   /** The configured model's vendor, for its icon; members without a configured model leave it out. */
   vendor?: string;
+  /** The model's lobehub icon: the one an administrator chose, else what its model ID suggests. */
+  icon?: string;
   /** Effort the child conversation was configured with; 'off' when reasoning is disabled. */
   reasoningEffort?: string;
   /** The user's configured division of work for this member. */
@@ -53,7 +55,7 @@ export const memberAnswerText = (answer: string) => answer.replace(ARTIFACT_ID_M
 export type ParallelTopic = { title: string; options?: string[] };
 
 export const PARALLEL_TOPIC_LIMIT = 4;
-const OPTIONAL_TEXT = ['system', 'profile', 'profileName', 'agentId', 'name', 'modelName', 'model', 'vendor', 'reasoningEffort', 'focus', 'answer'] as const;
+const OPTIONAL_TEXT = ['system', 'profile', 'profileName', 'agentId', 'name', 'modelName', 'model', 'vendor', 'icon', 'reasoningEffort', 'focus', 'answer'] as const;
 const STEP_STATES: readonly string[] = ['running', 'completed', 'failed'] satisfies ParallelMemberStep['status'][];
 const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
 const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 从已安装的 @lobehub/icons 生成模型图标目录与按图标分包的加载器；升级该依赖后重跑 `pnpm icons:lobe`。
+// 从已安装的 @lobehub/icons 生成模型图标目录、按图标分包的加载器与按模型 ID 认图标的规则；升级该依赖后重跑 `pnpm icons:lobe`。
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join, resolve } from 'node:path';
@@ -48,6 +48,29 @@ ${icons.map(icon => `  ${key(icon.id)}: () => import('@lobehub/icons/es/${icon.i
 };
 `;
 
+// modelMappings（lobehub ModelIcon 按模型 ID 认图标的规则）：`{ Icon: X, keywords: ['…'] }`，X 由 `import X from "../目录"` 指向图标。
+const mappingSource = readFileSync(join(esDir, 'features', 'modelConfig.js'), 'utf8');
+const importedIcons = new Map([...mappingSource.matchAll(/^import (\w+) from "\.\.\/(\w+)";$/gmu)].map(match => [match[1], match[2]]));
+const mappingBlock = mappingSource.slice(mappingSource.indexOf('export var modelMappings'));
+const known = new Set(icons.map(icon => icon.id));
+const rules = [];
+const entries = [...mappingBlock.matchAll(/Icon:\s*(\w+),\s*keywords:\s*\[((?:\s*'(?:[^'\\]|\\.)*'\s*,?)*)\s*\]/gu)];
+if (entries.length !== (mappingBlock.match(/Icon:/gu) ?? []).length) throw new Error('modelMappings changed shape; update the parser');
+for (const [, name, list] of entries) {
+  const id = importedIcons.get(name);
+  if (!id || !known.has(id)) continue;
+  const keywords = [...list.matchAll(/'((?:[^'\\]|\\.)*)'/gu)].map(match => JSON.parse(`"${match[1].replace(/\\'/gu, "'").replace(/"/gu, '\\"')}"`));
+  for (const keyword of keywords) new RegExp(keyword, 'i');
+  rules.push({ id, keywords });
+}
+const modelIcons = `${banner}
+/** [图标 ID, 关键词正则]：按顺序取第一个命中的，与 lobehub ModelIcon 认模型的方式相同。 */
+export const LOBE_MODEL_ICON_RULES: ReadonlyArray<readonly [string, readonly string[]]> = [
+${rules.map(rule => `  [${quote(rule.id)}, [${rule.keywords.map(quote).join(', ')}]],`).join('\n')}
+];
+`;
+
 writeFileSync(join(root, 'src/lib/ai/lobe-icons.generated.ts'), catalog);
 writeFileSync(join(root, 'src/lib/ai/lobe-icon-loaders.generated.ts'), loaders);
-console.log(`lobe icons: ${icons.length} (${icons.filter(icon => icon.variant === 'Color').length} color, ${icons.filter(icon => icon.variant === 'Mono').length} mono)`);
+writeFileSync(join(root, 'src/lib/ai/lobe-model-icons.generated.ts'), modelIcons);
+console.log(`lobe icons: ${icons.length} (${icons.filter(icon => icon.variant === 'Color').length} color, ${icons.filter(icon => icon.variant === 'Mono').length} mono), ${rules.length} model rules`);

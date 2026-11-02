@@ -2,22 +2,23 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { ScopedDb } from "@/lib/db/context.server";
 import { systemDb } from "@/lib/db/context.server";
-import { readFeatureModuleStateFresh } from "@/lib/app-settings";
+import { getByokPolicy, readFeatureModuleStateFresh } from "@/lib/app-settings";
+import { BYOK_KEY_MAX, isByokRef } from "@/lib/byok/config";
+import { byokAgentConfig } from "@/lib/byok/agent.server";
+import { sealByokRunKeys } from "@/lib/byok/secrets.server";
+import { resolveByokModels, type ResolvedByokModel } from "@/lib/byok/store.server";
 import { getDefaultModelConfigAsync, getModelConfigAsync } from "@/lib/server/ai-config";
 import { isModelOffered, UNPRICED_MODEL_MESSAGE } from "@/lib/ai/ai-access";
 import { buildChatPromptContext } from "@/lib/server/chat/prompt-context";
 import { getSpendableMicros, INSUFFICIENT_BALANCE_MESSAGE } from "@/lib/billing/account.server";
 import { isFreeTextModel } from "@/lib/billing/pricing";
 import { AI_RATE_LIMIT_CONFIG, checkRateLimit } from "@/lib/rate-limit";
-import type { AIModelConfig, ChatMessage, CustomProviderRequest, Mention, ChatAttachment } from "@/types";
+import type { AIModelConfig, ChatMessage, Mention, ChatAttachment } from "@/types";
 import type { AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from "@/lib/chat/model-settings";
 import type { AgentApprovalMode } from "./mcp/config";
 import type { MessageQuote } from "@/lib/chat/quotes";
-import { CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH, validateCustomProviderInput } from "@/lib/ai/custom-provider-url";
 import { AgentStore, type AgentRunRow } from "./store.server";
-import { encryptAgentCredential } from "./credentials.server";
-import { validateAgentProviderUrl } from "./safe-fetch.server";
 import { AGENT_ENGINE, isCurrentAgentCheckpoint } from "./engine";
 import { piHistory } from "./history.server";
 import { getAgentCitationBase } from "./evidence";
@@ -70,9 +71,15 @@ export type AgentSubmitBody = {
     quotes: MessageQuote[];
   };
   model?: string;
+  /** The image model generate_image uses: a platform image model or the member's own (`byok:`). */
+  imageModel?: string;
+  /**
+   * Keys of the member's own models that live only in their browser, by connection: staged for this task, sealed, and
+   * deleted when it ends.
+   */
+  byokKeys?: Record<string, string>;
   replaceFromMessageId?: string;
   mentions: Mention[];
-  customProvider?: CustomProviderRequest;
   webEnabled: boolean;
   codeMode: boolean;
   planMode: boolean;
@@ -113,26 +120,10 @@ export async function submitAgentTask(
     throw new AgentApiError("Agent 功能未启用", 403, "FEATURE_DISABLED");
   const compact = origin === "http" ? parseAgentCompactCommand(body.message.content) : null;
   const store = new AgentStore(systemDb());
-  const custom: CustomProviderRequest | undefined = body.customProvider
-    ? {
-      apiUrl: body.customProvider.apiUrl, apiKey: body.customProvider.apiKey, modelId: body.customProvider.modelId,
-      ...(body.customProvider.imageModelId ? { imageModelId: body.customProvider.imageModelId } : {}),
-    }
-    : undefined;
-  if (
-    custom &&
-    (!["apiUrl", "apiKey", "modelId"].every((key) => typeof custom[key as keyof CustomProviderRequest] === "string") ||
-      Object.keys(validateCustomProviderInput(custom)).length ||
-      (custom.imageModelId !== undefined && (typeof custom.imageModelId !== "string" || custom.imageModelId.length > CUSTOM_PROVIDER_MAX_MODEL_ID_LENGTH)))
-  )
-    throw new AgentApiError("自定义模型配置无效");
-  if (custom) {
-    try {
-      validateAgentProviderUrl(custom.apiUrl);
-    } catch {
-      throw new AgentApiError("自定义模型必须使用公开 HTTPS 地址");
-    }
-  }
+  if (body.imageModel !== undefined && (typeof body.imageModel !== "string" || !body.imageModel || body.imageModel.length > 200))
+    throw new AgentApiError("生图模型无效");
+  if (body.byokKeys !== undefined && (!body.byokKeys || typeof body.byokKeys !== "object" || Array.isArray(body.byokKeys)))
+    throw new AgentApiError("自定义模型 Key 无效");
   const requestHash = hashAgentRequest({
     origin,
     conversationId: body.conversationId,
@@ -141,7 +132,8 @@ export async function submitAgentTask(
     attachmentIds: body.message.attachments.ids ?? [],
     quotes: body.message.quotes,
     model: body.model ?? null,
-    custom: custom ? { ...custom, apiKey: hashAgentRequest(custom.apiKey) } : null,
+    imageModel: body.imageModel ?? null,
+    byokKeys: body.byokKeys ? Object.fromEntries(Object.entries(body.byokKeys).map(([id, key]) => [id, hashAgentRequest(key)])) : null,
     webEnabled: body.webEnabled !== false,
     codeMode: body.codeMode,
     planMode: body.planMode,
@@ -183,38 +175,45 @@ export async function submitAgentTask(
     history = history.slice(0, index);
   }
   if (compact && !history.length) throw new AgentApiError("当前对话还没有可压缩的内容");
-  const config = custom
-    ? undefined
+  // A compaction uses no collaborators: it only summarizes the context.
+  const collaborators = compact ? [] : body.collaborators;
+  const own = await admitOwnModels(ctx, body, collaborators, origin);
+  const ownMain = isByokRef(body.model) ? own.models.get(body.model) : undefined;
+  const config = ownMain
+    ? byokAgentConfig(ownMain)
     : body.model
       ? await getModelConfigAsync(body.model)
       : await getDefaultModelConfigAsync("chat");
-  if (!custom && !config) throw new AgentApiError("模型不存在");
+  if (!config) throw new AgentApiError("模型不存在");
   const attachments = await validateAttachmentIds(store.db, ctx.userId, body.message.attachments.ids).catch((error: Error) => {
     throw new AgentApiError(error.message);
   });
-  if (attachments.some((item) => item.kind === "image") && (custom || !config?.supportsVision))
-    throw new AgentApiError("图片资料需要平台视觉模型的 Agent 模式", 400);
-  if (config && !isModelOffered(config))
+  if (attachments.some((item) => item.kind === "image") && !config.supportsVision)
+    throw new AgentApiError("图片资料需要支持识图的模型", 400);
+  if (!ownMain && !isModelOffered(config))
     throw new AgentApiError(UNPRICED_MODEL_MESSAGE, 403, "MODEL_UNPRICED");
-  // A compaction uses no collaborators: it only summarizes the context.
-  const collaborators = compact ? [] : body.collaborators;
-  if (custom && collaborators.length) throw new AgentApiError('多模型协作需要使用平台模型；可在模型菜单中关闭协作');
   // A member's role must be one that is enabled now: the specialist always is.
   const roles = collaborators.some((member) => (member.profile ?? DEFAULT_AGENT_PROFILE) !== DEFAULT_AGENT_PROFILE)
     ? await availableProfiles() : [];
   const memberModels: AIModelConfig[] = [];
   for (const member of collaborators) {
+    if (isByokRef(member.model)) continue;
     const selected = await getModelConfigAsync(member.model);
     if (!selected) throw new AgentApiError(`协作模型不存在：${member.name}`);
     if (!isModelOffered(selected))
       throw new AgentApiError(`${member.name} 的模型尚未定价，暂不可用`, 403, 'MODEL_UNPRICED');
+    memberModels.push(selected);
+  }
+  for (const member of collaborators) {
     const role = member.profile ?? DEFAULT_AGENT_PROFILE;
     if (role !== DEFAULT_AGENT_PROFILE && !roles.some((item) => item.name === role && item.modes.includes('parallel')))
       throw new AgentApiError(`${member.name} 的角色已停用，请在「设置 → 个性化 → 多模型协作」里改选`, 400, 'PROFILE_UNAVAILABLE');
-    memberModels.push(selected);
   }
-  // Platform models need a positive balance to start; each request then pays for what it used.
-  if (config && [config, ...memberModels].some((model) => !isFreeTextModel(model.pricing)) &&
+  // The platform models a task runs need a positive balance to start; each request then pays for what it used. The
+  // member's own models are never charged, so a task of only those is exempt.
+  const platformModels = [...(ownMain ? [] : [config]), ...memberModels];
+  const billing = platformModels.length ? "metered" as const : "exempt" as const;
+  if (platformModels.some((model) => !isFreeTextModel(model.pricing)) &&
     await getSpendableMicros(ctx.userId, ctx.db) <= 0)
     throw new AgentApiError(INSUFFICIENT_BALANCE_MESSAGE, 402, "INSUFFICIENT_BALANCE");
   if (origin === "http") {
@@ -234,10 +233,10 @@ export async function submitAgentTask(
       throw error;
     }
   }
-  const modelId = config?.id ?? custom!.modelId;
-  const reasoning = !!config?.supportsReasoning && body.reasoning === true;
+  const modelId = config.id;
+  const reasoning = !!config.supportsReasoning && body.reasoning === true;
   const runId = options.runId ?? randomUUID();
-  const credential = custom ? encryptAgentCredential(custom.apiKey, ctx.userId, runId) : null;
+  const credential = sealByokRunKeys(ctx.userId, runId, own.keys);
   const userMessage: ChatMessage = {
     id: body.message.id,
     role: "user",
@@ -266,7 +265,7 @@ export async function submitAgentTask(
         timezone: body.timezone,
       },
       userId: ctx.userId,
-      metered: !custom,
+      metered: billing === "metered",
       requestedModelId: modelId,
       reasoningEnabled: reasoning,
     },
@@ -302,7 +301,7 @@ export async function submitAgentTask(
     content: "",
     createdAt: new Date().toISOString(),
     model: modelId,
-    modelName: config?.name ?? modelId,
+    modelName: config.name,
     agent: { version: 1, runId, status: "queued", parts: [] },
     metadata: prepared.metadata,
   };
@@ -325,7 +324,7 @@ export async function submitAgentTask(
     title: body.message.content.slice(0, 60),
     replaceFromMessageId: body.replaceFromMessageId ?? null,
     origin,
-    ...(custom ? { customProvider: { apiUrl: custom.apiUrl, modelId: custom.modelId, ...(custom.imageModelId ? { imageModelId: custom.imageModelId } : {}) } } : {}),
+    ...(body.imageModel ? { imageModel: body.imageModel } : {}),
   };
   const run = await store.rpc<AgentRunRow>("agent_create_run", {
     p_id: runId,
@@ -337,7 +336,40 @@ export async function submitAgentTask(
     p_checkpoint: checkpoint,
     p_message: assistant,
     p_credential: credential,
-    p_billing: custom ? "exempt" : "metered",
+    p_billing: billing,
   });
   return run;
+}
+
+/**
+ * The member's own models a task names (main, members, image), checked: each exists and fits its use, and has a key
+ * the task can use: the one stored here, or one the browser sends for this task. A scheduled task has no browser.
+ */
+async function admitOwnModels(
+  ctx: AgentSubmitContext, body: AgentSubmitBody, collaborators: readonly AgentCollaborator[], origin: "http" | "schedule",
+): Promise<{ models: Map<string, ResolvedByokModel>; keys: Record<string, string> }> {
+  const chatRefs = [body.model, ...collaborators.map((member) => member.model)].filter(isByokRef);
+  const imageRef = isByokRef(body.imageModel) ? body.imageModel : null;
+  if (!chatRefs.length && !imageRef) return { models: new Map(), keys: {} };
+  const state = await readFeatureModuleStateFresh("byok");
+  if (state.status === "unavailable") throw new AgentApiError("功能状态暂时无法确认", 503, "FEATURE_STATE_UNAVAILABLE");
+  if (state.status !== "enabled") throw new AgentApiError("自定义模型功能当前未启用", 403, "BYOK_UNAVAILABLE");
+  const models = await resolveByokModels(ctx.db, ctx.userId, [...chatRefs, ...(imageRef ? [imageRef] : [])], await getByokPolicy());
+  const keys: Record<string, string> = {};
+  const check = (ref: string, usage: "chat" | "image") => {
+    const model = models.get(ref);
+    if (!model) throw new AgentApiError("自定义模型不存在，可能已被删除", 400, "BYOK_UNAVAILABLE");
+    if (model.usage !== usage)
+      throw new AgentApiError(usage === "chat" ? "这个自定义模型只用于生图" : "这个自定义模型不是生图模型", 400, "BYOK_UNAVAILABLE");
+    if (model.serverKey) return;
+    const key = body.byokKeys?.[model.connection.id];
+    if (origin === "schedule")
+      throw new AgentApiError("定时任务只能使用平台模型或 Key 保存在本站的自定义模型", 400, "BYOK_KEY_UNAVAILABLE");
+    if (typeof key !== "string" || !key.trim() || key.length > BYOK_KEY_MAX || /\s/u.test(key.trim()))
+      throw new AgentApiError(`「${model.displayName || model.modelId}」需要先在本设备填写 API Key`, 400, "BYOK_KEY_UNAVAILABLE");
+    keys[model.connection.id] = key.trim();
+  };
+  for (const ref of chatRefs) check(ref, "chat");
+  if (imageRef) check(imageRef, "image");
+  return { models, keys };
 }

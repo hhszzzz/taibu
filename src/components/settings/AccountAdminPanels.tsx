@@ -1,5 +1,5 @@
 /**
- * 设置中心的管理页：公告、功能开关、计费（用户账户、套餐、兑换码、订单、充值设置）、AI 服务（模型、网关与 Agent 测评）、
+ * 设置中心的管理页：公告、功能开关、计费（用户账户、套餐、兑换码、订单、充值设置）、AI 服务（模型、网关、自定义模型策略与 Agent 测评）、
  * Agent 扩展（MCP 服务、技能、智能体角色、用户扩展策略与定时任务额度）、日志（用量日志、Agent 任务、定时任务）
  *
  * 'use client' 标记说明：
@@ -46,6 +46,9 @@ const LazyAIModelPanel = lazy(async () => ({
 }));
 const LazyAIGatewayPanel = lazy(async () => ({
   default: (await import('@/components/admin/AIGatewayPanel')).AIGatewayPanel,
+}));
+const LazyByokPolicyPanel = lazy(async () => ({
+  default: (await import('@/components/admin/ByokPolicyPanel')).ByokPolicyPanel,
 }));
 const LazyAgentTaskPanel = lazy(async () => ({
   default: (await import('@/components/admin/AgentTaskPanel')).AgentTaskPanel,
@@ -156,7 +159,8 @@ const renderBillingPanel = (tab: AdminBillingTab, active: boolean) => (
 );
 const renderAIPanel = (tab: AdminAITab, active: boolean) => (
   tab === 'models' ? <LazyAIModelPanel />
-    : tab === 'gateways' ? <LazyAIGatewayPanel /> : <LazyAgentEvalPanel active={active} />
+    : tab === 'gateways' ? <LazyAIGatewayPanel />
+      : tab === 'byok' ? <LazyByokPolicyPanel /> : <LazyAgentEvalPanel active={active} />
 );
 const renderLogsPanel = (tab: AdminLogsTab, active: boolean) => (
   tab === 'usage' ? <LazyBillingUsagePanel active={active} />

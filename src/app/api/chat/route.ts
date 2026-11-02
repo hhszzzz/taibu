@@ -7,6 +7,7 @@
  * - 返回 JSON / SSE 响应
  *
  * 平台模型按实际用量计费：调用结束后按上游返回的 usage 入账，拿不到时按提示词与已产出文字估算。
+ * `byok:` 模型（Key 保存在本站的自定义模型）由本站经 pi-ai 代发，用量按 $0 记入。
  */
 
 import { createRequestObservation } from '@/lib/server/analysis';
@@ -24,6 +25,8 @@ import {
   prepareChatRequest,
 } from '@/lib/server/chat/request';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
+import { isByokRef } from '@/lib/byok/config';
+import { handleServerByokChat } from '@/lib/byok/chat.server';
 
 export async function POST(request: NextRequest) {
   const observation = createRequestObservation(crypto.randomUUID(), 'chat', () => performance.now(), event => console.info('[ai-request]', event));
@@ -43,6 +46,7 @@ export async function POST(request: NextRequest) {
       observation.fail('admission');
       return body;
     }
+    if (isByokRef(body.model)) return await handleServerByokChat(request, body, body.model);
 
     const preparedRequest = await prepareChatRequest(request, body, observation);
     if (preparedRequest instanceof Response) {

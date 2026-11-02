@@ -21,6 +21,7 @@ import { useToast } from '@/components/ui/Toast';
 import type { AIReasoningEffort } from '@/types';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
+import { useOwnModels } from '@/lib/byok/client';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import { listSavedBaziCharts } from '@/lib/user/charts-client';
 import { agentScheduleClient } from '@/lib/agent/schedules/client';
@@ -142,6 +143,7 @@ export function ScheduleEditor({
   const client = useMemo(() => agentScheduleClient(userId), [userId]);
   const chartsQuery = useUserCharts(userId);
   const modelsQuery = useAvailableModels(userId);
+  const own = useOwnModels(userId);
   const charts = useMemo(() => listSavedBaziCharts(chartsQuery.data), [chartsQuery.data]);
   const defaultChartId = chartsQuery.data?.defaultChartIds?.bazi ?? null;
   const [draft, setDraft] = useState<Draft>(() => schedule ? draftFromSchedule(schedule) : draftFromTemplate(template ?? CUSTOM, defaultChartId));
@@ -149,7 +151,11 @@ export function ScheduleEditor({
   const [error, setError] = useState('');
   const promptRef = useRef<HTMLTextAreaElement>(null);
   const editing = Boolean(schedule);
-  const models = modelsQuery.data ?? [];
+  // 无人值守：自己的模型只列 Key 保存在本站的（由本站代为请求）。
+  const models = [
+    ...(modelsQuery.data ?? []).map(model => ({ value: model.id, label: model.name })),
+    ...own.models.filter(model => model.usage === 'chat' && model.serverKey).map(model => ({ value: model.ref, label: `${model.displayName}（自定义）` })),
+  ];
   const patch = (value: Partial<Draft>) => setDraft(current => ({ ...current, ...value }));
 
   const chooseTemplate = (next: AgentScheduleTemplate) => {
@@ -314,7 +320,7 @@ export function ScheduleEditor({
                 <Select className="sched-select" ariaLabel="模型" placeholder="跟随默认模型"
                   value={draft.model || null} disabled={saving}
                   onChange={model => patch({ model })}
-                  options={models.map(model => ({ value: model.id, label: model.name }))} />
+                  options={models} />
               </label>
               <label className="sched-field"><span>绑定命盘</span>
                 <Select className="sched-select" ariaLabel="绑定命盘" placeholder="默认命盘"
@@ -325,7 +331,7 @@ export function ScheduleEditor({
                   options={charts.map(chart => ({ value: chart.id, label: chart.name }))} />
               </label>
             </div>
-            <p className="sched-hint">定时任务始终使用平台模型，按实际用量从余额扣费，不使用自己的 API；余额不足时跳过当次运行。</p>
+            <p className="sched-hint">平台模型按实际用量从余额扣费，余额不足时跳过当次运行；自定义模型只能选 Key 保存在本站的，不计费，Key 不可用时跳过并通知。</p>
             <div className="sched-toggles">
               <div className="sched-toggle-row">
                 <div><span>推理</span><small>先思考再执行，适合需要分析的晨报与复盘</small></div>

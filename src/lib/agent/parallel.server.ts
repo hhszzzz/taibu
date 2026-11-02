@@ -9,7 +9,10 @@ import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { AIModelConfig } from '@/types';
 import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
 import { sentAtLine } from '@/lib/ai/prompt-time';
+import { matchModelIcon } from '@/lib/ai/lobe-icons';
 import { resolveThinkingLevel } from '@/lib/ai/thinking';
+import { isByokRef } from '@/lib/byok/config';
+import { byokAgentThinkingLevel } from '@/lib/byok/agent.server';
 
 // At most four children, written in one commit: deltas only.
 const ParallelDoc = defineDoc({ kind: 'taibu.parallel', version: 1, scope: 'task', initial: (): { children: number[] } => ({ children: [] }), checkpointWhen: () => false });
@@ -94,7 +97,9 @@ export function positionsInstruction(topics: readonly ParallelTopic[]) {
  * configured keeps the role and model they chose for it, unless the role has its own model.
  */
 export function createParallelExtension(kit: MemberKit, session: () => Harness, collaborators: readonly AgentCollaborator[] = [], models: ReadonlyMap<string, AIModelConfig> = new Map(), titles: ReadonlyMap<string, string> = new Map(), timeZone = DEFAULT_DIVINATION_TIMEZONE): Extension {
-    const memberEffort = (member: AgentCollaborator) => member.reasoning ? resolveThinkingLevel(models.get(member.model) ?? {}, member.reasoningEffort) : 'off';
+    const memberEffort = (member: AgentCollaborator) => isByokRef(member.model)
+        ? byokAgentThinkingLevel(models.get(member.model) ?? {}, member.reasoning, member.reasoningEffort)
+        : member.reasoning ? resolveThinkingLevel(models.get(member.model) ?? {}, member.reasoningEffort) : 'off';
     const roles = kit.roles('parallel');
     const roleOf = (member: AgentCollaborator) => member.profile ?? DEFAULT_AGENT_PROFILE;
     const extension: Extension = { name: 'taibu_parallel', tools: [defineTool({
@@ -122,7 +127,9 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
                 const profile = kit.role(member ? roleOf(member) : task.agent, 'parallel');
                 const identity = profile.name === DEFAULT_AGENT_PROFILE && task.system ? `你是太卜${systemTitle(task.system)}专项分析助手。`
                     : `你是太卜协作成员，角色是${profile.displayName}${task.system ? `，以 ${task.system}（${systemTitle(task.system)}）方法为准` : ''}。`;
-                return { member, setup: await kit.setup({ profile, system: task.system, identity }) };
+                const setup = await kit.setup({ profile, system: task.system, identity });
+                // A role's own model stands in for a platform model only: a member on the user's own model keeps it.
+                return { member, setup: member && isByokRef(member.model) ? { ...setup, model: undefined } : setup };
             }));
             const ids = await api.commit(async tx => {
                 const doc = await tx.doc(ParallelDoc, api.taskId);
@@ -144,9 +151,11 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
                 // The public card shows the role, model, effort and focus the child actually runs with.
                 const given = task.name?.trim();
                 const config = setup.model?.config ?? (member && models.get(member.model));
+                const icon = config ? config.icon ?? matchModelIcon(config.modelId || config.id) : member ? matchModelIcon(member.model) : null;
+                const look = { ...(config?.vendor ? { vendor: config.vendor } : {}), ...(icon ? { icon } : {}) };
                 const model = setup.model
-                    ? { model: setup.model.config.id, modelName: setup.model.config.name, ...(setup.model.config.vendor ? { vendor: setup.model.config.vendor } : {}), reasoningEffort: setup.model.thinkingLevel }
-                    : member ? { model: member.model, modelName: config?.name ?? member.model, ...(config?.vendor ? { vendor: config.vendor } : {}), reasoningEffort: memberEffort(member) } : {};
+                    ? { model: setup.model.config.id, modelName: setup.model.config.name, ...look, reasoningEffort: setup.model.thinkingLevel }
+                    : member ? { model: member.model, modelName: config?.name ?? member.model, ...look, reasoningEffort: memberEffort(member) } : {};
                 return { ...(task.system ? { system: task.system } : {}), profile: setup.profile.name, profileName: setup.profile.displayName, conversationId: ids[index], status: 'running', ...model, ...(member
                   ? { agentId: member.id, name: member.name, ...(member.focus.trim() ? { focus: member.focus.trim() } : {}) }
                   : given ? { name: given } : {}) };

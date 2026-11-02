@@ -18,6 +18,7 @@ import {
   normalizeAgentScheduleLimits,
   type AgentScheduleLimits,
 } from "@/lib/agent/schedules/config";
+import { BYOK_POLICY_KEY, normalizeByokPolicy, type ByokPolicy } from "@/lib/byok/config";
 
 // ─── 功能模块开关 ───
 
@@ -31,6 +32,8 @@ export const FEATURE_MODULE_IDS = [
   // Agent 的细粒度能力：各自可关，关掉后接口与入口一起失效。
   'skills', 'connectors', 'schedules', 'memory',
   'shares', 'annual-report',
+  // 自定义模型（BYOK）：设置页、模型菜单与按引用调用的接口一起关闭。
+  'byok',
 ] as const;
 
 export type FeatureModuleId = typeof FEATURE_MODULE_IDS[number];
@@ -335,4 +338,33 @@ export async function setAgentScheduleLimits(limits: AgentScheduleLimits): Promi
     .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(limits) as never, updated_at: updatedAt }))
     .execute());
   await agentScheduleLimitsCache.invalidate();
+}
+
+// ─── 自定义模型策略 ───
+
+/** Whether members may store keys here, and how many connections and models each may keep. */
+const byokPolicyCache = createSharedCache<ByokPolicy>({
+  name: 'byok-policy',
+  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
+});
+
+export async function getByokPolicy(): Promise<ByokPolicy> {
+  return byokPolicyCache.load(async () => {
+    const row = await systemDb().tx((trx) => trx
+      .selectFrom('app_settings')
+      .select('setting_value')
+      .where('setting_key', '=', BYOK_POLICY_KEY)
+      .executeTakeFirst());
+    return normalizeByokPolicy(row?.setting_value);
+  });
+}
+
+export async function setByokPolicy(policy: ByokPolicy): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await systemDb().tx((trx) => trx
+    .insertInto('app_settings')
+    .values({ setting_key: BYOK_POLICY_KEY, setting_value: json(policy) as never, updated_at: updatedAt })
+    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(policy) as never, updated_at: updatedAt }))
+    .execute());
+  await byokPolicyCache.invalidate();
 }

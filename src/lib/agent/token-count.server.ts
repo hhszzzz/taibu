@@ -52,13 +52,12 @@ function cached(key: string, load: () => Promise<number | null>) {
 }
 
 /**
- * 文本在模型上下文里占多少 token。`apiKey` 表示用户自带的直连模型：不替用户向其服务商发计数请求，直接估算。
+ * 文本在平台模型上下文里占多少 token；用户自己的模型不经这里，由调用方直接估算。
  * 网关计数失败、超时或网关不支持时回落到估算，所以总能给出数字。
  */
-export async function countModelTokens(config: AIModelConfig, text: string, options: { apiKey?: string; fetch?: Fetch } = {}): Promise<number> {
+export async function countModelTokens(config: AIModelConfig, text: string, options: { fetch?: Fetch } = {}): Promise<number> {
     if (!text) return 0;
     const estimate = () => estimateTokens(config.modelId || config.id, text);
-    if (options.apiKey) return estimate();
     const source = getOrderedModelSources(config).map(item => applySourceToModel(config, item)).find(isModelAvailable);
     const key = source && sourceApiKeyOrNone(source);
     if (!source || !key) return estimate();

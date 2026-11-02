@@ -67,7 +67,7 @@ export function AgentScheduleLimitsPanel() {
   return (
     <div className="flex flex-col gap-2">
       <SettingsSection title="定时任务额度" description="每人最多保留几个定时任务；调整后超出的任务会在下一分钟自动暂停，并保留创建最早的几个。">
-        <SettingsRow label="数量上限" description={`0 表示不能创建；最大 ${AGENT_SCHEDULE_LIMIT_MAX}。定时任务始终使用平台模型，每次运行按用量计费。`} control={(
+        <SettingsRow label="数量上限" description={`0 表示不能创建；最大 ${AGENT_SCHEDULE_LIMIT_MAX}。用平台模型的运行按用量计费；Key 保存在本站的自定义模型也能选，不计费。`} control={(
           <Input className="w-20" inputMode="numeric" aria-label="每人定时任务上限" disabled={saving} value={state.draft}
             onChange={event => setState(current => current.status === 'ready' ? { ...current, draft: event.target.value } : current)} />
         )} />

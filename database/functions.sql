@@ -821,11 +821,11 @@ BEGIN
       v_content:=coalesce(nullif(btrim(p_error),''),'运行失败，打开对话查看原因。');
     ELSIF p_status='skipped' AND p_skip_reason IN ('insufficient_balance','model_unavailable','feature_disabled','conversation_missing') THEN
       v_title:='定时任务「'||s.name||'」已跳过';
-      v_content:=CASE p_skip_reason
+      v_content:=coalesce(nullif(btrim(p_error),''),CASE p_skip_reason
         WHEN 'insufficient_balance' THEN '余额不足，本次运行已跳过。'
         WHEN 'model_unavailable' THEN '模型不可用或未定价，本次运行已跳过。'
         WHEN 'feature_disabled' THEN '功能已关闭，本次运行已跳过。'
-        ELSE '绑定的对话已删除，任务已暂停，请重新创建。' END;
+        ELSE '绑定的对话已删除，任务已暂停，请重新创建。' END);
     END IF;
     IF v_title IS NOT NULL AND coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=s.user_id),true) THEN
       INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)

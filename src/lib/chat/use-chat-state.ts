@@ -5,14 +5,9 @@
  * 对话列表数据由全局 ConversationListContext 管理。
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
-import type { ChatMessage, Mention, Conversation, ConversationListItem, CustomProviderConfig, AIReasoningEffort } from '@/types';
+import type { ChatMessage, Mention, Conversation, ConversationListItem, AIReasoningEffort } from '@/types';
 import type { AgentCollaborator } from './model-settings';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
-import {
-    CUSTOM_PROVIDER_CHANGED_EVENT,
-    getCustomProvider,
-    getCustomProviderDisplayName,
-} from '@/lib/chat/custom-provider';
 import {
     loadConversation,
     saveConversation,
@@ -85,10 +80,9 @@ export interface ChatStateReturn {
     setReasoningEffort: React.Dispatch<React.SetStateAction<AIReasoningEffort | null>>;
     collaborators: AgentCollaborator[];
     setCollaborators: React.Dispatch<React.SetStateAction<AgentCollaborator[]>>;
-    customProviderActive: boolean;
-    customProviderConfig: CustomProviderConfig | null;
-    setCustomProviderConfig: React.Dispatch<React.SetStateAction<CustomProviderConfig | null>>;
-    customProviderLabel: string | null;
+    /** The image model for 生图 and the Agent's image tool; null until the menu picks the default. */
+    imageModel: string | null;
+    setImageModel: (model: string | null) => void;
 
     // Attachments & mentions
     attachmentState: AttachmentState;
@@ -125,6 +119,22 @@ export interface ChatStateReturn {
     cacheConversationDetail: (conversation: Conversation) => void;
     cacheConversationMessages: (conversationId: string, messages: ChatMessage[], overrides?: ConversationDetailOverrides) => void;
     removeConversationDetail: (conversationId: string) => void;
+}
+
+const imageModelKey = (userId: string) => `taibu.image-model:${userId}`;
+
+/** The account's last image model on this device. */
+function readImageModel(userId: string | null): string | null {
+    if (!userId || typeof window === 'undefined') return null;
+    try { return localStorage.getItem(imageModelKey(userId)) || null; } catch { return null; }
+}
+
+function writeImageModel(userId: string | null, model: string | null) {
+    if (!userId) return;
+    try {
+        if (model) localStorage.setItem(imageModelKey(userId), model);
+        else localStorage.removeItem(imageModelKey(userId));
+    } catch { /* optional preference */ }
 }
 
 /** A forced reload of the conversation already validated on screen keeps its messages while fetching. */
@@ -200,7 +210,14 @@ export function useChatState({
         reasoningEffort: previous.owner === userId ? previous.reasoningEffort : null,
         collaborators: typeof value === 'function' ? value(previous.owner === userId ? previous.collaborators : []) : value,
     })), [userId]);
-    const [customProviderConfig, setCustomProviderConfig] = useState<CustomProviderConfig | null>(null);
+    const [imageModelChoice, setImageModelChoice] = useState(() => ({ owner: userId, model: readImageModel(userId) }));
+    // React's documented "adjust state during render": the choice belongs to the signed-in account.
+    if (imageModelChoice.owner !== userId) setImageModelChoice({ owner: userId, model: readImageModel(userId) });
+    const imageModel = imageModelChoice.owner === userId ? imageModelChoice.model : null;
+    const setImageModel = useCallback((model: string | null) => {
+        setImageModelChoice({ owner: userId, model });
+        writeImageModel(userId, model);
+    }, [userId]);
 
     // Attachments & mentions
     const [kbModalOpen, setKbModalOpen] = useState(false);
@@ -217,22 +234,6 @@ export function useChatState({
     // Sync refs
     useEffect(() => { activeConversationIdRef.current = activeConversationId; }, [activeConversationId]);
     useEffect(() => { hasLoadedConversationsRef.current = hasLoadedConversations; }, [hasLoadedConversations]);
-    useEffect(() => {
-        if (typeof window === 'undefined') return;
-        const syncCustomProvider = () => {
-            setCustomProviderConfig(getCustomProvider());
-        };
-        syncCustomProvider();
-        window.addEventListener(CUSTOM_PROVIDER_CHANGED_EVENT, syncCustomProvider);
-        window.addEventListener('storage', syncCustomProvider);
-        return () => {
-            window.removeEventListener(CUSTOM_PROVIDER_CHANGED_EVENT, syncCustomProvider);
-            window.removeEventListener('storage', syncCustomProvider);
-        };
-    }, []);
-
-    const customProviderActive = !!customProviderConfig;
-    const customProviderLabel = getCustomProviderDisplayName(customProviderConfig);
 
     const buildConversationDetail = useCallback((
         conversationId: string,
@@ -509,10 +510,8 @@ export function useChatState({
         selectedModel, setSelectedModel,
         reasoningEnabled, setReasoningEnabled,
         reasoningEffort, setReasoningEffort, collaborators, setCollaborators,
-        customProviderActive,
-        customProviderConfig,
-        setCustomProviderConfig,
-        customProviderLabel,
+        imageModel,
+        setImageModel,
         attachmentState, setAttachmentState,
         mentions, setMentions,
         kbModalOpen, setKbModalOpen,

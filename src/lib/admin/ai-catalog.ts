@@ -9,6 +9,7 @@ import {
 } from '@/types';
 import { GATEWAY_KEY_PATTERN } from '@/lib/ai/source-runtime';
 import { isLobeIconId } from '@/lib/ai/lobe-icons';
+import { isReservedModelKey } from '@/lib/byok/config';
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
 import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 
@@ -208,6 +209,8 @@ export function parseModelInput(body: unknown): Parsed<AdminModelInput> {
     if (!isRecord(body)) return { error: '请求格式错误' };
     const modelKey = text(body.modelKey);
     if (!modelKey || modelKey.length > 200 || /\s/u.test(modelKey)) return { error: '模型 ID 不能为空，也不能含空格' };
+    // Conversations name members' own models `byok:<id>`; the old browser-only ones were `custom:<id>`.
+    if (isReservedModelKey(modelKey)) return { error: '模型 ID 不能以 byok: 或 custom: 开头' };
     const displayName = text(body.displayName);
     if (!displayName || displayName.length > 80) return { error: '请填写显示名称（不超过 80 个字符）' };
     const description = text(body.description).slice(0, 200);

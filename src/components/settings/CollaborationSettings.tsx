@@ -9,6 +9,8 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import { useAvailableModels, type AvailableModel } from '@/lib/hooks/useAvailableModels';
+import { ownModelChoice, useOwnModels, type OwnModel } from '@/lib/byok/client';
+import { byokComposerEffort } from '@/lib/byok/config';
 import { useCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import { DEFAULT_AGENT_PROFILE } from '@/lib/agent/profiles/config';
@@ -25,6 +27,15 @@ const EFFORT_LABELS: ReadonlyArray<readonly [NonNullable<AgentCollaborator['reas
 
 const MAX_MEMBERS = 4;
 
+/** A member's model: the platform's, or one of the member's own. */
+type MemberModel = AvailableModel & { own?: OwnModel };
+
+/** The thinking a member starts with on this model: an own model's default, otherwise whether the model thinks by default. */
+function initialThinking(model: MemberModel | undefined): Pick<AgentCollaborator, 'reasoning' | 'reasoningEffort'> {
+    if (model?.own) return byokComposerEffort(model.own.defaultEffort);
+    return { reasoning: !!model?.isReasoningDefault, reasoningEffort: null };
+}
+
 /**
  * 多模型协作成员模板（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
  * 模板保存在本机（按用户隔离）：每个对话默认不协作，在模型菜单勾选某个模型时才套用它在这里的名称、角色、努力程度与分工。
@@ -33,7 +44,11 @@ const MAX_MEMBERS = 4;
 export function CollaborationSettings({ userId }: { userId: string }) {
     const preset = useCollaborationPreset(userId);
     const query = useAvailableModels(userId, { enabled: true });
-    const models = useMemo(() => query.data ?? [], [query.data]);
+    const own = useOwnModels(userId);
+    const models = useMemo<MemberModel[]>(() => [
+        ...(query.data ?? []),
+        ...own.models.filter(model => model.usage === 'chat').map(ownModelChoice),
+    ], [query.data, own.models]);
     const roles = useQuery({
         queryKey: queryKeys.agentProfiles(userId),
         queryFn: ({ signal }) => fetchProfileOptions(signal),
@@ -48,8 +63,7 @@ export function CollaborationSettings({ userId }: { userId: string }) {
             name: index === 0 ? '专项分析' : index === 1 ? '独立复核' : `协作 ${index + 1}`,
             model: model?.id ?? '',
             focus: index === 1 ? '独立核对依据、分歧和不确定性' : '',
-            reasoning: !!model?.isReasoningDefault,
-            reasoningEffort: null,
+            ...initialThinking(model),
         };
     };
     // 模板 0–4 名；它们只是候选，不会让任何对话自动协作。
@@ -121,7 +135,7 @@ export function CollaborationSettings({ userId }: { userId: string }) {
 function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onClose, onSave }: {
     member: AgentCollaborator;
     editing: boolean;
-    models: readonly AvailableModel[];
+    models: readonly MemberModel[];
     roles: readonly AgentProfileOption[];
     rolesLoading: boolean;
     onClose: () => void;
@@ -175,17 +189,11 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
                         ariaLabel="模型"
                         value={draft.model}
                         onChange={value => {
-                            const next = models.find(option => option.id === value);
-                            setDraft({
-                                ...draft,
-                                model: value,
-                                reasoning: !!next && next.isReasoningDefault === true,
-                                reasoningEffort: null,
-                            });
+                            setDraft({ ...draft, model: value, ...initialThinking(models.find(option => option.id === value)) });
                         }}
                         options={[
                             ...(!model ? [{ value: draft.model, label: draft.model ? '模型已不可用' : '选择模型' }] : []),
-                            ...models.map(option => ({ value: option.id, label: option.name })),
+                            ...models.map(option => ({ value: option.id, label: option.own ? `${option.name}（自定义）` : option.name })),
                         ]}
                         placeholder="选择模型"
                     />

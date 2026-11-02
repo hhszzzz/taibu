@@ -268,7 +268,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     }
 
     // AI 消息
-    const showCheckKeyAction = message.metadata?.customProviderErrorAction === 'check-key';
+    const showOwnModelAction = message.metadata?.byokErrorAction === 'settings';
     const assistantActions = message.content && !isCurrentStreaming ? (
         <MessageActions
             message={message}
@@ -301,15 +301,15 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
             <GeneratedImageGallery images={readGeneratedImageRefs(message.metadata?.generatedImages)} label="生成的图片" />
-            {showCheckKeyAction && !isCurrentStreaming && (
+            {showOwnModelAction && !isCurrentStreaming && (
                 <Button
                     variant="secondary"
                     size="sm"
-                    onClick={() => openSettingsCenter('personalization')}
+                    onClick={() => openSettingsCenter('byok')}
                     className="mt-3 gap-2 border-warning/40 bg-warning/5 text-warning hover:bg-warning/10"
                 >
                     <KeyRound className="h-4 w-4" aria-hidden="true" />
-                    检查 Key
+                    检查自定义模型
                 </Button>
             )}
             {isCurrentStreaming && !message.content && !message.agent && (

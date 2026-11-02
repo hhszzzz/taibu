@@ -15,6 +15,7 @@ import { IconButton } from '@/components/ui/IconButton';
 import { Select } from '@/components/ui/Select';
 import { SegmentedChoice } from '@/components/settings/SegmentedChoice';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
+import { matchModelIcon } from '@/lib/ai/lobe-icons';
 import { getVendorName, VENDOR_PRESETS } from '@/lib/ai/vendor-labels';
 import { formatPrice } from '@/lib/billing/money';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
@@ -291,7 +292,12 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                     </label>
                     <label className="ai-catalog-field"><span>模型 ID</span>
                         <Input size="sm" className="ai-catalog-mono" value={draft.modelKey} maxLength={200} spellCheck={false} autoCapitalize="off" placeholder="deepseek-v4"
-                            onChange={event => patch({ modelKey: event.target.value.trim() })} />
+                            onChange={event => {
+                                const modelKey = event.target.value.trim();
+                                // 图标没手选过时跟着模型 ID 认 lobehub 图标。
+                                const following = draft.icon === null || draft.icon === matchModelIcon(draft.modelKey);
+                                patch({ modelKey, ...(following ? { icon: matchModelIcon(modelKey) } : {}) });
+                            }} />
                     </label>
                 </div>
                 <label className="ai-catalog-field">

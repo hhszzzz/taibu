@@ -2,10 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomBytes } from "node:crypto";
 import type { fetch as undiciFetch } from "undici";
-import {
-  encryptAgentCredential,
-  decryptAgentCredential,
-} from "../lib/agent/credentials.server";
+import { openByokRunKeys, sealByokRunKeys } from "../lib/byok/secrets.server";
 import {
   createAgentSafeFetch,
   isPublicAgentAddress,
@@ -13,38 +10,30 @@ import {
   validateAgentProviderUrl,
 } from "../lib/agent/safe-fetch.server";
 
-test("Agent AES-GCM credentials are randomized, authenticated and bound to owner and run", () => {
+test("browser keys a task carries are randomized, authenticated and bound to owner, run and connection", () => {
   const previous = process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
   process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY =
     randomBytes(32).toString("base64");
   try {
-    const a = encryptAgentCredential("fixture-private-key", "owner", "run"),
-      b = encryptAgentCredential("fixture-private-key", "owner", "run");
-    assert.notEqual(a.data, b.data);
-    assert.equal(
-      decryptAgentCredential(a, "owner", "run"),
-      "fixture-private-key",
-    );
+    const keys = { "conn-a": "fixture-private-key", "conn-b": "other-key" };
+    const a = sealByokRunKeys("owner", "run", keys)!,
+      b = sealByokRunKeys("owner", "run", keys)!;
+    assert.equal(a.version, 2);
+    assert.notEqual(a.keys["conn-a"].data, b.keys["conn-a"].data);
     assert.ok(!JSON.stringify(a).includes("fixture-private-key"));
-    assert.throws(() => decryptAgentCredential(a, "other", "run"));
-    assert.throws(() => decryptAgentCredential(a, "owner", "other"));
-    assert.throws(() =>
-      decryptAgentCredential(
-        { ...a, data: Buffer.from("tampered").toString("base64") },
-        "owner",
-        "run",
-      ),
-    );
+    assert.deepEqual(openByokRunKeys("owner", "run", a), keys);
+    assert.deepEqual(openByokRunKeys("other", "run", a), {});
+    assert.deepEqual(openByokRunKeys("owner", "other", a), {});
+    assert.deepEqual(openByokRunKeys("owner", "run", { version: 2, keys: { "conn-b": a.keys["conn-a"] } }), {},
+      "a value moved to another connection does not open");
+    assert.deepEqual(openByokRunKeys("owner", "run", { version: 2, keys: { ...a.keys, "conn-a": { ...a.keys["conn-a"], data: Buffer.from("tampered").toString("base64") } } }),
+      { "conn-b": "other-key" }, "a tampered key is left out; the others still open");
+    assert.deepEqual(openByokRunKeys("owner", "run", { version: 1, data: "x" }), {}, "the old single-key format is not read");
+    assert.equal(sealByokRunKeys("owner", "run", {}), null, "a task without browser keys stores no credential");
     delete process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;
-    assert.throws(
-      () => encryptAgentCredential("key", "owner", "run"),
-      /KEY_NOT_CONFIGURED/,
-    );
+    assert.throws(() => sealByokRunKeys("owner", "run", keys), /KEY_NOT_CONFIGURED/);
     process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY = "not-a-valid-key";
-    assert.throws(
-      () => encryptAgentCredential("key", "owner", "run"),
-      /KEY_NOT_CONFIGURED/,
-    );
+    assert.throws(() => sealByokRunKeys("owner", "run", keys), /KEY_NOT_CONFIGURED/);
   } finally {
     if (previous === undefined)
       delete process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY;

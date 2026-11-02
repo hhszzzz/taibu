@@ -97,8 +97,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     onModelChange?: (modelId: string) => void;
     reasoningEnabled?: boolean;
     onReasoningChange?: (enabled: boolean) => void;
-    customProviderActive?: boolean;
-    customProviderLabel?: string | null;
     userId?: string | null;
     attachmentState?: AttachmentState;
     onAttachmentChange?: (state: AttachmentState) => void;
@@ -151,8 +149,6 @@ export function ChatComposer({
     onReasoningChange,
     reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange, planMode, onPlanModeChange,
     approval, onApprovalChange,
-    customProviderActive = false,
-    customProviderLabel = null,
     userId,
     attachmentState,
     onAttachmentChange,
@@ -611,7 +607,7 @@ export function ChatComposer({
         webControl,
         image: imageGeneration ? {
             active: imageMode,
-            title: imageMode ? '退出生图，回到对话' : `生图（直接生成图片，不经过对话模型）${imageGeneration.customModel ? ` · 使用 ${imageGeneration.customModel}，不计费` : imageGeneration.priceMicros > 0 ? ` · 每张 ${formatUsd(imageGeneration.priceMicros, { precise: true })}` : ''}`,
+            title: imageMode ? '退出生图，回到对话' : `生图（直接生成图片，不经过对话模型）${imageGeneration.model.own ? ` · 使用 ${imageGeneration.model.name}，不计费` : imageGeneration.model.priceMicros > 0 ? ` · 每张 ${formatUsd(imageGeneration.model.priceMicros, { precise: true })}` : ''}`,
             onToggle: () => setImageMode(value => !value),
         } : undefined,
         imageMode,
@@ -747,6 +743,16 @@ export function ChatComposer({
                 </div>
 
                 {imageMode && imageGeneration && <div className="chat-image-options" role="group" aria-label="生图设置">
+                    {imageGeneration.models.length > 1 && <label>模型
+                        <Select
+                            ariaLabel="生图模型"
+                            className="h-7 w-auto min-w-0 max-w-[12rem] rounded-lg bg-background px-2 text-xs"
+                            value={imageGeneration.model.id}
+                            onChange={imageGeneration.onModelChange}
+                            disabled={isLoading}
+                            options={imageGeneration.models.map(model => ({ value: model.id, label: model.own ? `${model.name}（自定义）` : model.name }))}
+                        />
+                    </label>}
                     <label>尺寸
                         <Select
                             ariaLabel="尺寸"
@@ -767,7 +773,7 @@ export function ChatComposer({
                             options={Array.from({ length: imageGeneration.maxCount }, (_, index) => ({ value: index + 1, label: `${index + 1} 张` }))}
                         />
                     </label>
-                    <span className="chat-image-cost">{imageGeneration.customModel ? '使用自己的生图模型，不计费' : imageGeneration.priceMicros > 0 ? `每张 ${formatUsd(imageGeneration.priceMicros, { precise: true })} · 共 ${formatUsd(imageGeneration.priceMicros * imageCount, { precise: true })}` : '本模型免费'}</span>
+                    <span className="chat-image-cost">{imageGeneration.model.own ? '使用自己的生图模型，不计费' : imageGeneration.model.priceMicros > 0 ? `每张 ${formatUsd(imageGeneration.model.priceMicros, { precise: true })} · 共 ${formatUsd(imageGeneration.model.priceMicros * imageCount, { precise: true })}` : '本模型免费'}</span>
                 </div>}
 
                 <ComposerStatusBar
@@ -788,11 +794,8 @@ export function ChatComposer({
                     onPlanModeChange={onPlanModeChange}
                     approval={approval}
                     onApprovalChange={onApprovalChange}
-                    customProviderActive={customProviderActive}
-                    customProviderLabel={customProviderLabel}
                     contextData={contextData}
                     onOpenContextResource={onOpenContextResource}
-                    providerReturnRef={addMenuRef}
                 />
 
                 {note && <p className="chat-composer-note" data-optional={noteOptional || undefined}>{note}</p>}

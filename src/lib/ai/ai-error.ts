@@ -8,6 +8,7 @@
 import 'server-only';
 
 import { APICallError } from 'ai';
+import { ByokRequestError } from '@/lib/byok/config';
 
 export interface AIErrorInfo {
     status: number;
@@ -21,6 +22,10 @@ export interface AIErrorInfo {
  * 返回 { status, code, message } 用于语义化错误处理。
  */
 export function extractAIErrorInfo(error: unknown): AIErrorInfo {
+    // 自定义模型：上游状态码与原文已写进提示，原样给用户
+    if (error instanceof ByokRequestError) {
+        return { status: 502, code: 'BYOK_REQUEST_FAILED', message: error.message };
+    }
     // AI SDK 结构化错误
     if (APICallError.isInstance(error)) {
         const statusCode: number | undefined = (error as { statusCode?: number }).statusCode;

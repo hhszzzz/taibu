@@ -14,15 +14,20 @@ import type { AIModelConfig, ChatMessage } from "@/types";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { isModelOffered, UNPRICED_MODEL_MESSAGE } from "@/lib/ai/ai-access";
+import { matchModelIcon } from "@/lib/ai/lobe-icons";
 import { resolveModelWindow } from "@/lib/ai/model-context";
 import { resolveThinkingLevel, thinkingLevelMap } from "@/lib/ai/thinking";
 import { readFeatureModuleStateFresh } from "@/lib/app-settings";
-import { chargeUsage, getSpendableMicros } from "@/lib/billing/account.server";
+import { chargeUsage, getSpendableMicros, recordDirectUsage } from "@/lib/billing/account.server";
 import { isFreeTextModel, piModelCost, type TokenUsage } from "@/lib/billing/pricing";
+import { isByokRef } from "@/lib/byok/config";
+import { byokRequestModel } from "@/lib/byok/pi-model";
+import {
+  byokAgentConfig, byokAgentPiModel, byokAgentThinkingLevel, byokOffMode, openTaskByokModels, type ByokKeyedModel,
+} from "@/lib/byok/agent.server";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
 import { agentMessageContent, putAgentPart, type AgentCheckpoint, type AgentFeatureStateProvider, type DomainTool, type PiStreamFn } from "./types";
-import { decryptAgentCredential } from "./credentials.server";
-import { AGENT_PUBLIC_STREAM_ERRORS, createPiModelStream } from "./pi-stream.server";
+import { AGENT_PUBLIC_STREAM_ERRORS, createByokModelStream, createPiModelStream } from "./pi-stream.server";
 import { publishAgentTextDelta } from "./tail-bus.server";
 import { createAgentTools, assertAgentToolAccess } from "./tools.server";
 import { isCurrentAgentCheckpoint } from "./engine";
@@ -78,6 +83,11 @@ export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败�
 export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
 /** A step that kept taking its worker down was parked by Pi's crash-loop guard: the task stops instead of looping. */
 export const AGENT_RESTART_LIMIT_MESSAGE = "任务的某一步多次意外中断，已停止执行；可重新发起任务";
+/** An own model the task names is gone, or neither stored here nor staged by the browser with a key. */
+export const AGENT_BYOK_UNAVAILABLE_MESSAGE = "自定义模型不可用：可能已被删除，或它的 Key 没有保存到本站";
+
+/** A failure that stops the task with its own text instead of the generic one. */
+export class AgentRunError extends Error {}
 /**
  * Pi's durable retries of a request every model source failed transiently (the stream marks those, see
  * AGENT_TRANSIENT_ERROR_MESSAGE): two more attempts, three and six seconds later.
@@ -178,7 +188,8 @@ export async function executeAgentRun(
     ?? ((id) => readFeatureModuleStateFresh(id as Parameters<typeof readFeatureModuleStateFresh>[0]));
   let interrupted = false, stopping = run.cancel_requested;
   let harness: Harness | undefined, root: Conversation | undefined, watch: ConversationWatch | undefined;
-  let storage: AgentDurableStorage | undefined, apiKey: string | undefined;
+  let storage: AgentDurableStorage | undefined;
+  let own = new Map<string, ByokKeyedModel>();
   let mcp: AgentMcpSession | undefined;
   let heartbeat: ReturnType<typeof setInterval> | undefined;
   // Subagents work in their own conversations, which the main conversation's watch does not see: each has its own.
@@ -298,17 +309,19 @@ export async function executeAgentRun(
       if (!interrupted) renewLease().catch(() => interrupt());
     }, injected?.leaseRenewMs ?? LEASE_RENEW_MS);
     heartbeat.unref();
-    const config = injected?.config ?? (run.input.customProvider ? {
-      id: run.input.model, name: run.input.model, vendor: "other" as const,
-      modelId: run.input.customProvider.modelId, apiUrl: run.input.customProvider.apiUrl,
-      supportsReasoning: false,
-    } : await getModelConfigAsync(run.input.model));
-    if (!config) throw new Error("模型不存在");
-    if (run.input.customProvider) {
-      const encrypted = await store.credential(run);
-      if (!encrypted) throw new Error("任务凭据不可用");
-      apiKey = decryptAgentCredential(encrypted, run.user_id, run.id);
+    // The member's own models (byok:) with their keys: stored here, or staged by the browser for this task.
+    const ownRefs = [run.input.model, ...(run.input.collaborators ?? []).map(member => member.model), run.input.imageModel];
+    if (!injected && ownRefs.some(isByokRef)) {
+      own = await openTaskByokModels(store.db, run.user_id, run.id, ownRefs, await store.credential(run));
+      if (ownRefs.some(ref => isByokRef(ref) && !own.has(ref))) throw new AgentRunError(AGENT_BYOK_UNAVAILABLE_MESSAGE);
     }
+    const ownConfig = (ref: string) => {
+      const entry = own.get(ref);
+      return entry ? byokAgentConfig(entry.model) : undefined;
+    };
+    const config = injected?.config ?? ownConfig(run.input.model) ?? await getModelConfigAsync(run.input.model);
+    if (!config) throw new Error("模型不存在");
+    const ownMain = own.get(config.id);
     // The skills the prompt lists are fixed when the task opens; every load finds the skill again. A configuration that
     // cannot be read leaves the task without skills rather than failing it. A test or evaluation run brings its own.
     // 方法是内置的：技能目录读不到、或测试与评测自带运行参数时，任务仍有内置方法，只是没有库里的技能。
@@ -319,23 +332,22 @@ export async function executeAgentRun(
         console.warn("[agent-skills]", { runId: run.id, code: "SKILLS_UNAVAILABLE" });
         return builtinSkillsSession();
       });
-    // 自定义配置带生图模型时，生图用同一地址与任务暂存的密钥，不计费。
-    const customImage = run.input.customProvider?.imageModelId && apiKey
-      ? { apiUrl: run.input.customProvider.apiUrl, apiKey, modelId: run.input.customProvider.imageModelId }
-      : undefined;
+    // 生图用用户在生图模式选的模型：自己的生图模型由本站代发、不计费；平台生图模型按张从余额扣费。
+    const ownImage = run.input.imageModel ? own.get(run.input.imageModel) : undefined;
     const tools = await createAgentTools(store, run, checkpoint, {
-      skills, featureState: injected?.featureState, images: !injected, customImage,
+      skills, featureState: injected?.featureState, images: !injected,
+      imageModel: ownImage ? { own: ownImage } : run.input.imageModel ? { platform: run.input.imageModel } : undefined,
     });
-    // 进入上下文的技能文本按主模型计数；测试注入的模型不发网络请求。
-    const countTokens = (text: string) => injected ? Promise.resolve(estimateTokens(config.modelId || config.id, text)) : countModelTokens(config, text, { apiKey });
-    const window = run.input.customProvider ? null : resolveModelWindow(config, run.input.reasoning);
+    // 进入上下文的技能文本按主模型计数；测试注入的模型与自己的模型不发计数请求。
+    const countTokens = (text: string) => injected || ownMain ? Promise.resolve(estimateTokens(config.modelId || config.id, text)) : countModelTokens(config, text);
+    const window = resolveModelWindow(config, run.input.reasoning);
     checkpoint.runtime = { model: {
-      id: config.id, name: config.name, contextWindow: window?.maxContext ?? null,
+      id: config.id, name: config.name, icon: config.icon ?? matchModelIcon(config.modelId || config.id), contextWindow: window?.maxContext ?? null,
       limitSource: window ? "configured" : "unknown",
     } };
-    const piModel: Model<Api> = {
+    const piModel: Model<Api> = ownMain ? byokAgentPiModel(ownMain.model, window) : {
       id: config.id, name: config.name, api: "openai-completions", provider: "taibu",
-      baseUrl: config.apiUrl, reasoning: config.supportsReasoning, input: config.supportsVision && !run.input.customProvider ? ['text','image'] : ['text'],
+      baseUrl: config.apiUrl, reasoning: config.supportsReasoning, input: config.supportsVision ? ['text','image'] : ['text'],
       thinkingLevelMap: thinkingLevelMap(config.thinkingLevels),
       cost: piModelCost(config.pricing),
       // Pi uses zero for an unknown window: threshold compaction is skipped,
@@ -343,8 +355,8 @@ export async function executeAgentRun(
       contextWindow: window?.maxContext ?? 0, maxTokens: config.defaultMaxTokens ?? 0,
     };
     const collaborators = parseAgentCollaborators(run.input.collaborators);
-    if (run.input.customProvider && collaborators.length) throw new Error('自定义直连模型不能调用平台协作模型');
-    // A metered task pays for every request, so it only runs models the platform has priced.
+    // A metered task pays for every request of a platform model, so it only runs models the platform has priced. The
+    // member's own models are never charged.
     const metered = run.billing === "metered";
     const authorizeModel = async (selected: AIModelConfig) => {
       const states = await Promise.all([featureStateOf("chat"), featureStateOf("agent")]);
@@ -352,11 +364,12 @@ export async function executeAgentRun(
         throw new Error("AGENT_FEATURE_STATE_UNAVAILABLE");
       if (states.some(state => state.status !== "enabled"))
         throw new Error("AI 功能已关闭");
-      if (metered && !isModelOffered(selected)) throw new Error(UNPRICED_MODEL_MESSAGE);
+      if (metered && !isByokRef(selected.id) && !isModelOffered(selected)) throw new Error(UNPRICED_MODEL_MESSAGE);
     };
     const configs = new Map([[config.id, config]]);
     for (const member of collaborators) {
-      const selected = configs.get(member.model) ?? injected?.configs?.find(item => item.id === member.model) ?? await getModelConfigAsync(member.model);
+      const selected = configs.get(member.model) ?? ownConfig(member.model) ?? injected?.configs?.find(item => item.id === member.model)
+        ?? (isByokRef(member.model) ? undefined : await getModelConfigAsync(member.model));
       if (!selected) throw new Error('协作模型不存在');
       await authorizeModel(selected);
       configs.set(selected.id, selected);
@@ -367,10 +380,11 @@ export async function executeAgentRun(
       console.warn("[agent-profiles]", { runId: run.id, code: "PROFILES_UNAVAILABLE" });
       return BUILTIN_AGENT_PROFILES.filter(profile => profile.name === DEFAULT_AGENT_PROFILE);
     });
-    // A role's own model, when the task may run it; otherwise the role's members keep the model they would have.
+    // A role's own model, when the task may run it; otherwise the role's members keep the model they would have. A
+    // task that runs only the member's own models is not metered, so it runs no role's platform model either.
     const roleModels = new Map<string, MemberModel>();
-    for (const profile of run.input.customProvider ? [] : roles) {
-      if (!profile.model) continue;
+    for (const profile of metered || !ownMain ? roles : []) {
+      if (!profile.model || isByokRef(profile.model)) continue;
       const selected = configs.get(profile.model) ?? injected?.configs?.find(item => item.id === profile.model) ?? await getModelConfigAsync(profile.model);
       if (!selected || (metered && !isModelOffered(selected))) continue;
       const wanted = profile.reasoningEffort === null ? selected.isReasoningDefault === true : profile.reasoningEffort !== 'off';
@@ -394,20 +408,32 @@ export async function executeAgentRun(
           idempotencyKey: `agent:${run.id}:${randomUUID()}` });
       },
     } : undefined;
+    // 自己的模型：Pi 的「不思考」按任务里的选择发成「模型默认」（不带思考参数）或「关闭推理」。
+    const thinkingUses = [{ model: config.id, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort }, ...collaborators];
     const bindings: GuardedAgentModel[] = [...configs.values()].map(selected => {
       const capacity = windows.get(selected.id);
-      const model: Model<Api> = selected.id === config.id ? piModel : { ...piModel, id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
-        input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), cost: piModelCost(selected.pricing), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 0 };
-      return { model, authorize: () => authorizeModel(selected),
-        stream: injected?.streamFn ?? createPiModelStream(selected, { reasoning: selected.supportsReasoning, apiKey, telemetry, billing: billingOf(selected), conversationId: run.conversation_id, cacheScope: run.user_id,
-          ...(selected.id === config.id && selected.supportsVision && !run.input.customProvider ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}),
-          ...(selected.id === config.id ? {
-            onAnswerStart: () => { tail.text = ''; },
-            onAnswerDelta: (delta: string) => {
-              tail.text += delta;
-              void publishAgentTextDelta(run.id, ++tail.seq, tail.text);
-            },
-          } : {}) }) };
+      const ownModel = own.get(selected.id);
+      const model: Model<Api> = selected.id === config.id ? piModel : ownModel ? { ...byokAgentPiModel(ownModel.model, capacity ?? null), input: ['text'] }
+        : { ...piModel, api: "openai-completions", id: selected.id, name: selected.name, baseUrl: selected.apiUrl, reasoning: selected.supportsReasoning,
+          input: ['text'], thinkingLevelMap: thinkingLevelMap(selected.thinkingLevels), cost: piModelCost(selected.pricing), contextWindow: capacity?.maxContext ?? 0, maxTokens: selected.defaultMaxTokens ?? 0, compat: undefined };
+      const hooks = {
+        telemetry,
+        ...(selected.id === config.id && selected.supportsVision ? { resolveImages: (messages: Parameters<typeof resolveAttachmentImages>[3]) => resolveAttachmentImages(store.db,run.user_id,run.conversation_id,messages) } : {}),
+        ...(selected.id === config.id ? {
+          onAnswerStart: () => { tail.text = ''; },
+          onAnswerDelta: (delta: string) => {
+            tail.text += delta;
+            void publishAgentTextDelta(run.id, ++tail.seq, tail.text);
+          },
+        } : {}),
+      };
+      const stream = injected?.streamFn ?? (ownModel
+        ? createByokModelStream(byokRequestModel(ownModel.model, ownModel.model.connection), {
+          ...hooks, apiKey: ownModel.key, levels: ownModel.model.thinkingLevels, off: byokOffMode(thinkingUses, selected.id),
+          record: usage => recordDirectUsage({ userId: run.user_id, model: ownModel.model.modelId, usage, source: "agent", referenceType: "agent_run", referenceId: run.id }),
+        })
+        : createPiModelStream(selected, { ...hooks, reasoning: selected.supportsReasoning, billing: billingOf(selected), conversationId: run.conversation_id, cacheScope: run.user_id }));
+      return { model, authorize: () => authorizeModel(selected), stream };
     });
     const [primary, ...additional] = bindings;
     const models = createGuardedAgentModels(primary.model, primary.stream, primary.authorize, additional);
@@ -720,7 +746,8 @@ export async function executeAgentRun(
     }, context);
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
-      thinkingLevel: run.input.reasoning ? resolveThinkingLevel(config, run.input.reasoningEffort) : 'off',
+      thinkingLevel: ownMain ? byokAgentThinkingLevel(config, run.input.reasoning, run.input.reasoningEffort)
+        : run.input.reasoning ? resolveThinkingLevel(config, run.input.reasoningEffort) : 'off',
       instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + (collaborators.length ? `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}` : ''),
     } });
     const enqueued = new Set<number>();
@@ -883,8 +910,9 @@ export async function executeAgentRun(
     // A blocking compaction that fails leaves the input unanswered with Pi's "Compaction failed: …" detail.
     const compactionFailed = submission?.status === "unanswered" && typeof submission.detail === "string" &&
       submission.detail.startsWith("Compaction failed");
+    // The member's own model fails with its provider's words, which they need to fix their connection.
     await finish(status, parked ? AGENT_RESTART_LIMIT_MESSAGE : compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
-      : last?.errorMessage && AGENT_PUBLIC_STREAM_ERRORS.has(last.errorMessage) ? last.errorMessage
+      : last?.errorMessage && (AGENT_PUBLIC_STREAM_ERRORS.has(last.errorMessage) || ownMain) ? last.errorMessage
       : compactionFailed ? AGENT_COMPACTION_FAILED_MESSAGE : undefined);
   } catch (error) {
     if (interrupted || shutdown?.aborted || storage?.isUnavailable) return;
@@ -894,7 +922,7 @@ export async function executeAgentRun(
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     harness = undefined;
     await writeLine;
-    await finish(stopping ? "cancelled" : "failed");
+    await finish(stopping ? "cancelled" : "failed", error instanceof AgentRunError ? error.message : undefined);
     console.warn("[agent-run]", { runId: run.id, phase: "execution", code: "FAILED" });
   } finally {
     controlAbort.abort();
@@ -904,6 +932,6 @@ export async function executeAgentRun(
     await harness?.close(BACKGROUND_CONTEXT).catch(() => {});
     scope.cancel();
     shutdown?.removeEventListener("abort", onShutdown);
-    apiKey = undefined;
+    own = new Map();
   }
 }

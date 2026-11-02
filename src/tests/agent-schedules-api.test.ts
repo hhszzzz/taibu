@@ -69,6 +69,29 @@ test('a member creates a schedule through the route with the parsed body', async
   assert.ok(fixture.created());
 });
 
+test('a schedule may name an own model only when its key is stored here', async (t) => {
+  const fixture = setup(t);
+  const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const store = require('../lib/byok/store.server') as typeof import('../lib/byok/store.server');
+  const ref = 'byok:00000000-0000-4000-8000-0000000000b1';
+  let serverKey = false;
+  t.mock.method(settings, 'getByokPolicy', async () => ({ allowServerKeys: true, maxConnections: 10, maxModelsPerConnection: 50 }));
+  t.mock.method(store, 'resolveByokModels', async () => new Map([[ref, {
+    id: '00000000-0000-4000-8000-0000000000b1', ref, modelId: 'deepseek-chat', displayName: 'DeepSeek', usage: 'chat', supportsVision: false,
+    thinkingLevels: [], defaultEffort: 'auto', contextWindow: null, maxOutput: null,
+    connection: { id: '00000000-0000-4000-8000-0000000000c1', name: 'DeepSeek', protocol: 'openai', baseUrl: 'https://api.deepseek.com', keyHint: serverKey ? 'sk-…ored' : null, updatedAt: '' },
+    serverKey, openKey: () => null,
+  } as never]]));
+  const api = require('../lib/agent/schedules/api.server') as typeof import('../lib/agent/schedules/api.server');
+  const body = { name: '晨间整理', prompt: '内容', cadence: { kind: 'daily', time: '08:00' }, timezone: 'Asia/Shanghai', options: { model: ref } };
+  const refused = await api.createSchedule(request('POST', body));
+  assert.equal(refused?.status, 400);
+  assert.match((await refused!.json()).error, /浏览器/u);
+  assert.equal(fixture.created(), null);
+  serverKey = true;
+  assert.equal((await api.createSchedule(request('POST', body)))?.status, 201);
+});
+
 test('the route refuses a member at the limit and a switched account', async (t) => {
   setup(t, { used: 5 });
   const api = require('../lib/agent/schedules/api.server') as typeof import('../lib/agent/schedules/api.server');

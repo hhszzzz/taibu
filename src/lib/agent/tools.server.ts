@@ -22,7 +22,9 @@ import {
   type FeatureModuleId,
   type AgentToolScopeId,
 } from "@/lib/app-settings";
-import { imagePriceMicros, generateCustomImages, generateImages, resolveImageModel, GENERATED_IMAGE_PROMPT_MAX, type CustomImageProvider } from "@/lib/ai/image-generation.server";
+import { imagePriceMicros, generateByokImageSet, generateImages, resolveImageModel, GENERATED_IMAGE_PROMPT_MAX } from "@/lib/ai/image-generation.server";
+import { MODEL_REQUEST_USER_AGENT } from "@/lib/ai/providers/ai-sdk-provider";
+import type { ByokKeyedModel } from "@/lib/byok/agent.server";
 import { agentSafeFetch } from "./safe-fetch.server";
 import { formatUsd } from "@/lib/billing/money";
 import { GENERATED_IMAGE_MAX_COUNT, GENERATED_IMAGE_SIZES, type GeneratedImageSize } from "@/lib/images/generated";
@@ -281,8 +283,11 @@ export async function createAgentTools(
     featureState?: AgentFeatureStateProvider;
     /** Evaluation and fixture runs never generate images (nobody pays, no user conversation). */
     images?: boolean;
-    /** The member's own image model, with the key the task holds: images go there and are not billed. */
-    customImage?: CustomImageProvider;
+    /**
+     * The image model the user picked: their own (with the key the task holds; not billed) or a platform one. Absent:
+     * the platform's default image model.
+     */
+    imageModel?: { own: ByokKeyedModel } | { platform: string };
   } = {},
 ): Promise<AgentTool[]> {
   const access: AgentRunAccess = { featureState: options.featureState };
@@ -732,10 +737,11 @@ export async function createAgentTools(
     const offset = Math.min(text.length, args.offset ?? 0);
     return textResult({ ...attachmentDto(row), text: text.slice(offset, offset + 8000), offset, total: text.length, nextOffset: offset + 8000 < text.length ? offset + 8000 : null });
   }));
-  // 生图：用户自带生图模型时直连、不计费；否则只在平台配置了已定价的生图模型时注册，每张图按单价预扣。单次任务最多 4 张。
-  const customImage = options.images === false ? undefined : options.customImage;
-  const imageModel = options.images === false || customImage ? null : await resolveImageModel().catch(() => null);
-  if (customImage || imageModel) tools.push(
+  // 生图：用户选了自己的生图模型时由本站代发、不计费；否则用所选（或默认）的平台生图模型，每张图按单价预扣。单次任务最多 4 张。
+  const ownImage = options.images !== false && options.imageModel && 'own' in options.imageModel ? options.imageModel.own : undefined;
+  const platformImage = options.images !== false && options.imageModel && 'platform' in options.imageModel ? options.imageModel.platform : null;
+  const imageModel = options.images === false || ownImage ? null : await resolveImageModel(platformImage).catch(() => null);
+  if (ownImage || imageModel) tools.push(
     wrap('generate_image', `根据文字描述生成图片（文生图）：prompt 写清主体、场景与风格；size 可选 ${GENERATED_IMAGE_SIZES.join('、')}，默认 1024x1024；n 为本次张数，最多 ${GENERATED_IMAGE_MAX_COUNT}。单次任务最多生成 4 张，${imageModel ? `每张 ${formatUsd(imagePriceMicros(imageModel), { precise: true })}，从用户余额扣除` : '使用用户自己的生图模型，不计费'}。只在用户明确要求图片时使用，不要主动生图`,
       Type.Object({
         prompt: Type.String({ minLength: 1, maxLength: GENERATED_IMAGE_PROMPT_MAX }),
@@ -756,14 +762,14 @@ export async function createAgentTools(
         };
         let model: { id: string; name: string };
         let result: Awaited<ReturnType<typeof generateImages>>;
-        if (customImage) {
-          // 地址经过与对话模型相同的公网校验。
-          result = await generateCustomImages({ ...request, provider: customImage }, { fetch: agentSafeFetch });
-          model = { id: `custom:${customImage.modelId}`, name: customImage.modelId };
+        if (ownImage) {
+          // 地址经过与对话模型相同的公网校验；服务商的报错原样交给模型与用户。
+          result = await generateByokImageSet({ ...request, ...ownImage }, { fetch: agentSafeFetch, userAgent: MODEL_REQUEST_USER_AGENT });
+          model = { id: ownImage.model.ref, name: ownImage.model.displayName || ownImage.model.modelId };
         } else {
           // 管理员停用或改价后立即生效：每次调用重新找可用的模型。
-          const current = await resolveImageModel().catch(() => null);
-          if (!current) throw new Error('当前没有可用的生图模型');
+          const current = await resolveImageModel(platformImage).catch(() => null);
+          if (!current) throw new Error(platformImage ? '所选的生图模型当前不可用' : '当前没有可用的生图模型');
           result = await generateImages({ ...request, model: current });
           model = { id: current.id, name: current.name };
         }

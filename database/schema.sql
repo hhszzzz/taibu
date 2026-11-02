@@ -510,6 +510,47 @@ CREATE TABLE public.ai_models (
     CONSTRAINT ai_models_usage_type_check CHECK ((usage_type = ANY (ARRAY['chat'::text, 'embedding'::text, 'rerank'::text, 'image'::text])))
 );
 
+CREATE TABLE public.user_ai_connections (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    user_id uuid NOT NULL,
+    name text NOT NULL,
+    protocol text DEFAULT 'openai'::text NOT NULL,
+    base_url text NOT NULL,
+    api_key_secret jsonb,
+    api_key_hint text,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_ai_connections_api_key_check CHECK ((((api_key_secret IS NULL) = (api_key_hint IS NULL)) AND ((api_key_secret IS NULL) OR (jsonb_typeof(api_key_secret) = 'object'::text)) AND ((api_key_hint IS NULL) OR (length(api_key_hint) <= 16)))),
+    CONSTRAINT user_ai_connections_base_url_check CHECK (((base_url ~ '^https://'::text) AND (length(base_url) <= 256))),
+    CONSTRAINT user_ai_connections_name_check CHECK (((length(btrim(name)) >= 1) AND (length(name) <= 40))),
+    CONSTRAINT user_ai_connections_protocol_check CHECK ((protocol = ANY (ARRAY['openai'::text, 'anthropic'::text])))
+);
+
+CREATE TABLE public.user_ai_models (
+    id uuid DEFAULT gen_random_uuid() NOT NULL,
+    connection_id uuid NOT NULL,
+    user_id uuid NOT NULL,
+    model_id text NOT NULL,
+    display_name text NOT NULL,
+    usage text DEFAULT 'chat'::text NOT NULL,
+    supports_vision boolean DEFAULT false NOT NULL,
+    thinking_levels text[] DEFAULT '{}'::text[] NOT NULL,
+    default_effort text DEFAULT 'medium'::text NOT NULL,
+    context_window integer,
+    max_output integer,
+    sort_order integer DEFAULT 0 NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT user_ai_models_context_window_check CHECK (((context_window IS NULL) OR ((context_window >= 1024) AND (context_window <= 10000000)))),
+    CONSTRAINT user_ai_models_default_effort_check CHECK (((default_effort = ANY (ARRAY['auto'::text, 'off'::text])) OR ((default_effort = ANY (ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])) AND ((cardinality(thinking_levels) = 0) OR (default_effort = ANY (thinking_levels)))))),
+    CONSTRAINT user_ai_models_display_name_check CHECK (((length(btrim(display_name)) >= 1) AND (length(display_name) <= 128))),
+    CONSTRAINT user_ai_models_max_output_check CHECK (((max_output IS NULL) OR ((max_output >= 1) AND (max_output <= 1000000)))),
+    CONSTRAINT user_ai_models_model_id_check CHECK (((length(btrim(model_id)) >= 1) AND (length(model_id) <= 128))),
+    CONSTRAINT user_ai_models_thinking_levels_check CHECK ((thinking_levels <@ ARRAY['minimal'::text, 'low'::text, 'medium'::text, 'high'::text, 'xhigh'::text, 'max'::text])),
+    CONSTRAINT user_ai_models_usage_check CHECK ((usage = ANY (ARRAY['chat'::text, 'image'::text])))
+);
+
 CREATE TABLE public.announcements (
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     content text NOT NULL,
@@ -1255,6 +1296,15 @@ ALTER TABLE ONLY public.ai_models
 ALTER TABLE ONLY public.ai_models
     ADD CONSTRAINT ai_models_pkey PRIMARY KEY (id);
 
+ALTER TABLE ONLY public.user_ai_connections
+    ADD CONSTRAINT user_ai_connections_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.user_ai_models
+    ADD CONSTRAINT user_ai_models_connection_id_model_id_usage_key UNIQUE (connection_id, model_id, usage);
+
+ALTER TABLE ONLY public.user_ai_models
+    ADD CONSTRAINT user_ai_models_pkey PRIMARY KEY (id);
+
 ALTER TABLE ONLY public.announcements
     ADD CONSTRAINT announcements_pkey PRIMARY KEY (id);
 
@@ -1515,6 +1565,15 @@ ALTER TABLE ONLY public.ai_model_gateway_bindings
 
 ALTER TABLE ONLY public.ai_model_gateway_bindings
     ADD CONSTRAINT ai_model_gateway_bindings_model_id_fkey FOREIGN KEY (model_id) REFERENCES public.ai_models(id);
+
+ALTER TABLE ONLY public.user_ai_connections
+    ADD CONSTRAINT user_ai_connections_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.user_ai_models
+    ADD CONSTRAINT user_ai_models_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.user_ai_connections(id) ON DELETE CASCADE;
+
+ALTER TABLE ONLY public.user_ai_models
+    ADD CONSTRAINT user_ai_models_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 ALTER TABLE ONLY public.annual_reports
     ADD CONSTRAINT annual_reports_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);

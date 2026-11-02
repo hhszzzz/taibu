@@ -47,12 +47,21 @@ export interface ComposerMemoryControl {
 }
 
 /** Standalone image generation: the composer talks to /api/images/generate instead of the chat model. */
-export interface ComposerImageGeneration {
-    sizes: readonly string[];
+/** A model the 生图 menu offers: the platform's, priced per image, or the member's own (free). */
+export interface ComposerImageModel {
+    id: string;
+    name: string;
     /** 每张图的价格（微美元）；0 表示免费。 */
     priceMicros: number;
-    /** 自定义配置里的生图模型：浏览器直连生成，不计费。 */
-    customModel?: string;
+    own: boolean;
+}
+
+export interface ComposerImageGeneration {
+    sizes: readonly string[];
+    models: ComposerImageModel[];
+    /** The chosen model, one of `models`. */
+    model: ComposerImageModel;
+    onModelChange: (id: string) => void;
     maxCount: number;
     onGenerate: (options: { prompt: string; size: string; count: number }) => void;
 }

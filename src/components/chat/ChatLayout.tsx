@@ -40,8 +40,9 @@ import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/a
 import { chartQuestion, type ChartAskContext } from '@/lib/agent/chart-interaction';
 import { clampMessageQuoteText, MAX_MESSAGE_QUOTE_CHARS, MAX_MESSAGE_QUOTES, type MessageQuote } from '@/lib/chat/quotes';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
-import type { ComposerWebControl } from './composer/ComposerToolbar';
+import type { ComposerImageModel, ComposerWebControl } from './composer/ComposerToolbar';
 import { useImageModels } from '@/lib/hooks/useAvailableModels';
+import { useOwnModels } from '@/lib/byok/client';
 import { GENERATED_IMAGE_MAX_COUNT as IMAGE_MAX_COUNT, GENERATED_IMAGE_SIZES } from '@/lib/images/generated';
 import { publishChatModeControl, clearChatModeControl, type ChatModeControl } from '@/lib/chat/mode-control-store';
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
@@ -105,10 +106,9 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onModelChange: (model: string) => void;
     reasoningEnabled: boolean;
     onReasoningChange: (enabled: boolean) => void;
-    customProviderActive: boolean;
-    customProviderLabel: string | null;
-    /** 自定义配置里的生图模型；有值时生图走浏览器直连。 */
-    customImageModelId?: string | null;
+    /** 生图与 Agent 生图工具用的模型；null 时选第一个可用的。 */
+    imageModel: string | null;
+    onImageModelChange: (model: string | null) => void;
     userId: string | null;
     /** Profile nickname for the empty-state greeting. */
     displayName?: string | null;
@@ -138,7 +138,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         inputValue, onInputChange, disabled,
         chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
-        customProviderActive, customProviderLabel, customImageModelId,
+        imageModel, onImageModelChange,
         userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         dreamContext, dreamContextLoading,
@@ -442,14 +442,26 @@ export function ChatLayout(props: ChatLayoutProps) {
         title: !webAllowed ? '当前环境未配置联网搜索' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
         onToggle: () => agent.setWebEnabled(!agent.webEnabled),
     } : undefined;
-    // 生图入口：有可用生图模型（自定义生图模型优先）、且不在解梦模式或任务运行中时才提供。
+    // 生图入口：有可用生图模型（平台的或自己的）、且不在解梦模式或任务运行中时才提供。
     const imageModels = useImageModels(userId, { enabled: !!userId });
-    const imageModel = imageModels.data?.models[0];
-    const customImageModel = customProviderActive ? customImageModelId || undefined : undefined;
-    const imageGeneration = (customImageModel || imageModel) && chatMode !== 'dream' && !agent?.active ? {
+    const own = useOwnModels(userId);
+    const imageChoices = useMemo<ComposerImageModel[]>(() => [
+        ...(imageModels.data?.models ?? []).map(model => ({ id: model.id, name: model.name, priceMicros: model.priceMicros, own: false })),
+        ...own.models.filter(model => model.usage === 'image').map(model => ({ id: model.ref, name: model.displayName, priceMicros: 0, own: true })),
+    ], [imageModels.data?.models, own.models]);
+    const currentImageModel = imageChoices.find(model => model.id === imageModel) ?? imageChoices[0];
+    // A choice that is gone (a deleted own model) falls back to the first once both lists have loaded.
+    const imageListsLoaded = !!userId && !imageModels.isLoading && !own.loading;
+    useEffect(() => {
+        if (!imageListsLoaded) return;
+        const next = currentImageModel?.id ?? null;
+        if (next !== imageModel) onImageModelChange(next);
+    }, [currentImageModel?.id, imageListsLoaded, imageModel, onImageModelChange]);
+    const imageGeneration = currentImageModel && chatMode !== 'dream' && !agent?.active ? {
         sizes: imageModels.data?.sizes.length ? imageModels.data.sizes : [...GENERATED_IMAGE_SIZES],
-        priceMicros: customImageModel ? 0 : imageModel?.priceMicros ?? 0,
-        customModel: customImageModel,
+        models: imageChoices,
+        model: currentImageModel,
+        onModelChange: onImageModelChange,
         maxCount: imageModels.data?.maxCount ?? IMAGE_MAX_COUNT,
         onGenerate: (options: { prompt: string; size: string; count: number }) => { void onImageGenerate?.(options); },
     } : undefined;
@@ -485,7 +497,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         onInputChange, onSend, onStop, onAuthRequired, disabled,
         chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
-        customProviderActive, customProviderLabel,
         userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         quotes, onRemoveQuote: removeQuote,

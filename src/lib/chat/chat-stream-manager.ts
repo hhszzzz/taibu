@@ -1,5 +1,4 @@
 import type { AIMessageMetadata, ChatMessage } from '@/types';
-import { normalizeBrowserDirectError } from '@/lib/ai/browser-direct-provider';
 import { saveConversation } from './conversation';
 
 export type ChatStreamTaskStatus = 'running' | 'completed' | 'stopped' | 'failed';
@@ -22,6 +21,9 @@ export interface ChatStreamTaskSnapshot {
     startedAt: number;
     updatedAt: number;
     hasVisibleToken: boolean;
+    /** The model the reply was asked of, also when it failed before any text arrived. */
+    model?: string;
+    modelName?: string;
 }
 
 export type ChatStreamEventType =
@@ -73,6 +75,14 @@ export interface ChatStreamTaskRunnerContext {
 }
 
 export type ChatStreamTaskRunner = (context: ChatStreamTaskRunnerContext) => Promise<void>;
+
+/** A runner's failure with the site's HTTP status; its message is what the reader sees. */
+export class ChatRunnerError extends Error {
+    constructor(message: string, readonly status: number) {
+        super(message);
+        this.name = 'ChatRunnerError';
+    }
+}
 
 interface ChatStreamTaskInternal {
     conversationId: string;
@@ -495,32 +505,9 @@ export class ChatStreamManager {
     }
 
     private classifyRunnerError(error: unknown): { code: ChatStreamTaskErrorCode; message: string } {
-        const normalized = normalizeBrowserDirectError(error);
-        if (normalized.status === 401 && normalized.code === 'PREPARE_FAILED') {
-            return {
-                code: 'AUTH_REQUIRED',
-                message: normalized.message,
-            };
-        }
-
-        if (normalized.status === 429) {
-            return {
-                code: 'REQUEST_FAILED',
-                message: normalized.message,
-            };
-        }
-
-        if (normalized.status === 0) {
-            return {
-                code: 'NETWORK_ERROR',
-                message: normalized.message,
-            };
-        }
-
-        return {
-            code: 'REQUEST_FAILED',
-            message: normalized.message,
-        };
+        if (error instanceof ChatRunnerError && error.status === 401) return { code: 'AUTH_REQUIRED', message: error.message };
+        // A provider's own failure arrives as ByokRequestError, already written for the reader.
+        return { code: 'REQUEST_FAILED', message: error instanceof Error && error.message ? error.message : '请求失败，请稍后再试' };
     }
 
     private async finishCompleted(task: ChatStreamTaskInternal): Promise<void> {
@@ -655,6 +642,8 @@ export class ChatStreamManager {
             startedAt: task.startedAt,
             updatedAt: task.updatedAt,
             hasVisibleToken: task.hasVisibleToken,
+            model: task.assistantMessage.model,
+            modelName: task.assistantMessage.modelName,
         };
     }
 

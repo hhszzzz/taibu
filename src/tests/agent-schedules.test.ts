@@ -257,6 +257,58 @@ test('a submit-time balance or pricing refusal is classified as a skip', async (
   }
 });
 
+const OWN_REF = 'byok:00000000-0000-4000-8000-0000000000b1';
+const ownModel = (serverKey: boolean) => ({
+  id: '00000000-0000-4000-8000-0000000000b1', ref: OWN_REF, modelId: 'deepseek-chat', displayName: 'DeepSeek', usage: 'chat' as const,
+  supportsVision: false, thinkingLevels: [], defaultEffort: 'auto' as const, contextWindow: null, maxOutput: null,
+  connection: { id: '00000000-0000-4000-8000-0000000000c1', name: 'DeepSeek', protocol: 'openai' as const, baseUrl: 'https://api.deepseek.com', keyHint: serverKey ? 'sk-…ored' : null, updatedAt: '2026-10-01T00:00:00Z' },
+  serverKey, openKey: () => (serverKey ? 'sk-stored' : null),
+});
+
+test('an own model runs on schedule only with its key stored here; otherwise the occurrence is skipped and says why', async (t) => {
+  const cases = [
+    { model: ownModel(true), byok: 'enabled', submitted: true },
+    { model: ownModel(false), byok: 'enabled', submitted: false },
+    { model: null, byok: 'enabled', submitted: false },
+    { model: ownModel(true), byok: 'disabled', submitted: false },
+  ] as const;
+  for (const { model, byok, submitted } of cases) {
+    const settled: SettleCall[] = [];
+    const schedule = scheduleFixture({ options: { ...scheduleFixture().options, model: OWN_REF } });
+    const db = mockScheduleDb(schedule, settled, [claimFixture()]);
+    const runtime = mockRuntime(t, { balance: 0 });
+    const appSettings = require('../lib/app-settings') as typeof import('../lib/app-settings');
+    const store = require('../lib/byok/store.server') as typeof import('../lib/byok/store.server');
+    t.mock.method(appSettings, 'readFeatureModuleStateFresh', async (id: string) => ({ status: id === 'byok' ? byok : 'enabled' }) as never);
+    t.mock.method(appSettings, 'getByokPolicy', async () => ({ allowServerKeys: true, maxConnections: 10, maxModelsPerConnection: 50 }));
+    t.mock.method(store, 'resolveByokModel', async () => model as never);
+    const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+    const summary = await processAgentSchedules({ db });
+    const label = `${model ? (model.serverKey ? 'stored' : 'browser') : 'missing'} key, byok ${byok}`;
+    assert.equal(runtime.submitted.length, submitted ? 1 : 0, label);
+    if (submitted) {
+      assert.equal((runtime.submitted[0].body as { model: string }).model, OWN_REF, 'no balance needed for an own model');
+      continue;
+    }
+    assert.deepEqual(summary, { claimed: 1, submitted: 0, skipped: 1, failed: 0 }, label);
+    assert.equal(settled[0].values.p_skip_reason, 'model_unavailable', label);
+    assert.match(String(settled[0].values.p_error), /Key 没有保存到本站/u, label);
+  }
+});
+
+test('a submit-time refusal of an own model or its key is a skip with the reason the member reads', async (t) => {
+  for (const code of ['BYOK_UNAVAILABLE', 'BYOK_KEY_UNAVAILABLE'] as const) {
+    const settled: SettleCall[] = [];
+    const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()]);
+    const submit = require('../lib/agent/submit.server') as typeof import('../lib/agent/submit.server');
+    mockRuntime(t, { submitError: new submit.AgentApiError('refused', 400, code) });
+    const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+    assert.deepEqual(await processAgentSchedules({ db }), { claimed: 1, submitted: 0, skipped: 1, failed: 0 });
+    assert.equal(settled[0].values.p_skip_reason, 'model_unavailable');
+    assert.match(String(settled[0].values.p_error), /自定义模型不可用/u);
+  }
+});
+
 test('manual run creates its occurrence through the SQL function, then submits', async (t) => {
   const settled: SettleCall[] = [];
   const order: string[] = [];

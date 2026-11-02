@@ -15,6 +15,7 @@ import {
     updateAvatarUrl as updateAvatarProfile,
     updateNickname as updateNicknameProfile,
 } from '@/lib/user/profile';
+import { clearDeviceKeys } from '@/lib/byok/device-keys';
 
 export type AuthUser = {
     id: string;
@@ -228,6 +229,8 @@ export async function signOut(): Promise<AuthResult> {
     if (error) {
         return { success: false, error: { message: '登出失败，请重试', code: error.code || error.message } };
     }
+    // 自定义模型的 Key 只在登录期间留在本机。
+    clearDeviceKeys();
     applySession(null, null, 'signed-out');
     return { success: true };
 }

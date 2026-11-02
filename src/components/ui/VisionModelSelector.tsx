@@ -1,27 +1,35 @@
 /**
  * 视觉模型选择器
  *
- * 仅显示视觉模型，用于手相/面相分析；支持推理模式切换。
+ * 仅显示视觉模型（平台的，以及打开了「识图」的自定义模型），用于手相/面相分析；支持推理模式切换。
  * 移动端为整行表单字段，桌面端为设计稿 Face「视觉模型」行右侧的小胶囊。
  */
-'use client'; // 需要下拉浮层开合状态与模型列表查询
+'use client'; // 需要下拉浮层开合状态、模型列表查询与本机的自定义模型 Key
 
 import { useMemo, useState, useEffect } from 'react';
 import { ChevronDown, Eye, Lightbulb } from 'lucide-react';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { ModelIcon } from '@/components/ui/ModelIcon';
+import { ByokKeyDialog } from '@/components/byok/ByokKeyDialog';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
+import { ownModelChoice, useOwnModels, type OwnModel } from '@/lib/byok/client';
+import { byokComposerEffort } from '@/lib/byok/config';
 import { DEFAULT_VISION_MODEL_ID } from '@/lib/ai/ai-config';
 import { getVendorName } from '@/lib/ai/vendor-labels';
 import { formatTokenPrices } from '@/lib/billing/format';
 import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@/components/ui/Menu';
 import { Button } from '@/components/ui/Button';
+import type { AIReasoningEffort } from '@/types';
 
 interface VisionModelSelectorProps {
     selectedModel?: string;
     onModelChange?: (modelId: string) => void;
     reasoningEnabled?: boolean;
     onReasoningChange?: (enabled: boolean) => void;
+    /** An own model starts at its default effort. */
+    onReasoningEffortChange?: (effort: AIReasoningEffort | null) => void;
+    /** The signed-in member, whose own vision models are listed too. */
+    userId?: string | null;
     disabled?: boolean;
 }
 
@@ -30,23 +38,43 @@ export function VisionModelSelector({
     onModelChange,
     reasoningEnabled = false,
     onReasoningChange,
+    onReasoningEffortChange,
+    userId,
     disabled = false,
 }: VisionModelSelectorProps) {
     const [dropdownOpen, setDropdownOpen] = useState(false);
+    const [keyModel, setKeyModel] = useState<OwnModel | null>(null);
     const modelsQuery = useAvailableModels(null, {
         enabled: !!onModelChange,
         vision: true,
     });
-    const models = useMemo(() => modelsQuery.data ?? [], [modelsQuery.data]);
+    const own = useOwnModels(onModelChange ? userId : null);
+    const models = useMemo(() => [
+        ...(modelsQuery.data ?? []),
+        ...own.models.filter(model => model.usage === 'chat' && model.supportsVision).map(ownModelChoice),
+    ], [modelsQuery.data, own.models]);
     const loading = modelsQuery.isLoading;
     const error = modelsQuery.error instanceof Error ? modelsQuery.error.message : null;
 
-    // 确保选中的模型存在
+    // 确保选中的模型存在；自己的模型可能还在加载。
     useEffect(() => {
-        if (!models.length || !onModelChange) return;
+        if (!models.length || !onModelChange || own.loading || own.failed) return;
         if (models.some(model => model.id === selectedModel)) return;
         onModelChange(models[0].id);
-    }, [models, onModelChange, selectedModel]);
+    }, [models, onModelChange, own.failed, own.loading, selectedModel]);
+
+    /** Own models start at their default effort; one without a key on this device asks for it first. */
+    const chooseModel = (id: string) => {
+        const model = models.find(item => item.id === id);
+        if (!model) return;
+        if ('own' in model && model.own) {
+            if (!model.own.ready) { setKeyModel(model.own); return; }
+            const effort = byokComposerEffort(model.own.defaultEffort);
+            onReasoningChange?.(effort.reasoning);
+            onReasoningEffortChange?.(effort.reasoningEffort);
+        }
+        onModelChange?.(id);
+    };
 
     const currentModel = useMemo(() => {
         return models.find(m => m.id === selectedModel) || models[0];
@@ -107,9 +135,10 @@ export function VisionModelSelector({
                             <div className="border-b border-border bg-background-secondary/50 px-3 py-2 text-xs font-medium text-foreground-secondary">
                                 视觉分析模型
                             </div>
-                            <MenuRadioGroup value={selectedModel} onValueChange={value => onModelChange?.(value)}>
+                            <MenuRadioGroup value={selectedModel} onValueChange={value => chooseModel(String(value))}>
                                 {models.map((model) => {
-                                    const prices = formatTokenPrices(model.pricing);
+                                    const ownModel = 'own' in model ? model.own : undefined;
+                                    const prices = ownModel ? null : formatTokenPrices('pricing' in model ? model.pricing : undefined);
                                     return (
                                         <MenuRadioItem
                                             key={model.id}
@@ -121,7 +150,7 @@ export function VisionModelSelector({
                                             <div className="min-w-0 flex-1">
                                                 <div className="truncate font-medium">{model.name}</div>
                                                 <div className="text-xs text-foreground-secondary">
-                                                    {getVendorName(model.vendor)}
+                                                    {ownModel ? `${ownModel.connection.name} · ${ownModel.ready ? '自定义，不计费' : '需填 Key'}` : getVendorName(model.vendor)}
                                                 </div>
                                             </div>
                                             {prices && (
@@ -137,6 +166,13 @@ export function VisionModelSelector({
                     {error && !loading && (
                         <div className="mt-1 text-xs text-danger">{error}</div>
                     )}
+                    {userId && <ByokKeyDialog model={keyModel} userId={userId} onClose={() => setKeyModel(null)} onSaved={model => {
+                        setKeyModel(null);
+                        const effort = byokComposerEffort(model.defaultEffort);
+                        onReasoningChange?.(effort.reasoning);
+                        onReasoningEffortChange?.(effort.reasoningEffort);
+                        onModelChange?.(model.ref);
+                    }} />}
                 </div>
             )}
 

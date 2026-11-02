@@ -18,6 +18,7 @@ import { generatedImagesDatabaseContracts } from './generated-images-database-co
 import { agentSchedulesDatabaseContracts } from './agent-schedules-database-contracts.mjs';
 import { billingDatabaseContracts } from './billing-database-contracts.mjs';
 import { communityReportDatabaseContracts } from './community-reports-database-contracts.mjs';
+import { byokDatabaseContracts } from './byok-database-contracts.mjs';
 
 // Real PostgreSQL/RLS contracts against a disposable local container. This does
 // NOT validate Better Auth sessions, network authentication, or production parity.
@@ -579,6 +580,7 @@ RESET ROLE;`);
   await agentSchedulesDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
   await billingDatabaseContracts(t,{sql,asActor,asOwner,adminId:ids.admin});
   await communityReportDatabaseContracts(t,{sql,asActor,asOwner,ownerId:ids.owner,adminId:ids.admin});
+  await byokDatabaseContracts(t,{sql,asActor,adminId:ids.admin});
 
 
 });

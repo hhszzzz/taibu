@@ -229,6 +229,7 @@ const adminLabelOverride: Record<string, string> = {
   billing: '钱包与用量',
   help: '帮助',
   charts: '我的命盘',
+  byok: '自定义模型',
 };
 
 /** Features that only appear in the admin toggle panel. */
@@ -241,6 +242,7 @@ const ADMIN_ONLY_FEATURES: { id: string; label: string }[] = [
   { id: 'memory', label: '任务记忆' },
   { id: 'shares', label: '分享链接' },
   { id: 'annual-report', label: '年度报告' },
+  { id: 'byok', label: '自定义模型' },
 ];
 
 /** Lookup a single registry entry by id. */

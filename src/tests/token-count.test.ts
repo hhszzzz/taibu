@@ -52,7 +52,7 @@ test('skill text is counted by the gateway, minus the message framing, and the c
   assert.equal(calls.length, 2, 'the same text on the same model is asked once');
 });
 
-test('without a count endpoint, a bring-your-own model or a key, the tokenkit estimate stands in', async () => {
+test('without a count endpoint or a key, the tokenkit estimate stands in', async () => {
   resetTokenCountCache();
   const text = '子平八字：先看月令，再看透干。';
   const missing = gateway(() => new Response('not found', { status: 404 }));
@@ -67,8 +67,7 @@ test('without a count endpoint, a bring-your-own model or a key, the tokenkit es
   assert.equal(failing.calls.length, 2, 'a transient failure is not remembered');
 
   const untouched = gateway(() => Response.json({ input_tokens: 1 }));
-  assert.equal(await countModelTokens(model(), text, { apiKey: 'sk-user', fetch: untouched.fetcher }), estimateTokens('deepseek-v3.2', text));
   const keyless = model({ sources: [{ sourceKey: 'gateway', sourceName: 'gateway', apiUrl: 'http://gateway.test/v1/', gatewayId: 'gateway-count', apiKeySecret: null }] });
   assert.equal(await countModelTokens(keyless, text, { fetch: untouched.fetcher }), estimateTokens('deepseek-v3.2', text));
-  assert.equal(untouched.calls.length, 0, 'no request on behalf of a user’s own provider or without a configured key');
+  assert.equal(untouched.calls.length, 0, 'no request without a configured key');
 });

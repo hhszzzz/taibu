@@ -15,6 +15,7 @@ export const ADMIN_SUBTABS = {
   'admin-ai-services': [
     { id: 'models', label: '模型管理' },
     { id: 'gateways', label: '网关管理' },
+    { id: 'byok', label: '自定义模型' },
     { id: 'agent-evals', label: 'Agent 测评' },
   ],
   'admin-agent-extensions': [

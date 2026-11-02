@@ -133,14 +133,15 @@ export function usageBiller(userId: string, source: BillingSource, reference?: {
 }
 
 /**
- * A call the member made with their own key: the browser reports what the provider said, and it lands in the usage
- * log at $0 with `byok`, so the log shows every call without the platform charging for it. A no-op when the provider
- * reported nothing. Never throws.
+ * A call the member made with their own key, reported by the browser or made here with the key they stored: it lands
+ * in the usage log at $0 with `byok`, so the log shows every call without the platform charging for it. `model` is
+ * the provider's model ID. A no-op when the provider reported nothing. Never throws.
  */
 export async function recordDirectUsage(input: {
     userId: string;
     model: string;
     usage: TokenUsage;
+    source?: BillingSource;
     referenceType?: string;
     referenceId?: string;
 }): Promise<void> {
@@ -148,7 +149,7 @@ export async function recordDirectUsage(input: {
     const key = `byok:${randomUUID()}`;
     try {
         await systemDb().rpc('billing_charge', {
-            p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: 'chat', p_model_key: input.model,
+            p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: input.source ?? 'chat', p_model_key: input.model,
             p_usage: { ...input.usage, byok: true },
             p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
             p_idempotency_key: key, p_description: '自带密钥调用',
@@ -188,11 +189,15 @@ export async function prepayImages(input: {
     return { key, micros, images: input.images };
 }
 
-/** The images a free image model delivered, recorded at $0 so the usage log shows them. Never throws. */
+/**
+ * The images a free image model, or the member's own one (`byok`), delivered, recorded at $0 so the usage log shows
+ * them. Never throws.
+ */
 export async function recordFreeImages(input: {
     userId: string;
     model: Pick<AIModelConfig, 'id'>;
     images: number;
+    byok?: boolean;
     referenceType?: string;
     referenceId?: string;
 }): Promise<void> {
@@ -201,7 +206,7 @@ export async function recordFreeImages(input: {
     try {
         await systemDb().rpc('billing_charge', {
             p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: 'image', p_model_key: input.model.id,
-            p_usage: { images: input.images, prices: { image: 0 } },
+            p_usage: { images: input.images, prices: { image: 0 }, ...(input.byok ? { byok: true } : {}) },
             p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
             p_idempotency_key: key, p_description: `生成 ${input.images} 张图片`,
         });

@@ -299,32 +299,6 @@ function createChatRequest(overrides: Record<string, unknown> = {}) {
     });
 }
 
-function createByokChatRequest() {
-    return new NextRequest('http://localhost/api/chat', {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: 'Bearer test-token',
-        },
-        body: JSON.stringify({
-            stream: true,
-            customProvider: {
-                apiUrl: 'https://8.8.8.8/v1',
-                apiKey: 'sk-test',
-                modelId: 'gpt-4.1-mini',
-            },
-            messages: [
-                {
-                    id: 'm1',
-                    role: 'user',
-                    content: '你好',
-                    createdAt: new Date().toISOString(),
-                },
-            ],
-        }),
-    });
-}
-
 function createDirectPrepareRequest() {
     return new NextRequest('http://localhost/api/chat/direct/prepare', {
         method: 'POST',
@@ -429,23 +403,6 @@ test('chat route refuses an unpriced model with 403 before the balance is read',
     assert.equal(state.balanceCalls, 0);
     assert.equal(state.rateLimitCalls, 0);
     assert.equal(state.aiUiCalls, 0);
-});
-
-test('chat route no longer uses the legacy BYOK server proxy path', async (t) => {
-    const state = setupRouteMocks(t, createUIChunkStream([
-        { type: 'text-delta', id: 't1', delta: 'ok' },
-    ]));
-    const { POST } = await import('../app/api/chat/route');
-
-    const response = await POST(createByokChatRequest());
-    await response.text();
-    await waitForMicrotask();
-
-    assert.equal(response.status, 200);
-    assert.equal(state.balanceCalls, 1, 'the platform model is admitted and metered as usual');
-    assert.equal(state.billers.length, 1);
-    assert.equal(state.aiUiCalls, 1);
-    assert.doesNotMatch(JSON.stringify(state.aiOptions), /sk-test/);
 });
 
 test('chat route returns 400 for invalid JSON bodies', async (t) => {
@@ -615,7 +572,6 @@ test('chat route meters a normal user and strips authorization fields before the
         assert.equal('skipBilling' in args[1], false);
         assert.equal('internalSecret' in args[1], false);
         assert.equal('accessTokenForKB' in args[1], false);
-        assert.equal('customProvider' in args[1], false);
         return original(...args);
     });
     const { POST } = await import('../app/api/chat/route');
@@ -624,7 +580,6 @@ test('chat route meters a normal user and strips authorization fields before the
         skipBilling: true,
         internalSecret: 'wrong-secret',
         accessTokenForKB: 'untrusted-token',
-        customProvider: { apiKey: 'must-not-enter-use-case' },
     }));
     await response.text();
     assert.equal(response.status, 200);

@@ -10,7 +10,7 @@
  *   const { run } = await import('file:///absolute/repo/scripts/tests/browser-components.mjs');
  *   return run(page, '/tmp/taibu-browser/fixture.js');
  *
- * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel/HelpPanel/CollaborationSettings,
+ * Actual components: SettingsCenterPage/SettingsCenterHost/GeneralSettingsPanel/ChartsPanel/SharedLinksPanel/ConnectorsPanel/SkillsPanel/BYOKPanel/HelpPanel/CollaborationSettings,
  * ShareConversationMenu, AIModelPanel, AnnouncementManagementPanel, BillingCodesPanel, AgentTaskPanel, AgentProfilesPanel, ConversationListProvider, ChartPickerModal,
  * useSelectedBaziChart, useComposerState, useComposerCommands, HistoryDrawer/HistoryPageTemplate, RecordsPage and useAnalysisSnapshot.
  * Actual root ClientProviders owns the shared Query client and handles synthetic auth I/O.
@@ -471,7 +471,7 @@ function AgentChatProbe() {
       selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
       planMode={planMode} onPlanModeChange={setPlanMode} codeMode={codeMode} onCodeModeChange={setCodeMode}
-      contextData={agentContextData} customProviderActive={false} customProviderLabel={null} />
+      contextData={agentContextData} />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
 }
@@ -487,17 +487,20 @@ function ComposerProbe() {
     <output data-testid="composer-error">{state.mentionLoadError}</output>
   </section>;
 }
-// 输入框「生图」入口：没有可用模型时按钮隐藏，开启后可选尺寸与张数并直接生成。
+// 输入框「生图」入口：没有可用模型时按钮隐藏，开启后可选模型、尺寸与张数并直接生成；自己的生图模型不计费。
+const IMAGE_MODELS = [{ id: 'fixture-image', name: '平台生图', priceMicros: 40_000, own: false }, { id: 'byok:00000000-0000-4000-8000-0000000000b2', name: '自有生图', priceMicros: 0, own: true }];
 function ImageComposerProbe() {
   const [value, setValue] = useState('');
   const [available, setAvailable] = useState(false);
   const [generated, setGenerated] = useState(null);
+  const [imageModel, setImageModel] = useState(IMAGE_MODELS[0].id);
   window.fixture.imageComposer = { available: () => available, generated: () => generated };
   return <section data-testid="image-composer">
     <button type="button" onClick={() => setAvailable(true)}>Enable image model</button>
     <ChatComposer draftKey="image-fixture" inputValue={value} onInputChange={setValue} onSend={() => {}} isLoading={false}
       userId="alice" disabled={false}
-      imageGeneration={available ? { sizes: ['1024x1024', '1536x1024'], priceMicros: 40_000, maxCount: 4, onGenerate: options => setGenerated(options) } : undefined} />
+      imageGeneration={available ? { sizes: ['1024x1024', '1536x1024'], models: IMAGE_MODELS, model: IMAGE_MODELS.find(model => model.id === imageModel), onModelChange: setImageModel,
+        maxCount: 4, onGenerate: options => setGenerated({ ...options, model: imageModel }) } : undefined} />
     {generated && <output data-testid="image-generated">{JSON.stringify(generated)}</output>}
     <GeneratedImageGallery images={[IMAGE_FIXTURE]} />
   </section>;
@@ -513,14 +516,19 @@ function GuestComposerProbe() {
     <output data-testid="guest-login">{loginAsked}</output>
   </section>;
 }
-// 平台模型目录为空时，模型菜单仍要能打开并给出自带 API 的入口。
+// 平台模型目录为空时，模型菜单仍要能打开并给出自带 API 的入口（跳到设置页的自定义模型）。
 function ModelSelectorProbe() {
   const [model, setModel] = useState('fixture-analysis');
-  const [providerOpen, setProviderOpen] = useState(0);
+  const [opened, setOpened] = useState('');
+  useEffect(() => {
+    const record = event => setOpened(event.detail.href);
+    window.addEventListener('taibu:settings-center:navigate', record);
+    return () => window.removeEventListener('taibu:settings-center:navigate', record);
+  }, []);
   return <section data-testid="model-selector">
-    <ModelSelector selectedModel={model} onModelChange={setModel} userId="alice" onCustomProvider={() => setProviderOpen(open => open + 1)} toolbarStyle />
+    <ModelSelector selectedModel={model} onModelChange={setModel} userId="alice" ownModelsEntry toolbarStyle />
     <output data-testid="model-selector-picked">{model}</output>
-    <output data-testid="model-selector-provider">{providerOpen}</output>
+    <output data-testid="model-selector-settings">{opened}</output>
   </section>;
 }
 
@@ -860,7 +868,7 @@ export async function build(outputDirectory) {
       plugin.onResolve({ filter: /^@\/lib\/auth$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/providers\/(ChatTaskToastBridge|AnnouncementPopupHost)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/lib\/hooks\/(useFeatureToggles|useCurrentUserProfile)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
-      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|UsageLogPanel|BillingPanel|HelpPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
+      plugin.onResolve({ filter: /^@\/components\/settings\/panels\// }, args => /\/(GeneralSettingsPanel|AISettingsPanel|ChartsPanel|SharedLinksPanel|ConnectorsPanel|SkillsPanel|BYOKPanel|UsageLogPanel|BillingPanel|HelpPanel)$/.test(args.path) ? null : ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^(?:node:)?crypto$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^next\/(navigation|link)$/ }, args => ({ path: args.path, namespace: 'fixture' }));
       plugin.onResolve({ filter: /^@\/components\/settings\/AccountAdminPanels$/ }, args => ({ path: args.path, namespace: 'fixture' }));
@@ -977,7 +985,7 @@ export async function run(existingPage, bundlePath) {
       if (url.pathname.startsWith('/api/agent/')) {
         const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(init.body) : null;
         agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
-        if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, customAvailable: true });
+        if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false });
         if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
         if (url.pathname === '/api/agent/skills') return Response.json({ skills: agentIO.skills ?? [] });
         // The roles a member may give a collaboration member, as an administrator set them up.
@@ -1244,6 +1252,13 @@ export async function run(existingPage, bundlePath) {
   const connectorsByUser = { alice: [], bob: [] };
   // Each account's own skills (/api/user/skills), with the same allowance: alice may add three, bob's are closed.
   const skillsByUser = { alice: [], bob: [] };
+  // Each account's own model connections (/api/byok/*), as the API answers them; the policy is the default one.
+  const byokByUser = { alice: [], bob: [] };
+  const byokPolicy = { allowServerKeys: true, maxConnections: 10, maxModelsPerConnection: 50 };
+  let byokSequence = 0;
+  const byokId = () => '00000000-0000-4000-8000-' + String(++byokSequence).padStart(12, '0');
+  // Requests that reached the provider the fixture serves at its own origin, with the headers a browser sent.
+  const providerRequests = [];
   await context.route('**/*', async route => {
     const request = route.request();
     const url = new URL(request.url());
@@ -1363,6 +1378,39 @@ export async function run(existingPage, bundlePath) {
         return ok({ server }, true);
       }
       if (method === 'DELETE') { owned.splice(owned.indexOf(server), 1); return ok({ deleted: true }, true); }
+    }
+    if (url.pathname.startsWith('/api/byok/')) {
+      const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
+      if (request.headers()['x-expected-user-id'] !== user) return route.fulfill({ status: 409, json: { error: 'Account changed' } });
+      const owned = byokByUser[user];
+      // As the API answers: a stored key comes back as its hint only, a browser key not at all.
+      const view = (input, saved) => ({ id: saved?.id ?? byokId(), name: input.name, protocol: input.protocol, baseUrl: input.baseUrl,
+        keyHint: !input.key.store ? null : input.key.value ? input.key.value.slice(0, 3) + '…' + input.key.value.slice(-4) : saved?.keyHint ?? null,
+        models: input.models.map(model => { const id = model.id ?? byokId(); return { ...model, id, ref: 'byok:' + id }; }), updatedAt: '2026-11-02T00:00:00Z' });
+      if (url.pathname === '/api/byok/connections' && method === 'GET') return ok({ connections: owned, policy: byokPolicy }, true);
+      if (url.pathname === '/api/byok/connections' && method === 'POST') {
+        const connection = view(body, null);
+        owned.push(connection);
+        return route.fulfill({ status: 201, contentType: 'application/json', body: JSON.stringify({ connection }) });
+      }
+      const item = url.pathname.match(/^\/api\/byok\/connections\/([^/]+)$/);
+      const index = item ? owned.findIndex(entry => entry.id === item[1]) : -1;
+      if (item && index < 0) return route.fulfill({ status: 404, json: { error: '连接不存在' } });
+      if (item && method === 'DELETE') { owned.splice(index, 1); return ok({ deleted: true }, true); }
+      if (item && method === 'PATCH') { owned[index] = view(body, owned[index]); return ok({ connection: owned[index] }, true); }
+      if (url.pathname === '/api/byok/capabilities' && method === 'POST') return ok({ models: {} }, true);
+    }
+    // A provider at the fixture's own origin, so a key kept in the browser is tested without leaving the fixture: its model
+    // list answers at /models (not under /v1), and its chat refuses reasoning_effort.
+    if (url.pathname.startsWith('/provider/')) {
+      providerRequests.push({ method, pathname: url.pathname, headers: request.headers(), body });
+      if (url.pathname === '/provider/models' && method === 'GET') return route.fulfill({ status: 200, json: { data: [{ id: 'gpt-image-1' }, { id: 'fixture-chat', name: 'Fixture Chat' }] } });
+      if (url.pathname === '/provider/chat/completions' && method === 'POST') {
+        if (body?.reasoning_effort) return route.fulfill({ status: 400, json: { error: { message: 'Unrecognized request argument supplied: reasoning_effort' } } });
+        const chunk = (delta, finish, usage) => 'data: ' + JSON.stringify({ id: 'c', object: 'chat.completion.chunk', created: 1, model: 'fixture-chat', choices: [{ index: 0, delta, finish_reason: finish }], ...(usage ? { usage } : {}) }) + '\n\n';
+        return route.fulfill({ status: 200, contentType: 'text/event-stream', body: chunk({ role: 'assistant', content: 'OK' }, null) + chunk({}, 'stop', { prompt_tokens: 3, completion_tokens: 1, total_tokens: 4 }) + 'data: [DONE]\n\n' });
+      }
+      return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
     }
     if (url.pathname.startsWith('/api/user/skills')) {
       const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
@@ -2480,12 +2528,16 @@ export async function run(existingPage, bundlePath) {
     const imageOptions = page.getByRole('group', { name: '生图设置' });
     check('生图 mode shows size, count and the price', await imageOptions.isVisible()
       && (await imageOptions.innerText()).includes('每张 $0.04 · 共 $0.04'));
+    await chooseSelect(imageOptions, '生图模型', '自有生图（自定义）');
+    await imageOptions.getByText('使用自己的生图模型，不计费', { exact: true }).waitFor();
+    check('生图 mode picks among the platform\'s and the member\'s own image models, and an own one is free',
+      (await imageOptions.getByRole('combobox', { name: '生图模型', exact: true }).innerText()).includes('自有生图（自定义）'));
     await page.getByLabel('描述要生成的图片').fill('水墨山居，晨雾缭绕');
     await page.getByLabel('描述要生成的图片').press('Enter');
     await page.getByTestId('image-generated').waitFor();
     const imageRequest = JSON.parse(await page.getByTestId('image-generated').innerText());
     check('生图 send asks for the image directly with the chosen options',
-      imageRequest.prompt === '水墨山居，晨雾缭绕' && imageRequest.size === '1024x1024' && imageRequest.count === 1);
+      imageRequest.prompt === '水墨山居，晨雾缭绕' && imageRequest.size === '1024x1024' && imageRequest.count === 1 && imageRequest.model === 'byok:00000000-0000-4000-8000-0000000000b2');
     const galleryImage = page.getByTestId('image-composer').locator('img[src="/api/images/11111111-1111-4111-8111-111111111111"]');
     check('the gallery renders private image URLs with the stored aspect ratio', await galleryImage.count() === 1
       && (await galleryImage.getAttribute('style') ?? '').includes('aspect-ratio'));
@@ -2521,8 +2573,8 @@ export async function run(existingPage, bundlePath) {
     check('An empty catalog still offers the member’s own API', await modelMenu.getByText('暂无可用模型。', { exact: true }).count() === 1
       && await modelMenu.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).count() === 1);
     await modelMenu.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).click();
-    await until(() => document.querySelector('[data-testid="model-selector-provider"]').textContent === '1');
-    check('Choosing the own API opens the provider dialog', true);
+    await until(() => document.querySelector('[data-testid="model-selector-settings"]').textContent !== '');
+    check('Choosing the own API opens the own-model settings', await page.getByTestId('model-selector-settings').innerText() === '/settings/byok');
     await page.evaluate(() => { window.fixture.mount.modelSelector(false); window.fixture.emptyModels = false; window.fixture.client.removeQueries({ queryKey: ['models'] }); });
 
     // 引用：选中助手回答中的文字浮出「引用」按钮，消息菜单可引用整条；发送后引用卡在用户气泡上方。
@@ -3047,15 +3099,70 @@ export async function run(existingPage, bundlePath) {
       const { collaborators } = window.fixture.agentChat.state;
       return collaborators[0].model === 'fixture-analysis' && collaborators[0].reasoningEffort === 'high' && collaborators[0].focus.includes('日支') && collaborators[1].model === 'fixture-review' && collaborators[1].reasoningEffort === 'xhigh';
     }));
-    await page.evaluate(async () => window.fixture.agentChat.messaging.agent.start('agent-byok', {
-      id: 'byok-message', role: 'user', content: 'Direct model task', createdAt: '2026-10-10T00:00:00Z',
-    }, { model: 'direct-model', reasoning: true, mentions: [], provider: {
-      apiUrl: 'https://fixture-direct.invalid/v1', apiKey: 'fixture-only', modelId: 'direct-model',
-    } }));
-    check('Direct model tasks omit platform collaborators while retaining saved platform settings', await page.evaluate(() => {
-      const request = window.fixtureAgentIO.requests.find(item => item.method === 'POST' && item.url === '/api/agent/runs' && item.body.conversationId === 'agent-byok');
-      return request.body.customProvider.modelId === 'direct-model' && request.body.collaborators.length === 0 && window.fixture.agentChat.state.collaborators.length === 2;
-    }));
+    // 自己的模型：菜单在平台模型之后按连接分组列出对话模型；本设备没 Key 的标「需填 Key」，选中或发送时先填 Key。
+    // 任务把本设备的 Key 按连接交给本站暂存，平台协作成员与选定的生图模型照常带上。
+    const ownConnection = byokId(), ownChat = 'byok:' + byokId(), ownImage = 'byok:' + byokId();
+    const ownModel = (ref, modelId, displayName, usage) => ({ id: ref.slice(5), ref, modelId, displayName, usage, supportsVision: false,
+      thinkingLevels: [], defaultEffort: usage === 'chat' ? 'medium' : 'auto', contextWindow: null, maxOutput: null });
+    byokByUser.alice = [{ id: ownConnection, name: '夹具中转', protocol: 'openai', baseUrl: origin + '/provider/chat/completions', keyHint: null,
+      models: [ownModel(ownChat, 'fixture-chat', '自有对话', 'chat'), ownModel(ownImage, 'gpt-image-1', '自有生图', 'image')], updatedAt: '2026-11-02T00:00:00Z' }];
+    await selectAgentConversation('agent-byok');
+    await page.evaluate(() => window.fixture.client.invalidateQueries({ queryKey: ['byok'] }));
+    await settingsTrigger.click();
+    await modelSettings.waitFor();
+    const ownGroup = modelSettings.getByRole('group', { name: '夹具中转', exact: true });
+    await ownGroup.waitFor();
+    check('Own chat models follow the platform\'s under their connection, and one without a key here says so',
+      JSON.stringify(await ownGroup.getByRole('menuitemradio').allInnerTexts()) === JSON.stringify(['自有对话需填 Key'])
+      && JSON.stringify((await modelSettings.getByRole('menuitemradio').allInnerTexts()).slice(-2)) === JSON.stringify(['仅支持推理开关', '自有对话需填 Key']));
+    const modelBefore = await page.evaluate(() => window.fixture.agentChat.state.selectedModel);
+    await ownGroup.getByRole('menuitemradio', { name: /^自有对话/u }).click();
+    const keyDialog = page.getByRole('dialog', { name: '填写 API Key', exact: true });
+    await keyDialog.waitFor();
+    check('Choosing it asks for the key first and keeps the current model', await page.evaluate(model => window.fixture.agentChat.state.selectedModel === model, modelBefore)
+      && (await keyDialog.innerText()).includes('「夹具中转」的 Key 只保存在这台设备的浏览器里'));
+    await keyDialog.getByRole('button', { name: '取消', exact: true }).click();
+    await keyDialog.waitFor({ state: 'hidden' });
+    await page.evaluate(({ chat, image }) => {
+      const { state } = window.fixture.agentChat;
+      state.setSelectedModel(chat);
+      state.setImageModel(image);
+      state.setCollaborators([{ id: 'member-review', name: '复核', model: 'fixture-review', focus: '', reasoning: false, reasoningEffort: null }]);
+      window.fixture.agentToasts.length = 0;
+    }, { chat: ownChat, image: ownImage });
+    await page.getByLabel('Agent fixture draft').fill('用自己的模型看看');
+    await until(() => window.fixture.agentChat.state.inputValue === '用自己的模型看看');
+    await page.evaluate(() => window.fixture.agentChat.messaging.handleSend());
+    const byokRun = () => page.evaluate(() => window.fixtureAgentIO.requests.find(item => item.method === 'POST' && item.url === '/api/agent/runs' && item.body.conversationId === 'agent-byok') ?? null);
+    check('Sending without the key here asks for it with a way to fill it in, and starts nothing', await page.evaluate(() => {
+      const [tone, message, options] = window.fixture.agentToasts.at(-1) ?? [];
+      return tone === 'info' && String(message).includes('API Key') && options?.action?.label === '填写 Key'
+        && window.fixture.agentChat.state.inputValue === '用自己的模型看看';
+    }) && await byokRun() === null);
+    await page.evaluate(() => window.fixture.agentToasts.at(-1)[2].action.onClick());
+    await keyDialog.waitFor();
+    await keyDialog.getByLabel('API Key', { exact: true }).fill('sk-fixture-device');
+    await keyDialog.getByRole('button', { name: '保存', exact: true }).click();
+    await keyDialog.waitFor({ state: 'hidden' });
+    check('The key is kept for this account on this device only', await page.evaluate(connection =>
+      JSON.parse(localStorage.getItem('taibu:byok-keys:alice') ?? '{}')[connection] === 'sk-fixture-device', ownConnection));
+    await page.evaluate(() => window.fixture.agentChat.messaging.handleSend());
+    await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url === '/api/agent/runs' && item.body.conversationId === 'agent-byok'));
+    const ownRun = await byokRun();
+    check('An Agent task on an own model hands this device\'s key over by connection, with its platform member and image model',
+      ownRun.body.model === ownChat && ownRun.body.imageModel === ownImage && JSON.stringify(ownRun.body.byokKeys) === JSON.stringify({ [ownConnection]: 'sk-fixture-device' })
+      && ownRun.body.collaborators.length === 1 && ownRun.body.collaborators[0].model === 'fixture-review');
+    byokByUser.alice = [];
+    await page.evaluate(() => {
+      const { state } = window.fixture.agentChat;
+      state.setImageModel(null);
+      state.setCollaborators([]);
+      state.setSelectedModel('fixture-analysis');
+      localStorage.removeItem('taibu:byok-keys:alice');
+      void window.fixture.client.invalidateQueries({ queryKey: ['byok'] });
+    });
+    await selectAgentConversation('agent-settings');
+    await until(() => window.fixture.agentChat.state.collaborators.length === 2);
     await page.getByRole('button', { name: 'Fixture Bob', exact: true }).click();
     await until(() => window.fixture.agentChat.state.collaborators.length === 0 && window.fixture.agentChat.state.reasoningEffort === null);
     check('Account changes clear previous-user collaborator names, focus and reasoning choices', await page.evaluate(() => window.fixture.agentChat.state.collaborators.length === 0 && window.fixture.agentChat.state.reasoningEffort === null));
@@ -4271,6 +4378,81 @@ export async function run(existingPage, bundlePath) {
     check('Agent mode\'s slash menu offers the member\'s skills and fills in /skill:名称',
       await page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url === '/api/agent/skills').length) === 1);
     await page.evaluate(() => window.fixture.mount.skillCommands(false));
+
+    // Own models: the address shows the request it resolves to, a connection test offers the address the provider answers
+    // at, models come from the provider's list, a model that refuses effort levels defaults to the model's own, and the
+    // key stays on this device until the connection stores it here.
+    await page.evaluate(() => { history.replaceState(null, '', '#settings/byok'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
+    await page.getByText('还没有自定义模型', { exact: true }).waitFor();
+    await page.getByRole('button', { name: '添加连接', exact: true }).click();
+    const byokEditor = page.locator('.byok-editor');
+    await byokEditor.getByLabel('名称', { exact: true }).fill('夹具中转');
+    await byokEditor.getByLabel('接口地址', { exact: true }).fill(origin + '/provider');
+    check('The address shows the request it resolves to before anything is saved',
+      (await byokEditor.innerText()).includes(`实际请求 ${origin}/provider/v1/chat/completions，模型列表 ${origin}/provider/v1/models`));
+    await byokEditor.getByLabel('API Key', { exact: true }).fill('sk-fixture-device');
+    await byokEditor.getByRole('button', { name: '测试连接', exact: true }).click();
+    const useAlternative = byokEditor.getByRole('button', { name: '改用这个地址', exact: true });
+    await useAlternative.waitFor();
+    check('A test that only answers with /v1 toggled says why and offers that address',
+      /HTTP 404/u.test(await byokEditor.getByRole('alert').innerText()) && (await byokEditor.getByRole('alert').innerText()).includes(`改用 ${origin}/provider/chat/completions 可以连通`)
+      && JSON.stringify(providerRequests.map(entry => entry.pathname)) === JSON.stringify(['/provider/v1/models', '/provider/models']));
+    check('The browser sends the key to the provider without the SDK headers CORS would refuse',
+      providerRequests[0].headers.authorization === 'Bearer sk-fixture-device' && !Object.keys(providerRequests[0].headers).some(name => name.startsWith('x-stainless')));
+    await useAlternative.click();
+    await byokEditor.getByText('连接成功，可用 2 个模型').waitFor();
+    check('Taking the offered address keeps the listed models', await byokEditor.getByLabel('接口地址', { exact: true }).inputValue() === origin + '/provider/chat/completions'
+      && (await byokEditor.innerText()).includes(`实际请求 ${origin}/provider/chat/completions，模型列表 ${origin}/provider/models`));
+    await byokEditor.getByRole('button', { name: '从列表添加', exact: true }).click();
+    const providerModels = byokEditor.getByRole('list', { name: '服务商提供的模型', exact: true });
+    await providerModels.getByRole('checkbox', { name: /fixture-chat/u }).click();
+    await providerModels.getByRole('checkbox', { name: /gpt-image-1/u }).click();
+    await byokEditor.getByRole('button', { name: '添加所选（2）', exact: true }).click();
+    const byokModels = byokEditor.getByRole('region', { name: '模型', exact: true });
+    await byokModels.getByLabel('模型 ID', { exact: true }).nth(1).waitFor();
+    check('Picked models are added with the use their IDs suggest and a medium default effort',
+      JSON.stringify(await byokModels.getByLabel('模型 ID', { exact: true }).evaluateAll(inputs => inputs.map(input => input.value))) === JSON.stringify(['fixture-chat', 'gpt-image-1'])
+      && JSON.stringify(await byokModels.getByRole('combobox', { name: '用途', exact: true }).allInnerTexts()) === JSON.stringify(['对话', '生图'])
+      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '默认：中等');
+    await byokModels.getByRole('button', { name: '测试「fixture-chat」', exact: true }).click();
+    await byokModels.getByText(/^可用：回复「OK」/u).waitFor();
+    const chatTests = providerRequests.filter(entry => entry.pathname === '/provider/chat/completions');
+    check('A model that refuses effort levels answers without one, and its default becomes the model\'s own',
+      (await byokModels.getByText(/^可用：回复「OK」/u).innerText()).includes('它不接受努力程度参数，默认已改为「模型默认」')
+      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '默认：模型默认'
+      && chatTests.length === 2 && chatTests[0].body.reasoning_effort === 'medium' && chatTests[1].body.reasoning_effort === undefined
+      && chatTests.every(entry => entry.body.model === 'fixture-chat' && entry.body.temperature === undefined));
+    await byokEditor.getByRole('button', { name: '添加', exact: true }).click();
+    const byokList = page.getByRole('list', { name: '我的模型连接', exact: true });
+    await byokList.getByText('Key 在本设备', { exact: true }).waitFor();
+    const createdByok = requests.find(entry => entry.pathname === '/api/byok/connections' && entry.method === 'POST');
+    const savedByok = byokByUser.alice[0];
+    check('A browser-key connection is saved for the account without its key, which stays on this device',
+      createdByok?.expectedUserId === 'alice' && JSON.stringify(createdByok.body.key) === JSON.stringify({ store: false }) && !JSON.stringify(createdByok.body).includes('sk-fixture-device')
+      && createdByok.body.baseUrl === origin + '/provider/chat/completions'
+      && JSON.stringify(createdByok.body.models.map(model => [model.modelId, model.usage, model.defaultEffort])) === JSON.stringify([['fixture-chat', 'chat', 'auto'], ['gpt-image-1', 'image', 'auto']])
+      && await page.evaluate(id => JSON.parse(localStorage.getItem('taibu:byok-keys:alice') ?? '{}')[id] === 'sk-fixture-device', savedByok.id));
+    check('The card names the protocol, the host and what its models are for',
+      (await byokList.innerText()).includes('OpenAI 兼容') && (await byokList.innerText()).includes('taibu-fixture.invalid · 1 个对话模型、1 个生图模型')
+      && JSON.stringify(await byokList.getByRole('list', { name: '「夹具中转」的模型' }).getByRole('listitem').allInnerTexts()) === JSON.stringify(['fixture-chat', 'gpt-image-1生图']));
+    await page.getByRole('button', { name: '编辑「夹具中转」', exact: true }).click();
+    await byokEditor.getByText(/已保存在这台设备（sk-…vice），留空则不修改/u).waitFor();
+    await byokEditor.getByRole('switch', { name: '保存到本站', exact: true }).click();
+    check('Storing it here offers to move this device\'s key', (await byokEditor.innerText()).includes('这台设备的 Key（sk-…vice）移到本站加密保存'));
+    await byokEditor.getByRole('button', { name: '保存', exact: true }).click();
+    await byokList.getByText('Key 保存在本站', { exact: true }).waitFor();
+    const movedByok = requests.filter(entry => entry.pathname === '/api/byok/connections/' + savedByok.id && entry.method === 'PATCH').at(-1);
+    check('Saving moves the key: sent once to be stored here, gone from this device',
+      JSON.stringify(movedByok?.body?.key) === JSON.stringify({ store: true, value: 'sk-fixture-device' })
+      && JSON.stringify(movedByok.body.models.map(model => model.id)) === JSON.stringify(savedByok.models.map(model => model.id))
+      && await page.evaluate(id => !(id in JSON.parse(localStorage.getItem('taibu:byok-keys:alice') ?? '{}')), savedByok.id));
+    await page.getByRole('button', { name: '删除「夹具中转」', exact: true }).click();
+    const byokDelete = page.getByRole('alertdialog', { name: '删除连接', exact: true });
+    check('Deleting asks first and says what goes with it', (await byokDelete.innerText()).includes('删除「夹具中转」后，它的 2 个模型一并移除'));
+    await byokDelete.getByRole('button', { name: '删除', exact: true }).click();
+    await page.getByText('还没有自定义模型', { exact: true }).waitFor();
+    check('A deleted connection leaves the list', byokByUser.alice.length === 0
+      && requests.some(entry => entry.pathname === '/api/byok/connections/' + savedByok.id && entry.method === 'DELETE'));
 
     // Roles: a collaboration member takes one of the roles the administrator offers; the preset keeps it, and a role
     // with its own model says the member runs on it.

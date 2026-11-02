@@ -183,6 +183,20 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
   });
 
+  await t.test('a skip that says why notifies with that reason; one that does not gets its default text', async () => {
+    const schedule = await create('跳过原因', { kind: 'daily', time: '08:00' });
+    const skip = async error => {
+      await dueNow(schedule.id);
+      const [run] = (await parsed('SELECT coalesce(jsonb_agg(to_jsonb(r)),\'[]\') FROM public.claim_agent_schedules(10) r;')).filter(item => item.schedule_id === schedule.id);
+      await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'skipped',NULL,${error === null ? 'NULL' : quote(error)},'model_unavailable');`);
+      return asActor(owner, `SELECT content FROM public.notifications WHERE event_key=${quote('schedule:' + run.id)};`);
+    };
+    const reason = '自定义模型不可用：可能已被删除，或它的 Key 没有保存到本站';
+    assert.equal(await skip(reason), reason);
+    assert.equal(await skip('  '), '模型不可用或未定价，本次运行已跳过。');
+    await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+  });
+
   await t.test('consecutive failures accumulate across starts and reset on a non-failure', async () => {
     const schedule = await create('失败计数', { kind: 'daily', time: '08:00' });
     const nextRun = async () => {

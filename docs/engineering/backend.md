@@ -119,7 +119,7 @@ Better Auth 的会话 Cookie 是 `SameSite=Lax`，跨站的顶层 GET 导航仍�
 
 涉及鉴权、计费、限流或资源归属的重构，先补成功、失败、权限与并发回归，再改实现。
 
-计费的固定做法：平台模型调用前只做余额准入（可用额度大于 0，免费模型不查），调用结束后按上游 `usage` 经 `src/lib/billing/account.server.ts` 入账，拿不到用量时估算并标 `estimated`；生图价格已知，预扣全额、没出的图退回。不要在路由里预扣固定金额或按「有无可见回复」退款。BYOK 不计费；浏览器直连的调用不经过服务器。
+计费的固定做法：平台模型调用前只做余额准入（可用额度大于 0，免费模型不查），调用结束后按上游 `usage` 经 `src/lib/billing/account.server.ts` 入账，拿不到用量时估算并标 `estimated`；生图价格已知，预扣全额、没出的图退回。不要在路由里预扣固定金额或按「有无可见回复」退款。自定义模型（BYOK）不计费，调用经 `recordDirectUsage` 记 $0 流水（`usage.byok`），浏览器直连的用量由浏览器经 `/api/chat/direct/usage` 回报；本站代发自定义模型的请求一律经 `agentSafeFetch`。
 
 ## 7. Redis、BullMQ 与 Worker
 

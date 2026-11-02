@@ -5,7 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { tmpdir } from 'node:os';
 import pg from 'pg';
@@ -362,6 +362,46 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         await native.query('DELETE FROM public.subscription_plans WHERE id = $1', [planId]);
         await native.query('DELETE FROM identity.users WHERE id = $1', [userId]);
       });
+      await t.test('tasks still open on the old browser provider settle as failed through migration 0004', async () => {
+        const userId = '00000000-0000-4000-8000-0000000000f1';
+        const [staleConversation, platformConversation] = ['00000000-0000-4000-8000-0000000000f2', '00000000-0000-4000-8000-0000000000f3'];
+        const [staleRun, finishedRun, platformRun] = ['00000000-0000-4000-8000-0000000000f4', '00000000-0000-4000-8000-0000000000f5', '00000000-0000-4000-8000-0000000000f6'];
+        const message = (runId, status) => ({ id: `agent:${runId}`, role: 'assistant', content: '', createdAt: '2026-10-01T00:00:00Z', agent: { version: 1, runId, status, parts: [] } });
+        const legacyProvider = { apiUrl: 'https://relay.example/v1', modelId: 'gpt-4.1' };
+        await native.query(`INSERT INTO identity.users (id, email, email_verified, name) VALUES ($1, 'legacy-provider@fixture.test', true, '旧直连用户')`, [userId]);
+        await native.query(`INSERT INTO public.conversations (id, user_id, personality, title, messages) VALUES ($1, $3, 'general', '旧直连', $4), ($2, $3, 'general', '平台', $5)`,
+          [staleConversation, platformConversation, userId, JSON.stringify([message(finishedRun, 'completed'), message(staleRun, 'running')]), JSON.stringify([message(platformRun, 'running')])]);
+        const run = (id, conversationId, status, input) => native.query(`
+          INSERT INTO public.agent_runs (id, user_id, conversation_id, request_id, request_hash, status, input, checkpoint, public_message, billing, worker_id, lease_until)
+          VALUES ($1, $2, $3, $8, 'hash', $4, $5, '{"version":2,"durable":{"engine":"pi-durable/1.4.0"}}', $6, $7, 'worker-old', now() + interval '1 hour')`,
+        [id, userId, conversationId, status, JSON.stringify(input), JSON.stringify(message(id, status)), input.customProvider ? 'exempt' : 'metered', `request-${id}`]);
+        await run(finishedRun, staleConversation, 'completed', { model: 'custom:gpt-4.1', customProvider: legacyProvider });
+        await run(staleRun, staleConversation, 'running', { model: 'custom:gpt-4.1', customProvider: legacyProvider, title: '旧直连任务' });
+        await run(platformRun, platformConversation, 'running', { model: 'fixture-analysis' });
+        await native.query(`INSERT INTO public.agent_run_credentials (run_id, ciphertext) VALUES ($1, '{"v":1}'), ($2, '{"v":2}')`, [staleRun, platformRun]);
+        await native.query("DELETE FROM taibu_meta.schema_migrations WHERE version = '0004'");
+
+        assert.match(await initialize(), /Applying 0004 0004_retire_browser_provider_runs/);
+        const runs = Object.fromEntries((await native.query(`
+          SELECT id, status, worker_id, lease_until, public_message #>> '{agent,status}' AS shown, public_message #>> '{agent,error}' AS note
+          FROM public.agent_runs WHERE user_id = $1`, [userId])).rows.map(row => [row.id, row]));
+        assert.deepEqual([runs[staleRun].status, runs[staleRun].shown, runs[staleRun].worker_id, runs[staleRun].lease_until], ['failed', 'failed', null, null]);
+        assert.match(runs[staleRun].note, /设置 → 自定义模型/u);
+        assert.deepEqual([runs[finishedRun].status, runs[platformRun].status, runs[platformRun].worker_id], ['completed', 'running', 'worker-old'],
+          'a finished task and a platform task are left alone');
+        assert.deepEqual((await native.query('SELECT run_id FROM public.agent_run_credentials WHERE run_id = ANY($1) ORDER BY run_id', [[staleRun, platformRun]])).rows.map(row => row.run_id),
+          [platformRun], 'only the retired task\'s staged key is dropped');
+        const shown = (await native.query('SELECT messages FROM public.conversations WHERE id = $1', [staleConversation])).rows[0].messages;
+        assert.deepEqual(shown.map(item => [item.id, item.agent.status]), [[`agent:${finishedRun}`, 'completed'], [`agent:${staleRun}`, 'failed']],
+          'the conversation shows the task as stopped');
+        assert.equal((await native.query(`SELECT count(*)::int AS n FROM public.notifications WHERE event_key = $1`, [`agent:${staleRun}:failed`])).rows[0].n, 1,
+          'its owner is told the task stopped');
+
+        await native.query('DELETE FROM public.agent_runs WHERE user_id = $1', [userId]);
+        await native.query('DELETE FROM public.notifications WHERE user_id = $1', [userId]);
+        await native.query('DELETE FROM public.conversations WHERE user_id = $1', [userId]);
+        await native.query('DELETE FROM identity.users WHERE id = $1', [userId]);
+      });
       await t.test('db:init --check lists pending migrations without touching the ledger or a legacy table', async () => {
         await native.query('DROP SCHEMA taibu_meta CASCADE');
         // Only a pending migration drops this column, so completion cannot be planned before it runs.
@@ -376,8 +416,9 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
             ) objects;
           `)).rows[0].hash;
           const output = await initialize(database, ['--check']);
+          const migrations = (await readdir(path.join(repoRoot, 'database', 'migrations'))).filter(name => name.endsWith('.sql')).length;
           assert.match(output, /Migration ledger is missing/u);
-          assert.match(output, /Would apply 3 migration\(s\)/u);
+          assert.match(output, new RegExp(`Would apply ${migrations} migration\\(s\\)`, 'u'));
           assert.match(output, /planned after the pending migrations/u);
           assert.equal((await native.query("SELECT to_regclass('taibu_meta.schema_migrations') AS ledger")).rows[0].ledger, null);
           const after = (await native.query(`

@@ -226,7 +226,7 @@
 :is(.chat-model-menu, .chat-plus-menu) { display: flex; flex-direction: column; gap: 0; padding: 4px; }
 .chat-model-menu { gap: 2px; width: max-content; min-width: 15rem; max-width: min(18rem, calc(100vw - 16px)); }
 .chat-plus-menu { min-width: 12rem; max-width: min(320px, calc(100vw - 16px)); }
-.chat-plus-menu [role^="menuitem"], .chat-model-options > [role^="menuitem"],
+.chat-plus-menu [role^="menuitem"], .chat-model-options [role^="menuitem"],
 .chat-model-action { display: flex; width: 100%; min-height: 32px; align-items: center; gap: 8px; padding: 6px 10px; border-radius: 8px; font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; color: var(--foreground); }
 .chat-plus-menu [role^="menuitem"] > svg, .chat-model-action > svg { flex-shrink: 0; color: var(--foreground-secondary); }
 .chat-plus-menu [role^="menuitem"] > svg:first-child { width: 18px; height: 18px; flex: 0 0 18px; }
@@ -244,10 +244,10 @@
 .chat-plus-menu > .chat-plus-back > svg { color: var(--foreground-secondary); }
 /* 输入框里的菜单与二级弹窗都铺整行 hover 底色；选中态由 aria-checked 保留。 */
 .chat-plus-menu [role^="menuitem"][data-highlighted],
-.chat-model-options > [role^="menuitem"][data-highlighted],
+.chat-model-options [role^="menuitem"][data-highlighted],
 .chat-model-action[data-highlighted],
 .chat-collab-row[data-highlighted] { background: var(--fill-ghost-hover); color: var(--foreground); }
-:is(.chat-plus-menu [role^="menuitem"], .chat-model-options > [role^="menuitem"])[data-disabled] { opacity: .55; cursor: not-allowed; }
+:is(.chat-plus-menu [role^="menuitem"], .chat-model-options [role^="menuitem"])[data-disabled] { opacity: .55; cursor: not-allowed; }
 /* 只换文字色：底色留给 data-highlighted，勾选过的行悬停时仍然有底色。 */
 .chat-plus-menu [role^="menuitem"][aria-checked="true"], .chat-plus-menu [role^="menuitem"][aria-checked="true"] > svg { color: var(--accent-hover); }
 /* The toolbar carries the Agent web switch except on phones. */
@@ -261,16 +261,18 @@
 .chat-style-menu [role="menuitemradio"] > svg { margin-left: auto; color: var(--accent); }
 .chat-style-menu [role="menuitemradio"][aria-checked="true"] { color: var(--accent-hover); }
 .chat-model-options { display: flex; flex-direction: column; gap: 2px; max-height: 15rem; overflow-y: auto; }
+/* 自己的模型按连接分组，组名是一行小字。 */
+.chat-model-options [role="group"] { display: flex; flex-direction: column; gap: 2px; }
 /* 触摸设备保留 40px 行高（>= 40px 触达） */
 @media (hover: none) {
-    .chat-plus-menu [role^="menuitem"], .chat-model-options > [role^="menuitem"],
+    .chat-plus-menu [role^="menuitem"], .chat-model-options [role^="menuitem"],
     .chat-model-action { min-height: var(--row-h-drawer); }
 }
-.chat-model-menu .chat-model-options > [aria-checked="true"] { background: var(--fill-ghost-hover); color: var(--foreground); }
+.chat-model-menu .chat-model-options [aria-checked="true"] { background: var(--fill-ghost-hover); color: var(--foreground); }
 .chat-model-option-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .chat-model-option-price { flex-shrink: 0; margin-left: 12px; font-size: calc(12 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
 /* 右侧给选中勾和详情键留位，免得互相压住。 */
-.chat-model-options > [role="menuitemradio"] { padding-right: 30px; }
+.chat-model-options [role="menuitemradio"] { padding-right: 30px; }
 /* 模型行：名称 + 一句简介，行尾一个详情键。 */
 .chat-model-option-row { position: relative; align-items: center; }
 .chat-model-option-text { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }

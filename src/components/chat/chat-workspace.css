@@ -221,8 +221,6 @@
 .chat-prose button.md-cite:hover { background: var(--background-tertiary); color: var(--foreground); }
 .chat-prose .md-cite[data-active] { background: var(--accent-light); color: var(--accent-hover); }
 .chat-prose button.md-cite:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.chat-provider-dialog { width: min(512px, calc(100vw - 24px)); }
-.chat-provider-dialog > div { width: 100%; border: 0; border-radius: 0; box-shadow: none; padding: 24px; }
 /* ≡ opens the navigation drawer where the page has no sidebar. */
 .chat-nav-trigger { display: flex; flex-shrink: 0; width: 40px; height: 40px; align-items: center; justify-content: center; margin-left: -8px; border-radius: 10px; color: var(--foreground); }
 .chat-nav-trigger:hover { background: var(--fill-ghost-hover); }

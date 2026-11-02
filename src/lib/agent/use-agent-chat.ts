@@ -1,6 +1,6 @@
 "use client";
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { ChatAttachment, ChatMessage, CustomProviderConfig, Mention } from "@/types";
+import type { ChatAttachment, ChatMessage, Mention } from "@/types";
 import type { ChatStateReturn } from "@/lib/chat/use-chat-state";
 import {
   agentJson,
@@ -23,14 +23,12 @@ type AgentCapabilities = {
   webAvailable: boolean;
   /** Plain chat can search the web; reported here because every chat already polls this status. */
   plainWebAvailable: boolean;
-  customAvailable: boolean;
 };
 const NO_CAPABILITIES: AgentCapabilities = {
   enabled: false,
   ready: false,
   webAvailable: false,
   plainWebAvailable: false,
-  customAvailable: false,
 };
 type AgentCommandRequest = Parameters<typeof postAgentCommand>[1];
 export function useAgentChat(
@@ -233,16 +231,17 @@ export function useAgentChat(
       model: string;
       reasoning: boolean;
       mentions: Mention[];
-      provider: CustomProviderConfig | null;
       attachment?: ChatAttachment;
       replaceFromMessageId?: string;
+      /** The image model the task's image tool uses; the platform's first when absent. */
+      imageModel?: string | null;
+      /** This device's keys for the own models the task uses whose calls the site cannot make itself, by connection. */
+      byokKeys?: Record<string, string>;
     },
   ) => {
     const isOwner = () => latest.current.userId === userId && identityRef.current.epoch === ownerEpoch;
     if (!userId || !isOwner()) throw new Error("登录状态已变更，请重新发送");
     const isCurrent = captureConversation(conversationId);
-    if (options.provider && !capabilities.customAvailable)
-      throw new Error("自定义模型后台任务未配置，可切换普通对话");
     const body: Record<string, unknown> = {
       conversationId,
       clientRequestId: crypto.randomUUID(),
@@ -250,18 +249,12 @@ export function useAgentChat(
       model: options.model,
       reasoning: options.reasoning,
       reasoningEffort: state.reasoningEffort,
-      collaborators: options.provider ? [] : state.collaborators,
+      collaborators: state.collaborators,
       mentions: options.mentions,
       attachment: options.attachment,
       replaceFromMessageId: options.replaceFromMessageId,
-      customProvider: options.provider
-        ? {
-            apiUrl: options.provider.apiUrl,
-            apiKey: options.provider.apiKey,
-            modelId: options.provider.modelId,
-            ...(options.provider.imageModelId ? { imageModelId: options.provider.imageModelId } : {}),
-          }
-        : undefined,
+      imageModel: options.imageModel ?? undefined,
+      byokKeys: options.byokKeys && Object.keys(options.byokKeys).length ? options.byokKeys : undefined,
       webEnabled,
       codeMode,
       planMode,

@@ -59,7 +59,7 @@ export interface AgentMessageData {
 
 /** Public projection of Pi's active context, never credentials or the full prompt. */
 export interface AgentRuntimeInfo {
-  model: { id: string; name: string; contextWindow: number | null; limitSource: "configured" | "unknown" };
+  model: { id: string; name: string; icon?: string | null; contextWindow: number | null; limitSource: "configured" | "unknown" };
   /** Settled model response measurements; old entries may have no measurements. */
   responses?: Array<{ id: string; durationMs?: number; startedAt?: number; endedAt?: number }>;
   /** 系统提示里注入的方法目录占的 token（网关 count_tokens 计数，不可用时估算）；上下文卡把它计入「技能」而不是「系统提示」。 */

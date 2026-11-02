@@ -1,17 +1,22 @@
 'use client';
-// 'use client'：模型菜单需要弹层、键盘导航与浏览器内的自定义模型状态
+// 'use client'：模型菜单需要弹层、键盘导航与本机保存的自定义模型 Key
 
 import { useMemo, useEffect, useState, type ReactNode } from 'react';
 import { BetaBadge } from '@/components/ui/BetaBadge';
 import { ChevronDown, Cpu, Info } from 'lucide-react';
 import { KeyIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from './SoundWaveLoader';
-import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
+import { Menu, MenuCheckboxItem, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
 import { ModelIcon } from './ModelIcon';
 import { preloadLobeIcons } from './LobeIcon';
+import { useToast } from './Toast';
+import { ByokKeyDialog } from '@/components/byok/ByokKeyDialog';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels, type AvailableModel } from '@/lib/hooks/useAvailableModels';
-import { CUSTOM_PROVIDER_CHANGED_EVENT, getCustomProvider, getCustomProviderDisplayName } from '@/lib/chat/custom-provider';
+import { ownModelChoice, useOwnModels, type OwnModel } from '@/lib/byok/client';
+import { byokComposerEffort, isByokRef } from '@/lib/byok/config';
+import { BYOK_KEY_REQUEST_EVENT } from '@/lib/byok/key-request';
+import { openSettingsCenter } from '@/lib/settings-center';
 import type { AIVendor, AIReasoningEffort } from '@/types';
 import { resolveThinkingLevel } from '@/lib/ai/thinking';
 import { type ModelSettingsProps, type AgentCollaborator } from '@/lib/chat/model-settings';
@@ -24,6 +29,8 @@ interface ClientModelConfig {
     thinkingLevels?: AIReasoningEffort[]; defaultThinkingLevel?: AIReasoningEffort | null;
     isReasoningDefault?: boolean; pricing?: AvailableModel['pricing'];
     contextWindow?: number | null; maxTokens?: number | null; supportsVision?: boolean;
+    /** The member's own model behind this row. */
+    own?: OwnModel;
 }
 /** 多模型协作的成员上限：0–4 个，主模型不占名额。 */
 const MAX_COLLABORATORS = 4;
@@ -32,10 +39,10 @@ interface ModelSelectorProps extends ModelSettingsProps {
     reasoningEnabled?: boolean; onReasoningChange?: (enabled: boolean) => void;
     userId?: string | null; disabled?: boolean;
     compact?: boolean; toolbarStyle?: boolean;
-    /** Extra menu rows rendered after the root items, such as custom-provider shortcuts. */
+    /** Extra menu rows rendered after the root items. */
     extra?: ReactNode;
-    /** Offers the bring-your-own-model dialog from the menu. */
-    onCustomProvider?: () => void;
+    /** Offers 「使用自己的模型 API」, which opens the own-model settings. */
+    ownModelsEntry?: boolean;
 }
 
 /** `1M` / `128K` / `8,000`: how a capacity reads in the model details. */
@@ -62,7 +69,7 @@ function ModelDetails({ model }: { model: ClientModelConfig }) {
                 <ModelIcon icon={model.icon} vendor={model.vendor} size={18} />
                 <div className="min-w-0">
                     <p className="chat-model-details-name">{model.name}</p>
-                    <p className="chat-model-details-id">{model.id}</p>
+                    <p className="chat-model-details-id">{model.own ? `${model.own.connection.name} · ${model.own.modelId}` : model.id}</p>
                 </div>
             </div>
             {model.description ? <p className="chat-model-details-desc">{model.description}</p> : null}
@@ -73,12 +80,14 @@ function ModelDetails({ model }: { model: ClientModelConfig }) {
                 <div><dt>思考等级</dt><dd>{model.thinkingLevels?.length ? model.thinkingLevels.map(level => level === 'minimal' ? '最低' : level === 'low' ? '低' : level === 'medium' ? '中等' : level === 'high' ? '高' : level === 'xhigh' ? '超高' : '最高').join(' / ') : '不支持'}</dd></div>
             </dl>
             <div className="chat-model-details-prices">
-                <p className="chat-model-details-label">每百万 token 的美元单价</p>
-                {priceRows.length ? (
-                    <dl className="chat-model-details-grid">
-                        {priceRows.map(row => <div key={row.label}><dt>{row.label}</dt><dd>{free ? '免费' : formatPrice(row.value as number)}</dd></div>)}
-                    </dl>
-                ) : <p className="chat-model-details-desc">未定价</p>}
+                {model.own ? <p className="chat-model-details-desc">使用自己的 API Key，不消耗本站余额。{model.own.serverKey ? 'Key 保存在本站，由本站代为请求。' : 'Key 只在你的浏览器里，由浏览器直接请求。'}</p> : <>
+                    <p className="chat-model-details-label">每百万 token 的美元单价</p>
+                    {priceRows.length ? (
+                        <dl className="chat-model-details-grid">
+                            {priceRows.map(row => <div key={row.label}><dt>{row.label}</dt><dd>{free ? '免费' : formatPrice(row.value as number)}</dd></div>)}
+                        </dl>
+                    ) : <p className="chat-model-details-desc">未定价</p>}
+                </>}
             </div>
         </div>
     );
@@ -114,25 +123,43 @@ function reasoningSummary(model: ClientModelConfig | undefined, enabled: boolean
     return effortLabel(modelEffort(model, effort), enabled);
 }
 
+/** Own models by connection, in the order the settings page lists them. */
+function groupByConnection(models: ClientModelConfig[]) {
+    const groups = new Map<string, { name: string; models: ClientModelConfig[] }>();
+    for (const model of models) {
+        if (!model.own) continue;
+        const group = groups.get(model.own.connection.id) ?? { name: model.own.connection.name, models: [] };
+        group.models.push(model);
+        groups.set(model.own.connection.id, group);
+    }
+    return [...groups.entries()].map(([id, group]) => ({ id, ...group }));
+}
+
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
-    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, onCustomProvider,
+    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, ownModelsEntry = false,
     userId, disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
+    const { showToast } = useToast();
     const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange });
-    const models = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
+    const own = useOwnModels(onModelChange ? userId : null);
+    const platformModels = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
+    // 平台模型在上，自己的对话模型按连接分组排在后面。
+    const ownChoices = useMemo<ClientModelConfig[]>(() => own.models.filter(model => model.usage === 'chat').map(ownModelChoice), [own.models]);
+    const models = useMemo(() => [...platformModels, ...ownChoices], [platformModels, ownChoices]);
+    const ownGroups = useMemo(() => groupByConnection(ownChoices), [ownChoices]);
     useEffect(() => { preloadLobeIcons(models.map(model => model.icon)); }, [models]);
     const collaborationPreset = useCollaborationPreset(userId ?? null);
-    const [custom, setCustom] = useState<ReturnType<typeof getCustomProvider>>(null);
+    const [keyModel, setKeyModel] = useState<OwnModel | null>(null);
+    // A missing own model may only still be loading, or its list failed to load: it is replaced once its absence is known.
+    const listsSettled = !query.isLoading && !own.loading && !own.failed;
     useEffect(() => {
-        const sync = () => setCustom(getCustomProvider()); sync();
-        window.addEventListener(CUSTOM_PROVIDER_CHANGED_EVENT, sync); window.addEventListener('storage', sync);
-        return () => { window.removeEventListener(CUSTOM_PROVIDER_CHANGED_EVENT, sync); window.removeEventListener('storage', sync); };
-    }, []);
-    useEffect(() => {
-        if (!models.length || !onModelChange) return;
+        if (!models.length || !onModelChange || !listsSettled) return;
         if (models.some(model => model.id === selectedModel)) return;
-        if (models[0].id !== selectedModel) onModelChange(models[0].id);
-    }, [models, onModelChange, selectedModel]);
+        const fallback = platformModels[0] ?? models[0];
+        if (fallback.id === selectedModel) return;
+        if (isByokRef(selectedModel)) showToast('info', `所选的自定义模型已不可用，已改用「${fallback.name}」`);
+        onModelChange(fallback.id);
+    }, [listsSettled, models, onModelChange, platformModels, selectedModel, showToast]);
     const current = models.find(model => model.id === selectedModel) ?? models[0];
     const reasoningAllowed = !!current?.supportsReasoning;
     useEffect(() => {
@@ -142,19 +169,43 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
             if (reasoningEffort) onReasoningEffortChange?.(null);
         } else if (current.isReasoningDefault && !reasoningEnabled) onReasoningChange(true);
     }, [current, reasoningAllowed, reasoningEnabled, reasoningEffort, onReasoningChange, onReasoningEffortChange]);
-    // 主模型只负责汇总，不作为协作成员：切换主模型时把旧主模型从成员里剔除。
-    const subCollaborators = useMemo(() => collaborators.filter(member => member.model !== current?.id), [collaborators, current?.id]);
+    // 主模型只负责汇总，不作为协作成员：切换主模型时把旧主模型从成员里剔除；已删除的自定义模型也一并去掉。
+    const subCollaborators = useMemo(() => collaborators.filter(member => member.model !== current?.id
+        && (!listsSettled || !isByokRef(member.model) || ownChoices.some(model => model.id === member.model))), [collaborators, current?.id, listsSettled, ownChoices]);
     useEffect(() => {
         if (!current || collaborators.length === subCollaborators.length) return;
         onCollaboratorsChange?.(subCollaborators);
     }, [current, collaborators, subCollaborators, onCollaboratorsChange]);
+    // 发送时发现缺 Key：由提示条里的「填写 Key」打开这里的对话框。
+    useEffect(() => {
+        if (!onModelChange) return;
+        const request = (event: Event) => {
+            const model = own.models.find(item => item.ref === (event as CustomEvent<string>).detail);
+            if (model) setKeyModel(model);
+        };
+        window.addEventListener(BYOK_KEY_REQUEST_EVENT, request);
+        return () => window.removeEventListener(BYOK_KEY_REQUEST_EVENT, request);
+    }, [onModelChange, own.models]);
     if (!onModelChange && !onReasoningChange) return null;
-    if (custom && !toolbarStyle) return <div className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-sm text-foreground-secondary"><Cpu size={16} /><span>{getCustomProviderDisplayName(custom) || custom.modelId}</span></div>;
-    // 没有平台模型时仍然可以打开菜单：用自己的模型 API（BYOK）不依赖平台模型目录。
+    // 没有平台模型时仍然可以打开菜单：自己的模型不依赖平台模型目录。
     const locked = disabled || query.isLoading;
     const summary = reasoningSummary(current, reasoningEnabled, reasoningEffort, !!onReasoningEffortChange);
     const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
     const close = () => setOpen(false);
+    /** Own models start at their own default effort; one without a key on this device asks for it first. */
+    const applyModel = (model: ClientModelConfig) => {
+        onModelChange?.(model.id);
+        if (!model.own) return;
+        const effort = byokComposerEffort(model.own.defaultEffort);
+        onReasoningChange?.(effort.reasoning);
+        onReasoningEffortChange?.(effort.reasoningEffort);
+    };
+    const chooseModel = (id: string) => {
+        const model = models.find(item => item.id === id);
+        if (!model) return;
+        if (model.own && !model.own.ready) { setKeyModel(model.own); return; }
+        applyModel(model);
+    };
     const reasoningSupported = !!current?.supportsReasoning;
     const effortSupported = reasoningSupported && !!current.thinkingLevels?.length && !!onReasoningEffortChange;
     const effectiveEffort = modelEffort(current, reasoningEffort);
@@ -169,6 +220,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         if (!existing && collaborationFull) return;
         // 个性化里为该模型配置过的名称、角色、努力程度与分工作为模板；勾选只影响当前对话，不改设置。
         const template = collaborationPreset.members.find(member => member.model === model.id);
+        const ownEffort = model.own ? byokComposerEffort(model.own.defaultEffort) : null;
         const next = existing
             ? collaborators.filter(member => member.model !== model.id)
             : [...collaborators, {
@@ -176,8 +228,8 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 name: template?.name ?? model.name,
                 model: model.id,
                 focus: template?.focus ?? '',
-                reasoning: template?.reasoning ?? !!model.isReasoningDefault,
-                reasoningEffort: template?.reasoningEffort ?? null,
+                reasoning: template?.reasoning ?? ownEffort?.reasoning ?? !!model.isReasoningDefault,
+                reasoningEffort: template?.reasoningEffort ?? ownEffort?.reasoningEffort ?? null,
                 ...(template?.profile ? { profile: template.profile } : {}),
             } satisfies AgentCollaborator];
         onCollaboratorsChange(next);
@@ -188,6 +240,23 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         onReasoningEffortChange?.(effort);
         close();
     };
+    const modelRow = (model: ClientModelConfig) => <MenuRadioItem key={model.id} value={model.id} closeOnClick hideIndicator className="chat-model-option-row">
+        <ModelIcon icon={model.icon} vendor={model.vendor} size={16} />
+        <span className="chat-model-option-text" title={model.description || undefined}>
+            <span className="chat-model-option-name">{model.name}{model.own && !model.own.ready && <span className="chat-model-badge" data-tone="warning">需填 Key</span>}</span>
+            {model.description ? <span className="chat-model-option-desc">{model.description}</span> : null}
+        </span>
+        {/* 详情弹层：点图标只开卡片，不选中这一行。 */}
+        <Popover>
+            <PopoverTrigger className="chat-model-info" aria-label={`「${model.name}」的详情`}
+                onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
+                <Info size={13} aria-hidden="true" />
+            </PopoverTrigger>
+            <PopoverContent side="right" align="start" sideOffset={8} className="chat-model-details-popover">
+                <ModelDetails model={model} />
+            </PopoverContent>
+        </Popover>
+    </MenuRadioItem>;
     return <div className={`flex items-center ${toolbarStyle ? 'chat-model-selector' : ''}`}>
         <Menu open={open} onOpenChange={setOpen}>
             {toolbarStyle ? <MenuTrigger disabled={locked} className="chat-model-trigger" data-model-trigger
@@ -204,24 +273,9 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
             </MenuTrigger>}
             <MenuContent side="top" align={toolbarStyle ? 'end' : 'start'} sideOffset={6} className="chat-model-menu" aria-label="模型与分析设置">
-                <MenuRadioGroup className="chat-model-options" aria-label="选择模型" value={selectedModel ?? ''} onValueChange={value => onModelChange?.(value)}>
-                    {models.map(model => <MenuRadioItem key={model.id} value={model.id} closeOnClick hideIndicator className="chat-model-option-row">
-                        <ModelIcon icon={model.icon} vendor={model.vendor} size={16} />
-                        <span className="chat-model-option-text" title={model.description || undefined}>
-                            <span className="chat-model-option-name">{model.name}</span>
-                            {model.description ? <span className="chat-model-option-desc">{model.description}</span> : null}
-                        </span>
-                        {/* 详情弹层：点图标只开卡片，不选中这一行。 */}
-                        <Popover>
-                            <PopoverTrigger className="chat-model-info" aria-label={`「${model.name}」的详情`}
-                                onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
-                                <Info size={13} aria-hidden="true" />
-                            </PopoverTrigger>
-                            <PopoverContent side="right" align="start" sideOffset={8} className="chat-model-details-popover">
-                                <ModelDetails model={model} />
-                            </PopoverContent>
-                        </Popover>
-                    </MenuRadioItem>)}
+                <MenuRadioGroup className="chat-model-options" aria-label="选择模型" value={selectedModel ?? ''} onValueChange={value => chooseModel(String(value))}>
+                    {platformModels.map(modelRow)}
+                    {ownGroups.map(group => <MenuGroup key={group.id} label={group.name}>{group.models.map(modelRow)}</MenuGroup>)}
                 </MenuRadioGroup>
                 {!models.length && !query.isLoading && <p className="chat-model-note">暂无可用模型。</p>}
                 {reasoningSupported && <MenuSeparator className="chat-model-separator" />}
@@ -264,24 +318,31 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                             const checked = collaborators.some(member => member.model === model.id);
                             // 右侧 = 个性化里为该模型注册的名称（如「专项分析」），未注册时不显示。
                             const registered = collaborationPreset.members.find(member => member.model === model.id)?.name ?? '';
+                            const needsKey = !!model.own && !model.own.ready;
                             const full = collaborationFull && !checked;
-                            return <MenuCheckboxItem key={model.id} checked={checked} closeOnClick={false} disabled={full}
+                            return <MenuCheckboxItem key={model.id} checked={checked} closeOnClick={false} disabled={full || (needsKey && !checked)}
                                 className="chat-model-action chat-collab-row" onCheckedChange={() => toggleCollaborator(model)}>
                                 <span className="chat-collab-icon"><ModelIcon icon={model.icon} vendor={model.vendor} size={16} /></span>
                                 <span className="chat-collab-name">{model.name}</span>
-                                {registered && <span className="chat-collab-registered" aria-hidden="true">{registered}</span>}
+                                {needsKey ? <span className="chat-collab-registered" aria-hidden="true">需填 Key</span>
+                                    : registered && <span className="chat-collab-registered" aria-hidden="true">{registered}</span>}
                             </MenuCheckboxItem>;
                         })}
                         {subCollaborators.length > 0 && <p className="chat-collab-foot">已选 {subCollaborators.length} 个协作模型</p>}
                     </MenuSubContent>
                 </MenuSub>}
                 {extra}
-                {onCustomProvider && <>
+                {ownModelsEntry && own.enabled && <>
                     <MenuSeparator className="chat-model-separator" />
-                    <MenuItem className="chat-model-action" onClick={() => { close(); onCustomProvider(); }}><KeyIcon size={16} />使用自己的模型 API</MenuItem>
+                    <MenuItem className="chat-model-action" onClick={() => { close(); openSettingsCenter('byok'); }}><KeyIcon size={16} />使用自己的模型 API</MenuItem>
                 </>}
                 {query.error && <p className="chat-model-note" role="alert">{query.error instanceof Error ? query.error.message : '模型列表加载失败'}</p>}
             </MenuContent>
         </Menu>
+        {userId && <ByokKeyDialog model={keyModel} userId={userId} onClose={() => setKeyModel(null)} onSaved={model => {
+            setKeyModel(null);
+            const choice = ownChoices.find(item => item.id === model.ref);
+            if (choice && choice.id !== selectedModel) applyModel(choice);
+        }} />}
     </div>;
 }

@@ -7,6 +7,7 @@ import {
   type Api,
   type AssistantMessage,
   type AssistantMessageEvent,
+  type AssistantMessageEventStream,
   type Message,
   type Model,
   type OpenAICompletionsCompat,
@@ -15,14 +16,16 @@ import {
 import { stream as streamCompletions } from "@earendil-works/pi-ai/api/openai-completions";
 import { estimateContextTokens, estimateMessageTokens } from "@earendil-works/pi-ai/utils/estimate";
 import type { PiStreamFn as StreamFn } from "./types";
-import type { AIModelConfig } from "@/types";
+import type { AIModelConfig, AIReasoningEffort } from "@/types";
 import { hasTokens, type TokenUsage } from "@/lib/billing/pricing";
 import {
   gatewayFetch,
   isModelAvailable,
   MODEL_REQUEST_USER_AGENT,
 } from "@/lib/ai/providers/ai-sdk-provider";
-import { normalizeCustomProviderBaseUrl } from "@/lib/ai/custom-provider-url";
+import { normalizeGatewayBaseUrl } from "@/lib/ai/gateway-url";
+import { byokFailureFromMessage, clampByokLevel, formatByokError } from "@/lib/byok/config";
+import { byokUsage, streamByok, type ByokRequestModel } from "@/lib/byok/pi-model";
 import { resolveSourceApiKey } from "@/lib/ai/gateway-secrets.server";
 import { PROMPT_CACHE_SWITCH } from "@/lib/ai/prompt-cache";
 import { modelPromptCacheKey } from "@/lib/ai/prompt-cache.server";
@@ -101,7 +104,7 @@ export function emptyPiAssistant(model: Model<Api>): AssistantMessage {
   return {
     role: "assistant",
     content: [],
-    api: "openai-completions",
+    api: model.api,
     provider: model.provider,
     model: model.id,
     timestamp: Date.now(),
@@ -111,12 +114,10 @@ export function emptyPiAssistant(model: Model<Api>): AssistantMessage {
 }
 
 /** One model request per invocation. Pi owns tool execution and continuation. */
-export function agentModelSources(config: AIModelConfig, apiKey?: string) {
-  return apiKey
-    ? [config]
-    : getOrderedModelSources(config)
-        .map((s) => applySourceToModel(config, s))
-        .filter(isModelAvailable);
+export function agentModelSources(config: AIModelConfig) {
+  return getOrderedModelSources(config)
+    .map((s) => applySourceToModel(config, s))
+    .filter(isModelAvailable);
 }
 
 /** Request body fields the transport writes, plus control switches that are never request fields. */
@@ -210,7 +211,8 @@ function failureKind(result: AssistantMessage) {
 }
 type FailureKind = ReturnType<typeof failureKind> | typeof GATEWAY_KEY_FAILURE | "silent" | "exhausted" | "balance";
 class StreamFailure extends Error {
-  constructor(readonly kind: FailureKind, readonly transientBeforeOutput = false) { super(kind); }
+  /** `detail`: the provider's failure text, shown only for the member's own model. */
+  constructor(readonly kind: FailureKind, readonly transientBeforeOutput = false, readonly detail?: string) { super(kind); }
 }
 function publicFailure(error: unknown) {
   if (error instanceof DOMException && error.name === "TimeoutError") return AGENT_TIMEOUT_MESSAGE;
@@ -236,17 +238,22 @@ export interface AgentModelBilling {
   charge: (usage: TokenUsage, estimated: boolean) => Promise<void>;
 }
 
-export interface AgentModelStreamSettings {
-  /** False keeps every request of this stream without thinking, whatever the task's level. */
-  reasoning?: boolean;
+/** What every model stream of a task shares: metrics, images, and the live answer text. */
+interface AgentStreamHooks {
   /** The run's metrics: when the first content arrives, and each request's usage. */
   telemetry?: AgentStreamTelemetry;
-  /** Absent for the member's own provider. */
-  billing?: AgentModelBilling;
-  /** The user's own provider key: requests go only to the configured URL, through the public-address guard. */
-  apiKey?: string;
   /** Replaces attachment references with their images, for a vision model. */
   resolveImages?: (messages: Message[]) => Promise<Message[]>;
+  /** Live answer text, for the display-only delta channel; never used for durability. */
+  onAnswerStart?: () => void;
+  onAnswerDelta?: (delta: string) => void;
+}
+
+export interface AgentModelStreamSettings extends AgentStreamHooks {
+  /** False keeps every request of this stream without thinking, whatever the task's level. */
+  reasoning?: boolean;
+  /** Absent for a call nobody pays for (an evaluation). */
+  billing?: AgentModelBilling;
   /** The task's conversation; its hash becomes this model's prompt cache key unless the model opts out. */
   conversationId?: string;
   /** The task owner; the key covers it, so two members' conversations never share a partition. */
@@ -254,138 +261,226 @@ export interface AgentModelStreamSettings {
   fetch?: typeof globalThis.fetch;
   /** Overrides the request temperature; defaults to 0.7 (the evaluator asks for 0.3). */
   temperature?: number;
-  /** Live answer text, for the display-only delta channel; never used for durability. */
-  onAnswerStart?: () => void;
-  onAnswerDelta?: (delta: string) => void;
+}
+
+/** Where one stream's requests go: the platform's gateway sources in order, or the member's own provider. */
+interface AgentModelRoute {
+  /** How many sources a failed request may move on to. */
+  sources: number;
+  /** The request to source `index`; throws a StreamFailure when that source cannot be used (the next one is tried). */
+  connect: (index: number) => (messages: Message[], signal: AbortSignal) => AssistantMessageEventStream;
+  /** Before each request; throws a StreamFailure when it may not start. */
+  admit?: () => Promise<void>;
+  /** After each request, with what it used; never throws. */
+  record?: (messages: readonly Message[], result: AssistantMessage) => Promise<void>;
+  /** The text the task shows for a failure. */
+  failure: (error: unknown) => string;
+}
+
+/**
+ * One response of the task's model, over the route's requests. A request falls back to the next source only before
+ * anything of the response was shown. A response with nothing to show, or one that only announced its next step, is
+ * requested once more with a note appended to the system prompt (as Pi Desktop does); the second response streams
+ * into the same message, so the reply reads as one.
+ */
+function streamAgentResponse(
+  piModel: Model<Api>, context: Parameters<StreamFn>[1], options: Parameters<StreamFn>[2], hooks: AgentStreamHooks,
+  open: () => AgentModelRoute,
+): AssistantMessageEventStream {
+  const output = createAssistantMessageEventStream();
+  void (async () => {
+    const message = emptyPiAssistant(piModel);
+    let started = false;
+    let failure: (error: unknown) => string = publicFailure;
+    try {
+      const route = open();
+      failure = route.failure;
+      const transcript = hooks.resolveImages && piModel.input?.includes("image") ? await hooks.resolveImages(context.messages) : context.messages;
+      let nudge: string | undefined;
+      let failures = 0;
+      while (true) {
+        let send: ReturnType<AgentModelRoute["connect"]>;
+        try { send = route.connect(Math.min(failures, route.sources - 1)); }
+        catch (error) {
+          if (!(error instanceof StreamFailure) || ++failures >= route.sources) throw error;
+          continue;
+        }
+        await route.admit?.();
+        const requestSignal = agentModelRequestSignal(options?.signal);
+        const messages: Message[] = nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript;
+        const inner = send(messages, requestSignal);
+        const base = message.content.length;
+        let shown = false;
+        for await (const event of inner) {
+          if (event.type === "text_start") hooks.onAnswerStart?.();
+          else if (event.type === "text_delta") hooks.onAnswerDelta?.(event.delta);
+          if (event.type === "start" || event.type === "done" || event.type === "error") continue;
+          message.content.length = base;
+          message.content.push(...event.partial.content);
+          if (!started) {
+            started = true;
+            hooks.telemetry?.firstToken();
+            output.push({ type: "start", partial: message });
+          }
+          shown = true;
+          output.push({ ...event, contentIndex: base + event.contentIndex, partial: message } as AssistantMessageEvent);
+        }
+        const result = await inner.result();
+        // 每一轮的用量都计入运行指标：缓存读取单独记，重试与提醒后的再次请求各算一轮。
+        hooks.telemetry?.usage(result.usage);
+        message.usage = addUsage(message.usage, result.usage);
+        // 每轮按上游报的用量入账；中断或出错没报用量时，平台模型按提示词与已产出内容估算。
+        await route.record?.(messages, result);
+        if (result.stopReason === "error" || result.stopReason === "aborted") {
+          requestSignal.throwIfAborted();
+          const kind = failureKind(result);
+          // Never restart a provider after part of a response was shown, nor a recovery request.
+          hooks.onAnswerStart?.();
+          if (shown || nudge !== undefined || options?.signal?.aborted || ++failures >= 3) {
+            message.content.length = base;
+            message.content.push(...result.content);
+            throw new StreamFailure(kind, kind === "transient" && !shown, result.errorMessage);
+          }
+          if (kind !== "transient" && failures >= route.sources) throw new StreamFailure(kind, false, result.errorMessage);
+          continue;
+        }
+        message.content.length = base;
+        message.content.push(...result.content);
+        message.stopReason = result.stopReason;
+        if (callsTools(message) || hasVisibleText(message)) {
+          if (nudge === undefined && isProgressOnlyTurn(result)) {
+            nudge = PROGRESS_TURN_NUDGE;
+            hooks.onAnswerStart?.();
+            continue;
+          }
+          break;
+        }
+        // The same budget would most likely be spent the same way again, so this is not requested again.
+        if (result.stopReason === "length") throw new StreamFailure("exhausted");
+        if (nudge !== undefined) throw new StreamFailure("silent");
+        nudge = SILENT_TURN_NUDGE;
+      }
+      if (!started) {
+        started = true;
+        output.push({ type: "start", partial: message });
+      }
+      output.push({ type: "done", reason: message.stopReason as "stop" | "length" | "toolUse", message });
+    } catch (error) {
+      message.stopReason = options?.signal?.aborted ? "aborted" : "error";
+      message.errorMessage = message.stopReason === "aborted" ? "任务已停止" : failure(error);
+      output.push({ type: "error", reason: message.stopReason, error: message });
+    } finally {
+      output.end(message);
+    }
+  })();
+  return output;
 }
 
 /**
  * Pi's model requests through pi-ai's own Chat Completions transport. It reads the reasoning the gateway streams
  * (`reasoning_content` and its variants) and sends each assistant message's reasoning back with it, so the model
  * continues from its own thinking between tool calls instead of starting over.
- *
- * A request falls back to the next source only before anything of the response was shown. A response with nothing to
- * show, or one that only announced its next step, is requested once more with a note appended to the system prompt
- * (as Pi Desktop does); the second response streams into the same message, so the reply reads as one.
  */
 export function createPiModelStream(config: AIModelConfig, settings: AgentModelStreamSettings = {}): StreamFn {
   const cacheKey = modelPromptCacheKey(config, settings.conversationId, settings.cacheScope);
-  return (piModel, context, options) => {
-    const output = createAssistantMessageEventStream();
-    void (async () => {
-      const message = emptyPiAssistant(piModel);
-      let started = false;
-      try {
-        const sources = agentModelSources(config, settings.apiKey);
-        if (!sources.length) throw new Error("模型服务未配置");
-        // Each model thinks at a level it lists: an unlisted one moves to the nearest that is.
-        const effort = settings.reasoning !== false && piModel.reasoning && options?.reasoning ? resolveThinkingLevel(config, options.reasoning) : undefined;
-        const transcript = settings.resolveImages && piModel.input?.includes("image") ? await settings.resolveImages(context.messages) : context.messages;
-        const fetcher = settings.fetch ?? (settings.apiKey ? agentSafeFetch : gatewayFetch);
-        let nudge: string | undefined;
-        let failures = 0;
-        while (true) {
-          const source = sources[Math.min(failures, sources.length - 1)];
-          const requestSignal = agentModelRequestSignal(options?.signal);
-          const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined && limit > 0);
-          const upstream = source.modelId;
-          const body = extraBody(source);
-          let apiKey = settings.apiKey;
-          try { apiKey ??= resolveSourceApiKey(source); }
-          catch {
-            if (++failures >= sources.length) throw new StreamFailure(GATEWAY_KEY_FAILURE);
-            continue;
-          }
-          if (settings.billing) {
-            // A balance that cannot be read is retried like an unavailable model service.
-            const admitted = await settings.billing.admit().catch(() => { throw new StreamFailure("transient", true); });
-            if (!admitted) throw new StreamFailure("balance");
-          }
-          const messages: Message[] = nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript;
-          const inner = streamCompletions({
-            ...piModel,
-            api: "openai-completions",
-            baseUrl: normalizeCustomProviderBaseUrl(source.apiUrl),
-            compat: agentCompletionsCompat(source),
-            thinkingLevelMap: thinkingLevelMap(config.thinkingLevels),
-          }, normalizeContext({ messages }), {
-            apiKey,
-            fetch: fetcher,
-            signal: requestSignal,
-            maxRetries: 0,
-            identity: { userAgent: { custom: MODEL_REQUEST_USER_AGENT } },
-            temperature: settings.temperature ?? 0.7,
-            ...(outputLimits.length ? { maxTokens: Math.min(...outputLimits) } : {}),
-            ...(effort ? { reasoningEffort: effort } : {}),
-            // The transcript keeps the task's model identity; the gateway is asked for the source's upstream model.
-            // Every request of the task carries the same cache key, so a provider can route them to one cache.
-            onPayload: payload => ({ ...body, ...(payload as Record<string, unknown>), model: upstream, ...(cacheKey ? { prompt_cache_key: cacheKey } : {}) }),
-          });
-          const base = message.content.length;
-          let shown = false;
-          for await (const event of inner) {
-            if (event.type === "text_start") settings.onAnswerStart?.();
-            else if (event.type === "text_delta") settings.onAnswerDelta?.(event.delta);
-            if (event.type === "start" || event.type === "done" || event.type === "error") continue;
-            message.content.length = base;
-            message.content.push(...event.partial.content);
-            if (!started) {
-              started = true;
-              settings.telemetry?.firstToken();
-              output.push({ type: "start", partial: message });
-            }
-            shown = true;
-            output.push({ ...event, contentIndex: base + event.contentIndex, partial: message } as AssistantMessageEvent);
-          }
-          const result = await inner.result();
-          // 每一轮的用量都计入运行指标：缓存读取单独记，重试与提醒后的再次请求各算一轮。
-          settings.telemetry?.usage(result.usage);
-          message.usage = addUsage(message.usage, result.usage);
-          // 每轮按上游报的用量计费；中断或出错没报用量时，按提示词与已产出内容估算。
-          const billed = settings.billing && billedUsage(messages, result);
-          if (billed) await settings.billing!.charge(billed.usage, billed.estimated);
-          if (result.stopReason === "error" || result.stopReason === "aborted") {
-            requestSignal.throwIfAborted();
-            const kind = failureKind(result);
-            // Never restart a provider after part of a response was shown, nor a recovery request.
-            settings.onAnswerStart?.();
-            if (shown || nudge !== undefined || options?.signal?.aborted || ++failures >= 3) {
-              message.content.length = base;
-              message.content.push(...result.content);
-              throw new StreamFailure(kind, kind === "transient" && !shown);
-            }
-            if (kind !== "transient" && failures >= sources.length) throw new StreamFailure(kind);
-            continue;
-          }
-          message.content.length = base;
-          message.content.push(...result.content);
-          message.stopReason = result.stopReason;
-          if (callsTools(message) || hasVisibleText(message)) {
-            if (nudge === undefined && isProgressOnlyTurn(result)) {
-              nudge = PROGRESS_TURN_NUDGE;
-              settings.onAnswerStart?.();
-              continue;
-            }
-            break;
-          }
-          // The same budget would most likely be spent the same way again, so this is not requested again.
-          if (result.stopReason === "length") throw new StreamFailure("exhausted");
-          if (nudge !== undefined) throw new StreamFailure("silent");
-          nudge = SILENT_TURN_NUDGE;
-        }
-        if (!started) {
-          started = true;
-          output.push({ type: "start", partial: message });
-        }
-        output.push({ type: "done", reason: message.stopReason as "stop" | "length" | "toolUse", message });
-      } catch (error) {
-        message.stopReason = options?.signal?.aborted ? "aborted" : "error";
-        message.errorMessage = message.stopReason === "aborted" ? "任务已停止" : publicFailure(error);
-        output.push({ type: "error", reason: message.stopReason, error: message });
-      } finally {
-        output.end(message);
-      }
-    })();
-    return output;
-  };
+  return (piModel, context, options) => streamAgentResponse(piModel, context, options, settings, () => {
+    const sources = agentModelSources(config);
+    if (!sources.length) throw new Error("模型服务未配置");
+    // Each model thinks at a level it lists: an unlisted one moves to the nearest that is.
+    const effort = settings.reasoning !== false && piModel.reasoning && options?.reasoning ? resolveThinkingLevel(config, options.reasoning) : undefined;
+    const fetcher = settings.fetch ?? gatewayFetch;
+    const billing = settings.billing;
+    return {
+      sources: sources.length,
+      connect: index => {
+        const source = sources[index];
+        let apiKey: string | undefined;
+        try { apiKey = resolveSourceApiKey(source) ?? undefined; }
+        catch { throw new StreamFailure(GATEWAY_KEY_FAILURE); }
+        const outputLimits = [source.defaultMaxTokens, piModel.maxTokens, options?.maxTokens].filter((limit): limit is number => limit !== undefined && limit > 0);
+        const upstream = source.modelId;
+        const body = extraBody(source);
+        return (messages, signal) => streamCompletions({
+          ...piModel,
+          api: "openai-completions",
+          baseUrl: normalizeGatewayBaseUrl(source.apiUrl),
+          compat: agentCompletionsCompat(source),
+          thinkingLevelMap: thinkingLevelMap(config.thinkingLevels),
+        }, normalizeContext({ messages }), {
+          apiKey,
+          fetch: fetcher,
+          signal,
+          maxRetries: 0,
+          identity: { userAgent: { custom: MODEL_REQUEST_USER_AGENT } },
+          temperature: settings.temperature ?? 0.7,
+          ...(outputLimits.length ? { maxTokens: Math.min(...outputLimits) } : {}),
+          ...(effort ? { reasoningEffort: effort } : {}),
+          // The transcript keeps the task's model identity; the gateway is asked for the source's upstream model.
+          // Every request of the task carries the same cache key, so a provider can route them to one cache.
+          onPayload: payload => ({ ...body, ...(payload as Record<string, unknown>), model: upstream, ...(cacheKey ? { prompt_cache_key: cacheKey } : {}) }),
+        });
+      },
+      ...(billing ? {
+        admit: async () => {
+          // A balance that cannot be read is retried like an unavailable model service.
+          const admitted = await billing.admit().catch(() => { throw new StreamFailure("transient", true); });
+          if (!admitted) throw new StreamFailure("balance");
+        },
+        record: async (messages: readonly Message[], result: AssistantMessage) => {
+          const billed = billedUsage(messages, result);
+          if (billed) await billing.charge(billed.usage, billed.estimated);
+        },
+      } : {}),
+      failure: publicFailure,
+    };
+  });
 }
+
+/** What the task shows for a failure of the member's own model: the provider's status and text, with a hint. */
+function byokFailure(error: unknown): string {
+  // Pi recovers from an overflow by compacting, which it recognizes by this text.
+  if (error instanceof StreamFailure && error.detail && error.kind !== "overflow") return formatByokError(byokFailureFromMessage(error.detail));
+  return publicFailure(error);
+}
+
+export interface ByokModelStreamSettings extends AgentStreamHooks {
+  apiKey: string;
+  /** The levels the model offers (empty: any). */
+  levels: readonly AIReasoningEffort[];
+  /**
+   * What thinking "off" means for this model in this task: no thinking parameters at all (the model's default, chosen
+   * as 「模型默认」) or the explicit off switch (「关闭推理」).
+   */
+  off: "auto" | "off";
+  /** Each request's usage, recorded at $0. */
+  record?: (usage: TokenUsage) => Promise<void>;
+  fetch?: typeof globalThis.fetch;
+}
+
+/**
+ * The member's own model in a task: pi-ai's transport for its protocol, its own key, through the public-address
+ * guard, no temperature. The transcript keeps the task's identity for the model (its `byok:` reference), so the model
+ * gets its own thinking back between tool calls.
+ */
+export function createByokModelStream(model: ByokRequestModel, settings: ByokModelStreamSettings): StreamFn {
+  return (piModel, context, options) => streamAgentResponse(piModel, context, options, settings, () => {
+    const thinking = options?.reasoning
+      ? { mode: "level" as const, level: clampByokLevel(settings.levels, options.reasoning) }
+      : { mode: settings.off };
+    return {
+      sources: 1,
+      connect: () => (messages, signal) => streamByok(model, normalizeContext({ messages }), {
+        apiKey: settings.apiKey, thinking, signal, fetch: settings.fetch ?? agentSafeFetch, userAgent: MODEL_REQUEST_USER_AGENT,
+        transcriptModel: { id: piModel.id, provider: piModel.provider },
+      }),
+      ...(settings.record ? {
+        record: async (_messages: readonly Message[], result: AssistantMessage) => {
+          const usage = byokUsage(result.usage);
+          if (usage) await settings.record!(usage);
+        },
+      } : {}),
+      failure: byokFailure,
+    };
+  });
+}
+

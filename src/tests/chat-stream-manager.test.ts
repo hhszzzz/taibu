@@ -2,9 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import type { ChatMessage } from '../types';
 
-
-const { ChatStreamManager } = require('../lib/chat/chat-stream-manager') as typeof import('../lib/chat/chat-stream-manager');
-const { BrowserDirectProviderError } = require('../lib/ai/browser-direct-provider') as typeof import('../lib/ai/browser-direct-provider');
+const { ChatRunnerError, ChatStreamManager } = require('../lib/chat/chat-stream-manager') as typeof import('../lib/chat/chat-stream-manager');
 
 function createUserMessage(): ChatMessage {
     return {
@@ -754,10 +752,7 @@ test('chat stream manager maps browser-direct prepare auth failures to AUTH_REQU
         baseMessages,
         assistantMessage: createAssistantMessage('assistant-direct-auth'),
         runner: async () => {
-            throw new BrowserDirectProviderError('请先登录后再使用 AI 对话', {
-                status: 401,
-                code: 'PREPARE_FAILED',
-            });
+            throw new ChatRunnerError('请先登录后再使用 AI 对话', 401);
         },
     });
     assert.equal(started.ok, true);

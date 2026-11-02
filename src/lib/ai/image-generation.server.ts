@@ -2,8 +2,12 @@ import 'server-only';
 
 import { createHash, randomUUID } from 'node:crypto';
 import { generateImage, type ImageModel, type GeneratedFile } from 'ai';
+import { ByokRequestError } from '@/lib/byok/config';
+import { generateByokImages, type ByokImage } from '@/lib/byok/images';
+import type { ResolvedByokModel } from '@/lib/byok/store.server';
 import type { AIModelConfig } from '@/types';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
+import { readStillImage } from '@/lib/images/still-image';
 import { getObjectStore } from '@/lib/storage/index.server';
 import type { ObjectStore } from '@/lib/storage/object-store';
 import { getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
@@ -58,8 +62,8 @@ type StoredImageTarget = Pick<ImageGenerationRequest, 'userId' | 'prompt' | 'siz
   modelId: string;
 };
 
-/** A member's own image model; the key comes from the browser or the task's sealed credential, never from storage. */
-export type CustomImageProvider = { apiUrl: string; apiKey: string; modelId: string };
+/** A member's own image model and its key (stored here, or staged for an Agent task). */
+export type ByokImageModel = { model: ResolvedByokModel; key: string };
 
 export type ImageGenerationResult = {
   images: GeneratedImageDto[];
@@ -81,10 +85,17 @@ export type ImageGenerationDeps = {
 
 const EXTENSION: Record<string, string> = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
 
-/** The platform's image model: the first enabled, priced one with a callable source. */
-export async function resolveImageModel(): Promise<AIModelConfig | null> {
+/** The platform's image models members may pick: enabled, priced, with a callable source. */
+export async function listImageModels(): Promise<AIModelConfig[]> {
   const models = await getModelsByUsageTypeAsync('image');
-  return models.find(model => isModelOffered(model) && getOrderedModelSources(model).length > 0) ?? null;
+  return models.filter(model => isModelOffered(model) && getOrderedModelSources(model).length > 0);
+}
+
+/** The image model asked for when the platform offers it, else the first offered one; null when none is. */
+export async function resolveImageModel(modelId?: string | null): Promise<AIModelConfig | null> {
+  const models = await listImageModels();
+  if (modelId) return models.find(model => model.id === modelId) ?? null;
+  return models[0] ?? null;
 }
 
 /** Micro-dollars per generated image. */
@@ -233,50 +244,53 @@ export async function generateImages(
 }
 
 /**
- * Generate on a member's own image model with the key their Agent task holds: the platform's limits and storage, the
- * row recorded under `custom:<model>`, never billed. The caller supplies the fetch, so a task's provider address goes
- * through the same public-address checks as its chat model.
+ * Generate on a member's own image model whose key is stored here or staged for an Agent task: the platform's limits
+ * and storage, the row recorded under the model's `byok:` reference, usage at $0. The caller supplies the fetch, so the
+ * provider address goes through the public-address checks; the provider's own error reaches the user.
  */
-export async function generateCustomImages(
-  request: Omit<ImageGenerationRequest, 'model'> & { provider: CustomImageProvider },
-  deps: Pick<ImageGenerationDeps, 'db' | 'store' | 'generate' | 'countRunImages'> & { fetch: typeof globalThis.fetch },
+export async function generateByokImageSet(
+  request: Omit<ImageGenerationRequest, 'model'> & ByokImageModel,
+  deps: Pick<ImageGenerationDeps, 'db' | 'store' | 'countRunImages' | 'recordFree'> & { fetch: typeof globalThis.fetch; userAgent?: string },
 ): Promise<ImageGenerationResult> {
   const prompt = checkImageRequest(request);
   const db = deps.db ?? systemDb();
   await checkRunImageLimit(db, request, deps.countRunImages);
-  const { provider } = request;
-  const model = createImageModelFromConfig(
-    { id: `custom:${provider.modelId}`, name: provider.modelId, vendor: 'other', modelId: provider.modelId, apiUrl: provider.apiUrl, supportsReasoning: false },
-    { apiKey: provider.apiKey, fetch: deps.fetch },
-  );
-  let files: GeneratedFile[];
+  let generated: ByokImage[];
   try {
-    const result = await (deps.generate ?? generateImage)({
-      model, prompt, n: request.count, size: request.size, maxRetries: 0, abortSignal: request.abortSignal,
+    generated = await generateByokImages({
+      baseUrl: request.model.connection.baseUrl, modelId: request.model.modelId, apiKey: request.key, prompt, size: request.size,
+      count: request.count, signal: request.abortSignal, fetch: deps.fetch, userAgent: deps.userAgent,
     });
-    files = result.images.slice(0, request.count);
   } catch (error) {
     if (request.abortSignal?.aborted) throw new ImageGenerationError('已停止生成', 'FAILED');
-    console.warn('[image-generation] custom image model failed', { error: error instanceof Error ? error.name : typeof error });
-    throw new ImageGenerationError('自定义生图模型请求失败，请检查生图模型与 Key', 'FAILED');
+    if (error instanceof ByokRequestError) throw new ImageGenerationError(error.message, 'FAILED');
+    throw error;
   }
-  if (!files.length) throw new ImageGenerationError('自定义生图模型没有返回图片', 'FAILED');
-  const images = await storeImages(db, deps.store ?? getObjectStore(), { ...request, prompt, modelId: `custom:${provider.modelId}` }, files);
+  const files: Array<{ uint8Array: Uint8Array; mediaType: string; size: string }> = [];
+  for (const image of generated) {
+    const still = readStillImage(image.bytes);
+    if (still) files.push({ uint8Array: image.bytes, ...still });
+  }
+  if (!files.length) throw new ImageGenerationError('生图模型返回的图片无法识别', 'FAILED');
+  const images = await storeByokImages({ ...request, prompt, model: request.model }, files, { db, store: deps.store, recordFree: deps.recordFree });
   return { images, costMicros: 0 };
 }
 
 /**
- * Saves images the browser got from the member's own image model; the route has checked each is one still PNG, JPEG
- * or WebP by its bytes and read its real size (a model may not honour the size asked). Stored like platform images
- * under `custom:<model>`, never billed.
+ * Saves images from the member's own image model (made here, or in their browser and uploaded), each already checked
+ * by `readStillImage`. Stored like platform images under the model's `byok:` reference; the usage log shows them at $0.
  */
-export async function storeCustomImages(
-  target: Omit<StoredImageTarget, 'modelId'> & { customModelId: string },
+export async function storeByokImages(
+  target: Omit<StoredImageTarget, 'modelId'> & { model: Pick<ResolvedByokModel, 'ref' | 'modelId'> },
   files: ReadonlyArray<{ uint8Array: Uint8Array; mediaType: string; size: string }>,
-  deps: { db?: ScopedDb; store?: ObjectStore } = {},
+  deps: { db?: ScopedDb; store?: ObjectStore; recordFree?: typeof recordFreeImages } = {},
 ): Promise<GeneratedImageDto[]> {
   const prompt = checkImageRequest({ prompt: target.prompt, size: target.size, count: files.length });
-  return storeImages(deps.db ?? systemDb(), deps.store ?? getObjectStore(), { ...target, prompt, modelId: `custom:${target.customModelId}` }, files);
+  const images = await storeImages(deps.db ?? systemDb(), deps.store ?? getObjectStore(), { ...target, prompt, modelId: target.model.ref }, files);
+  const reference = target.runId ? { referenceType: 'agent_run', referenceId: target.runId }
+    : target.conversationId ? { referenceType: 'conversation', referenceId: target.conversationId } : {};
+  await (deps.recordFree ?? recordFreeImages)({ userId: target.userId, model: { id: target.model.modelId }, images: images.length, byok: true, ...reference });
+  return images;
 }
 
 /** Loads one image the caller may read: its own row, or through an active share of its conversation. */

@@ -8,14 +8,16 @@ import { systemDb } from "@/lib/db/context.server";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { subscribeAgentTextDelta } from "./tail-bus.server";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
-import { readFeatureModuleStateFresh } from "@/lib/app-settings";
+import { getByokPolicy, readFeatureModuleStateFresh } from "@/lib/app-settings";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { isChatAttachment } from "@/lib/ai/document-formats";
 import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
 import { webRouteAvailable } from "./mcp/web-route.server";
 import { parseAgentApproval } from "./mcp/config";
 import { isValidUUID } from "@/lib/validation";
-import type { ChatMessage, CustomProviderRequest, Mention } from "@/types";
+import type { ChatMessage, Mention } from "@/types";
+import { isByokRef } from "@/lib/byok/config";
+import { resolveByokModel } from "@/lib/byok/store.server";
 import { normalizeMessageQuotes } from "@/lib/chat/quotes";
 import { isDataSourceType } from "@/lib/data-sources/types";
 import {
@@ -99,22 +101,15 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
       });
     }
   }
-  let customProvider: CustomProviderRequest | undefined;
-  if (value.customProvider !== undefined) {
-    const custom = object(value.customProvider);
-    if (
-      typeof custom.apiUrl !== "string" ||
-      typeof custom.apiKey !== "string" ||
-      typeof custom.modelId !== "string" ||
-      (custom.imageModelId !== undefined && typeof custom.imageModelId !== "string")
-    )
-      throw new AgentApiError("自定义模型配置无效");
-    customProvider = {
-      apiUrl: custom.apiUrl,
-      apiKey: custom.apiKey,
-      modelId: custom.modelId,
-      ...(typeof custom.imageModelId === "string" && custom.imageModelId.trim() ? { imageModelId: custom.imageModelId.trim() } : {}),
-    };
+  if (value.imageModel !== undefined && typeof value.imageModel !== "string") throw new AgentApiError("生图模型无效");
+  // Keys of the member's own models that stay in the browser, by connection; only the ones the task uses are kept.
+  let byokKeys: Record<string, string> | undefined;
+  if (value.byokKeys !== undefined) {
+    const keys = object(value.byokKeys);
+    const entries = Object.entries(keys);
+    if (entries.length > 20 || entries.some(([id, key]) => !isValidUUID(id) || typeof key !== "string"))
+      throw new AgentApiError("自定义模型 Key 无效");
+    byokKeys = Object.fromEntries(entries) as Record<string, string>;
   }
   const attachments =
     message.attachments === undefined ? undefined : object(message.attachments);
@@ -137,9 +132,10 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
       quotes: normalizeMessageQuotes(message.quotes),
     },
     model: value.model as string | undefined,
+    ...(typeof value.imageModel === "string" && value.imageModel ? { imageModel: value.imageModel } : {}),
+    ...(byokKeys ? { byokKeys } : {}),
     replaceFromMessageId: value.replaceFromMessageId as string | undefined,
     mentions,
-    customProvider,
     webEnabled: value.webEnabled !== false,
     codeMode: value.codeMode === true,
     planMode: value.planMode === true,
@@ -223,7 +219,6 @@ export async function agentCapabilities(request: NextRequest) {
     ready: state.status === "enabled" && (await store.workerReady()),
     webAvailable: searchAvailable || mcpAvailable,
     plainWebAvailable: searchAvailable,
-    customAvailable: !!process.env.AGENT_CREDENTIAL_ENCRYPTION_KEY,
   });
 }
 
@@ -311,8 +306,10 @@ export async function controlAgentTask(
   };
   const commandAttachments = await validateAttachmentIds(store.db,auth.user.id,body.attachmentIds).catch(error => { throw new AgentApiError(error.message); });
   if (commandAttachments.some(item=>item.kind==='image')) {
-    const model=run.input.customProvider ? null : await getModelConfigAsync(run.input.model);
-    if (!model?.supportsVision) throw new AgentApiError('当前任务的模型不支持图片；请在下个独立任务选择视觉模型');
+    const vision = isByokRef(run.input.model)
+      ? (await resolveByokModel(store.db, auth.user.id, run.input.model, await getByokPolicy()))?.supportsVision
+      : (await getModelConfigAsync(run.input.model))?.supportsVision;
+    if (!vision) throw new AgentApiError('当前任务的模型不支持图片；请在下个独立任务选择视觉模型');
   }
   if(commandAttachments.length) message.attachments={fileName:commandAttachments.map(item=>item.name).join('、'),ids:commandAttachments.map(item=>item.id)};
   // A skill named in a message sent into the task must be usable now; the worker expands it when it delivers the message.

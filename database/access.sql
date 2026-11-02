@@ -493,6 +493,20 @@ CREATE POLICY user_agent_memory_owner ON public.user_agent_memory TO authenticat
 
 CREATE POLICY user_agent_memory_worker_read ON public.user_agent_memory FOR SELECT TO authenticated USING (public.is_admin_user());
 
+ALTER TABLE public.user_ai_connections ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_ai_connections_owner ON public.user_ai_connections TO authenticated USING ((user_id = auth.uid())) WITH CHECK ((user_id = auth.uid()));
+
+CREATE POLICY user_ai_connections_worker_read ON public.user_ai_connections FOR SELECT TO authenticated USING (public.is_admin_user());
+
+ALTER TABLE public.user_ai_models ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY user_ai_models_owner ON public.user_ai_models TO authenticated USING ((user_id = auth.uid())) WITH CHECK (((user_id = auth.uid()) AND (EXISTS ( SELECT 1
+   FROM public.user_ai_connections c
+  WHERE ((c.id = user_ai_models.connection_id) AND (c.user_id = auth.uid()))))));
+
+CREATE POLICY user_ai_models_worker_read ON public.user_ai_models FOR SELECT TO authenticated USING (public.is_admin_user());
+
 ALTER TABLE public.user_oauth_providers ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY user_oauth_providers_delete_access ON public.user_oauth_providers FOR DELETE USING (public.is_admin_user());
@@ -611,6 +625,10 @@ GRANT ALL ON FUNCTION public.agent_submit_command(p_run_id uuid, p_request_id te
 GRANT ALL ON FUNCTION public.agent_worker_heartbeat(p_worker_id text, p_engine text) TO authenticated;
 
 GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_agent_memory TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_ai_connections TO authenticated;
+
+GRANT SELECT,INSERT,DELETE,UPDATE ON TABLE public.user_ai_models TO authenticated;
 
 GRANT ALL ON FUNCTION public.agent_write_memory(p_run_id uuid, p_worker_id text, p_fence bigint, p_title text, p_content text, p_kind text, p_evidence text) TO authenticated;
 

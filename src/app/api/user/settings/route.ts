@@ -1,5 +1,6 @@
 import { type NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { json } from '@/lib/db/sql-helpers';
 import {
     buildUserSettingsUpdatePayload,
     getUserSettingsSnapshot,
@@ -56,12 +57,16 @@ export async function PATCH(request: NextRequest) {
   if (!hasEffectiveUserSettingsUpdate(payload)) {
     return jsonError('没有可更新的设置字段', 400);
   }
+  // pg encodes a JS array as a PostgreSQL array literal; this column is jsonb.
+  const values = Array.isArray(payload.prompt_kb_ids)
+    ? { ...payload, prompt_kb_ids: json(payload.prompt_kb_ids) as never }
+    : payload;
 
   try {
     await auth.db.tx((trx) => trx
       .insertInto('user_settings')
-      .values(payload as never)
-      .onConflict((conflict) => conflict.column('user_id').doUpdateSet(payload as never))
+      .values(values as never)
+      .onConflict((conflict) => conflict.column('user_id').doUpdateSet(values as never))
       .execute());
   } catch {
     return jsonError('更新用户设置失败', 500);

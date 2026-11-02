@@ -233,3 +233,28 @@ test('Agent preference updates preserve display settings and reject invalid temp
   assert.equal((await patch({ promptTemplates: [] })).status, 200);
   assert.deepEqual((settings.chat_preferences as { promptTemplates: unknown }).promptTemplates, []);
 });
+
+test('prompt knowledge base ids are written as JSON text for the jsonb column', async t => {
+  const api = require('../lib/api-utils') as typeof import('../lib/api-utils');
+  const writes: Record<string, unknown>[] = [];
+  t.mock.method(api, 'requireUserContext', async () => ({
+    user: { id: 'alice' },
+    db: createMockScopedDb({
+      tx: async (work) => work(settingsTx(() => ({ prompt_kb_ids: [] }), (payload) => writes.push(payload)) as never),
+    }),
+  }) as unknown as Awaited<ReturnType<typeof api.requireUserContext>>);
+  const { PATCH } = await import('../app/api/user/settings/route');
+  const response = await PATCH(new NextRequest('http://localhost/api/user/settings', {
+    method: 'PATCH',
+    headers: { 'X-Expected-User-Id': 'alice' },
+    body: JSON.stringify({ promptKbIds: ['kb-1', 'kb-2'] }),
+  }));
+  assert.equal(response.status, 200);
+  assert.equal(writes.length, 1);
+  const field = writes[0]?.prompt_kb_ids as {
+    toOperationNode: () => { sqlFragments: string[]; parameters: Array<{ value: unknown }> };
+  };
+  const node = field.toOperationNode();
+  assert.ok(node.sqlFragments.some(fragment => fragment.includes('::jsonb')));
+  assert.deepEqual(node.parameters.map(parameter => parameter.value), [JSON.stringify(['kb-1', 'kb-2'])]);
+});

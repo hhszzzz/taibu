@@ -122,6 +122,8 @@ interface UseChatMessagingParams {
     user: { name?: string | null } | null;
     refreshViewerState: () => Promise<unknown>;
     markViewerBalanceExhausted: () => void;
+    /** The known balance cannot pay for the chosen platform model; checked again when sending. */
+    balanceInsufficient: boolean;
     showToast: ReturnType<typeof import('@/components/ui/Toast').useToast>['showToast'];
     router: ReturnType<typeof import('next/navigation').useRouter>;
     searchParams: ReturnType<typeof import('next/navigation').useSearchParams>;
@@ -133,6 +135,7 @@ export function useChatMessaging({
     user,
     refreshViewerState,
     markViewerBalanceExhausted,
+    balanceInsufficient,
     showToast,
     router,
     searchParams,
@@ -198,8 +201,26 @@ export function useChatMessaging({
 
     const markBalanceExhausted = useCallback((message?: string) => {
         markViewerBalanceExhausted();
-        showToast('info', message || '余额不足，请充值、兑换或订阅后再试', TOP_UP_TOAST);
-    }, [markViewerBalanceExhausted, showToast]);
+        // 钱包关闭时没有可以去的充值入口：只提示余额不足。
+        const walletOpen = isFeatureEnabled('billing');
+        showToast('info', walletOpen ? (message || '余额不足，请充值、兑换或订阅后再试') : '余额不足', walletOpen ? TOP_UP_TOAST : undefined);
+    }, [isFeatureEnabled, markViewerBalanceExhausted, showToast]);
+
+    /** 缓存的余额可能落后于刚完成的充值：拦下发送前再读一次，只有确认仍为空才提示。 */
+    const guardBalance = useCallback(async () => {
+        if (!balanceInsufficient) return true;
+        let spendable: number | null | undefined;
+        try {
+            const data = await refreshViewerState() as { billing?: { spendableMicros?: number } | null } | null;
+            spendable = data?.billing?.spendableMicros;
+        } catch {
+            spendable = undefined;
+        }
+        // 读不到时交给服务端判断；只有明确为零才拦。
+        if (typeof spendable !== 'number' || spendable > 0) return true;
+        markBalanceExhausted();
+        return false;
+    }, [balanceInsufficient, markBalanceExhausted, refreshViewerState]);
 
     // Scroll helpers
     const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth') => {
@@ -424,6 +445,7 @@ export function useChatMessaging({
         let conversationId = activeConversationId;
         const assistantId = (Date.now() + 1).toString();
         const userMessage: ChatMessage = { id: Date.now().toString(), role: 'user', content: prompt, createdAt: new Date().toISOString() };
+        let insufficientBalance = false;
         try {
             if (!isNewConversation && !conversationValidatedRef.current) {
                 showToast('info', '会话加载中，请稍后再试');
@@ -453,7 +475,7 @@ export function useChatMessaging({
                     body: JSON.stringify({ conversationId, prompt, size: options.size, count: options.count }),
                 });
             const images = response.data?.images ?? [];
-            if (response.status === 402) markViewerBalanceExhausted();
+            if (response.status === 402) { insufficientBalance = true; markViewerBalanceExhausted(); }
             if (response.error || !images.length) throw new Error(response.error?.message ?? '生成图片失败，请重试');
             const assistantMessage: ChatMessage = {
                 id: assistantId, role: 'assistant', createdAt: new Date().toISOString(),
@@ -472,7 +494,8 @@ export function useChatMessaging({
             if (isCurrent()) setMessages(prev => prev.filter(message => message.id !== assistantId && message.id !== userMessage.id));
             if (isNewConversation && conversationId) await discardDraftConversation(conversationId);
             else if (conversationId === activeConversationIdRef.current) setMessages(messages);
-            showToast('error', error instanceof Error ? error.message : '生成图片失败，请重试');
+            if (insufficientBalance) markBalanceExhausted(error instanceof Error ? error.message : undefined);
+            else showToast('error', error instanceof Error ? error.message : '生成图片失败，请重试');
         } finally {
             setIsSendingToList(false);
         }
@@ -502,6 +525,7 @@ export function useChatMessaging({
         if (!trimmedInput || isLoading || isSendingToList) return;
         if (attachmentState.uploaded?.length && agent.mode !== 'agent') { showToast('info', '私有图片和文本资料请使用 Agent 模式发送'); return; }
         if (isDreamMode && dreamContextLoading) return;
+        if (!(await guardBalance())) return;
         let isCurrent = agent.captureConversation();
         const clearSubmittedDraft = state.captureSubmittedDraft(true);
         setIsSendingToList(true);
@@ -635,6 +659,7 @@ export function useChatMessaging({
         if (agent.active) { showToast('info', '请先停止当前任务，再编辑历史消息'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
+        if (!(await guardBalance())) return;
         const isTargetActive = agent.captureConversation(targetConversationId);
         const originalSnapshot = messages;
         const messageIndex = messages.findIndex(m => m.id === messageId);
@@ -659,7 +684,11 @@ export function useChatMessaging({
             const runningUserMessage: ChatMessage = { ...updatedUserMessage, versions: pending.versions, currentVersionIndex: pending.index };
             if (isTargetActive()) setMessages([...previousMessages, runningUserMessage]);
             try { await agent.start(targetConversationId, runningUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: originalMessage.id }); }
-            catch (error) { if (isTargetActive()) setMessages(originalSnapshot); showToast('error', error instanceof Error ? error.message : '编辑失败'); }
+            catch (error) {
+                if (isTargetActive()) setMessages(originalSnapshot);
+                if (error instanceof AgentHttpError && error.status === 402) markBalanceExhausted(error.message);
+                else showToast('error', error instanceof Error ? error.message : '编辑失败');
+            }
             return;
         }
         if (isTargetActive()) setMessages(newMessages);
@@ -723,6 +752,7 @@ export function useChatMessaging({
         if (agent.active) { showToast('info', '请先停止当前任务，再重新生成'); return; }
         const targetConversationId = activeConversationIdRef.current;
         if (!targetConversationId) return;
+        if (!(await guardBalance())) return;
         const isTargetActive = agent.captureConversation(targetConversationId);
         const originalSnapshot = messages;
         const messageIndex = messages.findIndex(m => m.id === messageId);
@@ -742,7 +772,11 @@ export function useChatMessaging({
             const runningUserMessage: ChatMessage = { ...lastUserMessage, versions: pending.versions, currentVersionIndex: pending.index };
             if (isTargetActive()) setMessages(previousMessages.map(message => message.id === lastUserMessage.id ? runningUserMessage : message));
             try { await agent.start(targetConversationId, lastUserMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, provider: getCustomProvider(), replaceFromMessageId: lastUserMessage.id }); }
-            catch (error) { if (isTargetActive()) setMessages(originalSnapshot); showToast('error', error instanceof Error ? error.message : '重新生成失败'); }
+            catch (error) {
+                if (isTargetActive()) setMessages(originalSnapshot);
+                if (error instanceof AgentHttpError && error.status === 402) markBalanceExhausted(error.message);
+                else showToast('error', error instanceof Error ? error.message : '重新生成失败');
+            }
             return;
         }
 

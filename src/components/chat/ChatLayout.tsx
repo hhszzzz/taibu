@@ -17,8 +17,7 @@ import { useToast } from '@/components/ui/Toast';
 import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
-import Link from 'next/link';
-import { LayoutDashboard, Lock, X } from 'lucide-react';
+import { LayoutDashboard, X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
@@ -33,7 +32,6 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { BrandMark } from '@/components/brand/BrandMark';
 import type { ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
 import type { ChatMode } from '@/lib/chat/use-chat-state';
-import { getSettingsCenterRouteTarget, openSettingsCenter } from '@/lib/settings-center';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
 import { prefersReducedMotion, useEntranceMotion } from '@/lib/motion/entrance';
 import { SessionDetailsPanel } from './agent/SessionDetailsPanel';
@@ -123,8 +121,6 @@ interface ChatLayoutProps extends ModelSettingsProps {
     dreamContextLoading: boolean;
     knowledgeBaseEnabled: boolean;
 
-    /** The balance is spent and the chosen platform model is paid: sending waits for a top-up. */
-    balanceLocked: boolean;
     onAuthRequired?: () => void;
 
     // Modals (rendered by parent)
@@ -147,7 +143,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         mentions, onMentionsChange, promptKnowledgeBases,
         dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
-        balanceLocked,
         onAuthRequired,
         children,
     } = props;
@@ -419,9 +414,10 @@ export function ChatLayout(props: ChatLayoutProps) {
     const sendWithContext = async () => {
         const context = activeChartAsks.length ? activeChartAsks.map(ask => chartQuestion(ask.reference, ask.targets)).join('\n\n') : undefined;
         const outgoing = quotes;
+        await onSend(context, outgoing.length ? outgoing : undefined);
+        // 发送被余额提示拦下时保留引用与追问命盘，用户不必重新添加。
         setChartAsks([]);
         if (outgoing.length) setQuotes([]);
-        await onSend(context, outgoing.length ? outgoing : undefined);
     };
     // “稍后回答” folds the dock for this question only; a new question opens it again.
     const questionKey = waitingQuestion && props.agent?.run ? `${workspaceKey}:${props.agent.run.id}:${waitingQuestion.id}` : null;
@@ -466,9 +462,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         collaborators,
     };
     const note = composerNote(noteState);
-    // 追问建议不再显示为输入框上方的胶囊：任务跑完时那一条建议直接写进输入框（见上面的 seenRunStatus），
-    // 输入框上方只留余额不足的提示条。
-    const composerHeader = balanceLocked ? <BalanceStrip /> : undefined;
     const citedParagraph = useCallback((cite: number) => getAgentCitedParagraph(messages, cite), [messages]);
     const composerProps = {
         draftKey: workspaceKey,
@@ -493,7 +486,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         customProviderActive, customProviderLabel,
-        userId, balanceLocked, attachmentState, onAttachmentChange,
+        userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         quotes, onRemoveQuote: removeQuote,
         chartAsks: chartAskChips,
@@ -503,7 +496,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         imageGeneration,
         plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
     };
-    const composer = <ChatComposer {...composerProps} onSend={sendWithContext} continuing note={note} noteOptional={isRunningComposerNote(noteState)} header={composerHeader}
+    const composer = <ChatComposer {...composerProps} onSend={sendWithContext} continuing note={note} noteOptional={isRunningComposerNote(noteState)}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }
@@ -521,7 +514,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     // 右侧会话栏常驻（claude /code 无开关），仅在打开工作区时让位。
     const showSessionDetails = isAgentMode && Boolean(latestAgentData) && showHeader && !workspaceOpen;
     // 生成中锁住编辑、重新生成、版本切换与分叉：它们都会改写正在写入的分支。
-    const transcriptLocked = balanceLocked || isLoading || !!props.agent?.active || !!props.agent?.restoring || !!props.agent?.syncing;
+    const transcriptLocked = isLoading || !!props.agent?.active || !!props.agent?.restoring || !!props.agent?.syncing;
 
     return (
         <AgentResultContext.Provider value={resultWorkspace}><ChatRecordViewContext.Provider value={recordView}><div className="chat-workspace flex bg-background" style={{ '--chat-column': `${preferences.width}px` } as CSSProperties}>
@@ -564,14 +557,14 @@ export function ChatLayout(props: ChatLayoutProps) {
                 {conversationLoading ? (
                     <SoundWaveLoader variant="block" text="" />
                 ) : emptyState ? (
-                    /* claude 空态 = 问候 + composer，别无他物；只在余额不足时放提示条。 */
+                    /* claude 空态 = 问候 + composer，别无他物。 */
                     <div className="chat-empty-state">
                         <div className="chat-empty-inner">
                             <div className="chat-empty-intro">
                                 <BrandMark className="chat-empty-symbol" />
                                 <h1>{displayName ? `${greeting}，${displayName}` : `${greeting}，想问什么？`}</h1>
                             </div>
-                            <ChatComposer {...composerProps} variant="hero" header={composerHeader} />
+                            <ChatComposer {...composerProps} variant="hero" />
                         </div>
                     </div>
                 ) : (
@@ -659,12 +652,4 @@ function ShortcutSheet({ open, onClose }: { open: boolean; onClose: () => void }
             </div>)}
         </dl>
     </Dialog>;
-}
-
-/** The balance is spent: paid platform models wait for a top-up; free models and your own API still work. */
-function BalanceStrip() {
-    return <div className="chat-balance-strip" role="status">
-        <Lock size={15} aria-hidden="true" /><span>余额不足</span>
-        <Link href={getSettingsCenterRouteTarget('billing')} onClick={event => { event.preventDefault(); openSettingsCenter('billing'); }}>去充值</Link>
-    </div>;
 }

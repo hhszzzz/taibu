@@ -59,17 +59,16 @@ export default function ChatPage() {
     );
 
     const state = useChatState({ userId, sessionLoading, bootstrapLoading, router, searchParams });
+    const models = useAvailableModels(userId, { enabled: !!userId });
+    // 免费模型和自带 API 不需要余额；余额不足只在发起平台模型时提示，输入框始终可用。
+    const freeModel = isFreeTokenPricing(models.data?.find(model => model.id === state.selectedModel)?.pricing);
+    const balanceInsufficient = !!models.data && !!balance && balance.spendableMicros <= 0 && !freeModel && !state.customProviderActive;
 
     const messaging = useChatMessaging({
         state, userId, user,
         refreshViewerState: appBootstrap.refresh, markViewerBalanceExhausted: appBootstrap.markBalanceExhausted,
-        showToast, router, searchParams,
+        showToast, router, searchParams, balanceInsufficient,
     });
-
-    const models = useAvailableModels(userId, { enabled: !!userId });
-    // A free model and your own API need no balance; the server still decides on each request.
-    const freeModel = isFreeTokenPricing(models.data?.find(model => model.id === state.selectedModel)?.pricing);
-    const balanceLocked = !!balance && balance.spendableMicros <= 0 && !freeModel && !state.customProviderActive && !messaging.agent.active;
     const [showAuthModal, setShowAuthModal] = useState(false);
 
     if (bootstrapLocked) {
@@ -139,7 +138,6 @@ export default function ChatPage() {
                 dreamContext={state.dreamContext}
                 dreamContextLoading={state.dreamContextLoading}
                 knowledgeBaseEnabled={knowledgeBaseEnabled}
-                balanceLocked={balanceLocked}
             >
                 {state.kbTargetMessage && state.activeConversationId && isFeatureEnabled('knowledge-base') && (
                     <AddToKnowledgeBaseModal

@@ -459,11 +459,12 @@ function AgentChatProbe() {
   const router = useMemo(() => ({ replace() {}, push() {} }), []);
   const searchParams = useMemo(() => new URLSearchParams(), []);
   const state = useChatState({ userId: user?.id ?? null, sessionLoading: false, bootstrapLoading: false, router, searchParams });
-  const messaging = useChatMessaging({ state, userId: user?.id ?? null, user,
-    refreshViewerState: async () => {}, markViewerBalanceExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
+  const [balanceInsufficient, setBalanceInsufficient] = useState(false);
+  const messaging = useChatMessaging({ state, userId: user?.id ?? null, user, balanceInsufficient,
+    refreshViewerState: async () => window.fixture.viewerState ?? {}, markViewerBalanceExhausted() {}, showToast: (...args) => { window.fixture.agentToasts.push(args); }, router, searchParams });
   const [planMode, setPlanMode] = useState(false);
   const [codeMode, setCodeMode] = useState(false);
-  window.fixture.agentChat = { state, messaging, planMode, codeMode };
+  window.fixture.agentChat = { state, messaging, planMode, codeMode, setBalanceInsufficient };
   return <section data-testid="agent-chat"><input aria-label="Agent fixture draft" value={state.inputValue} onChange={event => state.setInputValue(event.target.value)} />
     <ComposerStatusBar agentMode disabled={false} userId={user?.id}
       selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
@@ -2835,6 +2836,31 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.agent(true));
     await until(() => window.fixture.agentChat?.messaging.agent.capabilities.ready);
     await page.evaluate(() => window.fixture.agentChat.messaging.agent.setMode('agent'));
+    // 余额不足不锁输入框：平台模型发起时提示并可去充值，不创建任务；草稿保留。
+    await page.evaluate(() => {
+      window.fixture.viewerState = { billing: { spendableMicros: 0 } };
+      window.fixture.agentToasts.length = 0;
+      window.fixture.agentChat.setBalanceInsufficient(true);
+    });
+    await page.getByLabel('Agent fixture draft').fill('余额不足也要能输入');
+    await until(() => window.fixture.agentChat.state.inputValue === '余额不足也要能输入');
+    const balanceMessagesBefore = await page.evaluate(() => window.fixture.agentChat.state.messages.length);
+    await page.evaluate(() => { window.fixture.agentSend = window.fixture.agentChat.messaging.handleSend(); });
+    await until(() => window.fixture.agentToasts.length > 0);
+    await page.evaluate(() => window.fixture.agentSend);
+    check('An exhausted balance prompts on send with a top-up action instead of blocking the composer', await page.evaluate(before => {
+      const [tone, message, options] = window.fixture.agentToasts[0];
+      return tone === 'info' && String(message).includes('余额不足') && options?.action?.label === '去充值'
+        && window.fixture.agentChat.state.messages.length === before
+        && window.fixture.agentChat.state.inputValue === '余额不足也要能输入'
+        && window.fixture.agentChat.state.activeConversationId === null;
+    }, balanceMessagesBefore));
+    await page.evaluate(() => {
+      window.fixture.agentChat.setBalanceInsufficient(false);
+      window.fixture.viewerState = null;
+      window.fixture.agentChat.state.setInputValue('');
+      window.fixture.agentToasts.length = 0;
+    });
     const selectAgentConversation = async (id, status = null) => {
       await page.evaluate(async ({ id, status }) => {
         const io = window.fixtureAgentIO;

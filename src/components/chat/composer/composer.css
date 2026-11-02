@@ -13,7 +13,6 @@
 /* 会话内 composer 与阅读列同宽（cds：dock 宽 = transcript 列 768px）；首屏列宽由 .chat-empty-inner 提供 */
 .chat-composer-inner { position: relative; width: 100%; max-width: var(--chat-column); min-width: 0; container-type: inline-size; }
 .is-hero .chat-composer-inner { max-width: 100%; }
-.chat-composer-header { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
 /* 追问命盘的富文本引用：图标 + 盘名 + 模型当前查看的位置；发送时并入消息。 */
 /* 追问命盘 = 输入框内可叠加的富文本 token（与提及同构，用 accent 底与图标区分）。 */
 .chat-composer-context-tokens { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 2px 4px; }
@@ -156,7 +155,7 @@
 .chat-run-primary { padding: 0 12px; background: var(--accent); color: var(--on-accent); font-weight: 600; }
 .chat-run-primary:hover:not(:disabled) { background: var(--accent-hover); }
 :is(.chat-run-secondary, .chat-run-primary):disabled { opacity: .5; cursor: not-allowed; }
-.chat-composer-shell :where(button, [tabindex]):focus-visible, .chat-composer-header :where(button, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chat-composer-shell :where(button, [tabindex]):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---- Attachments ---- */
 .chat-attachment-row { display: flex; flex-wrap: wrap; gap: 8px; }
@@ -189,12 +188,6 @@
 
 /* ---- Saved charts under the empty-state input ---- */
 .chat-saved-charts :where(button, a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-
-/* ---- Notices shown above the input ---- */
-.chat-balance-strip { display: flex; align-items: center; gap: 10px; padding: 10px 12px 10px 14px; border-radius: 14px; background: var(--accent-light); font-size: calc(13 / 16 * 1rem); color: var(--accent-hover); }
-.chat-balance-strip > span { font-weight: 500; }
-.chat-balance-strip > a { display: inline-flex; align-items: center; gap: 6px; height: 30px; margin-left: auto; padding: 0 12px; border-radius: 8px; background: var(--accent); color: var(--on-accent); font-size: calc(12.5 / 16 * 1rem); text-decoration: none; }
-.chat-balance-strip > a:hover { background: var(--accent-hover); color: var(--on-accent); }
 
 /* ---- @ 提及弹层（claude 同款形态：r12 面板 + 13px 分组标签 + 32px 选项行） ---- */
 .chat-mention-popover { overflow: hidden; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--chat-raised); box-shadow: var(--shadow-panel-popover); }

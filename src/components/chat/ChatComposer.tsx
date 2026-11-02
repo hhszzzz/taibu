@@ -62,8 +62,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     draftKey?: string;
     /** The empty-state composer is larger and carries the conversation-mode switch. */
     variant?: 'dock' | 'hero';
-    /** Shown above the input, such as the balance notice. */
-    header?: ReactNode;
     /** 输入框内的追问命盘富文本 token（与提及同构、视觉区分）。 */
     contextToken?: ReactNode;
     /** Attached to the top edge of the input, such as the follow-up queue. */
@@ -102,8 +100,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     customProviderActive?: boolean;
     customProviderLabel?: string | null;
     userId?: string | null;
-    /** The balance is spent and the chosen platform model is paid: the draft stays editable but does not send. */
-    balanceLocked?: boolean;
     attachmentState?: AttachmentState;
     onAttachmentChange?: (state: AttachmentState) => void;
     mentions?: Mention[];
@@ -126,7 +122,6 @@ interface ChatComposerProps extends ModelSettingsProps {
 export function ChatComposer({
     draftKey,
     variant = 'dock',
-    header,
     contextToken,
     queue,
     note,
@@ -159,7 +154,6 @@ export function ChatComposer({
     customProviderActive = false,
     customProviderLabel = null,
     userId,
-    balanceLocked = false,
     attachmentState,
     onAttachmentChange,
     mentions = [],
@@ -202,8 +196,6 @@ export function ChatComposer({
         setPrevImageDraftKey(draftKey);
         setImageMode(false);
     }
-    // 余额不足只拦对话发送；生图按生图模型的价格由服务端判断。
-    const sendLocked = balanceLocked && !imageMode;
 
     const state = useComposerState({
         userId,
@@ -466,7 +458,7 @@ export function ChatComposer({
                 }
             }
         }
-        if (e.key === 'Enter' && !e.shiftKey && !disabled && !sendLocked && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
+        if (e.key === 'Enter' && !e.shiftKey && !disabled && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
             e.preventDefault();
             if (!userId && onAuthRequired) {
                 onAuthRequired();
@@ -591,7 +583,6 @@ export function ChatComposer({
     let inputPlaceholder: string;
     let inputLabel: string;
     if (disabled) { inputPlaceholder = '暂时无法发送'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
-    else if (sendLocked) { inputPlaceholder = '余额不足，充值后继续'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
     else if (awaitingInput) { inputPlaceholder = '补充信息，继续当前任务…'; inputLabel = '补充任务信息'; }
     else if (running) { inputPlaceholder = '补充信息或调整方向…'; inputLabel = '补充信息或调整方向'; }
     else if (imageMode) { inputPlaceholder = '描述要生成的图片，例如：水墨风格的山间小筑，晨雾缭绕…'; inputLabel = '描述要生成的图片'; }
@@ -605,9 +596,9 @@ export function ChatComposer({
     } else { inputPlaceholder = '问问命盘、运势，或最近困惑的事…'; inputLabel = '输入消息'; }
 
     const send: ComposerSendState = isSendingToList || uploads.uploading ? { kind: 'sending' }
-        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled || sendLocked || dreamContextLoading, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
+        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled || dreamContextLoading, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
         : isLoading && onStop ? { kind: 'stop' }
-        : { kind: 'send', disabled: !hasDraft || sendLocked || dreamContextLoading };
+        : { kind: 'send', disabled: !hasDraft || dreamContextLoading };
     const styles = useMemo<ChatMode[]>(() => ['normal', ...(canUseBaziChart && userId ? ['mangpai' as const] : []), ...(userId ? ['dream' as const] : [])], [canUseBaziChart, userId]);
     const toolbarProps = {
         agentMode,
@@ -655,9 +646,8 @@ export function ChatComposer({
     };
 
     return (
-        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled || sendLocked ? ' is-locked' : ''}`} style={dockStyle}>
+        <div data-chat-composer data-expanded={composerExpanded || undefined} className={`chat-composer-dock${hero ? ' is-hero' : ''}${disabled ? ' is-locked' : ''}`} style={dockStyle}>
             <div className="chat-composer-inner">
-                {header && <div className="chat-composer-header">{header}</div>}
                 <MentionManager
                     userId={userId}
                     mentionOpen={mentionOpen}

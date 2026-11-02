@@ -32,8 +32,6 @@ TaiBu turns traditional Chinese metaphysics into reproducible, checkable tools, 
 - **Open to any AI client.** The same implementation is available over MCP, as an offline Skill and as npm packages for Claude, Cursor, Cherry Studio and others.
 - **Fully self-hosted.** A Docker Compose stack of Next.js, PostgreSQL and Redis; one image runs both the web app and the worker.
 
-The current version is **v1.0.1**; the first stable release was v1.0.0. See the [changelog](CHANGELOG.md).
-
 The product UI and most documentation are in Chinese.
 
 ## Features

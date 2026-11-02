@@ -32,8 +32,6 @@
 - **工具对外开放**：同一套实现经 MCP、离线 Skill 与 npm 包提供给 Claude、Cursor、Cherry Studio 等任意 AI 客户端。
 - **完全自托管**：Next.js + PostgreSQL + Redis 的 Docker Compose 栈，一个镜像同时运行 Web 与 worker。
 
-当前版本 **v1.0.1**，首个正式版本是 v1.0.0，变更见 [更新日志](CHANGELOG.md)。
-
 ## 功能
 
 ### 占术与排盘

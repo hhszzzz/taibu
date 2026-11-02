@@ -21,6 +21,7 @@
 - 计费模块关闭后，侧栏、账户菜单、个人页与各处充值入口不再显示余额和钱包。([fe6c625](https://github.com/hhszzzz/taibu/commit/fe6c6257ee2e89396e8c3cc8c011ae9fdeb1cce4))
 - 未登录时，「+」菜单与侧栏照常列出需要账号的条目，点按时提示登录；平台没有可用模型时，模型菜单仍可打开。([1855c0e](https://github.com/hhszzzz/taibu/commit/1855c0e5a8ac28677a8585158b5b8cf8f6965be2))
 - 从各结果页「问太卜」进入对话时会带上本次排盘结果，尚未保存的结果先保存。([6e283f3](https://github.com/hhszzzz/taibu/commit/6e283f3248d772f538d80aa781ff24f9fd6260d3))
+- 自定义模型保存的上下文窗口与输出上限现在会作用到实际请求；API 对超限的请求体返回 413，并限制服务商响应的读取大小。([4ec34ff](https://github.com/hhszzzz/taibu/commit/4ec34ffd), [a370770](https://github.com/hhszzzz/taibu/commit/a370770f))
 
 ### 调整
 

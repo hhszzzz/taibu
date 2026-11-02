@@ -228,6 +228,50 @@ test('comments and ordinary strings are not dependency edges', t => {
   }), '');
 });
 
+test('JSONB array writes require json() while native arrays stay native', (t) => {
+  const fixture = mkdtempSync(path.join(tmpdir(), 'taibu-guard-jsonb-'));
+  t.after(() => rmSync(fixture, { recursive: true, force: true }));
+  const files = {
+    'database/schema.sql': 'CREATE TABLE public.tarot_readings (\n    cards jsonb NOT NULL,\n    labels text[]\n);\n',
+    'tsconfig.json': JSON.stringify({
+      compilerOptions: {
+        target: 'ES2022', module: 'ESNext', moduleResolution: 'Bundler', strict: true, skipLibCheck: true,
+      },
+      include: ['src/**/*.ts'],
+    }),
+    'src/app/api/demo/route.ts': [
+      'declare const db: any;',
+      'declare function json(value: unknown): never;',
+      'const cards: string[] = [];',
+      'const labels: string[] = [];',
+      "db.insertInto('tarot_readings').values({ cards, labels });",
+      "db.insertInto('tarot_readings').values({ cards: json(cards), labels });",
+    ].join('\n'),
+  };
+  for (const [relativePath, source] of Object.entries(files)) {
+    const target = path.join(fixture, relativePath);
+    mkdirSync(path.dirname(target), { recursive: true });
+    writeFileSync(target, source);
+  }
+  const result = spawnSync(process.execPath, [GUARD_SCRIPT], {
+    cwd: fixture,
+    env: { ...process.env, NODE_OPTIONS: '' },
+    encoding: 'utf8',
+    timeout: 20_000,
+  });
+  assert.ifError(result.error);
+  assert.equal(result.status, 1);
+  assert.ok(
+    result.stderr.split('\n').some(line => line.includes('src/app/api/demo/route.ts:5:') && line.includes('tarot_readings.cards is jsonb')),
+    result.stderr,
+  );
+  assert.ok(
+    !result.stderr.split('\n').some(line => line.includes('src/app/api/demo/route.ts:6:')),
+    'json() must be accepted',
+  );
+  assert.doesNotMatch(result.stderr, /tarot_readings\.labels is jsonb/u);
+});
+
 test('complete repository retains all architecture guards', () => {
   const result = spawnSync(process.execPath, [GUARD_SCRIPT], {
     cwd: REPO_ROOT,

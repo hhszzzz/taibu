@@ -944,6 +944,127 @@ for (const file of walk('src/lib/identity')) {
   mustMatch(file, /^\s*import\s+['"]server-only['"];?/u, 'identity server modules must import server-only first');
 }
 
+// JSONB writes: node-postgres encodes a JS array as a PostgreSQL array literal,
+// so an array bound to a jsonb column must go through json() (src/lib/db/sql-helpers.ts).
+const schemaPath = resolve(root, 'database/schema.sql');
+const tsconfigPath = resolve(root, 'tsconfig.json');
+if (existsSync(schemaPath) && existsSync(tsconfigPath)) {
+  const jsonbColumns = new Map();
+  let currentTable = null;
+  for (const line of (read('database/schema.sql') ?? '').split('\n')) {
+    const tableMatch = line.match(/^CREATE TABLE public\.([a-zA-Z0-9_]+)\s*\(/u);
+    if (tableMatch) {
+      currentTable = tableMatch[1];
+      jsonbColumns.set(currentTable, new Set());
+      continue;
+    }
+    if (!currentTable) continue;
+    if (/^\);?/u.test(line)) {
+      currentTable = null;
+      continue;
+    }
+    const columnMatch = line.match(/^\s+([a-zA-Z0-9_]+)\s+(?:jsonb|json)\b/u);
+    if (columnMatch) jsonbColumns.get(currentTable).add(columnMatch[1]);
+  }
+
+  const tsconfig = ts.readConfigFile(tsconfigPath, ts.sys.readFile);
+  const parsedTsconfig = tsconfig.error ? null : ts.parseJsonConfigFileContent(tsconfig.config, ts.sys, root);
+  if (parsedTsconfig && !parsedTsconfig.errors.length) {
+    const program = ts.createProgram(parsedTsconfig.fileNames, parsedTsconfig.options);
+    const checker = program.getTypeChecker();
+    const unwrap = (node) => {
+      let value = node;
+      while (value && (ts.isAsExpression(value) || ts.isParenthesizedExpression(value) || ts.isNonNullExpression(value)
+        || (ts.isSatisfiesExpression && ts.isSatisfiesExpression(value)))) value = value.expression;
+      return value;
+    };
+    const isJsonValue = (node) => {
+      const value = unwrap(node);
+      if (!value) return false;
+      if (ts.isCallExpression(value) && ts.isIdentifier(value.expression) && value.expression.text === 'json') return true;
+      return ts.isTaggedTemplateExpression(value) && ts.isIdentifier(value.tag) && value.tag.text === 'sql';
+    };
+    const isArrayType = (type) => {
+      if (type.isUnion()) return type.types.some(isArrayType);
+      if (type.isIntersection()) return type.types.some(isArrayType);
+      if (checker.isArrayType(type) || checker.isTupleType(type)) return true;
+      const text = checker.typeToString(type);
+      return /\[\]$/u.test(text) || /^(?:Readonly)?Array</u.test(text);
+    };
+    const stringArg = (call) => {
+      const argument = call.arguments?.[0];
+      return argument && ts.isStringLiteralLike(argument) ? argument.text : null;
+    };
+    const baseTable = (start) => {
+      let current = start;
+      let guard = 0;
+      while (current && guard++ < 20) {
+        if (ts.isCallExpression(current) && ts.isPropertyAccessExpression(current.expression)) {
+          const method = current.expression.name.text;
+          if (method === 'insertInto' || method === 'updateTable') return stringArg(current);
+          current = current.expression.expression;
+          continue;
+        }
+        if (ts.isPropertyAccessExpression(current)) {
+          current = current.expression;
+          continue;
+        }
+        if (ts.isCallExpression(current)) {
+          current = current.expression;
+          continue;
+        }
+        break;
+      }
+      return null;
+    };
+    const tableOf = (call) => {
+      if (ts.isPropertyAccessExpression(call.expression) && call.expression.name.text === 'doUpdateSet') {
+        let parent = call.parent;
+        while (parent && !(ts.isCallExpression(parent) && ts.isPropertyAccessExpression(parent.expression)
+          && parent.expression.name.text === 'onConflict')) parent = parent.parent;
+        if (parent) return baseTable(parent);
+      }
+      return baseTable(call);
+    };
+
+    for (const sourceFile of program.getSourceFiles()) {
+      if (sourceFile.isDeclarationFile) continue;
+      const file = relative(root, sourceFile.fileName).replaceAll('\\', '/');
+      if (!file.startsWith('src/') || file.startsWith('src/tests/')) continue;
+      const visit = (node) => {
+        if (ts.isCallExpression(node) && ts.isPropertyAccessExpression(node.expression)) {
+          const method = node.expression.name.text;
+          if (method === 'values' || method === 'set' || method === 'doUpdateSet') {
+            const table = tableOf(node);
+            const columns = table ? jsonbColumns.get(table) : null;
+            const argument = node.arguments?.[0];
+            const payload = argument ? unwrap(argument) : null;
+            if (columns?.size && payload && ts.isObjectLiteralExpression(payload)) {
+              for (const property of payload.properties) {
+                let key = null;
+                let value = null;
+                if (ts.isPropertyAssignment(property)) {
+                  key = ts.isIdentifier(property.name) || ts.isStringLiteral(property.name) ? property.name.text : null;
+                  value = property.initializer;
+                } else if (ts.isShorthandPropertyAssignment(property)) {
+                  key = property.name.text;
+                  value = property.name;
+                }
+                if (!key || !value || !columns.has(key) || isJsonValue(value)) continue;
+                if (!isArrayType(checker.getTypeAtLocation(value))) continue;
+                const line = sourceFile.getLineAndCharacterOfPosition(property.getStart()).line + 1;
+                failures.push(`${file}:${line}: ${table}.${key} is jsonb; wrap the array in json() so node-postgres sends JSON text`);
+              }
+            }
+          }
+        }
+        ts.forEachChild(node, visit);
+      };
+      visit(sourceFile);
+    }
+  }
+}
+
 if (failures.length > 0) {
   console.error('Architecture guard failures:');
   for (const failure of failures) {

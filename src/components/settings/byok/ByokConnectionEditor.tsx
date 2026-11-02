@@ -1,6 +1,6 @@
 /**
  * One connection opened in place: address with the request it resolves to, the key and where it lives, connection and
- * model tests, the provider's model list, and the models with what models.dev fills in.
+ * model tests, and models picked from the provider's list or typed by hand, with what models.dev fills in.
  *
  * 'use client' 标记说明：
  * - 草稿、测试中状态、模型列表筛选与保存
@@ -11,13 +11,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, EyeOff, Plus, Trash2, Zap } from 'lucide-react';
+import { ChevronDown, Eye, EyeOff, Plus, RefreshCw, Trash2, Zap } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 import { ModelIcon } from '@/components/ui/ModelIcon';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { Select } from '@/components/ui/Select';
 import { Switch } from '@/components/ui/Switch';
 import { useToast } from '@/components/ui/Toast';
@@ -26,9 +27,9 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { matchModelIcon } from '@/lib/ai/lobe-icons';
 import { fetchByokCapabilities, probeOnServer, saveByokConnection } from '@/lib/byok/client';
 import {
-  BYOK_PROTOCOL_LABELS, byokAddressError, byokEffortLevels, byokEndpoint, byokKeyHint, formatByokError, inferByokProtocol,
+  BYOK_PROTOCOL_LABELS, byokAddressError, byokEffortLevels, formatByokError, inferByokProtocol,
   normalizeByokAddress,
-  type ByokConnectionView, type ByokDefaultEffort, type ByokPolicy, type ByokProtocol, type ByokUsage,
+  type ByokConnectionView, type ByokDefaultEffort, type ByokPolicy, type ByokUsage,
 } from '@/lib/byok/config';
 import { setDeviceKey } from '@/lib/byok/device-keys';
 import {
@@ -41,12 +42,11 @@ import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 
 const EFFORT_LABELS: Record<AIReasoningEffort, string> = { minimal: '最低', low: '低', medium: '中等', high: '高', xhigh: '超高', max: '最高' };
 const PROTOCOL_OPTIONS = (['openai', 'anthropic'] as const).map(value => ({ value, label: BYOK_PROTOCOL_LABELS[value] }));
-const PICKER_ROWS = 200;
+const MAX_OPTIONS = 50;
 
 type ConnectionTest =
   | { status: 'idle' }
   | { status: 'testing' }
-  | { status: 'ok'; models: ByokListedModel[] }
   | { status: 'error'; message: string; alternative?: { baseUrl: string; models: ByokListedModel[] } };
 
 type ModelTest =
@@ -56,15 +56,14 @@ type ModelTest =
 
 const isLevel = (value: ByokDefaultEffort): value is AIReasoningEffort => AI_REASONING_EFFORTS.includes(value as AIReasoningEffort);
 
-/** What the address resolves to, so a missing or extra `/v1` shows before saving. */
-function AddressPreview({ protocol, address }: { protocol: ByokProtocol; address: string }) {
-  if (!address.trim() || byokAddressError(address)) {
-    return <>{protocol === 'anthropic'
-      ? '填到域名即可，例如 https://api.anthropic.com；对话请求 /v1/messages。'
-      : '填到域名或版本号即可，例如 https://api.deepseek.com；完整的 …/chat/completions 地址会原样使用。'}</>;
-  }
-  const endpoint = byokEndpoint(protocol, address);
-  return <>实际请求 <code className="byok-url">{endpoint.chatUrl}</code>，模型列表 <code className="byok-url">{endpoint.modelsUrl}</code></>;
+/** 1048576 → 1M, 393216 → 393K. */
+function formatTokens(value: string): string {
+  const tokens = Number(value);
+  if (!Number.isFinite(tokens) || tokens <= 0) return '';
+  const scaled = (number: number) => number >= 100 ? String(Math.round(number)) : String(Number(number.toFixed(1)));
+  if (tokens >= 1_000_000) return `${scaled(tokens / 1_000_000)}M`;
+  if (tokens >= 1_000) return `${scaled(tokens / 1_000)}K`;
+  return String(tokens);
 }
 
 export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone, onCancel, onDelete }: {
@@ -85,7 +84,12 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   const [saving, setSaving] = useState(false);
   const [connectionTest, setConnectionTest] = useState<ConnectionTest>({ status: 'idle' });
   const [modelTests, setModelTests] = useState<Record<string, ModelTest>>({});
-  const [picker, setPicker] = useState<{ filter: string; selected: string[] } | null>(null);
+  const [fetchingModels, setFetchingModels] = useState(false);
+  /** The provider's list, read by 「获取模型」; each model ID input offers it. */
+  const [listed, setListed] = useState<ByokListedModel[]>([]);
+  const [modelListError, setModelListError] = useState('');
+  /** The model row whose ID input has the provider's list open. */
+  const [openRow, setOpenRow] = useState<string | null>(null);
   useUnsavedSettingsGuard(draftChanged(draft, saved));
 
   const patch = (value: Partial<ByokConnectionDraft>) => { setDraft(current => ({ ...current, ...value })); setError(''); };
@@ -105,14 +109,16 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   const testBlocked = (): string | null => byokAddressError(draft.baseUrl) ?? (testKey || canUseStoredKey ? null : '请先填写 API Key');
 
   const testConnection = async () => {
-    const blocked = testBlocked();
+    const blocked = byokAddressError(draft.baseUrl);
     if (blocked) { setConnectionTest({ status: 'error', message: blocked }); return; }
     setConnectionTest({ status: 'testing' });
     const result = onSite
       ? await probeOnServer(userId, { connectionId: saved?.id ?? null, protocol: draft.protocol, baseUrl: address, apiKey: testKey || null, action: 'models' })
       : await probeByokConnection(draft.protocol, address, testKey, { fetch: byokBrowserFetch });
-    if (result.ok) {
-      setConnectionTest({ status: 'ok', models: result.models });
+    // The key is checked by the model list and model tests; here a 401 means the service answered, so the address works.
+    if (result.ok || result.failure.status === 401 || result.failure.status === 403) {
+      setConnectionTest({ status: 'idle' });
+      showToast('success', '连接成功');
       return;
     }
     setConnectionTest({ status: 'error', message: formatByokError(result.failure, { browser: !onSite }), alternative: result.alternative });
@@ -147,12 +153,36 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
     if (capability) setDraft(current => ({ ...current, models: current.models.map(item => item.key === model.key && item.modelId.trim() === modelId ? applyCapability(item, capability) : item) }));
   };
 
-  const addModels = async (ids: string[]) => {
-    const fresh = ids.filter(id => !draft.models.some(model => model.modelId.trim() === id)).slice(0, Math.max(modelRoom, 0));
-    if (!fresh.length) return;
-    const capabilities = await fetchByokCapabilities(userId, fresh.filter(id => guessUsage(id, draft.protocol) === 'chat'));
-    setDraft(current => ({ ...current, models: [...current.models, ...fresh.map(id => newModelDraft(id, guessUsage(id, current.protocol), capabilities[id]))] }));
-    setPicker(null);
+  /** Reads the provider's list so each model ID input can offer it. */
+  const fetchModels = async () => {
+    const blocked = testBlocked();
+    if (blocked) { setModelListError(blocked); return; }
+    setFetchingModels(true);
+    setModelListError('');
+    const result = onSite
+      ? await probeOnServer(userId, { connectionId: saved?.id ?? null, protocol: draft.protocol, baseUrl: address, apiKey: testKey || null, action: 'models' })
+      : await probeByokConnection(draft.protocol, address, testKey, { fetch: byokBrowserFetch });
+    setFetchingModels(false);
+    if (!result.ok) {
+      setModelListError(formatByokError(result.failure, { browser: !onSite }));
+      return;
+    }
+    setListed(result.models);
+    showToast('success', `已获取 ${result.models.length} 个模型`);
+    if (!draft.models.length && modelRoom > 0) {
+      const row = newModelDraft('', 'chat');
+      setDraft(current => ({ ...current, models: [...current.models, row] }));
+      setOpenRow(row.key);
+    }
+  };
+
+  /** Picks a model from the provider's list into a row, with what models.dev knows about it. */
+  const pickModel = async (model: ByokModelDraft, listed: ByokListedModel) => {
+    const usage = guessUsage(listed.id, draft.protocol);
+    setOpenRow(null);
+    const capability = usage === 'chat' ? (await fetchByokCapabilities(userId, [listed.id]))[listed.id] : null;
+    const next = { ...newModelDraft(listed.id, usage, capability), key: model.key, id: model.id, displayName: listed.name ?? listed.id };
+    setDraft(current => ({ ...current, models: current.models.map(item => item.key === model.key ? next : item) }));
   };
 
   const save = async () => {
@@ -181,18 +211,11 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
 
   const keyToggle = showKey ? '隐藏 API Key' : '显示 API Key';
   const keyDescription = onSite
-    ? keyMoves ? '接口地址换了域名，需要重新填写 Key。'
-      : saved?.keyHint ? `已保存在本站（${saved.keyHint}），留空则不修改。`
-        : deviceKey ? `留空则把这台设备的 Key（${byokKeyHint(deviceKey)}）移到本站加密保存。` : 'Key 加密保存在本站，只写不回显。'
-    : deviceKey ? `已保存在这台设备（${byokKeyHint(deviceKey)}），留空则不修改。` : '只保存在这台设备的浏览器里，退出登录时清除。';
+    ? 'Key 加密保存在本站，只写不回显。'
+    : '只保存在这台设备的浏览器里，退出登录时清除；定时任务无法使用。出现其他错误时，请打开「保存到本站」。';
   const storeDescription = !policy.allowServerKeys
     ? saved?.keyHint ? '管理员已关闭「保存到本站」：已保存的 Key 暂不使用；关闭开关并保存会删除它。' : '管理员已关闭「保存到本站」。'
-    : onSite ? '这个连接的调用由本站服务器发起，也能用于定时任务。'
-      : saved?.keyHint ? '保存后本站删除已保存的 Key，改由这台设备的浏览器直接请求服务商。'
-        : '由浏览器直接请求服务商（服务商需允许跨域）；定时任务不能使用。';
-  const listed = connectionTest.status === 'ok' ? connectionTest.models : [];
-  const filter = picker?.filter.trim().toLowerCase() ?? '';
-  const pickable = listed.filter(model => !filter || model.id.toLowerCase().includes(filter) || model.name?.toLowerCase().includes(filter));
+    : 'Key 加密保存在本站，请求由本站发出，可用定时任务等完整权限。';
 
   return (
     <div className="byok-editor">
@@ -206,15 +229,41 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
           <SegmentedChoice ariaLabel="协议" value={draft.protocol} options={PROTOCOL_OPTIONS} maxWidth={320}
             onChange={protocol => { patch({ protocol }); setConnectionTest({ status: 'idle' }); }} />
         </div>
-        <Field label="接口地址" className="is-wide" description={<AddressPreview protocol={draft.protocol} address={draft.baseUrl} />}>
-          <Input value={draft.baseUrl} inputMode="url" autoComplete="off" spellCheck={false} className="font-mono placeholder:font-sans"
-            placeholder={draft.protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.deepseek.com'}
-            onChange={event => {
-              const baseUrl = event.target.value;
-              // api.anthropic.com only speaks Messages.
-              patch({ baseUrl, ...(inferByokProtocol(baseUrl) === 'anthropic' ? { protocol: 'anthropic' as const } : {}) });
-              setConnectionTest({ status: 'idle' });
-            }} />
+        <Field label="接口地址" className="is-wide">
+          {props => (
+            <div className="byok-address">
+              <div className="byok-address-row">
+                <Input {...props} value={draft.baseUrl} inputMode="url" autoComplete="off" spellCheck={false} className="font-mono placeholder:font-sans"
+                  placeholder={draft.protocol === 'anthropic' ? 'https://api.anthropic.com' : 'https://api.deepseek.com'}
+                  onChange={event => {
+                    const baseUrl = event.target.value;
+                    // api.anthropic.com only speaks Messages.
+                    patch({ baseUrl, ...(inferByokProtocol(baseUrl) === 'anthropic' ? { protocol: 'anthropic' as const } : {}) });
+                    setConnectionTest({ status: 'idle' });
+                    setListed([]);
+                  }} />
+                <Button variant="secondary" size="sm" loading={connectionTest.status === 'testing'} onClick={() => { void testConnection(); }}>
+                  <Zap size={14} aria-hidden="true" />测试连接
+                </Button>
+              </div>
+              {connectionTest.status === 'error' ? (
+                <div className="byok-result" data-tone="error" role="alert">
+                  <p>{connectionTest.message}</p>
+                  {connectionTest.alternative ? <p>
+                    改用 <code className="byok-url">{connectionTest.alternative.baseUrl}</code> 可以连通。
+                    <Button variant="ghost" size="xs" onClick={() => {
+                      const alternative = connectionTest.status === 'error' ? connectionTest.alternative : undefined;
+                      if (!alternative) return;
+                      patch({ baseUrl: alternative.baseUrl });
+                      setListed([]);
+                      setConnectionTest({ status: 'idle' });
+                      showToast('success', '连接成功');
+                    }}>改用这个地址</Button>
+                  </p> : null}
+                </div>
+              ) : null}
+            </div>
+          )}
         </Field>
         <Field label="API Key" className="is-wide" description={keyDescription}>
           {props => (
@@ -240,81 +289,66 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
         </div>
       </div>
 
-      <div className="byok-test">
-        <Button variant="secondary" size="sm" loading={connectionTest.status === 'testing'} onClick={() => { void testConnection(); }}>
-          <Zap size={14} aria-hidden="true" />测试连接
-        </Button>
-        {connectionTest.status === 'ok' ? (
-          <p className="byok-result" data-tone="ok">
-            连接成功，可用 {connectionTest.models.length} 个模型
-            {connectionTest.models.length ? <Button variant="ghost" size="xs" onClick={() => setPicker(picker ? null : { filter: '', selected: [] })}>{picker ? '收起列表' : '从列表添加'}</Button> : null}
-          </p>
-        ) : null}
-        {connectionTest.status === 'error' ? (
-          <div className="byok-result" data-tone="error" role="alert">
-            <p>{connectionTest.message}</p>
-            {connectionTest.alternative ? <p>
-              改用 <code className="byok-url">{connectionTest.alternative.baseUrl}</code> 可以连通。
-              <Button variant="ghost" size="xs" onClick={() => {
-                const alternative = connectionTest.status === 'error' ? connectionTest.alternative : undefined;
-                if (!alternative) return;
-                patch({ baseUrl: alternative.baseUrl });
-                setConnectionTest({ status: 'ok', models: alternative.models });
-              }}>改用这个地址</Button>
-            </p> : null}
-          </div>
-        ) : null}
-      </div>
-
-      {picker && listed.length ? (
-        <div className="byok-picker">
-          <Input value={picker.filter} placeholder={`筛选 ${listed.length} 个模型`} aria-label="筛选模型"
-            onChange={event => setPicker({ ...picker, filter: event.target.value })} />
-          <ul className="byok-picker-list" aria-label="服务商提供的模型">
-            {pickable.slice(0, PICKER_ROWS).map(model => {
-              const added = draft.models.some(item => item.modelId.trim() === model.id);
-              const checked = added || picker.selected.includes(model.id);
-              return <li key={model.id}>
-                <label className="mcp-check">
-                  <Checkbox checked={checked} disabled={added}
-                    onCheckedChange={() => setPicker({ ...picker, selected: checked ? picker.selected.filter(id => id !== model.id) : [...picker.selected, model.id] })} />
-                  <ModelIcon icon={matchModelIcon(model.id)} vendor="other" size={16} />
-                  <span className="font-mono">{model.id}</span>
-                  {model.name ? <span className="byok-muted">{model.name}</span> : null}
-                  {guessUsage(model.id, draft.protocol) === 'image' ? <span className="mcp-badge">生图</span> : null}
-                </label>
-              </li>;
-            })}
-          </ul>
-          {pickable.length > PICKER_ROWS ? <p className="mcp-hint">只显示前 {PICKER_ROWS} 个，输入关键字缩小范围。</p> : null}
-          <div className="settings-actions">
-            <Button size="sm" disabled={!picker.selected.length || modelRoom <= 0} onClick={() => { void addModels(picker.selected); }}>
-              添加所选（{picker.selected.length}）
-            </Button>
-            {modelRoom < picker.selected.length ? <span className="mcp-hint">每个连接最多 {policy.maxModelsPerConnection} 个模型</span> : null}
-          </div>
-        </div>
-      ) : null}
-
       <section className="byok-models" aria-label="模型">
         <div className="byok-models-head">
           <h4>模型</h4>
-          <Button variant="ghost" size="sm" disabled={modelRoom <= 0}
-            onClick={() => setDraft(current => ({ ...current, models: [...current.models, newModelDraft('', 'chat')] }))}>
-            <Plus size={14} aria-hidden="true" />添加模型
-          </Button>
+          <div className="byok-models-actions">
+            <Button variant="ghost" size="sm" loading={fetchingModels} onClick={() => { void fetchModels(); }}>
+              <RefreshCw size={14} aria-hidden="true" />获取模型
+            </Button>
+            <Button variant="ghost" size="sm" disabled={modelRoom <= 0}
+              onClick={() => setDraft(current => ({ ...current, models: [...current.models, newModelDraft('', 'chat')] }))}>
+              <Plus size={14} aria-hidden="true" />添加模型
+            </Button>
+          </div>
         </div>
+        {modelListError ? <p className="byok-result" data-tone="error" role="alert">{modelListError}</p> : null}
         {draft.models.length ? draft.models.map(model => {
           const test = modelTests[model.key];
           const levels = byokEffortLevels(model.thinkingLevels);
           const chat = model.usage === 'chat';
+          const query = model.modelId.trim().toLowerCase();
+          const offered = listed.filter(item => !query || item.id.toLowerCase().includes(query) || item.name?.toLowerCase().includes(query));
+          const open = openRow === model.key;
           return <div key={model.key} className="byok-model">
             <div className="byok-model-main">
               <span className="byok-model-icon"><ModelIcon icon={matchModelIcon(model.modelId)} vendor="other" size={18} /></span>
-              <Input size="sm" aria-label="模型 ID" value={model.modelId} className="font-mono placeholder:font-sans" placeholder="模型 ID，例如 deepseek-chat"
-                autoComplete="off" spellCheck={false}
-                onChange={event => patchModel(model.key, { modelId: event.target.value })}
-                onBlur={() => { void fillModel(model); }} />
+              <div className="byok-model-id">
+                <Popover open={open} onOpenChange={next => setOpenRow(next ? model.key : null)}>
+                  <Input size="sm" aria-label="模型 ID" value={model.modelId} className="pr-8 font-mono placeholder:font-sans" placeholder="模型 ID，例如 deepseek-chat"
+                    autoComplete="off" spellCheck={false}
+                    onFocus={() => setOpenRow(model.key)}
+                    onChange={event => patchModel(model.key, { modelId: event.target.value })}
+                    onBlur={() => { void fillModel(model); }} />
+                  <span className="absolute inset-y-0 right-1 flex items-center">
+                    <PopoverTrigger className="byok-model-id-toggle" aria-label="选择服务商的模型" title="选择服务商的模型"
+                      onClick={() => { if (!listed.length) void fetchModels(); }}>
+                      <ChevronDown size={14} aria-hidden="true" />
+                    </PopoverTrigger>
+                  </span>
+                  <PopoverContent side="bottom" align="end" sideOffset={4} className="byok-model-options">
+                    {listed.length ? (
+                      <div role="group" aria-label="服务商的模型">
+                        {offered.slice(0, MAX_OPTIONS).map(item => (
+                          <Button unstyled key={item.id} type="button" className="byok-model-option" aria-pressed={item.id === model.modelId}
+                            onClick={() => { void pickModel(model, item); }}>
+                            <ModelIcon icon={matchModelIcon(item.id)} vendor="other" size={16} />
+                            <span className="font-mono">{item.id}</span>
+                            {item.name ? <span className="byok-muted">{item.name}</span> : null}
+                            {guessUsage(item.id, draft.protocol) === 'image' ? <span className="mcp-badge">生图</span> : null}
+                          </Button>
+                        ))}
+                        {offered.length > MAX_OPTIONS ? <p className="byok-option-hint">只显示前 {MAX_OPTIONS} 个，继续输入可缩小范围。</p> : null}
+                      </div>
+                    ) : (
+                      <div className="byok-model-empty">
+                        <span>{fetchingModels ? '正在获取模型列表…' : modelListError || '还没有获取模型列表'}</span>
+                        {fetchingModels ? null : <Button variant="ghost" size="xs" onClick={() => { void fetchModels(); }}>获取模型</Button>}
+                      </div>
+                    )}
+                  </PopoverContent>
+                </Popover>
+              </div>
               <Input size="sm" aria-label="显示名称" className="byok-model-name" value={model.displayName === model.modelId ? '' : model.displayName}
                 placeholder={model.modelId || '显示名称'} onChange={event => patchModel(model.key, { displayName: event.target.value })} />
               <div className="byok-model-usage">
@@ -335,10 +369,6 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
               <label className="mcp-check">
                 <Checkbox checked={model.supportsVision} onCheckedChange={supportsVision => patchModel(model.key, { supportsVision })} />识图
               </label>
-              <Input size="sm" aria-label="上下文（token）" inputMode="numeric" value={model.contextWindow} placeholder="上下文（token）"
-                onChange={event => patchModel(model.key, { contextWindow: event.target.value.trim() })} />
-              <Input size="sm" aria-label="输出上限（token）" inputMode="numeric" value={model.maxOutput} placeholder="输出上限（token）"
-                onChange={event => patchModel(model.key, { maxOutput: event.target.value.trim() })} />
               <Select<string> ariaLabel="默认努力程度" value={model.defaultEffort} className="h-8 rounded-lg"
                 options={[
                   ...levels.map(level => ({ value: level, label: `默认：${EFFORT_LABELS[level]}` })),
@@ -347,6 +377,8 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
                 ]}
                 onChange={value => patchModel(model.key, { defaultEffort: value as ByokDefaultEffort })} />
               <p className="mcp-hint is-wide">
+                {model.contextWindow ? `上下文 ${formatTokens(model.contextWindow)}` : ''}
+                {model.contextWindow ? ' · ' : ''}
                 {model.thinkingLevels.length ? `努力程度：${levels.map(level => EFFORT_LABELS[level]).join(' / ')}` : '努力程度档位未知：模型菜单提供全部档位。'}
               </p>
             </div> : <p className="mcp-hint">生图模型调用 /images/generations，在输入框「生图」与 Agent 生图中使用。</p>}
@@ -354,7 +386,7 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
               {test.status === 'testing' ? '正在测试…' : test.status === 'ok' ? `可用：回复「${test.reply || '（空）'}」${test.note}` : test.message}
             </p> : null}
           </div>;
-        }) : <p className="mcp-hint">还没有模型：手动添加，或测试连接后从服务商的列表里选。</p>}
+        }) : <p className="mcp-hint">还没有模型：点「获取模型」从服务商的列表里选，或手动添加。</p>}
       </section>
 
       <div className="byok-editor-foot">

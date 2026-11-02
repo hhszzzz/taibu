@@ -121,6 +121,11 @@ export function ByokSettings({ userId }: { userId: string }) {
         打开「保存到本站」的连接由本站加密保存 Key 并代为请求，定时任务也能使用。自定义模型的调用不计费。
         {policy.allowServerKeys ? null : ' 管理员已关闭「保存到本站」：已保存的 Key 暂不使用，这些连接需要在本设备填写 Key。'}
       </p>
+      {connections.length === 0 ? (
+        <p className="mcp-hint">
+          第一次添加：Key 由模型服务商签发，可能有过期时间或额度上限；Key 失效或用完时，对话和任务会直接报错，需要到服务商后台续期或充值。
+        </p>
+      ) : null}
       <div className="mcp-toolbar">
         <p>共 {connections.length} / {policy.maxConnections} 个连接</p>
         <Button disabled={full || editing !== null} title={full ? `最多 ${policy.maxConnections} 个连接` : undefined} onClick={() => setEditing(NEW)}>

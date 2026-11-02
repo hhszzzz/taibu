@@ -18,15 +18,14 @@ field() {
   grep -o "\"$1\":\"[^\"]*\"" "${HANDLED}" | head -n 1 | cut -d'"' -f4
 }
 
-# The same psql the deploy runs; variables are quoted by psql itself, so log
-# text with quotes or newlines is safe.
+# psql interpolates -v variables on stdin, not in -c; :'name' keeps the log text safe.
 record() {
   local status="$1" text="$2"
-  docker compose --project-directory "${ROOT}" --env-file "${ENV_FILE}" "${COMPOSE_FILES[@]}" \
-    exec -T db psql -U postgres -d taibu -v ON_ERROR_STOP=1 \
-    -v id="${LOG_ID}" -v status="${status}" -v logtext="${text}" \
-    -c "update public.deployment_logs set status = :'status', log_output = :'logtext', completed_at = now() where id = :'id'" \
-    >>"${LOG_FILE}" 2>&1 || log "could not record ${status} for ${LOG_ID}"
+  printf '%s\n' "update public.deployment_logs set status = :'status', log_output = :'logtext', completed_at = now() where id = :'id';" \
+    | docker compose --project-directory "${ROOT}" --env-file "${ENV_FILE}" "${COMPOSE_FILES[@]}" \
+      exec -T db psql -U postgres -d taibu -v ON_ERROR_STOP=1 \
+      -v id="${LOG_ID}" -v status="${status}" -v logtext="${text}" \
+      >>"${LOG_FILE}" 2>&1 || log "could not record ${status} for ${LOG_ID}"
 }
 
 [[ -f "${SIGNAL}" ]] || { echo "no signal file at ${SIGNAL}" >&2; exit 1; }

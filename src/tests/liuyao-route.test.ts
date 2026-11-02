@@ -184,3 +184,38 @@ test('liuyao route update returns 404 when no record is updated', async (t) => {
     const response = await POST(request);
     assert.equal(response.status, 404);
 });
+
+test('liuyao save writes changed_lines as jsonb and keeps yongShenTargets as a native array', async (t) => {
+    const inserted: Record<string, unknown>[] = [];
+    mockScopedContext(t, scopedLiuyao({ captureInsert: (payload) => { inserted.push(payload as Record<string, unknown>); } }));
+
+    const { POST } = await import('../app/api/liuyao/route');
+    const request = new NextRequest('http://localhost/api/liuyao', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer test-token' },
+        body: JSON.stringify({
+            action: 'save',
+            question: '测试问题',
+            yongShenTargets: ['官鬼'],
+            yaos: [
+                { type: 1, change: 'stable', position: 1 },
+                { type: 1, change: 'stable', position: 2 },
+                { type: 1, change: 'stable', position: 3 },
+                { type: 1, change: 'stable', position: 4 },
+                { type: 1, change: 'stable', position: 5 },
+                { type: 1, change: 'stable', position: 6 },
+            ],
+            changedLines: [3],
+        }),
+    });
+
+    const response = await POST(request);
+    assert.equal(response.status, 200);
+    assert.deepEqual(inserted[0]?.yongshen_targets, ['官鬼']);
+    const field = inserted[0]?.changed_lines as {
+        toOperationNode: () => { sqlFragments: string[]; parameters: Array<{ value: unknown }> };
+    };
+    const node = field.toOperationNode();
+    assert.ok(node.sqlFragments.some(fragment => fragment.includes('::jsonb')));
+    assert.deepEqual(node.parameters.map(parameter => parameter.value), [JSON.stringify([3])]);
+});

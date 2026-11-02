@@ -5,6 +5,7 @@
  */
 import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { json } from '@/lib/db/sql-helpers';
 import { saveUserOwnedDivinationRecord } from '@/lib/api/divination-pipeline';
 import type { Hexagram, Yao, LiuQin } from '@/lib/divination/liuyao';
 
@@ -83,7 +84,7 @@ export async function POST(request: NextRequest) {
                         yongshen_targets: parsedTargets.targets.length > 0 ? parsedTargets.targets : null,
                         hexagram_code: hexagramCode,
                         changed_hexagram_code: changedCode,
-                        changed_lines: changedLines,
+                        ...(changedLines === undefined ? {} : { changed_lines: json(changedLines) as never }),
                     }),
                 });
             }

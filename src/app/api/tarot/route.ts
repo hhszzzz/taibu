@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { drawCards, drawForSpread, getDailyCard, TAROT_CARDS, TAROT_SPREADS, type DrawnCard, type TarotNumerology, type TarotSpread } from '@/lib/divination/tarot';
 import { getAuthContext, jsonError, jsonOk } from '@/lib/api-utils';
+import { json } from '@/lib/db/sql-helpers';
 import {
     persistUserOwnedDivinationRecord,
     saveUserOwnedDivinationRecord,
@@ -64,7 +65,7 @@ const tarotSaveConfig = {
             user_id: userId,
             spread_id: input.spreadId!,
             question: input.question || null,
-            cards: input.cards!,
+            cards: json(input.cards!) as never,
             ...(metadata ? { metadata } : {}),
         };
     },
@@ -127,7 +128,7 @@ export async function POST(request: NextRequest): Promise<NextResponse<TarotResp
                             user_id: resolvedUserId,
                             spread_id: input.spreadId,
                             question: input.question || null,
-                            cards: input.cards,
+                            cards: json(input.cards) as never,
                             ...(input.metadata ? { metadata: input.metadata } : {}),
                         }),
                     });

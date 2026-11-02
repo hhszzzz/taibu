@@ -228,3 +228,35 @@ test('tarot spread persists reading for cookie-authenticated users without beare
     assert.ok(inserted);
     assert.equal(inserted.user_id, 'user-cookie');
 });
+
+test('tarot save writes cards as jsonb instead of a PostgreSQL array literal', async (t) => {
+    const inserted: Record<string, unknown>[] = [];
+    const scoped = scopedTarot({
+        captureInsert: (payload) => { inserted.push(payload); },
+        insertResult: () => ({ id: 'reading-jsonb' }),
+    });
+    t.mock.method(apiUtilsModule, 'requireUserContext', async () =>
+        createMockAuthContext('user-1', scoped));
+
+    const { POST } = await import('../app/api/tarot/route');
+    const response = await POST(new NextRequest('http://localhost/api/tarot', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer test-token' },
+        body: JSON.stringify({
+            action: 'save',
+            spreadId: 'single',
+            cards: [{
+                card: { nameChinese: '测试牌', keywords: ['关键词'], uprightMeaning: '正位', reversedMeaning: '逆位' },
+                orientation: 'upright',
+            }],
+        }),
+    }));
+
+    assert.equal(response.status, 200);
+    const field = inserted[0]?.cards as {
+        toOperationNode: () => { sqlFragments: string[]; parameters: Array<{ value: unknown }> };
+    };
+    const node = field.toOperationNode();
+    assert.ok(node.sqlFragments.some(fragment => fragment.includes('::jsonb')));
+    assert.equal(typeof node.parameters[0]?.value, 'string');
+});

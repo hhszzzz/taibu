@@ -189,7 +189,6 @@ for (const file of [
   'src/components/settings/panels/ProfilePanel.tsx',
   'src/components/knowledge-base/AddToKnowledgeBaseModal.tsx',
   'src/components/chat/composer/useComposerState.ts',
-  'src/components/daily/DailyAIChat.tsx',
   'src/lib/chat/use-chat-messaging.ts',
   'src/lib/auth.ts',
   'src/components/admin/FeatureTogglePanel.tsx',

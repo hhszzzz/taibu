@@ -49,7 +49,7 @@ export function DailyFortuneCard({
                 </p>
             </div>
 
-            {/* 卡片被右侧问答卡撑高时，等级条均匀铺满剩余高度 */}
+            {/* 卡片被右侧问太卜卡撑高时，等级条均匀铺满剩余高度 */}
             <FortuneLevelBars levels={fortune} fill />
 
             {!isPersonalized && personalizeHref && (

@@ -81,3 +81,29 @@ test('trend chart scores map back to the levels shown on the cards', () => {
         }
     }
 });
+
+test('daily fortune mention carries the almanac for the selected day', async () => {
+    const { dailyFortuneProvider } = await import('../lib/data-sources/fortune');
+    const { createMockScopedDb } = await import('./helpers/db-mock');
+    const scoped = createMockScopedDb({
+        tx: async (work) => work({
+            selectFrom() {
+                const query = {
+                    select() { return query; },
+                    where() { return query; },
+                    orderBy() { return query; },
+                    limit() { return query; },
+                    async executeTakeFirst() { return undefined; },
+                    async execute() { return []; },
+                };
+                return query;
+            },
+        } as never),
+    });
+    const data = await dailyFortuneProvider.get('2026-03-25', 'user-1', { db: scoped });
+    assert.match(data?.content ?? '', /## 黄历（2026-03-25）/u);
+    assert.match(data?.content ?? '', /- 宜：/u);
+    assert.match(data?.content ?? '', /- 忌：/u);
+    assert.match(data?.content ?? '', /## 今日运势（2026-03-25）/u);
+});
+

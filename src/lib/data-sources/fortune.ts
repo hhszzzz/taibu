@@ -1,4 +1,5 @@
 import { calculateDailyFortune, calculateMonthlyFortune, calculateGenericDailyFortune, calculateGenericMonthlyFortune } from '@/lib/divination/fortune';
+import { getCalendarAlmanac } from '@/lib/divination/calendar';
 import { generateFortuneInterpretation } from '@/lib/divination/fortune-interpretations';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
@@ -14,6 +15,29 @@ function formatYmd(date: Date) {
 
 function formatYm(date: Date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+
+/** 黄历细项：日运问答从黄历页移交对话后，@今日运势 需要同时带上这一天宜忌。 */
+function buildAlmanacSection(date: Date): string[] {
+    const almanac = getCalendarAlmanac(date);
+    return [
+        `## 黄历（${formatYmd(date)}）`,
+        `- 农历：${almanac.lunarDate}`,
+        `- 干支：${almanac.ganZhi.year}年 ${almanac.ganZhi.month}月 ${almanac.ganZhi.day}日`,
+        `- 生肖：年${almanac.shengXiao.year} 月${almanac.shengXiao.month} 日${almanac.shengXiao.day}`,
+        `- 纳音：${almanac.naYin.year} ${almanac.naYin.month} ${almanac.naYin.day}`,
+        `- 节气：${almanac.jieQi.current?.name || '无'}`,
+        `- 宜：${almanac.yi.join('、') || '诸事不宜'}`,
+        `- 忌：${almanac.ji.join('、') || '无'}`,
+        `- 吉神：${almanac.jiShen.join('、') || '无'}`,
+        `- 凶煞：${almanac.xiongSha.join('、') || '无'}`,
+        `- 冲煞：${almanac.chongSha.chong}`,
+        `- 空亡：${almanac.kongWang}`,
+        `- 财神位：${almanac.shenWei.caiShen}`,
+        `- 喜神位：${almanac.shenWei.xiShen}`,
+        `- 福神位：${almanac.shenWei.fuShen}`,
+        `- 值神：${almanac.zhiShen}`,
+    ];
 }
 
 const BAZI_CHART_COLUMNS = [
@@ -91,6 +115,8 @@ export const dailyFortuneProvider: DataSourceProvider<FortuneData> = {
         if (!baziChart) {
             const generic = calculateGenericDailyFortune(normalized);
             const content = [
+                ...buildAlmanacSection(normalized),
+                '',
                 `## 今日运势（${ymd}）`,
                 `- 综合：${generic.overall}`,
                 `- 事业：${generic.career}`,
@@ -118,6 +144,8 @@ export const dailyFortuneProvider: DataSourceProvider<FortuneData> = {
         );
 
         const content = [
+            ...buildAlmanacSection(normalized),
+            '',
             `## 今日运势（${ymd}）`,
             `- 十神：${fortune.tenGod}`,
             `- 综合：${fortune.overall}`,

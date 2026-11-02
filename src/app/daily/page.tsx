@@ -7,13 +7,13 @@
 'use client';
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeftRight, Share2, X } from 'lucide-react';
 
 import { AuthModal } from '@/components/auth/AuthModal';
 import { ChartPickerModal, type ChartItem } from '@/components/common/ChartPickerModal';
 import { CalendarAlmanac } from '@/components/daily/CalendarAlmanac';
-import { DailyAIChat } from '@/components/daily/DailyAIChat';
+import { DailyAskCard } from '@/components/daily/DailyAskCard';
 import { DailyFortuneCard, DailyFortuneInsights } from '@/components/daily/DailyFortuneCard';
 import { toLocalDateKey } from '@/components/daily/useDailyAlmanacDetail';
 import type { FortuneTrendDataPoint } from '@/components/fortune/FortuneTrendChart';
@@ -31,10 +31,9 @@ import { calculateDailyFortune, calculateGenericDailyFortune, calculateWeeklyTre
 import { generateFortuneInterpretation, getDailyHeadline } from '@/lib/divination/fortune-interpretations';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { useSelectedBaziChart } from '@/lib/hooks/useUserCharts';
+import { openChatWithResult } from '@/lib/chat/result-handoff';
 
 const PAGE_CONTAINER_CLASS = 'mx-auto flex w-full max-w-[1104px] flex-col gap-4 px-4 pt-1 pb-5 lg:gap-7 lg:px-8 lg:pt-8 lg:pb-14';
-/** 移动端问答输入框固定在底部导航之上，页尾需让出其高度。 */
-const PAGE_ASSISTANT_PADDING_CLASS = 'max-lg:pb-24';
 const SKELETON_BLOCK_CLASS = 'animate-pulse bg-background-secondary';
 const MENU_ICON_CLASS = 'size-4';
 
@@ -55,12 +54,13 @@ function parseDateParam(dateStr: string | null): Date {
 }
 
 function DailyPageContent() {
+    const router = useRouter();
     const searchParams = useSearchParams();
     const { isFeatureEnabled, loaded: featureTogglesLoaded, isLoading: featureToggleLoading } = useFeatureToggles();
     const { user, loading: sessionLoading } = useSessionSafe();
     const { setMenuItems, clearMenuItems } = useHeaderMenu();
     const baziFeatureEnabled = !featureToggleLoading && isFeatureEnabled('bazi');
-    // 与 AIFeatureGate 一致的 fail-closed 判断：开关未加载或关闭时不渲染问答
+    // 与 AIFeatureGate 一致的 fail-closed 判断：开关未加载或关闭时不显示问太卜入口
     const aiEnabled = featureTogglesLoaded && isFeatureEnabled('chat');
     const dateParam = searchParams.get('date');
     const [dateSelection, setDateSelection] = useState(() => ({ param: dateParam, date: parseDateParam(dateParam) }));
@@ -161,6 +161,25 @@ function DailyPageContent() {
         [baziChart, fortune],
     );
 
+    /** 问太卜：带上当天黄历（以及有命盘时的当日运势）进入 AI 对话。 */
+    const handleAsk = useCallback(() => {
+        if (!user) { openAuthModal(); return; }
+        const dateKey = toLocalDateKey(selectedDate);
+        const dateDisplay = `${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日`;
+        const personal = personalFortune
+            ? `我当前命盘这一天的流日十神是${personalFortune.fortune.tenGod || '未知'}，综合${personalFortune.fortune.overall}，事业${personalFortune.fortune.career}，感情${personalFortune.fortune.love}，财运${personalFortune.fortune.wealth}，健康${personalFortune.fortune.health}，人际${personalFortune.fortune.social}。`
+            : '';
+        openChatWithResult(router, {
+            text: `请结合${dateDisplay}的黄历${personalFortune ? '与我的当日运势' : ''}，说明这一天适合做什么、需要避开什么，并给出具体建议。${personal}`,
+            mentions: [{
+                type: 'daily_fortune',
+                id: dateKey,
+                name: `黄历 · ${dateDisplay}`,
+                preview: `农历${almanac.lunarDate} · 宜${almanac.yi.slice(0, 3).join('、') || '诸事不宜'}`,
+            }],
+        });
+    }, [almanac.lunarDate, almanac.yi, openAuthModal, personalFortune, router, selectedDate, user]);
+
     // 移动端顶栏三点菜单：分享与切换命盘（桌面端入口在运势卡与运势详解中）
     const menuItems = useMemo((): HeaderMenuItem[] => [
         { id: 'share', label: '分享运势', icon: <Share2 className={MENU_ICON_CLASS} />, onClick: openShareCard },
@@ -185,7 +204,7 @@ function DailyPageContent() {
 
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className={`${PAGE_CONTAINER_CLASS} ${aiEnabled ? PAGE_ASSISTANT_PADDING_CLASS : ''} animate-fade-in`}>
+            <div className={`${PAGE_CONTAINER_CLASS} animate-fade-in`}>
                 {chartLoadError ? (
                     <section role="alert" className="rounded-2xl border-[0.5px] border-danger/30 bg-fire-soft px-4 py-4 lg:px-5">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -268,7 +287,11 @@ function DailyPageContent() {
                         />
                     )}
                     assistant={aiEnabled
-                        ? <DailyAIChat date={selectedDate} userId={user?.id ?? null} onRequireLogin={openAuthModal} personalFortune={personalFortune} />
+                        ? <DailyAskCard
+                            dateLabel={`${selectedDate.getFullYear()}年${selectedDate.getMonth() + 1}月${selectedDate.getDate()}日`}
+                            personalized={isPersonalized}
+                            onAsk={handleAsk}
+                        />
                         : null}
                     insights={(
                         <DailyFortuneInsights

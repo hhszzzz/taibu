@@ -67,6 +67,11 @@ test('a member creates a schedule through the route with the parsed body', async
   assert.deepEqual(payload.schedule.cadence, { kind: 'daily', time: '08:00' });
   assert.equal(payload.allowance.used, 0);
   assert.ok(fixture.created());
+
+  const oversized = await api.createSchedule(new NextRequest('http://localhost/api/agent/schedules', {
+    method: 'POST', body: 'x'.repeat(256 * 1024 + 1),
+  }));
+  assert.equal(oversized?.status, 413);
 });
 
 test('a schedule may name an own model only when its key is stored here', async (t) => {

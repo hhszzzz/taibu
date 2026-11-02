@@ -1,6 +1,6 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireAdminUser, requireUserContext } from '@/lib/api-utils';
 import { getAgentScheduleLimits, getByokPolicy, readFeatureModuleStateFresh, setAgentScheduleLimits } from '@/lib/app-settings';
 import { isValidUUID } from '@/lib/validation';
 import type { ScopedDb } from '@/lib/db/context.server';
@@ -24,10 +24,14 @@ async function schedulesGate(): Promise<Response | null> {
   return jsonError('定时任务功能当前未启用', 403, { code: 'FEATURE_DISABLED' });
 }
 
-const readBody = (request: NextRequest) => request.json().catch(() => null) as Promise<unknown>;
+const readBody = async (request: NextRequest) => {
+  const parsed = await readJsonBody(request, 256 * 1024);
+  if ('error' in parsed) throw new AgentScheduleInputError(parsed.error.message, parsed.error.status);
+  return parsed.body;
+};
 
 function failure(error: unknown): Response {
-  if (error instanceof AgentScheduleInputError) return jsonError(error.message, 400, { code: 'AGENT_SCHEDULE_INVALID' });
+  if (error instanceof AgentScheduleInputError) return jsonError(error.message, error.status, { code: 'AGENT_SCHEDULE_INVALID' });
   if (error instanceof AgentScheduleError) return jsonError(error.message, error.status, { code: error.code });
   console.error('[agent-schedules-api]', { code: 'AGENT_SCHEDULE_FAILED' });
   return jsonError('定时任务服务暂时不可用', 500, { code: 'AGENT_SCHEDULE_FAILED' });

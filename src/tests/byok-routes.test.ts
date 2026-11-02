@@ -84,6 +84,8 @@ test('a connection is saved only with valid input, and a stored key only for a p
   const invalid = await POST(request('/api/byok/connections', 'POST', { ...body, models: [{ modelId: 'a' }, { modelId: 'a' }] }));
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, 'BYOK_INVALID');
+  const oversized = await POST(request('/api/byok/connections', 'POST', 'x'.repeat(256 * 1024 + 1)));
+  assert.equal(oversized.status, 413);
 
   const store = require('../lib/byok/store.server') as typeof import('../lib/byok/store.server');
   created.mock.mockImplementation(async () => { throw new store.ByokError('最多 10 个连接', 409, 'BYOK_LIMIT'); });
@@ -159,6 +161,7 @@ test('the administrator\'s policy is read and replaced whole, and only by an adm
   assert.equal(saved.status, 200);
   assert.deepEqual(setPolicy.mock.calls[0]!.arguments[0], next);
   assert.equal((await PUT(request('/api/admin/byok-policy', 'PUT', { policy: { ...next, maxConnections: 0 } }))).status, 400);
+  assert.equal((await PUT(request('/api/admin/byok-policy', 'PUT', 'x'.repeat(256 * 1024 + 1)))).status, 413);
   state.admin = false;
   assert.equal((await GET(request('/api/admin/byok-policy', 'GET'))).status, 403);
   assert.equal((await PUT(request('/api/admin/byok-policy', 'PUT', { policy: next }))).status, 403);

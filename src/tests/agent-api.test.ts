@@ -542,6 +542,7 @@ test("own models are refused before mutation when missing, misused, keyless or s
     [{ imageModel: OWN_CHAT.ref, ...keys }, /不是生图模型/],
     [{ model: OWN_CHAT.ref }, /需要先在本设备填写 API Key/],
     [{ model: OWN_CHAT.ref, byokKeys: { [OWN_CONNECTION]: "has space" } }, /需要先在本设备填写 API Key/],
+    [{ model: OWN_CHAT.ref, byokKeys: { [OWN_CONNECTION]: "k".repeat(513) } }, /Key 无效/],
     [{ model: OWN_CHAT.ref, byokKeys: [] }, /无效/],
     [{ model: OWN_CHAT.ref, byokKeys: { "not-a-connection": "sk-user" } }, /Key 无效/],
     [{ imageModel: 3 }, /生图模型无效/],

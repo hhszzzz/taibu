@@ -3,7 +3,7 @@ import { AGENT_STREAM_QUEUE_BYTES, enqueueAgentFrame, type AgentResync } from '.
 import { randomUUID } from "node:crypto";
 import type { NextRequest } from "next/server";
 import { availableMcpServers } from './mcp/session.server';
-import { jsonError, jsonOk, requireUserContext } from "@/lib/api-utils";
+import { jsonError, jsonOk, readJsonBody, requireUserContext } from "@/lib/api-utils";
 import { systemDb } from "@/lib/db/context.server";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { subscribeAgentTextDelta } from "./tail-bus.server";
@@ -16,7 +16,7 @@ import { webRouteAvailable } from "./mcp/web-route.server";
 import { parseAgentApproval } from "./mcp/config";
 import { isValidUUID } from "@/lib/validation";
 import type { ChatMessage, Mention } from "@/types";
-import { isByokRef } from "@/lib/byok/config";
+import { BYOK_KEY_MAX, isByokRef } from "@/lib/byok/config";
 import { resolveByokModel } from "@/lib/byok/store.server";
 import { normalizeMessageQuotes } from "@/lib/chat/quotes";
 import { isDataSourceType } from "@/lib/data-sources/types";
@@ -47,11 +47,9 @@ function object(value: unknown): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 async function requestBody(request: NextRequest) {
-  try {
-    return object(await request.json());
-  } catch {
-    throw new AgentApiError("请求体不是合法 JSON 对象");
-  }
+  const parsed = await readJsonBody(request, 8 * 1024 * 1024);
+  if ('error' in parsed) throw new AgentApiError(parsed.error.message, parsed.error.status);
+  return object(parsed.body);
 }
 function createBody(value: Record<string, unknown>): AgentSubmitBody {
   let reasoningEffort, collaborators;
@@ -69,6 +67,7 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
   if (
     typeof message.content !== "string" ||
     !message.content.trim() ||
+    Buffer.byteLength(message.content, 'utf8') > 2 * 1024 * 1024 ||
     typeof message.id !== "string" ||
     !message.id.trim()
   )
@@ -107,7 +106,7 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
   if (value.byokKeys !== undefined) {
     const keys = object(value.byokKeys);
     const entries = Object.entries(keys);
-    if (entries.length > 20 || entries.some(([id, key]) => !isValidUUID(id) || typeof key !== "string"))
+    if (entries.length > 20 || entries.some(([id, key]) => !isValidUUID(id) || typeof key !== "string" || key.length > BYOK_KEY_MAX))
       throw new AgentApiError("自定义模型 Key 无效");
     byokKeys = Object.fromEntries(entries) as Record<string, string>;
   }
@@ -281,6 +280,7 @@ export async function controlAgentTask(
     !body ||
     typeof body.content !== "string" ||
     !body.content.trim() ||
+    Buffer.byteLength(body.content, 'utf8') > 2 * 1024 * 1024 ||
     typeof body.mode !== "string" ||
     !["steer", "follow_up", "reply"].includes(body.mode) ||
     typeof body.clientRequestId !== "string" ||

@@ -98,7 +98,7 @@ const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/u;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/iu;
 
 export class AgentScheduleInputError extends Error {
-  constructor(message: string) {
+  constructor(message: string, readonly status = 400) {
     super(message);
     this.name = 'AgentScheduleInputError';
   }

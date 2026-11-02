@@ -81,6 +81,18 @@ test('requireUserContext rejects anonymous requests with 401', async (t) => {
   assert.deepEqual(result, { error: { message: '请先登录', status: 401 } });
 });
 
+test('readJsonBody counts streamed bytes and cancels an oversized request', async () => {
+  let canceled = false;
+  const body = new ReadableStream<Uint8Array>({
+    start(controller) { controller.enqueue(new TextEncoder().encode('{"large":"payload"}')); },
+    cancel() { canceled = true; },
+  });
+  const { readJsonBody } = await import('../lib/api-utils');
+  const result = await readJsonBody(new Request('http://localhost/api/test', { method: 'POST', body, ...( { duplex: 'half' } as Record<string, unknown>) }), 8);
+  assert.deepEqual(result, { error: { message: '请求体超过大小限制', status: 413 } });
+  assert.equal(canceled, true);
+});
+
 test('requireAdminContext allows a public.users administrator', async () => {
   const { requireAdminContext } = await import('../lib/api-utils');
   const result = await requireAdminContext(request(), {

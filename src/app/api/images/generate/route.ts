@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 import { isValidUUID } from '@/lib/validation';
 import { checkRateLimit } from '@/lib/rate-limit';
@@ -37,12 +37,9 @@ export async function POST(request: NextRequest) {
     return jsonError('请求过于频繁，请稍后再试', 429);
   }
 
-  let body: { prompt?: unknown; size?: unknown; count?: unknown; conversationId?: unknown; model?: unknown };
-  try {
-    body = await request.json();
-  } catch {
-    return jsonError('请求体无效', 400);
-  }
+  const parsed = await readJsonBody<{ prompt?: unknown; size?: unknown; count?: unknown; conversationId?: unknown; model?: unknown }>(request, 16 * 1024);
+  if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
+  const body = parsed.body;
   const prompt = typeof body?.prompt === 'string' ? body.prompt.trim() : '';
   if (!prompt) return jsonError('请描述要生成的图片', 400);
   const size = body?.size ?? '1024x1024';

@@ -1,7 +1,7 @@
 import 'server-only';
 
 import { NextResponse, type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireAdminUser, requireUserContext } from '@/lib/api-utils';
 import { readFeatureModuleStateFresh } from '@/lib/app-settings';
 import { systemDb, userDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
@@ -59,7 +59,10 @@ function failure(error: unknown, action: string): Response {
 }
 
 const record = (value: unknown) => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null);
-const readBody = async (request: NextRequest) => record(await request.json().catch(() => null));
+const readBody = async (request: NextRequest) => {
+    const parsed = await readJsonBody(request, 256 * 1024);
+    return 'error' in parsed ? null : record(parsed.body);
+};
 const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const integer = (value: string | null) => (value !== null && /^\d{1,6}$/u.test(value) ? Number(value) : undefined);
 const pageOf = (params: URLSearchParams) => ({ offset: integer(params.get('offset')), limit: integer(params.get('limit')) });

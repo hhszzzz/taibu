@@ -1,6 +1,6 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireAdminUser, requireUserContext } from '@/lib/api-utils';
 import { getByokPolicy, readFeatureModuleStateFresh, setByokPolicy } from '@/lib/app-settings';
 import { allModelsDevModels } from '@/lib/admin/models-dev.server';
 import { exactModelsDevMatch } from '@/lib/admin/models-dev';
@@ -31,7 +31,11 @@ export async function byokGate(): Promise<Response | null> {
 const PROBE_RATE_LIMIT = { endpoint: '/api/byok/probe', maxRequests: 20, windowMs: 60_000 } as const;
 const CAPABILITIES_RATE_LIMIT = { endpoint: '/api/byok/capabilities', maxRequests: 30, windowMs: 60_000 } as const;
 
-const readBody = (request: NextRequest) => request.json().catch(() => null) as Promise<unknown>;
+const readBody = async (request: NextRequest) => {
+  const parsed = await readJsonBody(request, 256 * 1024);
+  if ('error' in parsed) throw new ByokInputError(parsed.error.message, parsed.error.status);
+  return parsed.body;
+};
 
 async function member(request: NextRequest) {
   const gate = await byokGate();
@@ -44,7 +48,7 @@ async function member(request: NextRequest) {
 }
 
 function failure(error: unknown, action: string): Response {
-  if (error instanceof ByokInputError) return jsonError(error.message, 400, { code: 'BYOK_INVALID' });
+  if (error instanceof ByokInputError) return jsonError(error.message, error.status, { code: 'BYOK_INVALID' });
   if (error instanceof ByokError) return jsonError(error.message, error.status, { code: error.code });
   if (error instanceof ByokKeyError) return jsonError('保存的 Key 无法读取，请重新填写', 409, { code: 'BYOK_KEY_INVALID' });
   console.error('[byok]', { action, code: toDbError(error).code });
@@ -185,7 +189,12 @@ export async function capabilities(request: NextRequest) {
   const auth = await member(request);
   if (auth instanceof Response) return auth;
   if (!(await checkRateLimit(auth.user.id, CAPABILITIES_RATE_LIMIT.endpoint, CAPABILITIES_RATE_LIMIT)).allowed) return jsonError('请求过于频繁，请稍后再试', 429);
-  const body = await readBody(request) as { modelIds?: unknown } | null;
+  let body: { modelIds?: unknown } | null;
+  try {
+    body = await readBody(request) as { modelIds?: unknown } | null;
+  } catch (error) {
+    return failure(error, '读取模型能力');
+  }
   const ids = Array.isArray(body?.modelIds) ? body.modelIds.filter((id): id is string => typeof id === 'string' && !!id.trim() && id.length <= BYOK_MODEL_ID_MAX).slice(0, 200) : [];
   if (!ids.length) return jsonOk({ models: {} });
   let catalog;
@@ -225,6 +234,7 @@ export async function savePolicy(request: NextRequest) {
   try {
     policy = parseByokPolicy((await readBody(request) as { policy?: unknown } | null)?.policy);
   } catch (error) {
+    if (error instanceof ByokInputError) return failure(error, '保存自定义模型策略');
     return jsonError(error instanceof Error ? error.message : '策略格式无效', 400);
   }
   try {

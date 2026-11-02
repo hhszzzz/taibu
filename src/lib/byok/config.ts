@@ -333,7 +333,9 @@ export class ByokRequestError extends Error {
 
 // ─── Input ───
 
-export class ByokInputError extends Error {}
+export class ByokInputError extends Error {
+  constructor(message: string, readonly status = 400) { super(message); }
+}
 
 export interface ByokModelInput {
   /** An existing model of the connection keeps its id, so references to it stay valid. */

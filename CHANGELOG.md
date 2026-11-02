@@ -2,6 +2,16 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.1.3 · 2026-11-02
+
+### 修复
+
+- 塔罗与六爻记录可以正常保存，并可以再次带入「问太卜」：`cards` 与 `changed_lines` 是 `jsonb` 列，此前按 PostgreSQL 数组写入导致保存失败。([ab8bf2b](https://github.com/hhszzzz/taibu/commit/ab8bf2b1a45556274cb91b7a76fdc4944428cf65))
+
+### 升级须知
+
+无数据库或配置变更；直接更新到 v1.1.3 即可。本版本同时包含 v1.1.2 的知识库保存修复。
+
 ## v1.1.2 · 2026-11-02
 
 ### 修复

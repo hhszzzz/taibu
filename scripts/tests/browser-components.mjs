@@ -1398,7 +1398,7 @@ export async function run(existingPage, bundlePath) {
       if (item && index < 0) return route.fulfill({ status: 404, json: { error: '连接不存在' } });
       if (item && method === 'DELETE') { owned.splice(index, 1); return ok({ deleted: true }, true); }
       if (item && method === 'PATCH') { owned[index] = view(body, owned[index]); return ok({ connection: owned[index] }, true); }
-      if (url.pathname === '/api/byok/capabilities' && method === 'POST') return ok({ models: {} }, true);
+      if (url.pathname === '/api/byok/capabilities' && method === 'POST') return ok({ models: { 'fixture-chat': { contextWindow: 1_048_576, maxOutput: 65_536, vision: false, thinkingLevels: ['low', 'medium', 'high'] } } }, true);
     }
     // A provider at the fixture's own origin, so a key kept in the browser is tested without leaving the fixture: its model
     // list answers at /models (not under /v1), and its chat refuses reasoning_effort.
@@ -4388,8 +4388,6 @@ export async function run(existingPage, bundlePath) {
     const byokEditor = page.locator('.byok-editor');
     await byokEditor.getByLabel('名称', { exact: true }).fill('夹具中转');
     await byokEditor.getByLabel('接口地址', { exact: true }).fill(origin + '/provider');
-    check('The address shows the request it resolves to before anything is saved',
-      (await byokEditor.innerText()).includes(`实际请求 ${origin}/provider/v1/chat/completions，模型列表 ${origin}/provider/v1/models`));
     await byokEditor.getByLabel('API Key', { exact: true }).fill('sk-fixture-device');
     await byokEditor.getByRole('button', { name: '测试连接', exact: true }).click();
     const useAlternative = byokEditor.getByRole('button', { name: '改用这个地址', exact: true });
@@ -4400,18 +4398,23 @@ export async function run(existingPage, bundlePath) {
     check('The browser sends the key to the provider without the SDK headers CORS would refuse',
       providerRequests[0].headers.authorization === 'Bearer sk-fixture-device' && !Object.keys(providerRequests[0].headers).some(name => name.startsWith('x-stainless')));
     await useAlternative.click();
-    await byokEditor.getByText('连接成功，可用 2 个模型').waitFor();
-    check('Taking the offered address keeps the listed models', await byokEditor.getByLabel('接口地址', { exact: true }).inputValue() === origin + '/provider/chat/completions'
-      && (await byokEditor.innerText()).includes(`实际请求 ${origin}/provider/chat/completions，模型列表 ${origin}/provider/models`));
-    await byokEditor.getByRole('button', { name: '从列表添加', exact: true }).click();
-    const providerModels = byokEditor.getByRole('list', { name: '服务商提供的模型', exact: true });
-    await providerModels.getByRole('checkbox', { name: /fixture-chat/u }).click();
-    await providerModels.getByRole('checkbox', { name: /gpt-image-1/u }).click();
-    await byokEditor.getByRole('button', { name: '添加所选（2）', exact: true }).click();
+    await page.getByText('连接成功', { exact: true }).waitFor();
+    check('Taking the offered address switches it and tests again', await byokEditor.getByLabel('接口地址', { exact: true }).inputValue() === origin + '/provider/chat/completions');
+    await byokEditor.getByRole('button', { name: '获取模型', exact: true }).click();
     const byokModels = byokEditor.getByRole('region', { name: '模型', exact: true });
-    await byokModels.getByLabel('模型 ID', { exact: true }).nth(1).waitFor();
-    check('Picked models are added with the use their IDs suggest and a medium default effort',
-      JSON.stringify(await byokModels.getByLabel('模型 ID', { exact: true }).evaluateAll(inputs => inputs.map(input => input.value))) === JSON.stringify(['fixture-chat', 'gpt-image-1'])
+    const modelIds = byokModels.getByLabel('模型 ID', { exact: true });
+    await modelIds.first().waitFor();
+    const providerList = page.locator('.byok-model-options');
+    await providerList.getByRole('button', { name: /fixture-chat/u }).click();
+    await byokModels.getByText(/上下文 1M/u).waitFor();
+    check('The model ID input offers the provider\'s list and fills the pick with what models.dev knows',
+      await modelIds.first().inputValue() === 'fixture-chat' && (await byokModels.innerText()).includes('上下文 1M')
+      && !(await byokModels.getByLabel('上下文（token）', { exact: true }).count()) && !(await byokModels.getByLabel('输出上限（token）', { exact: true }).count()));
+    await byokModels.getByRole('button', { name: '添加模型', exact: true }).click();
+    await modelIds.nth(1).click();
+    await providerList.getByRole('button', { name: /gpt-image-1/u }).click();
+    check('Picked models keep the use their IDs suggest and a medium default effort',
+      JSON.stringify(await modelIds.evaluateAll(inputs => inputs.map(input => input.value))) === JSON.stringify(['fixture-chat', 'gpt-image-1'])
       && JSON.stringify(await byokModels.getByRole('combobox', { name: '用途', exact: true }).allInnerTexts()) === JSON.stringify(['对话', '生图'])
       && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '默认：中等');
     await byokModels.getByRole('button', { name: '测试「fixture-chat」', exact: true }).click();
@@ -4434,11 +4437,11 @@ export async function run(existingPage, bundlePath) {
       && await page.evaluate(id => JSON.parse(localStorage.getItem('taibu:byok-keys:alice') ?? '{}')[id] === 'sk-fixture-device', savedByok.id));
     check('The card names the protocol, the host and what its models are for',
       (await byokList.innerText()).includes('OpenAI 兼容') && (await byokList.innerText()).includes('taibu-fixture.invalid · 1 个对话模型、1 个生图模型')
-      && JSON.stringify(await byokList.getByRole('list', { name: '「夹具中转」的模型' }).getByRole('listitem').allInnerTexts()) === JSON.stringify(['fixture-chat', 'gpt-image-1生图']));
+      && JSON.stringify(await byokList.getByRole('list', { name: '「夹具中转」的模型' }).getByRole('listitem').allInnerTexts()) === JSON.stringify(['Fixture Chat', 'gpt-image-1生图']));
     await page.getByRole('button', { name: '编辑「夹具中转」', exact: true }).click();
-    await byokEditor.getByText(/已保存在这台设备（sk-…vice），留空则不修改/u).waitFor();
+    await byokEditor.getByText(/只保存在这台设备的浏览器里/u).waitFor();
     await byokEditor.getByRole('switch', { name: '保存到本站', exact: true }).click();
-    check('Storing it here offers to move this device\'s key', (await byokEditor.innerText()).includes('这台设备的 Key（sk-…vice）移到本站加密保存'));
+    check('Turning the switch on states what the site does with the key', (await byokEditor.innerText()).includes('Key 加密保存在本站，只写不回显。'));
     await byokEditor.getByRole('button', { name: '保存', exact: true }).click();
     await byokList.getByText('Key 保存在本站', { exact: true }).waitFor();
     const movedByok = requests.filter(entry => entry.pathname === '/api/byok/connections/' + savedByok.id && entry.method === 'PATCH').at(-1);

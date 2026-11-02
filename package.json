@@ -24,7 +24,7 @@
     "lint:code": "eslint .",
     "lint:guards": "node scripts/check-architecture-guards.mjs",
     "test:guards": "node --test scripts/tests/architecture-guards.test.mjs",
-    "test:db": "node --require ./scripts/ts-register.cjs --test scripts/tests/postgres-contracts.test.mjs scripts/tests/db-context-contracts.test.mjs scripts/tests/db-init.test.mjs",
+    "test:db": "node --require ./scripts/ts-register.cjs --test scripts/tests/postgres-contracts.test.mjs scripts/tests/jsonb-write-contracts.test.mjs scripts/tests/db-context-contracts.test.mjs scripts/tests/db-init.test.mjs",
     "test:auth": "node --test scripts/tests/auth-acceptance.test.mjs",
     "test:npm-packages": "pnpm build:packages && node --test scripts/tests/npm-package-artifacts.test.mjs scripts/tests/skill-bundle.test.mjs",
     "prepare:github-packages": "node scripts/prepare-github-package.mjs --package core --package mcp --output .release/github-packages",

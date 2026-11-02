@@ -70,7 +70,7 @@ export function verificationSteps(files, complete = false, useInstalledChrome = 
     pnpmStep('Agent worker build', ['build:agent']),
     pnpmStep('Next production build', ['exec', 'next', 'build']),
     nodeStep('Package, license and Skill artifacts', ['--test', ...ARTIFACT_TESTS]),
-    nodeStep('Isolated PostgreSQL contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/postgres-contracts.test.mjs', 'scripts/tests/db-context-contracts.test.mjs', 'scripts/tests/db-init.test.mjs']),
+    nodeStep('Isolated PostgreSQL contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/postgres-contracts.test.mjs', 'scripts/tests/jsonb-write-contracts.test.mjs', 'scripts/tests/db-context-contracts.test.mjs', 'scripts/tests/db-init.test.mjs']),
     nodeStep('Auth acceptance (local stack + Mailpit)', ['--test', 'scripts/tests/auth-acceptance.test.mjs']),
     nodeStep('Real Redis admission contracts', ['--require', './scripts/ts-register.cjs', '--test', 'scripts/tests/selfhost-redis.test.mjs']),
     nodeStep('Agent notification contracts', ['--test', 'scripts/tests/agent-notify-live.test.mjs']),

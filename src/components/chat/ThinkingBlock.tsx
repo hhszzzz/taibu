@@ -9,7 +9,7 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/Button';
-import { ChevronRight, ChevronDown, Brain, Clock3, LoaderCircle } from 'lucide-react';
+import { ChevronRight, ChevronDown, Brain, LoaderCircle } from 'lucide-react';
 
 interface ThinkingBlockProps {
     content: string;
@@ -36,11 +36,11 @@ function formatDuration(seconds: number): string {
 /**
  * 思考过程展示组件
  * 可折叠，显示 AI 的推理过程
- * - 流式模式：自动展开，显示实时计时器
- * - 流式结束：自动收起，显示总用时
+ * - 流式模式：显示实时计时器；对话页默认收起，由读者点开
+ * - 流式结束：显示总用时；对话页保留读者的展开状态
  */
 export function ThinkingBlock({ content, duration, isStreaming = false, startTime, variant = 'default', className }: ThinkingBlockProps) {
-    const [isExpanded, setIsExpanded] = useState(isStreaming);
+    const [isExpanded, setIsExpanded] = useState(variant === 'chat' ? false : isStreaming);
     const [elapsedSeconds, setElapsedSeconds] = useState(0);
     const prevStreamingRef = useRef(isStreaming);
 
@@ -65,6 +65,11 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
 
     // 监听流式状态变化
     useEffect(() => {
+        // 对话页不自动展开/收起：只留状态行，读者点开才看正文。
+        if (variant === 'chat') {
+            prevStreamingRef.current = isStreaming;
+            return;
+        }
         // 流式开始时展开（通过 microtask 避免同步 setState）
         if (!prevStreamingRef.current && isStreaming) {
             queueMicrotask(() => setIsExpanded(true));
@@ -76,7 +81,7 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
             return () => clearTimeout(timer);
         }
         prevStreamingRef.current = isStreaming;
-    }, [isStreaming]);
+    }, [isStreaming, variant]);
 
     if (!content) return null;
 
@@ -86,15 +91,23 @@ export function ThinkingBlock({ content, duration, isStreaming = false, startTim
     if (variant === 'chat') {
         const timed = displayDuration !== undefined && displayDuration > 0 ? ` ${formatDuration(displayDuration)}` : '';
         return (
-            <div className={`chat-thinking${isStreaming ? ' is-streaming' : ''}${className ? ` ${className}` : ''}`}>
-                <Button unstyled type="button" className="chat-thinking-toggle" aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
-                    {isStreaming
-                        ? <LoaderCircle size={13} strokeWidth={2.4} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />
-                        : <Clock3 size={14} aria-hidden="true" />}
-                    <span>{isStreaming ? `正在思考…${timed}` : `已思考${timed}`}</span>
-                    <ChevronRight size={14} aria-hidden="true" className={isExpanded ? 'rotate-90' : undefined} />
+            <div className={`agent-process chat-thinking${className ? ` ${className}` : ''}`}>
+                <Button unstyled type="button" className={`agent-process-heading${isStreaming ? ' is-live' : ''}`} aria-expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
+                    {isStreaming && <LoaderCircle size={14} strokeWidth={2.2} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
+                    <span className="agent-process-label">
+                        <span className={isStreaming ? 'agent-process-now' : 'agent-process-count'}>{isStreaming ? `正在思考…${timed}` : `已思考${timed}`}</span>
+                        <ChevronRight size={12} aria-hidden="true" className={`agent-process-chevron${isExpanded ? ' rotate-90' : ''}`} />
+                    </span>
                 </Button>
-                {isExpanded && <p className="chat-thinking-text">{content}</p>}
+                {isExpanded && (
+                    <div className="agent-process-steps chat-thinking-card">
+                        <div className="agent-step agent-step--note">
+                            <div className="agent-step-note-body">
+                                <p className="agent-step-reasoning">{content}</p>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     }

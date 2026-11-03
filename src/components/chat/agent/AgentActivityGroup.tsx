@@ -345,10 +345,10 @@ function ToolStep({ tool, data, shownId, calls = [] }: { tool: AgentTool; data: 
 }
 
 /** Reasoning between calls and questions asked without the question tool: rows that disclose their text in place. */
-function NoteStep({ id: motionKey, title, text, children }: { id: string; title: string; text?: string; children: ReactNode }) {
+function NoteStep({ id: motionKey, title, text, className, children }: { id: string; title: string; text?: string; className?: string; children: ReactNode }) {
     const id = useId();
     const [open, setOpen] = useState(false);
-    return <li className="agent-step agent-step--note" data-motion-key={motionKey}>
+    return <li className={`agent-step agent-step--note${className ? ` ${className}` : ''}`} data-motion-key={motionKey}>
         <Button unstyled type="button" className="agent-step-row" aria-expanded={open} aria-controls={open ? id : undefined} onClick={() => setOpen(!open)}>
             <span className="agent-step-text"><span className="agent-step-title">{title}</span>{text && <span className="agent-step-detail">{text}</span>}
                 <ChevronRight size={12} aria-hidden="true" className={`agent-step-chevron${open ? ' rotate-90' : ''}`} /></span>
@@ -409,7 +409,7 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
                 {open && rows.map(part => {
                     if (part.type === 'tool') return <ToolStep key={part.id} tool={part} data={data} shownId={workspace?.shown?.toolId ?? undefined} calls={scriptCalls.get(part.id)} />;
                     // 思考只在展开后给出内容：折叠时只剩「思考」一行，避免把草稿当成过程结论。
-                    if (part.type === 'reasoning') return <NoteStep key={part.id} id={part.id} title="思考">
+                    if (part.type === 'reasoning') return <NoteStep key={part.id} id={part.id} title="思考" className="agent-step--reasoning">
                         <p className="agent-step-reasoning">{part.text}</p>
                     </NoteStep>;
                     return <NoteStep key={part.id} id={part.id} title="向你确认信息" text={firstLine(part.question)}>

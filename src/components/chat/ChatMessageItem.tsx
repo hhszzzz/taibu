@@ -293,7 +293,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     startTime={message.reasoningStartTime}
                     duration={message.reasoningDuration}
                     variant="chat"
-                    className="mb-3"
                 />
             )}
             {message.dreamInfo && (

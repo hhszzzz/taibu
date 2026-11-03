@@ -282,6 +282,9 @@
 .agent-step-title { flex-shrink: 0; font-size: inherit; font-weight: 400; }
 .agent-step-detail { display: inline; min-width: 0; flex: 0 1 auto; overflow: hidden; font-size: inherit; color: var(--foreground-tertiary); text-overflow: ellipsis; white-space: nowrap; }
 .agent-step-note { color: inherit; }
+/* 思考行和展开的正文不再画上分隔线。 */
+.agent-step.agent-step--reasoning { border-top: 0; }
+.agent-step--reasoning .agent-step-note-body { border-top: 0; }
 .agent-step[data-state="failed"] .agent-step-note { color: var(--danger); }
 .agent-step-chevron { flex-shrink: 0; margin-left: 0; color: inherit; transition: rotate .15s; }
 .agent-step-body { border-top: 0; }
@@ -406,14 +409,10 @@ button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-s
 /* A folded process card carries that line in its heading (phones fold it by default, wider screens when the reader does);
    the line below then stays announced but out of sight, so one live line shows at a time. */
 .agent-message:has(.agent-process-heading.is-live) > .agent-live-activity { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
-.chat-thinking { display: flex; min-width: 0; flex-direction: column; align-items: flex-start; gap: 6px; }
-.chat-thinking-toggle { display: inline-flex; align-items: center; gap: 6px; border-radius: 6px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
-.chat-thinking-toggle:hover { color: var(--foreground); }
-.chat-thinking-toggle > svg:last-child { transition: transform .15s; }
-.chat-thinking-text { align-self: stretch; max-height: 320px; margin: 0; overflow: auto; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--background-secondary) 60%, transparent); font-size: calc(13 / 16 * 1rem); line-height: 1.7; color: var(--foreground-secondary); white-space: pre-wrap; overflow-wrap: anywhere; }
-.chat-thinking.is-streaming { align-items: stretch; padding: 10px 12px; border-radius: 12px; background: color-mix(in srgb, var(--background-secondary) 60%, transparent); }
-.chat-thinking.is-streaming .chat-thinking-toggle > svg:last-child { display: none; }
-.chat-thinking.is-streaming .chat-thinking-text { max-height: 160px; padding: 0; background: none; }
+/* Chat 的思考沿用「任务过程」的折叠行与步骤卡片：一行「思考」+ 时长，点开是带发丝框的正文。 */
+.chat-thinking { margin: 0 0 12px; }
+.chat-thinking-card .agent-step { padding: 0; border-top: 0; }
+.chat-thinking-card .agent-step-note-body { border-top: 0; padding: 10px 12px; }
 /* Answer blocks follow the cds prose flow defined above; only the list indent stays local. */
 .chat-answer > :is(ul, ol) { padding-left: 1.4em; }
 .chat-answer.is-streaming > :is(p, h1, h2, h3, h4, blockquote):last-child::after,
@@ -684,13 +683,11 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 @keyframes agent-body-in { from { opacity: 0; translate: 0 -4px; } }
 .agent-step-body[data-disclosed], .agent-step-note-body { animation: agent-body-in var(--duration-base) var(--ease-out) backwards; }
 /* 进行中：步骤标题、折叠行的「正在…」与思考中的提示带一道流光，读者不必盯着转圈也知道它还在动。 */
-:is(.agent-process-heading.is-live .agent-process-now, .agent-step[data-state="running"] > .agent-step-row .agent-step-title, .chat-thinking.is-streaming .chat-thinking-toggle > span) {
+:is(.agent-process-heading.is-live .agent-process-now, .agent-step[data-state="running"] > .agent-step-row .agent-step-title) {
     background: linear-gradient(90deg, var(--foreground-tertiary) 40%, var(--foreground) 50%, var(--foreground-tertiary) 60%) 0 0 / 250% 100%;
     -webkit-background-clip: text; background-clip: text; color: transparent;
     animation: motion-shimmer 1.8s linear infinite;
 }
-/* tailwind 的 rotate-90 写的是 rotate 属性，过渡也要跟 rotate。 */
-.chat-thinking-toggle > svg:last-child { transition: rotate .15s var(--ease-out); }
 /* 引用角标、回到最新、提问面板：悬停换色有过渡，出现时轻弹入。 */
 .chat-prose .md-cite { transition: background-color var(--duration-snap) var(--ease-out), color var(--duration-snap) var(--ease-out); }
 .chat-jump-latest { animation: motion-pop-in var(--duration-base) var(--ease-overshoot) backwards; transition: color var(--duration-snap) var(--ease-out), scale var(--duration-fast) var(--ease-out); }
@@ -701,7 +698,7 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 /* 上下文用量环：数值变化时沿圆周走过去，而不是跳变。 */
 .chat-context-value { transition: stroke-dasharray var(--duration-slow) var(--ease-out); }
 @media (prefers-reduced-motion: reduce) {
-    :is(.agent-process-heading.is-live .agent-process-now, .agent-step[data-state="running"] > .agent-step-row .agent-step-title, .chat-thinking.is-streaming .chat-thinking-toggle > span) { background: none; color: inherit; }
+    :is(.agent-process-heading.is-live .agent-process-now, .agent-step[data-state="running"] > .agent-step-row .agent-step-title) { background: none; color: inherit; }
     .chat-workspace *, .chat-workspace *::before, .chat-workspace *::after { scroll-behavior: auto; transition-duration: 0s; }
     .chat-answer.is-streaming > *::after, .chat-answer.is-streaming li::after { animation: none; }
 }

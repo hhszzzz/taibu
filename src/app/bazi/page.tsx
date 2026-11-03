@@ -68,10 +68,6 @@ function BaziPageContent() {
     const searchParams = useSearchParams();
     const { showToast } = useToast();
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const [unknownTime, setUnknownTime] = useState(() => {
-        const hourParam = searchParams.get('hour');
-        return hourParam === null || hourParam === '-1';
-    });
 
 
 
@@ -129,12 +125,13 @@ function BaziPageContent() {
                 }
 
                 if (value === 'lunar') {
+                    const hour = prev.birthHour >= 0 ? prev.birthHour : 0;
                     const solar = Solar.fromYmdHms(
                         prev.birthYear,
                         prev.birthMonth,
                         prev.birthDay,
-                        prev.birthHour,
-                        prev.birthMinute,
+                        hour,
+                        prev.birthHour >= 0 ? prev.birthMinute : 0,
                         0
                     );
                     const lunar = solar.getLunar();
@@ -155,8 +152,8 @@ function BaziPageContent() {
                     prev.birthYear,
                     prev.isLeapMonth ? -Math.abs(prev.birthMonth) : prev.birthMonth,
                     clampDay('lunar', prev.birthYear, prev.birthMonth, prev.birthDay, prev.isLeapMonth),
-                    prev.birthHour,
-                    prev.birthMinute,
+                    prev.birthHour >= 0 ? prev.birthHour : 0,
+                    prev.birthHour >= 0 ? prev.birthMinute : 0,
                     0
                 );
                 const solar = lunar.getSolar();
@@ -206,6 +203,10 @@ function BaziPageContent() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
+        if (formData.birthHour < 0) {
+            showToast('warning', '请填写出生时间');
+            return;
+        }
         // 四柱模式下必须已反推出日期才能提交
         if (formData.calendarType === 'pillars') {
             if (!formData.birthYear || !formData.birthMonth || !formData.birthDay) {
@@ -265,8 +266,8 @@ function BaziPageContent() {
                 params.set('year', String(formData.birthYear));
                 params.set('month', String(formData.birthMonth));
                 params.set('day', String(formData.birthDay));
-                params.set('hour', unknownTime ? '-1' : String(formData.birthHour));
-                params.set('minute', unknownTime ? '0' : String(formData.birthMinute || 0));
+                params.set('hour', String(formData.birthHour));
+                params.set('minute', String(formData.birthMinute || 0));
                 params.set('calendar', formData.calendarType || 'solar');
                 if (formData.calendarType === 'lunar') {
                     params.set('leap', formData.isLeapMonth ? '1' : '0');
@@ -301,7 +302,6 @@ function BaziPageContent() {
             birthMinute: now.getMinutes(),
             calendarType: 'solar',
         }));
-        setUnknownTime(false);
         // 自动提交
         setTimeout(() => {
             const form = document.querySelector('form');
@@ -325,8 +325,6 @@ function BaziPageContent() {
                 <BaziForm
                     formData={formData}
                     onUpdate={updateField}
-                    unknownTime={unknownTime}
-                    onToggleUnknownTime={() => setUnknownTime((prev) => !prev)}
                     onSubmit={handleSubmit}
                     isSubmitting={isSubmitting}
                 />

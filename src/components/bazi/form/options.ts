@@ -3,12 +3,14 @@ import type { BaziFormData } from '@/types';
 const today = new Date();
 
 export const DEFAULT_BAZI_FORM_DATA: BaziFormData = {
+    timezone: 'Asia/Shanghai',
+    disambiguation: 'compatible',
     name: '',
     gender: 'male',
     birthYear: today.getFullYear(),
     birthMonth: today.getMonth() + 1,
     birthDay: today.getDate(),
-    birthHour: 12,
+    birthHour: -1,
     birthMinute: 0,
     calendarType: 'solar',
     isLeapMonth: false,

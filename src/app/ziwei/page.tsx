@@ -28,8 +28,6 @@ function ZiweiPageContent() {
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [formData, setFormData] = useState<BaziFormData>(initialState.formData);
     const [requiresBirthTimeConfirmation, setRequiresBirthTimeConfirmation] = useState(initialState.requiresBirthTimeConfirmation);
-    // 时辰默认未知：用户选了才算知道（与八字一致）。
-    const [unknownTime, setUnknownTime] = useState(!searchParams.get('hour') || searchParams.get('hour') === '-1');
 
     useEffect(() => {
         if (requiresBirthTimeConfirmation) {
@@ -50,8 +48,8 @@ function ZiweiPageContent() {
                         prev.birthYear,
                         prev.birthMonth,
                         prev.birthDay,
-                        prev.birthHour,
-                        prev.birthMinute,
+                        prev.birthHour >= 0 ? prev.birthHour : 0,
+                        prev.birthHour >= 0 ? prev.birthMinute : 0,
                         0
                     );
                     const lunar = solar.getLunar();
@@ -72,8 +70,8 @@ function ZiweiPageContent() {
                     prev.birthYear,
                     prev.isLeapMonth ? -Math.abs(prev.birthMonth) : prev.birthMonth,
                     clampDay('lunar', prev.birthYear, prev.birthMonth, prev.birthDay, prev.isLeapMonth),
-                    prev.birthHour,
-                    prev.birthMinute,
+                    prev.birthHour >= 0 ? prev.birthHour : 0,
+                    prev.birthHour >= 0 ? prev.birthMinute : 0,
                     0
                 );
                 const solar = lunar.getSolar();
@@ -122,12 +120,8 @@ function ZiweiPageContent() {
     // 提交表单
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (requiresBirthTimeConfirmation) {
+        if (requiresBirthTimeConfirmation || formData.birthHour < 0) {
             showToast('warning', ZIWEI_BIRTH_TIME_REQUIRED_MESSAGE);
-            return;
-        }
-        if (unknownTime) {
-            showToast('warning', '紫微斗数需要出生时辰：可以先让 Agent 按人生经历反推，再回来排盘');
             return;
         }
         setIsSubmitting(true);
@@ -190,8 +184,6 @@ function ZiweiPageContent() {
                 <UnifiedZiweiForm
                     formData={formData}
                     onUpdate={updateField}
-                    unknownTime={unknownTime}
-                    onToggleUnknownTime={() => setUnknownTime(value => !value)}
                     onSubmit={handleSubmit}
                     isSubmitting={isSubmitting}
                     onBirthTimeConfirm={() => setRequiresBirthTimeConfirmation(false)}

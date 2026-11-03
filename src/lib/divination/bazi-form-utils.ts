@@ -56,6 +56,9 @@ export function normalizeBirthDateForCalendarSwitch(
 
     const safeNow = normalizeNow(now);
     const shouldUseFallback = input.calendarType === 'pillars' || !hasValidDate(input);
+    // 出生时辰可以为空（-1），历法换算按 00:00 处理。
+    const hour = input.birthHour >= 0 ? input.birthHour : 0;
+    const minute = input.birthHour >= 0 ? input.birthMinute : 0;
 
     if (target === 'solar') {
         if (input.calendarType === 'lunar' && !shouldUseFallback) {
@@ -63,8 +66,8 @@ export function normalizeBirthDateForCalendarSwitch(
                 input.birthYear,
                 input.isLeapMonth ? -Math.abs(input.birthMonth) : input.birthMonth,
                 input.birthDay,
-                input.birthHour,
-                input.birthMinute,
+                hour,
+                minute,
                 0
             );
             const solar = lunar.getSolar();
@@ -99,8 +102,8 @@ export function normalizeBirthDateForCalendarSwitch(
             year: input.birthYear,
             month: input.birthMonth,
             day: input.birthDay,
-            hour: input.birthHour,
-            minute: input.birthMinute,
+            hour,
+            minute,
         }
         : safeNow;
 

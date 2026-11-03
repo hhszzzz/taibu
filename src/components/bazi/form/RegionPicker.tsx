@@ -1,14 +1,8 @@
-/**
- * 省市县三级联动选择组件
- *
- * 'use client' 标记说明：
- * - 使用 useState 管理选择状态
- * - 包含交互式下拉选择
- */
+/** 省市县三级联动选择：每一级都可输入、可下拉。 */
 'use client';
 
-import { Select } from '@/components/ui/Select';
-import { useState, useMemo, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { ComboBox } from '@/components/ui/ComboBox';
 
 interface Region {
     name: string;
@@ -29,6 +23,33 @@ async function loadRegions(): Promise<Region[]> {
     const data = await res.json();
     regionsCache = data;
     return regionsCache!;
+}
+
+function RegionCombobox({
+    ariaLabel,
+    placeholder,
+    value,
+    options,
+    disabled,
+    onChange,
+}: {
+    ariaLabel: string;
+    placeholder: string;
+    value: string;
+    options: string[];
+    disabled?: boolean;
+    onChange: (value: string) => void;
+}) {
+    return (
+        <ComboBox
+            value={value}
+            options={options.map(option => ({ value: option, label: option }))}
+            onChange={onChange}
+            ariaLabel={ariaLabel}
+            placeholder={placeholder}
+            disabled={disabled}
+        />
+    );
 }
 
 export function RegionPicker({ value, onChange }: RegionPickerProps) {
@@ -102,46 +123,29 @@ export function RegionPicker({ value, onChange }: RegionPickerProps) {
 
     return (
         <div className="grid grid-cols-3 gap-2">
-            {/* 省份选择 */}
-            <div>
-                <label className="mb-1.5 block text-[13px] text-foreground-secondary">省/直辖市</label>
-                <Select
-                    ariaLabel="省/直辖市"
-                    placeholder="省份"
-                    value={selectedProvince || null}
-                    onChange={handleProvinceChange}
-                    options={regions.map(region => ({ value: region.name, label: region.name }))}
-                    className="h-11 text-sm"
-                />
-            </div>
-
-            {/* 城市选择 */}
-            <div>
-                <label className="mb-1.5 block text-[13px] text-foreground-secondary">市/区</label>
-                <Select
-                    ariaLabel="市/区"
-                    placeholder="城市"
-                    value={selectedCity || null}
-                    onChange={handleCityChange}
-                    disabled={cities.length === 0}
-                    options={cities.map(city => ({ value: city.name, label: city.name }))}
-                    className="h-11 text-sm"
-                />
-            </div>
-
-            {/* 区县选择 */}
-            <div>
-                <label className="mb-1.5 block text-[13px] text-foreground-secondary">区/县</label>
-                <Select
-                    ariaLabel="区/县"
-                    placeholder="区县"
-                    value={selectedDistrict || null}
-                    onChange={handleDistrictChange}
-                    disabled={districts.length === 0}
-                    options={districts.map(district => ({ value: district.name, label: district.name }))}
-                    className="h-11 text-sm"
-                />
-            </div>
+            <RegionCombobox
+                ariaLabel="省/直辖市"
+                placeholder="省份"
+                value={selectedProvince}
+                onChange={handleProvinceChange}
+                options={regions.map(region => region.name)}
+            />
+            <RegionCombobox
+                ariaLabel="市/区"
+                placeholder="城市"
+                value={selectedCity}
+                onChange={handleCityChange}
+                disabled={cities.length === 0}
+                options={cities.map(city => city.name)}
+            />
+            <RegionCombobox
+                ariaLabel="区/县"
+                placeholder="区县"
+                value={selectedDistrict}
+                onChange={handleDistrictChange}
+                disabled={districts.length === 0}
+                options={districts.map(district => district.name)}
+            />
         </div>
     );
 }

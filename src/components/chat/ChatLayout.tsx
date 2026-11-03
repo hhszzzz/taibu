@@ -497,11 +497,6 @@ export function ChatLayout(props: ChatLayoutProps) {
         planModeAvailable: agent?.capabilities.planModeAvailable,
         approval: agent?.approval, onApprovalChange: agent?.setApproval,
         agentMode: isAgentMode,
-        onEnableAgent: () => {
-            agent?.setMode('agent');
-            // 新会话没有可跟随的会话方式：地址同步成 Agent，刷新后不会掉回对话。
-            if (!conversationMode && searchParams.get('mode') !== 'agent') router.replace('/chat?mode=agent');
-        },
         contextData: latestAgentData,
         onOpenContextResource: openResource,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',

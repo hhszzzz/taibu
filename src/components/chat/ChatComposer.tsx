@@ -76,8 +76,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     /** The server can search the web for plain chat. */
     plainWebAvailable?: boolean;
     agentMode?: boolean;
-    /** 在普通对话里从 + 菜单选技能时，切到 Agent 对话。 */
-    onEnableAgent?: () => void;
     /** The conversation already has messages, so the input continues it. */
     continuing?: boolean;
     awaitingInput?: boolean;
@@ -128,7 +126,6 @@ export function ChatComposer({
     imageGeneration,
     plainWebAvailable = false,
     agentMode = false,
-    onEnableAgent,
     continuing = false,
     awaitingInput = false,
     allowDuringRun = false,
@@ -630,10 +627,8 @@ export function ChatComposer({
             onToggle: (id: string) => void toggleKnowledgeBaseSearch(id),
             onRemove: (id: string) => void toggleKnowledgeBaseSearch(id),
         },
-        onEnableAgent,
         onLoginRequired: requireLogin,
         onSkillSelect: (name: string) => {
-            if (!agentMode) onEnableAgent?.();
             onInputChange(`/skill:${name} `);
             requestAnimationFrame(() => textareaRef.current?.focus());
         },

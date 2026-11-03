@@ -114,8 +114,6 @@ interface ComposerToolbarProps extends ModelSettingsProps {
     onSkillSelect?: (name: string) => void;
     /** 未登录时点击需要账号的条目：提示先登录。 */
     onLoginRequired?: () => void;
-    /** 普通对话里选技能时切到 Agent 对话。 */
-    onEnableAgent?: () => void;
     polish: { available: boolean; busy: boolean; run: () => void; undo?: () => void };
     // Send
     send: ComposerSendState;
@@ -134,9 +132,9 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
     const [extensions, setExtensions] = useState<{ skills: SkillCommand[]; connectors: AgentConnector[]; loaded: boolean }>(
         { skills: [], connectors: [], loaded: false });
     const addLabel = agentMode ? '添加图片或文本资料' : '添加附件';
-    // 每次打开 + 菜单重读技能与连接器：设置里刚添加的条目马上可见。
+    // 每次打开 + 菜单重读技能与连接器：设置里刚添加的条目马上可见。二者只有 Agent 能用。
     useEffect(() => {
-        if (menu !== 'plus' || !userId) return;
+        if (menu !== 'plus' || !userId || !agentMode) return;
         const controller = new AbortController();
         Promise.all([
             fetchSkillCommands(controller.signal).catch(() => [] as SkillCommand[]),
@@ -145,7 +143,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
             if (!controller.signal.aborted) setExtensions({ skills, connectors, loaded: true });
         });
         return () => controller.abort();
-    }, [menu, userId]);
+    }, [menu, userId, agentMode]);
     const searchToggle = webControl
         ? { active: webControl.enabled, disabled: webControl.disabled, title: webControl.title, onToggle: webControl.onToggle }
         : { active: props.plainWeb.active, disabled: !props.plainWeb.allowed, title: props.plainWeb.title, onToggle: props.plainWeb.onToggle };
@@ -163,12 +161,12 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         <Paperclip size={16} aria-hidden="true" /><span className="chat-plus-label">上传或添加文件</span><kbd>⌘U</kbd>
                     </MenuItem>
                     <MenuSeparator className="chat-plus-divider" />
-                    {userId ? <MenuSub>
+                    {agentMode && (userId ? <MenuSub>
                         <MenuSubTrigger><SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge /></MenuSubTrigger>
                         <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="技能">
                             {extensions.skills.length > 0 ? extensions.skills.map(skill => (
                                 <MenuItem key={skill.name} title={skill.description}
-                                    onClick={() => { if (!agentMode) props.onEnableAgent?.(); props.onSkillSelect?.(skill.name); }}>
+                                    onClick={() => props.onSkillSelect?.(skill.name)}>
                                     <SkillIcon size={18} /><span className="chat-plus-label">{skill.name}</span>
                                     <small>{skill.scope === 'platform' ? '平台' : '我的'}</small>
                                 </MenuItem>
@@ -180,8 +178,8 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         </MenuSubContent>
                     </MenuSub> : <MenuItem onClick={() => props.onLoginRequired?.()}>
                         <SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge />
-                    </MenuItem>}
-                    {userId ? <MenuSub>
+                    </MenuItem>)}
+                    {agentMode && (userId ? <MenuSub>
                         <MenuSubTrigger><ConnectorsIcon size={18} /><span className="chat-plus-label">连接器</span><BetaBadge /></MenuSubTrigger>
                         <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="连接器">
                             {extensions.connectors.length > 0
@@ -199,7 +197,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         </MenuSubContent>
                     </MenuSub> : <MenuItem onClick={() => props.onLoginRequired?.()}>
                         <ConnectorsIcon size={18} /><span className="chat-plus-label">连接器</span><BetaBadge />
-                    </MenuItem>}
+                    </MenuItem>)}
                     {props.knowledgeBase.enabled && (userId ? <MenuSub onOpenChange={open => { if (open) props.knowledgeBase.onLoad(); }}>
                         <MenuSubTrigger disabled={!props.knowledgeBase.allowed}>
                             <KnowledgeIcon size={18} /><span className="chat-plus-label">知识库</span>

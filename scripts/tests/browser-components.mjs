@@ -2535,16 +2535,16 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.imageComposer(false));
     await page.getByTestId('image-composer').waitFor({ state: 'detached' });
 
-    // 未登录的 + 菜单：需要账号的条目照常列出，点按只在右下角提示登录。
+    // 普通对话的 + 菜单只列可用项：技能与连接器属于 Agent，未登录的访客也不显示。
     await page.evaluate(() => window.fixture.mount.guestComposer(true));
     const guestComposer = page.getByTestId('guest-composer');
     await guestComposer.getByRole('button', { name: '添加附件', exact: true }).click();
     const guestPlusMenu = page.getByRole('menu', { name: '添加附件', exact: true });
     await guestPlusMenu.waitFor();
-    check('The guest + menu keeps the account-only entries', await guestPlusMenu.getByRole('menuitem').filter({ hasText: '技能' }).count() === 1
-      && await guestPlusMenu.getByRole('menuitem').filter({ hasText: '连接器' }).count() === 1
+    check('The plain-chat + menu hides Agent-only entries', await guestPlusMenu.getByRole('menuitem').filter({ hasText: '技能' }).count() === 0
+      && await guestPlusMenu.getByRole('menuitem').filter({ hasText: '连接器' }).count() === 0
       && await guestPlusMenu.getByRole('menuitem').filter({ hasText: '知识库' }).count() === 1);
-    await guestPlusMenu.getByRole('menuitem').filter({ hasText: '技能' }).click();
+    await guestPlusMenu.getByRole('menuitem').filter({ hasText: '知识库' }).click();
     await page.getByText('请先登录后使用', { exact: true }).waitFor();
     check('A guest entry asks for a login from the bottom-right toast', await page.getByRole('button', { name: '去登录', exact: true }).count() === 1);
     await page.getByRole('button', { name: '去登录', exact: true }).click();

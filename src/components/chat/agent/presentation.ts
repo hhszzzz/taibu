@@ -305,7 +305,8 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
     }
     if (tool.name === AGENT_SUBMIT_PLAN_TOOL) {
         if (tool.status === 'running' || tool.status === 'pending') return '等待你批准';
-        const output = tool.output && typeof tool.output === 'object' ? tool.output as { approved?: unknown } : {};
+        const output = tool.output && typeof tool.output === 'object' ? tool.output as { approved?: unknown; disabled?: unknown } : {};
+        if (output.disabled === true) return '计划模式已关闭';
         return output.approved === true ? '已批准' : output.approved === false ? '要求修改' : null;
     }
     if (tool.name === AGENT_CODEMODE_TOOL) {

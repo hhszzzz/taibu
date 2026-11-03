@@ -445,7 +445,7 @@ export function getAgentToolSearchLoaded(tool: AgentToolPart): AgentToolSearchLo
   return { names, labels: names.map((name, index) => typeof labels[index] === 'string' ? labels[index] : name) };
 }
 
-export interface AgentPlanDraft { plan: string; approved: boolean | null; feedback: string | null }
+export interface AgentPlanDraft { plan: string; approved: boolean | null; feedback: string | null; disabled: boolean }
 
 /** 计划模式的提交：模型写的 Markdown 计划，以及用户批准、要求修改（可带意见）的结果。 */
 export function getAgentPlan(tool: AgentToolPart): AgentPlanDraft | null {
@@ -453,10 +453,12 @@ export function getAgentPlan(tool: AgentToolPart): AgentPlanDraft | null {
   const input = record(tool.input);
   if (typeof input.plan !== 'string' || !input.plan.trim()) return null;
   const output = record(tool.output);
+  const disabled = output.disabled === true;
   return {
     plan: input.plan,
-    approved: typeof output.approved === 'boolean' ? output.approved : null,
+    approved: !disabled && typeof output.approved === 'boolean' ? output.approved : null,
     feedback: typeof output.feedback === 'string' && output.feedback.trim() ? output.feedback.trim() : null,
+    disabled,
   };
 }
 

@@ -109,6 +109,8 @@ export interface AgentCheckpoint {
   summary?: string;
   /** Plan mode: the user approved the submitted plan; gated tools are available again. */
   planApproved?: boolean;
+  /** Plan mode was disabled while this task was running; unanswered plans never grant approval. */
+  planModeDisabled?: boolean;
   /** Plan mode: how often the model answered without submitting a plan, so the nudge cannot loop forever. */
   planNudges?: number;
   summaryThrough?: number;

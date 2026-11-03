@@ -36,7 +36,7 @@ import { agentToolCardId, modelCallEntry, projectDurableConversation, publicCano
 import {
   AGENT_CODEMODE_CALL_LIMIT, AGENT_SCRIPT_RESULT_SCHEMA, agentScriptCallNumber, agentScriptResult, createAgentCodemodeExtension,
 } from './codemode.server';
-import { AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, getAgentExtensionToolTitle, isAgentChartTool, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
+import { AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, getAgentExtensionToolTitle, getAgentToolScopeLabel, isAgentChartTool, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
 import { createAgentToolSearchExtension } from './tool-search.server';
 import type { AgentAnswers, AgentQuestion } from './questions';
 import { agentInputContent } from './attachment-input';
@@ -63,6 +63,9 @@ import { projectAgentUsage } from './usage';
 import { splitAgentFollowUps } from './follow-ups';
 import { AgentRunTelemetry } from './telemetry.server';
 import { buildAgentVisualizationInstructions } from '@/lib/visualization/prompt';
+
+const PLAN_MODE_DISABLED_MESSAGE = `Agent 工具范围已关闭：${getAgentToolScopeLabel('plan')}`;
+const isPlanModeDisabledError = (error: unknown) => error instanceof Error && error.message === PLAN_MODE_DISABLED_MESSAGE;
 
 export const AGENT_INSTRUCTIONS = `\n你是太卜智能体(Taibu Agent)，使用真实工具逐步完成任务。
 每批工具调用前先用一句话说明这一步要做什么、为什么；耗时较长的任务中途简要说明进展。没有实际执行的工具调用或核对，不能说成已经做过。
@@ -519,7 +522,12 @@ export async function executeAgentRun(
         try {
           await assertAgentToolAccess(store, run, AGENT_SUBMIT_PLAN_TOOL, { plan }, { featureState: injected?.featureState });
         } catch (error) {
-          return { output: [{ type: 'text' as const, text: error instanceof Error ? error.message : '计划模式已关闭' }], isError: true, details: { plan, approved: false } };
+          const disabled = isPlanModeDisabledError(error);
+          if (disabled) checkpoint.planModeDisabled = true;
+          const text = disabled
+            ? '计划模式已被管理员关闭，用户的回复不能视为批准。不要再次提交计划或执行受计划审批保护的工具；整理已完成的研究，并说明未执行的部分。'
+            : error instanceof Error ? error.message : '计划审批状态暂不可用';
+          return { output: [{ type: 'text' as const, text }], isError: true, details: { plan, approved: null, ...(disabled ? { disabled: true } : {}) } };
         }
         const decision = (reply.answers as AgentAnswers | undefined)?.plan?.[0];
         const approved = decision === 'approve';
@@ -612,11 +620,15 @@ export async function executeAgentRun(
      */
     const planSection: PromptSection = {
       key: 'taibu_plan',
-      render: input => run.input.planMode && input.agent.tools.some(tool => tool.name === AGENT_SUBMIT_PLAN_TOOL) ? [
+      render: input => run.input.planMode && (checkpoint.planModeDisabled || input.agent.tools.some(tool => tool.name === AGENT_SUBMIT_PLAN_TOOL))
+        ? checkpoint.planModeDisabled
+          ? '管理员已关闭计划模式。先前提交的计划未获批准，受计划审批保护的操作仍不可执行；整理已完成的研究并说明未执行的部分。'
+          : [
         '本任务开启了计划模式。先做必要的研究（排盘、详查、检索、读取资料），但不要写长期记忆或记入档案、不要调用 parallel_analysis 或 background_agent 派出子分析。',
         '研究清楚后，把分析计划写成 Markdown 调用 submit_plan：使用哪些体系与工具、按什么顺序判断、每个体系要回答什么、已知的资料缺口与备选做法。计划要具体到可执行，不要复述问题。',
         '用户批准后才能执行上述被限制的工具并给出最终答复；用户要求修改时按反馈修订后再次提交。',
-      ].join('\n') : undefined,
+      ].join('\n')
+        : undefined,
     };
     registry.install({
       name: "taibu",
@@ -633,6 +645,7 @@ export async function executeAgentRun(
             if (block) return { block };
             try { await assertAgentToolAccess(store, run, call.name, call.arguments, { featureState: injected?.featureState }); }
             catch (error) {
+              if (call.name === AGENT_SUBMIT_PLAN_TOOL && isPlanModeDisabledError(error)) checkpoint.planModeDisabled = true;
               const message = error instanceof Error && error.message.trim()
                 ? error.message
                 : '当前权限或工具策略不允许此调用，请检查任务配置。';
@@ -650,7 +663,7 @@ export async function executeAgentRun(
           onYield: async (answer, api, yieldContext) => {
             // Plan mode: an answer before the plan is approved is not the task. The nudge is bounded so a model that
             // ignores it cannot keep the task alive forever.
-            if (api.conversationId === root?.id && answer.stopReason === 'stop' && run.input.planMode && !checkpoint.planApproved &&
+            if (api.conversationId === root?.id && answer.stopReason === 'stop' && run.input.planMode && !checkpoint.planApproved && !checkpoint.planModeDisabled &&
               (checkpoint.planNudges ?? 0) < 2) {
               checkpoint.planNudges = (checkpoint.planNudges ?? 0) + 1;
               return { continue: '计划模式：请先调用 submit_plan 提交计划并等待用户批准，再执行或作答。' };

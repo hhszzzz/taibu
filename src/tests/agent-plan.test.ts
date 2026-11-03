@@ -18,8 +18,9 @@ const plan = (id: string, text: string, output?: Record<string, unknown>, status
   part(id, 'submit_plan', { status, input: { plan: text }, ...(output ? { output } : {}) });
 
 test('a plan is read from the call: the Markdown it proposed and the decision that followed', () => {
-  assert.deepEqual(getAgentPlan(plan('p1', '# 计划\n1. 先排盘。')), { plan: '# 计划\n1. 先排盘。', approved: null, feedback: null });
-  assert.deepEqual(getAgentPlan(plan('p1', '# 计划', { plan: '# 计划', approved: false, feedback: '先看紫微' })), { plan: '# 计划', approved: false, feedback: '先看紫微' });
+  assert.deepEqual(getAgentPlan(plan('p1', '# 计划\n1. 先排盘。')), { plan: '# 计划\n1. 先排盘。', approved: null, feedback: null, disabled: false });
+  assert.deepEqual(getAgentPlan(plan('p1', '# 计划', { plan: '# 计划', approved: false, feedback: '先看紫微' })), { plan: '# 计划', approved: false, feedback: '先看紫微', disabled: false });
+  assert.deepEqual(getAgentPlan(plan('p1', '# 计划', { approved: false, disabled: true })), { plan: '# 计划', approved: null, feedback: null, disabled: true });
   assert.equal(getAgentPlan(part('b', 'bazi', { input: { plan: '# 计划' } })), null, 'only the plan tool');
   assert.equal(getAgentPlan(part('p', 'submit_plan', { input: { plan: '  ' } })), null, 'an empty plan has nothing to show');
 });
@@ -62,6 +63,15 @@ test('a plan still waiting for the user says so, and an ended task does not pret
   const ended = renderToStaticMarkup(createElement(AgentPlanView, { tools: [plan('p1', '# 待批计划', undefined, 'running')], runStatus: 'cancelled' }));
   assert.match(ended.replace(/<[^>]+>/gu, ' '), /任务结束时计划未被处理/u);
   assert.ok(!ended.includes('等待你批准'));
+});
+
+test('a disabled plan is not shown as approved or as a requested revision', () => {
+  const tool = plan('p1', '# 待批计划', { approved: false, disabled: true });
+  const html = renderToStaticMarkup(createElement(AgentPlanView, { tools: [tool], runStatus: 'completed' }));
+  const text = html.replace(/<[^>]+>/gu, ' ').replace(/\s+/gu, ' ');
+  assert.match(text, /计划模式已关闭/u);
+  assert.match(text, /受计划审批保护的操作未执行/u);
+  assert.ok(!text.includes('要求修改'));
 });
 
 test('the skills are the methods and skills this task loaded, listed once each', () => {

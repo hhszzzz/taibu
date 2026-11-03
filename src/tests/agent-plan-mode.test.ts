@@ -8,11 +8,16 @@ import { executeAgentRun } from '../lib/agent/runtime.server';
 import { summarizeAgentTool } from '../components/chat/agent/presentation';
 import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixture';
 
+let planModeEnabled = true;
+
 beforeEach((t) => {
   assert.ok('mock' in t);
+  planModeEnabled = true;
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   const sdk = require('../lib/ai/providers/ai-sdk-provider') as typeof import('../lib/ai/providers/ai-sdk-provider');
-  t.mock.method(settings, 'readFeatureModuleStateFresh', async () => ({ status: 'enabled' as const }));
+  t.mock.method(settings, 'readFeatureModuleStateFresh', async (id: Parameters<typeof settings.readFeatureModuleStateFresh>[0]) => ({
+    status: id === 'agent-tool:plan' && !planModeEnabled ? 'disabled' as const : 'enabled' as const,
+  }));
   t.mock.method(sdk, 'isModelAvailable', () => true);
   t.mock.method(sdk, 'createModelFromConfig', () => new MockLanguageModelV3());
 });
@@ -106,6 +111,38 @@ test('a revision keeps the task gated until a later plan is approved', async () 
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [{ type: 'text', text: '按修订后的计划完成' }]) });
   assert.equal(finished(store).args.p_status, 'completed');
   assert.equal((finished(store).args.p_checkpoint as AgentRunRow['checkpoint']).planApproved, true);
+});
+
+test('closing plan mode while its plan awaits approval does not grant approval or keep nudging', async () => {
+  const store = new MemoryStore(), run = row();
+  run.input.planMode = true;
+  run.input.memoryEnabled = true;
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => [
+    { type: 'toolCall', id: 'plan', name: 'submit_plan', arguments: { plan: '研究完成后写入长期记忆。' } },
+  ]) });
+  assert.equal(finished(store).args.p_status, 'awaiting_input');
+
+  planModeEnabled = false;
+  run.checkpoint = finished(store).args.p_checkpoint as AgentRunRow['checkpoint'];
+  store.pending = [reply(10, { plan: ['approve'] })];
+  const userTurns: string[] = [];
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => index === 0 ? [remember] : [
+    { type: 'text', text: '已完成前置研究，但未执行记忆写入。' },
+  ], messages => userTurns.push(...messages.flatMap(message => message.role === 'user' && typeof message.content === 'string' ? [message.content] : []))) });
+
+  assert.equal(finished(store).args.p_status, 'completed');
+  const checkpoint = finished(store).args.p_checkpoint as AgentRunRow['checkpoint'];
+  assert.equal(checkpoint.planApproved, undefined, 'an approval reply cannot override the administrator switch');
+  assert.equal(checkpoint.planModeDisabled, true);
+  const plan = toolParts(store).find(part => part.name === 'submit_plan')!;
+  assert.equal(plan.status, 'failed');
+  assert.equal((plan.output as { approved?: unknown; disabled?: unknown }).approved, null);
+  assert.equal((plan.output as { disabled?: unknown }).disabled, true);
+  assert.equal(summarizeAgentTool(plan), '计划模式已关闭');
+  const blocked = results(store).find(message => message.toolName === 'remember_user_fact');
+  assert.ok(blocked);
+  assert.match(text(blocked!), /计划尚未批准/u, 'the gated tool stays blocked');
+  assert.ok(!userTurns.some(turn => turn.includes('请先调用 submit_plan')), 'the closed plan mode does not trigger a submit-plan nudge loop');
 });
 
 test('plan mode keeps background subagents for after the approval', async () => {

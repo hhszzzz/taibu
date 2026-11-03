@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react';
 import { Select as SelectPrimitive } from '@base-ui/react/select';
-import { Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { Check, ChevronDown } from 'lucide-react';
 import { fieldClass } from '@/components/ui/Input';
 import { cn } from '@/lib/utils';
 
@@ -129,9 +129,7 @@ export function Select<Value extends string | number>({
                             popupClassName,
                         )}
                     >
-                        <SelectPrimitive.ScrollUpArrow className="flex h-6 items-center justify-center bg-surface text-foreground-tertiary">
-                            <ChevronUp className="h-4 w-4" aria-hidden="true" />
-                        </SelectPrimitive.ScrollUpArrow>
+                        {/* 滚动交给列表本身：浮层里不放上下箭头，免得挡住首尾选项。 */}
                         <SelectPrimitive.List className="max-h-[min(18rem,var(--available-height))] overflow-y-auto overscroll-contain">
                             {options.map(option => (
                                 <SelectPrimitive.Item
@@ -152,9 +150,6 @@ export function Select<Value extends string | number>({
                                 </SelectPrimitive.Item>
                             ))}
                         </SelectPrimitive.List>
-                        <SelectPrimitive.ScrollDownArrow className="flex h-6 items-center justify-center bg-surface text-foreground-tertiary">
-                            <ChevronDown className="h-4 w-4" aria-hidden="true" />
-                        </SelectPrimitive.ScrollDownArrow>
                     </SelectPrimitive.Popup>
                 </SelectPrimitive.Positioner>
             </SelectPrimitive.Portal>

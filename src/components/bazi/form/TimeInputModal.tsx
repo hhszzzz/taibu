@@ -7,15 +7,15 @@
  */
 'use client';
 
-import { Select } from '@/components/ui/Select';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { useId, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { Clock, X } from 'lucide-react';
 import type { BaziFormData } from '@/types';
 import { HOUR_OPTIONS } from '@/components/bazi/form/options';
 import { useToast } from '@/components/ui/Toast';
 import { resolveBirthTimeOptions } from '@/lib/divination/birth-time';
+import { checkLocalTime } from '@/lib/timezones';
 import { Dialog } from '@/components/ui/Dialog';
 import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
 
@@ -23,10 +23,7 @@ interface TimeInputModalProps {
     isOpen: boolean;
     onClose: () => void;
     formData: BaziFormData;
-    unknownTime: boolean;
-    onToggleUnknownTime: () => void;
     onUpdate: <K extends keyof BaziFormData>(field: K, value: BaziFormData[K]) => void;
-    allowUnknownTime?: boolean;
     onConfirm?: () => void;
 }
 
@@ -34,18 +31,13 @@ export function TimeInputModal({
     isOpen,
     onClose,
     formData,
-    unknownTime,
-    onToggleUnknownTime,
     onUpdate,
-    allowUnknownTime = true,
     onConfirm,
 }: TimeInputModalProps) {
     const titleId = useId();
     const [localHour, setLocalHour] = useState(formData.birthHour);
     const [localMinute, setLocalMinute] = useState(formData.birthMinute);
-    const [localUnknownTime, setLocalUnknownTime] = useState(unknownTime);
-    const [localTimezone, setLocalTimezone] = useState(formData.timezone ?? DEFAULT_DIVINATION_TIMEZONE);
-    const [localDisambiguation, setLocalDisambiguation] = useState<string>(formData.disambiguation ?? 'reject');
+    const localTimezone = formData.timezone ?? DEFAULT_DIVINATION_TIMEZONE;
     const { showToast } = useToast();
 
     // 当模态框打开时，同步外部值到本地状态
@@ -53,19 +45,22 @@ export function TimeInputModal({
     if (isOpen && !lastIsOpen) {
         setLocalHour(formData.birthHour);
         setLocalMinute(formData.birthMinute);
-        setLocalTimezone(formData.timezone ?? DEFAULT_DIVINATION_TIMEZONE);
-        setLocalDisambiguation(formData.disambiguation ?? 'reject');
-        // 打开时保持当前状态：未知就还是未知，选了时间才算知道。
-        setLocalUnknownTime(unknownTime);
     }
     if (isOpen !== lastIsOpen) {
         setLastIsOpen(isOpen);
     }
 
+    // 只有钟表时间真的落在夏令时跳时/回拨里才提示；平时不出现任何专业选项。
+    const timeCheck = useMemo(() => checkLocalTime({
+        year: formData.birthYear, month: formData.birthMonth, day: formData.birthDay,
+        hour: localHour, minute: localMinute,
+    }, localTimezone), [formData.birthYear, formData.birthMonth, formData.birthDay, localHour, localMinute, localTimezone]);
+
     const handleConfirm = () => {
         let options;
         try {
-            options = resolveBirthTimeOptions({ timezone: localTimezone, disambiguation: localDisambiguation });
+            const disambiguation = formData.disambiguation && formData.disambiguation !== 'reject' ? formData.disambiguation : 'compatible';
+            options = resolveBirthTimeOptions({ timezone: localTimezone, disambiguation });
         } catch (error) {
             showToast('warning', error instanceof Error ? error.message : '时间规则无效');
             return;
@@ -74,9 +69,6 @@ export function TimeInputModal({
         onUpdate('disambiguation', options.disambiguation);
         onUpdate('birthHour', localHour);
         onUpdate('birthMinute', localMinute);
-        if (allowUnknownTime && localUnknownTime !== unknownTime) {
-            onToggleUnknownTime();
-        }
         onConfirm?.();
         onClose();
     };
@@ -87,8 +79,6 @@ export function TimeInputModal({
             const [hours, minutes] = timeValue.split(':').map(Number);
             setLocalHour(hours);
             setLocalMinute(minutes);
-            // 选了时间就是知道了。
-            setLocalUnknownTime(false);
         }
     };
 
@@ -99,9 +89,6 @@ export function TimeInputModal({
     };
 
     if (!isOpen) return null;
-
-    // knowTime 表示"知道时辰"，是 localUnknownTime（不知时辰）的反义
-    const knowTime = allowUnknownTime ? !localUnknownTime : true;
 
     return (
         <Dialog bare open={isOpen} onClose={onClose} labelledBy={titleId} className="dialog-plain dialog-lg dialog-sheet">
@@ -125,121 +112,71 @@ export function TimeInputModal({
 
                 {/* 内容 */}
                 <div className="flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
-                    {/* 不知时辰开关 */}
-                    {allowUnknownTime && (
-                        <label className="group flex cursor-pointer items-center justify-between">
-                            <span className="text-sm font-medium text-foreground">
-                                {knowTime ? '已知时辰' : '不知时辰'}
-                            </span>
-                            <div
-                                onClick={() => setLocalUnknownTime(!localUnknownTime)}
-                                className={`
-                                    relative flex h-6 w-11 items-center rounded-full transition-colors duration-150 ease-out
-                                    ${knowTime ? 'bg-accent' : 'bg-background-tertiary'}
-                                `}
-                            >
-                                <div
-                                    className={`
-                                        absolute h-5 w-5 rounded-full bg-surface shadow-sm
-                                        transition-transform duration-150
-                                        ${knowTime ? 'translate-x-[22px]' : 'translate-x-0.5'}
-                                    `}
-                                />
-                            </div>
-                        </label>
-                    )}
+                    <div className="space-y-6 animate-fade-in">
+                        {/* 精确时间输入框 */}
+                        <div className="flex items-center gap-4 rounded-xl bg-panel p-3 sm:p-4">
+                            <label className="whitespace-nowrap text-[13px] text-foreground-secondary">
+                                精确时间
+                            </label>
+                            <Input
+                                type="time"
+                                value={formatTimeValue()}
+                                onChange={handleTimeChange}
+                                className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-center font-mono text-lg text-foreground
+                                    transition-colors duration-150 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
+                            />
+                        </div>
 
-                    {/* 具体时间输入 - 仅当知道时辰时显示 */}
-                    {knowTime && (
-                        <div className="space-y-6 animate-fade-in">
-                            {/* 精确时间输入框 */}
-                            <div className="flex items-center gap-4 rounded-xl bg-panel p-3 sm:p-4">
-                                <label className="whitespace-nowrap text-[13px] text-foreground-secondary">
-                                    精确时间
+                        {/* 快捷选择时辰：保留子丑寅卯，统一显示为「子时」 */}
+                        <div>
+                            <div className="mb-3 flex items-center justify-between gap-3">
+                                <label className="text-[13px] font-medium text-foreground">
+                                    快捷选择时辰
                                 </label>
-                                <Input
-                                    type="time"
-                                    value={formatTimeValue()}
-                                    onChange={handleTimeChange}
-                                    className="h-11 flex-1 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-center font-mono text-lg text-foreground
-                                        transition-colors duration-150 focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/15"
-                                />
+                                <span className="text-xs text-foreground-tertiary">
+                                    点击选择将自动修正时间
+                                </span>
                             </div>
 
-                            {/* 时辰快捷选择 */}
-                            <div>
-                                <div className="mb-3 flex items-center justify-between gap-3">
-                                    <label className="text-[13px] font-medium text-foreground">
-                                        快捷选择时辰
-                                    </label>
-                                    <span className="text-xs text-foreground-tertiary">
-                                        点击选择将自动修正时间
-                                    </span>
-                                </div>
-
-                                <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-                                    {HOUR_OPTIONS.map(({ value, name, time }) => {
-                                        const isSelected = localHour === value && (localMinute || 0) === 0;
-                                        return (
-                                            <Button unstyled
-                                                key={value}
-                                                type="button"
-                                                aria-pressed={isSelected}
-                                                onClick={() => {
-                                                    setLocalHour(value);
-                                                    setLocalMinute(0);
-                                                    setLocalUnknownTime(false);
-                                                }}
-                                                className={`
-                                                    flex flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-sm transition-colors duration-150
-                                                    ${isSelected
-                                                        ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
-                                                        : 'border-[0.5px] border-border bg-surface text-foreground hover:bg-background-secondary'
-                                                    }
-                                                `}
-                                            >
-                                                <span className="font-display text-[15px]">
-                                                    {name}
-                                                </span>
-                                                <span className={`text-[11px] ${isSelected ? 'text-accent-strong/80' : 'text-foreground-tertiary'}`}>
-                                                    {time}
-                                                </span>
-                                            </Button>
-                                        );
-                                    })}
-                                </div>
+                            <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+                                {HOUR_OPTIONS.map(({ value, name, time }) => {
+                                    const isSelected = localHour === value && (localMinute || 0) === 0;
+                                    return (
+                                        <Button unstyled
+                                            key={value}
+                                            type="button"
+                                            aria-pressed={isSelected}
+                                            onClick={() => {
+                                                setLocalHour(value);
+                                                setLocalMinute(0);
+                                            }}
+                                            className={`
+                                                flex flex-col items-center justify-center gap-0.5 rounded-xl px-1 py-2 text-sm transition-colors duration-150
+                                                ${isSelected
+                                                    ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
+                                                    : 'border-[0.5px] border-border bg-surface text-foreground hover:bg-background-secondary'
+                                                }
+                                            `}
+                                        >
+                                            <span className="font-display text-[15px]">
+                                                {name}
+                                            </span>
+                                            <span className={`text-[11px] ${isSelected ? 'text-accent-strong/80' : 'text-foreground-tertiary'}`}>
+                                                {time}
+                                            </span>
+                                        </Button>
+                                    );
+                                })}
                             </div>
                         </div>
-                    )}
-                    <div className="space-y-4 border-t-[0.5px] border-border pt-5">
-                        <label className="block text-[13px] font-medium text-foreground">
-                            出生地时区（IANA）
-                            <Input
-                                type="text"
-                                value={localTimezone}
-                                onChange={event => setLocalTimezone(event.target.value)}
-                                placeholder="Asia/Shanghai"
-                                maxLength={100}
-                                className="mt-2 h-11 border-border-hover"
-                            />
-                        </label>
-                        <label className="block text-[13px] font-medium text-foreground">
-                            夏令时重复／缺失时间
-                            <Select
-                                value={localDisambiguation}
-                                onChange={setLocalDisambiguation}
-                                ariaLabel="夏令时重复／缺失时间"
-                                options={[
-                                    { value: 'reject', label: '遇到歧义时提示错误（默认）' },
-                                    { value: 'earlier', label: '选择较早的瞬间' },
-                                    { value: 'later', label: '选择较晚的瞬间' },
-                                    { value: 'compatible', label: '兼容模式：重复取早，缺失取晚' },
-                                ]}
-                                className="mt-2 h-11 text-sm font-normal"
-                            />
-                        </label>
-                        <p className="text-xs leading-relaxed text-foreground-tertiary">输入出生地当时的民用钟表时间。时区规则包含历史夏令时；只有确知取舍时才调整默认策略。</p>
                     </div>
+                    {timeCheck.issue && (
+                        <p className="text-xs leading-relaxed text-foreground-tertiary">
+                            {timeCheck.issue === 'nonexistent'
+                                ? `当地这天 ${formatTimeValue()} 因夏令时拨快而不存在，将按 ${timeCheck.adjusted} 计算。`
+                                : `当地这天 ${formatTimeValue()} 因夏令时回拨出现两次，将按第一次计算。`}
+                        </p>
+                    )}
                 </div>
 
                 {/* 底部按钮 */}

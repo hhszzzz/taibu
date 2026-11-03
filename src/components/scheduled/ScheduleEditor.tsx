@@ -25,10 +25,11 @@ import { useOwnModels } from '@/lib/byok/client';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import { listSavedBaziCharts } from '@/lib/user/charts-client';
 import { agentScheduleClient } from '@/lib/agent/schedules/client';
+import { browserTimeZone, timeZoneOptions } from '@/lib/timezones';
 import {
   AGENT_SCHEDULE_INTERVAL_HOURS_MAX, AGENT_SCHEDULE_NAME_MAX, AGENT_SCHEDULE_PROMPT_MAX,
   AGENT_SCHEDULE_WEEKDAY_LABELS, dailyBriefingPrompt, defaultAgentScheduleOptions,
-  parseAgentScheduleInput, validAgentScheduleTimeZone,
+  parseAgentScheduleInput,
   type AgentScheduleCadence, type AgentScheduleKind, type AgentScheduleOptions, type AgentScheduleTemplate,
   type AgentScheduleView,
 } from '@/lib/agent/schedules/config';
@@ -70,16 +71,6 @@ const KINDS: ReadonlyArray<{ value: AgentScheduleKind; label: string }> = [
 ];
 
 const PROMPT_VARIABLES = ['{{date}}', '{{time}}', '{{weekday}}', '{{timezone}}', '{{name}}'] as const;
-
-function browserTimeZone(): string {
-  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || 'Asia/Shanghai'; } catch { return 'Asia/Shanghai'; }
-}
-
-function timeZones(current: string): string[] {
-  let supported: string[] = [];
-  try { supported = Intl.supportedValuesOf?.('timeZone') ?? []; } catch { supported = []; }
-  return [...new Set([current, 'Asia/Shanghai', 'UTC', ...supported])].filter(validAgentScheduleTimeZone);
-}
 
 function draftFromSchedule(schedule: AgentScheduleView): Draft {
   const cadence = schedule.cadence;
@@ -296,7 +287,7 @@ export function ScheduleEditor({
               <label className="sched-field"><span>时区</span>
                 <Select className="sched-select" ariaLabel="时区" value={draft.timezone} disabled={saving}
                   onChange={timezone => patch({ timezone })}
-                  options={timeZones(draft.timezone).map(zone => ({ value: zone, label: zone }))} />
+                  options={timeZoneOptions(draft.timezone).map(zone => ({ value: zone, label: zone }))} />
               </label>
             </div>
             {draft.kind === 'weekly' ? (

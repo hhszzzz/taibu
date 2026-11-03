@@ -422,14 +422,15 @@ function BirthRulesProbe() {
   window.fixture.birthResult = result;
   return <section data-testid="birth-rules">
     <button onClick={() => setOpen(true)}>Open birth time rules</button>
+    <button onClick={() => setForm(previous => ({ ...previous, timezone: 'America/New_York' }))}>Use New York</button>
     <button onClick={() => {
       try {
         const { output, astrolabe } = calculateZiweiChartBundle(form);
         setResult({ options: output.calculationOptions, day: getHoroscope(output, astrolabe, new Date('2024-06-01T02:00:00Z'))?.daily.period });
       } catch (error) { setResult({ error: error.message }); }
     }}>Calculate actual Ziwei</button>
-    <TimeInputModal isOpen={open} onClose={() => setOpen(false)} formData={form} unknownTime={false} allowUnknownTime={false}
-      onToggleUnknownTime={() => {}} onUpdate={(field, value) => setForm(previous => ({ ...previous, [field]: value }))} />
+    <TimeInputModal isOpen={open} onClose={() => setOpen(false)} formData={form}
+      onUpdate={(field, value) => setForm(previous => ({ ...previous, [field]: value }))} />
   </section>;
 }
 import { queryKeys } from '@/lib/query/keys';
@@ -1670,26 +1671,16 @@ export async function run(existingPage, bundlePath) {
     const birthProbe = page.getByTestId('birth-rules');
     const birthDialog = page.getByRole('dialog', { name: '出生时辰' });
     await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
-    await birthDialog.getByLabel('出生地时区（IANA）').fill('America/New_York');
-    await chooseSelect(birthDialog, '夏令时重复／缺失时间', '选择较晚的瞬间');
     await birthDialog.locator('input[type=time]').fill('03:15');
     await birthDialog.getByRole('button', { name: '取消', exact: true }).click();
     check('Cancelling birth-time draft preserves all original fields', await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai' && window.fixture.birthForm.disambiguation === 'reject' && window.fixture.birthForm.birthHour === 2 && window.fixture.birthForm.birthMinute === 30));
+    await birthProbe.getByRole('button', { name: 'Use New York' }).click();
     await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
-    await birthDialog.getByLabel('出生地时区（IANA）').fill('invalid/timezone');
-    await birthDialog.getByRole('button', { name: '确定', exact: true }).click();
-    check('Invalid IANA zone keeps the time editor open and does not commit', await birthDialog.getByLabel('出生地时区（IANA）').isVisible() && await page.evaluate(() => window.fixture.birthForm.timezone === 'Asia/Shanghai'));
-    await birthDialog.getByLabel('出生地时区（IANA）').fill('America/New_York');
+    await birthDialog.getByText(/因夏令时拨快而不存在/u).waitFor();
     await birthDialog.getByRole('button', { name: '确定', exact: true }).click();
     await birthProbe.getByRole('button', { name: 'Calculate actual Ziwei' }).click();
-    await until(() => Boolean(window.fixture.birthResult?.error));
-    checks.push('Actual browser Ziwei rejects nonexistent birth time without explicit resolution');
-    await birthProbe.getByRole('button', { name: 'Open birth time rules' }).click();
-    await chooseSelect(birthDialog, '夏令时重复／缺失时间', '选择较晚的瞬间');
-    await birthDialog.getByRole('button', { name: '确定', exact: true }).click();
-    await birthProbe.getByRole('button', { name: 'Calculate actual Ziwei' }).click();
-    await until(() => window.fixture.birthResult?.options?.disambiguation === 'later');
-    check('Actual browser Ziwei preserves birth timezone into lazy flow calculation', await page.evaluate(() => window.fixture.birthResult.options.timezone === 'America/New_York' && window.fixture.birthResult.day === '2024-05-31'));
+    await until(() => window.fixture.birthResult?.options?.timezone === 'America/New_York');
+    check('Actual browser Ziwei resolves a daylight-saving gap without exposing the policy', await page.evaluate(() => window.fixture.birthResult.options.disambiguation === 'compatible' && window.fixture.birthResult.day === '2024-05-31'));
     await page.getByRole('button', { name: 'Load more actual list', exact: true }).click();
     await until(() => window.fixture.list().length === 9);
     check('Query pagination retains API order and 7+2 rows', (await page.locator('[data-testid="conversation-list"] li').allTextContents()).join('|') === rows.alice.map(row => row.title).join('|'));

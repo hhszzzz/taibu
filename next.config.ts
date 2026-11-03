@@ -14,6 +14,8 @@ const documentWorkerFiles = [
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Host dev is reached through 127.0.0.1/localhost on the fixed 3090 port.
+  allowedDevOrigins: ['127.0.0.1', 'localhost'],
   // Forces a new client build id per deploy so stale chunks 404 instead of
   // mixing builds behind a rolling restart.
   deploymentId: process.env.GIT_SHA,

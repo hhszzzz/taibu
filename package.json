@@ -4,8 +4,8 @@
   "private": true,
   "license": "AGPL-3.0-only",
   "scripts": {
-    "dev": "node scripts/dev-with-core-watch.mjs",
-    "dev:web": "next dev",
+    "dev": "node scripts/dev-with-core-watch.mjs --port 3090",
+    "dev:web": "next dev --port 3090",
     "build": "pnpm -C packages/core build && pnpm build:agent && next build",
     "build:agent": "node scripts/build-agent-worker.mjs",
     "agent:worker": "pnpm build:core && pnpm build:agent && node scripts/agent-worker.mjs",

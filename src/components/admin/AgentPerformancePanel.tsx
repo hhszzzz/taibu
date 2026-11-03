@@ -1,7 +1,7 @@
 /**
  * Agent 运行性能面板
  *
- * 按模型查看近 1 / 7 / 30 天的运行指标：总耗时与首字延迟的 P50/P95、工具耗时占比、失败率与挂起率；点开一次
+ * 按模型查看近 1 / 7 / 30 天的运行指标：总耗时与首字延迟的 P50/P95、工具耗时占比、失败率与中断率；点开一次
  * 运行可看它的阶段时间线。指标由 worker 在任务结束时写入 `agent_run_metrics`，不包含消息正文、工具参数或结果。
  *
  * 'use client' 标记说明：
@@ -90,7 +90,7 @@ function PhaseTimeline({ metrics }: { metrics: AgentRunMetricsRow }) {
                 <Field label="生成">{`${metrics.generationCount} 次 · ${formatAgentDuration(metrics.generationMs)}`}</Field>
                 <Field label="工具">{`${metrics.toolCount} 次 · ${formatAgentDuration(metrics.toolMs)}`}</Field>
                 <Field label="压缩">{`${metrics.compactionCount} 次 · ${formatAgentDuration(metrics.compactionMs)}`}</Field>
-                <Field label="重试 / 故障 / 挂起">{`${metrics.retries} / ${metrics.faults} / ${metrics.hangs}`}</Field>
+                <Field label="重试 / 故障 / 中断">{`${metrics.retries} / ${metrics.faults} / ${metrics.hangs}`}</Field>
                 <Field label="Token（输入 / 输出 / 缓存读 / 缓存写）">
                     {`${formatTokens(metrics.inputTokens)} / ${formatTokens(metrics.outputTokens)} / ${formatTokens(metrics.cacheReadTokens)} / ${formatTokens(metrics.cacheWriteTokens)}`}
                 </Field>
@@ -185,7 +185,7 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
     return (
         <div data-testid="agent-metrics" className="flex flex-col gap-4">
             <p className="settings-help">
-                运行指标由 worker 在任务结束时写入，只记阶段、耗时、重试、故障与 token，不含消息正文、工具参数或结果；保留 30 天。总耗时与首字延迟看 P50/P95，工具占比是工具阶段耗时占运行总耗时，挂起指 Pi 把任务停放在半途（task_parked）。
+                运行指标由 worker 在任务结束时写入，只记阶段、耗时、重试、故障与 token，不含消息正文、工具参数或结果；保留 30 天。总耗时与首字延迟看 P50/P95，工具占比是工具阶段耗时占运行总耗时，中断指某一步被崩溃反复打断，Pi 结束了这一步（task_interrupted）。
             </p>
 
             {error ? (
@@ -227,7 +227,7 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
                                 <th scope="col" className={TH}>首字 P50 / P95</th>
                                 <th scope="col" className={TH}>工具占比</th>
                                 <th scope="col" className={TH}>失败率</th>
-                                <th scope="col" className={`${TH} pr-5`}>挂起率</th>
+                                <th scope="col" className={`${TH} pr-5`}>中断率</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -259,7 +259,7 @@ export function AgentPerformancePanel({ active = true }: { active?: boolean }) {
                                 <th scope="col" className={TH}>模型</th>
                                 <th scope="col" className={TH}>总耗时</th>
                                 <th scope="col" className={TH}>首字</th>
-                                <th scope="col" className={TH}>重试 / 故障 / 挂起</th>
+                                <th scope="col" className={TH}>重试 / 故障 / 中断</th>
                                 <th scope="col" className={`${TH} pr-5`}>结束</th>
                             </tr>
                         </thead>

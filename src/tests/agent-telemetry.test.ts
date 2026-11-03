@@ -29,7 +29,7 @@ test("the adapter aggregates phases, retries, reports, tokens and the first toke
   duration.record(900, { task: "taibu.background.anchor", phase: "run", outcome: "done" });
   const reports = telemetry.metrics.counter("pi.durable.reports");
   reports.add(1, { type: "task_faulted" });
-  reports.add(2, { type: "task_parked" });
+  reports.add(2, { type: "task_interrupted" });
   reports.add(5, { type: "not-a-report" });
 
   await telemetry.startSpan({ name: "pi.durable.phase", attributes: {

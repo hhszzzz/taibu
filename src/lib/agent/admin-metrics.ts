@@ -45,9 +45,9 @@ export interface AgentRunMetricsRow {
   compactionMs: number;
   /** Generation attempts beyond the first. */
   retries: number;
-  /** Reports Pi raised other than a parked task. */
+  /** Reports Pi raised other than an interrupted task. */
   faults: number;
-  /** Times Pi parked a task (its crash-loop guard). */
+  /** Times crashes ended a task (`task_interrupted`, Pi's crash-loop guard). */
   hangs: number;
   inputTokens: number;
   outputTokens: number;

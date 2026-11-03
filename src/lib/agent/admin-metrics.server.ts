@@ -29,8 +29,8 @@ function nullableNumber(value: unknown): number | null {
 }
 
 /**
- * Per-model percentiles over a window: total run time, time to first token, tool-time share, failure rate and hang
- * rate, plus the newest runs. Metrics are admin-only; the route checks the administrator before calling this.
+ * Per-model percentiles over a window: total run time, time to first token, tool-time share, failure rate and the
+ * rate of runs with an interrupted task, plus the newest runs. Metrics are admin-only; the route checks the administrator before calling this.
  */
 export async function readAgentMetricsForAdmin(db: ScopedDb, days: number): Promise<AgentRunMetricsReport> {
   const since = new Date(Date.now() - days * 86_400_000).toISOString();

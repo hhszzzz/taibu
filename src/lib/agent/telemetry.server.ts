@@ -20,9 +20,9 @@ export const AGENT_RUN_PHASE_LIMIT = 500;
 const PHASE_SPAN = "pi.durable.phase";
 const SUBMIT_SPAN = "pi.durable.submit";
 const PHASE_TASKS = new Set(["pi.generation", "pi.tool", "pi.compaction"]);
-const REPORT_PARKED = "task_parked";
+const REPORT_INTERRUPTED = "task_interrupted";
 const REPORT_TYPES = new Set([
-  "session_failed", "task_faulted", "task_parked", "migration_failed", "task_outdated",
+  "storage_failed", "task_faulted", "task_interrupted", "migration_failed", "task_outdated",
   "task_error", "extension_error", "host_error", "listener_error",
 ]);
 const SUBMISSION_RESULTS = new Set(["queued", "placed", "done"]);
@@ -206,11 +206,14 @@ export class AgentRunTelemetry implements TelemetryContext, AgentStreamTelemetry
     else if (task === "pi.compaction" && phase === "summarize") { this.compactionCount += 1; this.compactionMs += duration; }
   }
 
-  /** `pi.durable.reports`: a parked task is a hang; every other report is a fault. */
+  /**
+   * `pi.durable.reports`: a task Pi ended because crashes kept cutting it off (task_interrupted) is a hang; every other
+   * report is a fault.
+   */
   private recordReport(value: number, attributes?: SpanAttributes) {
     const type = attributes?.type;
     if (typeof type !== "string" || !REPORT_TYPES.has(type) || !Number.isFinite(value) || value <= 0) return;
-    if (type === REPORT_PARKED) this.hangs += value;
+    if (type === REPORT_INTERRUPTED) this.hangs += value;
     else this.faults += value;
   }
 

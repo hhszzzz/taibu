@@ -1,7 +1,7 @@
 /**
  * 单次 Agent 运行的性能明细
  *
- * GET: 该运行的耗时、首字延迟、各阶段次数与耗时、重试、故障、挂起、token 与阶段时间线
+ * GET: 该运行的耗时、首字延迟、各阶段次数与耗时、重试、故障、中断、token 与阶段时间线
  */
 import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireAdminUser } from '@/lib/api-utils';

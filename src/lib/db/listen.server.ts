@@ -135,7 +135,7 @@ async function connect(): Promise<void> {
   candidate.on('end', () => retire(candidate));
   try {
     await candidate.connect();
-    await candidate.query(`listen ${CHANNEL}`);
+    await candidate.query(`listen "${CHANNEL}"`);
     client = candidate;
     retry = 0;
     startPing(candidate);

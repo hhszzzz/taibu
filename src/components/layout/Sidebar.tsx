@@ -25,7 +25,7 @@ import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButt
 import { VersionChip } from '@/components/layout/VersionChip';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { getSidebarNavItems, getSidebarToolItems, type NavItemDef } from '@/lib/navigation/registry';
+import { getSidebarNavItems, getSidebarToolItems, toFeatureId, type NavItemDef } from '@/lib/navigation/registry';
 import { resolveSidebarPinnedIds, useSidebarPins } from '@/lib/navigation/sidebar-pins';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
@@ -195,7 +195,7 @@ function SidebarInner() {
 
     // 根据 feature toggle 过滤导航项
     const filteredNavItems = useMemo(() => navItems
-        .filter((item) => isFeatureEnabled(item.id)), [isFeatureEnabled]);
+        .filter((item) => isFeatureEnabled(toFeatureId(item.id))), [isFeatureEnabled]);
 
     // 固定项（含默认固定的日运 / 月运）按 registry 固定顺序展示；
     // 当前页属于未固定占术时临时追加，不改变其余项的相对顺序。
@@ -214,7 +214,7 @@ function SidebarInner() {
 
     // 所有入口都展示；未登录时点开需要账号的页面会先提示登录。
     const filteredToolItems = useMemo(() => toolItems
-        .filter((item) => item.id !== 'chat' && isFeatureEnabled(item.id)), [isFeatureEnabled]);
+        .filter((item) => item.id !== 'chat' && isFeatureEnabled(toFeatureId(item.id))), [isFeatureEnabled]);
 
     if (isNavLoading) {
         return <SidebarSkeleton />;

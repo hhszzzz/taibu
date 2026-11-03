@@ -174,8 +174,8 @@ function DonutChart({ elements, favorableElement, interactions }: DonutProps) {
 
       {/* 相克 dashed red lines across the donut */}
       {keInteractions.map((inter, idx) => {
-        const fromA = midAngles[inter.from];
-        const toA = midAngles[inter.to];
+        const fromA = inter.from ? midAngles[inter.from] : undefined;
+        const toA = inter.to ? midAngles[inter.to] : undefined;
         if (fromA === undefined || toA === undefined) return null;
         const p1 = polarToCartesian(CX, CY, (INNER_R + OUTER_R) / 2, fromA);
         const p2 = polarToCartesian(CX, CY, (INNER_R + OUTER_R) / 2, toA);
@@ -351,8 +351,8 @@ function WuxingEnergyChartInner({ data, compact = false }: WuxingEnergyChartProp
                     backgroundColor: isKe ? 'rgba(239,68,68,0.05)' : 'rgba(34,197,94,0.05)',
                   }}
                 >
-                  <span style={{ color: WUXING_COLORS[inter.from] }}>
-                    {ELEMENT_CN[inter.from] ?? inter.from}
+                  <span style={{ color: inter.from ? WUXING_COLORS[inter.from] : undefined }}>
+                    {inter.from ? (ELEMENT_CN[inter.from] ?? inter.from) : null}
                   </span>
                   <span
                     className="font-medium"
@@ -360,11 +360,13 @@ function WuxingEnergyChartInner({ data, compact = false }: WuxingEnergyChartProp
                   >
                     {inter.type}
                   </span>
-                  <span style={{ color: WUXING_COLORS[inter.to] }}>
-                    {ELEMENT_CN[inter.to] ?? inter.to}
+                  <span style={{ color: inter.to ? WUXING_COLORS[inter.to] : undefined }}>
+                    {inter.to ? (ELEMENT_CN[inter.to] ?? inter.to) : null}
                   </span>
                   {inter.impact && (
-                    <span className="text-foreground-secondary ml-1">| {inter.impact}</span>
+                    <span className="text-foreground-secondary ml-1">
+                      {(inter.from || inter.to || inter.type) ? '| ' : ''}{inter.impact}
+                    </span>
                   )}
                 </div>
               );

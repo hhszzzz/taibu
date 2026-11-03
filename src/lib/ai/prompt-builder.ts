@@ -21,6 +21,7 @@ import {
     buildVisualizationPreferencePrompts,
     buildVisualizationPromptSection,
 } from '@/lib/visualization/prompt';
+import { VISUALIZATION_OUTPUT_ENABLED } from '@/lib/visualization/output-switch';
 import { formatPreviousChartsForPrompt, type ExtractedChart } from '@/lib/visualization/chart-data-extract';
 import { serializeMessageQuotes, type MessageQuote } from '@/lib/chat/quotes';
 import { sentAtLine } from './prompt-time';
@@ -509,7 +510,7 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
             visualizationPrompts.chartStylePrompt,
         );
     }
-    if (context.chartContext || vizSettings || context.dreamMode?.enabled || hasVisualizationMentions(context.mentions)) {
+    if (VISUALIZATION_OUTPUT_ENABLED && (vizSettings || hasVisualizationMentions(context.mentions))) {
         const allowedChartTypes = resolveAllowedChartTypes(context);
         tryInject(
             'visualization_output_contract',

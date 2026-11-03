@@ -14,6 +14,7 @@ import {
   type FortuneDimensionKey,
 } from '@/lib/visualization/dimensions';
 import { clearLocalVisualizationSettings, readLocalVisualizationSettings, type VisualizationChartStyle } from '@/lib/visualization/settings';
+import { VISUALIZATION_OUTPUT_ENABLED } from '@/lib/visualization/output-switch';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
@@ -394,6 +395,9 @@ function AccountAISettingsPanel() {
         </div>
 
         <div className="settings-form-body">
+          {!VISUALIZATION_OUTPUT_ENABLED && (
+            <p className="settings-help">图表输出已全局暂停，以下偏好目前只影响文字分析中的关注维度。</p>
+          )}
           <div className="settings-inline-row">
             <span>启用可视化偏好</span>
             <SettingsSwitch

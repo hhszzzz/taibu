@@ -32,6 +32,7 @@ import {
   DEFAULT_DIMENSIONS,
 } from '@/lib/visualization/dimensions';
 import { getDimensionColor } from '@/lib/visualization/chart-theme';
+import { ScoreBar } from '@/components/visualization/shared/ScoreBar';
 import type { LifeFortuneTrendData } from '@/lib/visualization/chart-types';
 
 // ===== Types =====
@@ -255,6 +256,39 @@ function TrendTooltip({
 
 // ===== Main Component =====
 
+/** 模型只给出每个大运一个综合分时的兜底：逐段显示分数与摘要，而不是整块报「数据不完整」。 */
+function OverallPeriodList({ periods }: { periods: LifeFortuneTrendData['data']['periods'] }) {
+  const maxScore = Math.max(...periods.map((period) => period.overall ?? 0));
+  const scale = maxScore > 0 && maxScore <= 10 ? 10 : 1;
+  return (
+    <div className="space-y-2">
+      {periods.map((period, index) => {
+        const score = Math.max(0, Math.min(100, Math.round((period.overall ?? 0) * scale)));
+        return (
+          <div
+            key={`${period.label}-${index}`}
+            className="rounded-xl border border-[var(--color-border)]/50 bg-[var(--color-background-secondary)]/30 p-2.5"
+          >
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-medium text-[var(--color-foreground)]">{period.label}</span>
+              <span className="text-xs text-[var(--color-foreground-secondary)]">
+                {Number.isFinite(period.startAge) ? `${period.startAge}–${period.endAge}岁` : ''}
+              </span>
+              <span className="text-sm font-bold tabular-nums text-[var(--color-foreground)]">{score}</span>
+            </div>
+            <div className="mt-1.5">
+              <ScoreBar value={score} color="#D4AF37" height={6} showLabel={false} />
+            </div>
+            {period.summary ? (
+              <p className="mt-1.5 text-xs leading-relaxed text-[var(--color-foreground-secondary)]">{period.summary}</p>
+            ) : null}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function LifeFortuneTrendInner({
   data,
   compact = false,
@@ -338,6 +372,14 @@ function LifeFortuneTrendInner({
   );
 
   if (chartData.length === 0 || !hasRenderableScores) {
+    const overallPeriods = data.data.periods.filter((period) => isFiniteNumber(period.overall));
+    if (overallPeriods.length > 0) {
+      return (
+        <div ref={ref} className={`space-y-3 ${CHART_ENTRANCE_BASE} ${entered ? CHART_ENTRANCE_ACTIVE : ''}`}>
+          <OverallPeriodList periods={overallPeriods} />
+        </div>
+      );
+    }
     return <ChartEmpty message="图表评分数据不完整" />;
   }
 

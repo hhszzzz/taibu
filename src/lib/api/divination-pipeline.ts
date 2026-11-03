@@ -273,7 +273,7 @@ async function prepareInterpretAnalysis<T extends InterpretInput, TContext exten
       const chartTypes = typeof config.allowedChartTypes === 'function'
         ? config.allowedChartTypes(input, context)
         : config.allowedChartTypes;
-      return chartTypes?.length ? buildVisualizationPromptSection(chartTypes) : undefined;
+      return (chartTypes?.length ? buildVisualizationPromptSection(chartTypes) : '') || undefined;
     },
   });
 }

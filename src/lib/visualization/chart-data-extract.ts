@@ -10,6 +10,8 @@ import type {
     ChartType,
     FortuneRadarData,
     LifeFortuneTrendData,
+    WuxingElement,
+    WuxingEnergyData,
 } from '@/lib/visualization/chart-types';
 import { getDimensionConfig, normalizeDimensionKey } from '@/lib/visualization/dimensions';
 
@@ -18,6 +20,7 @@ const CHART_BLOCK_REGEX = /```chart\s*\n([\s\S]*?)```/g;
 type FortuneRadarPayload = FortuneRadarData['data'];
 type FortuneRadarScores = FortuneRadarPayload['scores'];
 type LifeFortuneTrendPayload = LifeFortuneTrendData['data'];
+type WuxingEnergyPayload = WuxingEnergyData['data'];
 type LifeFortuneTrendPeriod = LifeFortuneTrendPayload['periods'][number];
 type LifeFortuneTrendYearlyScore = NonNullable<LifeFortuneTrendPeriod['yearlyScores']>[number];
 type LifeFortuneTrendTurningDirection = LifeFortuneTrendPayload['lifeHighlight']['nextTurningPoint']['direction'];
@@ -200,6 +203,13 @@ export function normalizeChartData(chart: ChartData): ChartData {
         };
     }
 
+    if (chart.chartType === 'wuxing_energy') {
+        return {
+            ...chart,
+            data: normalizeWuxingEnergyData(data),
+        };
+    }
+
     return chart;
 }
 
@@ -236,6 +246,8 @@ function normalizeLifeFortuneTrendData(data: Record<string, unknown>): LifeFortu
         rawTurningPoint?.direction === 'up' || rawTurningPoint?.direction === 'down'
         ? rawTurningPoint.direction
         : undefined;
+    // 模型偶尔把 lifeHighlight 写成一句话；放进「当前状态」，而不是整张图报错。
+    const highlightText = typeof data.lifeHighlight === 'string' ? data.lifeHighlight.trim() : '';
 
     return {
         ...data,
@@ -248,7 +260,7 @@ function normalizeLifeFortuneTrendData(data: Record<string, unknown>): LifeFortu
                 ages: normalizeString(rawBestPeriod?.ages),
                 reason: normalizeString(rawBestPeriod?.reason),
             },
-            currentStatus: normalizeString(rawLifeHighlight?.currentStatus),
+            currentStatus: normalizeString(rawLifeHighlight?.currentStatus, highlightText),
             nextTurningPoint: {
                 age: normalizedTurningAge ?? Number.NaN,
                 direction: normalizedDirection ?? 'up',
@@ -267,19 +279,17 @@ function normalizeLifeFortuneTrendPeriod(
     if (!period) return null;
 
     const scores = normalizeNumericDimensionScores(period.scores);
-    if (Object.keys(scores).length === 0) {
-        return null;
-    }
-
+    const overall = normalizeScore(period.overall ?? period.score);
     const yearlyScores = normalizeYearlyScores(period.yearlyScores);
+    const parsedAgeRange = parseAgeRange(period.ageRange ?? period.age ?? period.ages);
     const inferredStartAge = yearlyScores[0]?.age;
     const inferredEndAge = yearlyScores[yearlyScores.length - 1]?.age;
     const normalizedAgeRange = normalizeAscendingPair(
-        toFiniteNumber(period.startAge) ?? inferredStartAge,
-        toFiniteNumber(period.endAge) ?? inferredEndAge,
+        toFiniteNumber(period.startAge) ?? parsedAgeRange?.[0] ?? inferredStartAge,
+        toFiniteNumber(period.endAge) ?? parsedAgeRange?.[1] ?? inferredEndAge,
     );
 
-    if (!normalizedAgeRange && yearlyScores.length === 0) {
+    if (Object.keys(scores).length === 0 && overall == null && !normalizedAgeRange && yearlyScores.length === 0) {
         return null;
     }
 
@@ -300,17 +310,122 @@ function normalizeLifeFortuneTrendPeriod(
         ?? Number.NaN;
 
     return {
-        label: normalizeString(period.label, `阶段${index + 1}`),
+        label: normalizeString(period.label ?? period.name, `阶段${index + 1}`),
         startAge,
         endAge,
         startYear,
         endYear,
         scores,
-        summary: normalizeString(period.summary),
+        overall,
+        summary: normalizeString(period.summary ?? period.description ?? period.desc),
         highlights: normalizeStringArray(period.highlights),
         warnings: normalizeStringArray(period.warnings),
         yearlyScores,
     };
+}
+
+/** 解析「22-31」「22–31岁」「22至31」这类大运年龄段。 */
+function parseAgeRange(value: unknown): readonly [number, number] | undefined {
+    if (typeof value !== 'string') return undefined;
+    const match = /(\d+)\s*(?:[-–—~至到]|岁\s*[-–—~至到])\s*(\d+)/u.exec(value);
+    if (!match) return undefined;
+    return normalizeAscendingPair(Number(match[1]), Number(match[2]));
+}
+
+const WUXING_KEYS: WuxingElement[] = ['wood', 'fire', 'earth', 'metal', 'water'];
+const WUXING_KEY_BY_LABEL: Record<string, WuxingElement> = {
+    木: 'wood', 火: 'fire', 土: 'earth', 金: 'metal', 水: 'water',
+    wood: 'wood', fire: 'fire', earth: 'earth', metal: 'metal', water: 'water',
+};
+
+/** 兼容模型把 elements 写成 [{name,value}]、分数用汉字元素名或带注解的写法。 */
+function normalizeWuxingElementKey(value: unknown): WuxingElement | undefined {
+    if (typeof value !== 'string') return undefined;
+    const text = value.trim();
+    if (WUXING_KEY_BY_LABEL[text]) return WUXING_KEY_BY_LABEL[text];
+    const head = text.charAt(0);
+    return WUXING_KEY_BY_LABEL[head];
+}
+
+function normalizeWuxingEnergyData(data: Record<string, unknown>): WuxingEnergyPayload {
+    const raw = data.elements;
+    const strengths = new Map<WuxingElement, number>();
+    const levels = new Map<WuxingElement, string>();
+    const stars = new Map<WuxingElement, string[]>();
+
+    if (Array.isArray(raw)) {
+        for (const item of raw) {
+            const record = asRecord(item);
+            if (!record) continue;
+            const key = normalizeWuxingElementKey(record.name ?? record.element ?? record.key);
+            const strength = normalizeScore(record.strength ?? record.value ?? record.score);
+            if (!key || strength == null) continue;
+            strengths.set(key, strength);
+            const level = normalizeString(record.level);
+            if (level) levels.set(key, level);
+            const normalizedStars = normalizeStringArray(record.stars);
+            if (normalizedStars.length > 0) stars.set(key, normalizedStars);
+        }
+    } else {
+        const record = asRecord(raw);
+        if (record) {
+            for (const [rawKey, rawValue] of Object.entries(record)) {
+                const key = normalizeWuxingElementKey(rawKey);
+                if (!key) continue;
+                const value = asRecord(rawValue);
+                const strength = normalizeScore(value?.strength ?? value?.value ?? value?.score ?? rawValue);
+                if (strength == null) continue;
+                strengths.set(key, strength);
+                const level = normalizeString(value?.level);
+                if (level) levels.set(key, level);
+                const normalizedStars = normalizeStringArray(value?.stars);
+                if (normalizedStars.length > 0) stars.set(key, normalizedStars);
+            }
+        }
+    }
+
+    const total = [...strengths.values()].reduce((sum, value) => sum + value, 0);
+    const elements = Object.fromEntries(WUXING_KEYS.map((key) => {
+        const strength = strengths.get(key) ?? 0;
+        const share = total > 0 ? strength / total : 0;
+        const level = levels.get(key) ?? (share >= 0.25 ? '旺' : share <= 0.1 ? '弱' : '平');
+        return [key, { strength, level, stars: stars.get(key) ?? [] }];
+    })) as WuxingEnergyPayload['elements'];
+
+    const strongest = [...strengths.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+    const weakest = [...strengths.entries()].sort((a, b) => a[1] - b[1])[0]?.[0];
+
+    return {
+        ...data,
+        elements,
+        favorableElement: normalizeWuxingElementKey(data.favorableElement) ?? strongest ?? 'wood',
+        unfavorableElement: normalizeWuxingElementKey(data.unfavorableElement) ?? weakest ?? 'wood',
+        advice: normalizeString(data.advice),
+        interactions: normalizeWuxingInteractions(data.interactions),
+    };
+}
+
+function normalizeWuxingInteractions(input: unknown): WuxingEnergyPayload['interactions'] {
+    if (!Array.isArray(input)) return [];
+    const result: WuxingEnergyPayload['interactions'] = [];
+    for (const item of input) {
+        if (typeof item === 'string') {
+            const impact = item.trim();
+            if (impact) result.push({ impact });
+            continue;
+        }
+        const record = asRecord(item);
+        if (!record) continue;
+        const impact = normalizeString(record.impact ?? record.description ?? record.detail);
+        if (!impact) continue;
+        result.push({
+            from: normalizeWuxingElementKey(record.from),
+            to: normalizeWuxingElementKey(record.to),
+            type: normalizeString(record.type),
+            impact,
+        });
+    }
+    return result;
 }
 
 function normalizeRadarScores(input: unknown): FortuneRadarScores {
@@ -344,7 +459,7 @@ function normalizeNumericDimensionScores(input: unknown): LifeFortuneTrendPeriod
         const key = normalizeDimensionKey(rawKey);
         if (!key) continue;
 
-        const score = normalizeScore(rawValue);
+        const score = normalizeScore(asRecord(rawValue)?.score ?? rawValue);
         if (score == null) continue;
         result[key] = score;
     }

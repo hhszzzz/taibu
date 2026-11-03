@@ -4,33 +4,97 @@ import {
     formatChartStyleLabel,
     formatVisualizationDimensions,
 } from '@/lib/visualization/settings';
+import { VISUALIZATION_OUTPUT_ENABLED } from '@/lib/visualization/output-switch';
 
 interface ChartPromptHint {
     label: string;
     when: string;
-    data: string;
+    /** data 的紧凑 JSON 骨架：模型按这个结构填，字段名不得改写。 */
+    schema: string;
 }
+
+/** 图表输出总开关在 output-switch.ts 中维护，客户端设置面板只引用它，不打包整份提示词。 */
 
 /**
  * 一种可视化体系：内置图表模板（```chart，模型只写 JSON）与沙箱 HTML（```visual）。
  * 这里的提示同时供普通对话、各占术解读和 Agent 使用，类型说明只维护这一份。
  */
 export const CHART_PROMPT_HINTS: Record<ChartType, ChartPromptHint> = {
-    life_fortune_trend: { label: '大运趋势', when: '展示大运/流年走势。', data: 'currentAge、currentYear、periods、lifeHighlight。' },
-    fortune_radar: { label: '运势雷达', when: '展示当前多维评分。', data: 'period、scores、overallScore、overallLabel、topAdvice。' },
-    fortune_calendar: { label: '运势日历', when: '展示月度/年度运势热力图。', data: 'year、month、days（每日 overallScore + level）、monthSummary。' },
-    wuxing_energy: { label: '五行能量', when: '展示五行能量分布。', data: 'elements、favorableElement、unfavorableElement、advice、interactions。' },
-    life_timeline: { label: '人生时间轴', when: '展示人生关键节点。', data: 'currentAge、milestones。' },
-    compatibility_gauge: { label: '合婚仪表', when: '展示关系兼容度。', data: 'overallScore、overallLabel、dimensions、highlights、challenges、advice。' },
-    divination_verdict: { label: '占卜结论', when: '展示占卜吉凶判断。', data: 'verdict、verdictScore、confidence、question、keyFactors、actionAdvice。' },
-    mbti_spectrum: { label: 'MBTI 光谱', when: '展示 MBTI 性格分析。', data: 'type、typeName、dimensions（EI/SN/TF/JP）、traits。' },
-    tarot_elements: { label: '塔罗元素', when: '展示塔罗元素能量分布。', data: 'elements（fire/water/air/earth）、keywords、positions、coreCard。' },
-    personality_petal: { label: '人格花瓣', when: '展示人格特质。', data: 'traits、topTraits、summary。' },
-    yearly_sparklines: { label: '年度走势', when: '展示年度各维度月度走势。', data: 'year、dimensions（每个含 key、label、currentScore、monthlyScores）。' },
-    physiognomy_annotation: { label: '面相标注', when: '展示面相/手相特征标注。', data: 'type（face/palm）、annotations、overallAssessment。' },
-    fortune_comparison: { label: '运势对比', when: '展示两个时段的对比柱状图。', data: 'periodA、periodB、dimensions（含 scoreA/scoreB/change）、summary。' },
-    cross_system: { label: '多体系共识', when: '展示多体系共识分析。', data: 'systems、consensus、conflicts、overallAdvice。' },
-    dream_association: { label: '解梦关联', when: '展示解梦意象关联网络。', data: 'nodes、edges、coreInterpretation。' },
+    life_fortune_trend: {
+        label: '大运趋势',
+        when: '展示大运/流年走势。',
+        schema: '{"currentAge":24,"currentYear":2026,"periods":[{"label":"辛亥","startAge":23,"endAge":32,"startYear":2025,"endYear":2034,"scores":{"career":65,"wealth":58,"love":60,"health":55,"family":60,"windfall":40},"summary":"一句话","highlights":["…"],"warnings":["…"],"yearlyScores":[{"year":2026,"age":24,"overall":62}]}],"lifeHighlight":{"bestPeriod":{"label":"庚戌","ages":"33-42","reason":"…"},"currentStatus":"…","nextTurningPoint":{"age":33,"direction":"up","reason":"…"}}}',
+    },
+    fortune_radar: {
+        label: '运势雷达',
+        when: '展示当前多维评分。',
+        schema: '{"period":"2026年","scores":{"career":{"score":72,"label":"事业/学业","trend":"up"}},"previousScores":{"career":66},"overallScore":72,"overallLabel":"…","topAdvice":"…"}',
+    },
+    fortune_calendar: {
+        label: '运势日历',
+        when: '展示月度/年度运势热力图。',
+        schema: '{"year":2026,"month":11,"days":[{"date":1,"overallScore":70,"level":"吉","highlight":"…"}],"monthSummary":{"bestDays":[3],"cautionDays":[8],"luckyDayCount":10,"normalDayCount":18,"cautionDayCount":3}}',
+    },
+    wuxing_energy: {
+        label: '五行能量',
+        when: '展示五行能量分布。',
+        schema: '{"elements":{"wood":{"strength":40,"level":"旺","stars":[]},"fire":{"strength":14,"level":"平","stars":[]},"earth":{"strength":20,"level":"平","stars":[]},"metal":{"strength":10,"level":"弱","stars":[]},"water":{"strength":16,"level":"平","stars":[]}},"favorableElement":"fire","unfavorableElement":"wood","advice":"…","interactions":[{"from":"wood","to":"earth","type":"克","impact":"…"}]}',
+    },
+    life_timeline: {
+        label: '人生时间轴',
+        when: '展示人生关键节点。',
+        schema: '{"currentAge":24,"milestones":[{"age":18,"year":2020,"label":"…","type":"turning","icon":"…","summary":"…","detail":"…"}]}',
+    },
+    compatibility_gauge: {
+        label: '合婚仪表',
+        when: '展示关系兼容度。',
+        schema: '{"overallScore":74,"overallLabel":"…","dimensions":[{"key":"career","label":"事业","score":80,"detail":"…"}],"highlights":["…"],"challenges":["…"],"advice":"…"}',
+    },
+    divination_verdict: {
+        label: '占卜结论',
+        when: '展示占卜吉凶判断。',
+        schema: '{"verdict":"…","verdictScore":72,"confidence":"medium","question":"…","keyFactors":[{"factor":"…","impact":"positive","detail":"…"}],"timeline":[{"time":"…","event":"…","advice":"…"}],"actionAdvice":"…"}',
+    },
+    mbti_spectrum: {
+        label: 'MBTI 光谱',
+        when: '展示 MBTI 性格分析。',
+        schema: '{"type":"INTJ","typeName":"…","dimensions":{"EI":{"score":30,"direction":"I","label":"内向"},"SN":{"score":60,"direction":"N","label":"直觉"},"TF":{"score":70,"direction":"T","label":"思考"},"JP":{"score":40,"direction":"J","label":"判断"}},"traits":[{"trait":"…","description":"…"}],"cognitiveStack":["Ni","Te","Fi","Se"]}',
+    },
+    tarot_elements: {
+        label: '塔罗元素',
+        when: '展示塔罗元素能量分布。',
+        schema: '{"elements":{"fire":{"count":2,"percentage":40,"label":"火"},"water":{"count":1,"percentage":20,"label":"水"},"air":{"count":1,"percentage":20,"label":"风"},"earth":{"count":1,"percentage":20,"label":"土"}},"keywords":["…"],"positions":[{"position":"过去","card":"愚者","upright":true,"energy":70}],"coreCard":{"name":"…","meaning":"…"}}',
+    },
+    personality_petal: {
+        label: '人格花瓣',
+        when: '展示人格特质。',
+        schema: '{"traits":[{"key":"openness","label":"开放性","score":80,"description":"…"}],"topTraits":["…"],"summary":"…"}',
+    },
+    yearly_sparklines: {
+        label: '年度走势',
+        when: '展示年度各维度月度走势。',
+        schema: '{"year":2026,"dimensions":[{"key":"career","label":"事业/学业","currentScore":72,"trend":"up","monthlyScores":[60,62,65,68,70,72,70,68,66,70,73,75]}]}',
+    },
+    physiognomy_annotation: {
+        label: '面相标注',
+        when: '展示面相/手相特征标注。',
+        schema: '{"type":"face","annotations":[{"region":"…","label":"…","rating":"positive","position":{"x":50,"y":40},"detail":"…"}],"overallAssessment":"…"}',
+    },
+    fortune_comparison: {
+        label: '运势对比',
+        when: '展示两个时段的对比柱状图。',
+        schema: '{"periodA":{"label":"2026年","year":2026},"periodB":{"label":"2027年","year":2027},"dimensions":[{"key":"career","label":"事业/学业","scoreA":65,"scoreB":72,"change":"上升"}],"summary":"…"}',
+    },
+    cross_system: {
+        label: '多体系共识',
+        when: '展示多体系共识分析。',
+        schema: '{"systems":[{"name":"八字","scores":{"career":70,"wealth":60}}],"consensus":[{"dimension":"career","label":"事业/学业","agreement":80,"detail":"…"}],"overallAgreement":75,"advice":"…"}',
+    },
+    dream_association: {
+        label: '解梦关联',
+        when: '展示解梦意象关联网络。',
+        schema: '{"nodes":[{"id":"water","label":"水","meaning":"…","sentiment":"neutral","size":"medium"}],"edges":[{"from":"water","to":"fear","strength":60,"label":"…"}],"coreInterpretation":"…"}',
+    },
 };
 
 export const CHART_TYPE_ORDER: ChartType[] = [
@@ -79,6 +143,7 @@ export function buildVisualizationPreferencePrompts(settings?: VisualizationSett
  * `required` 显式覆盖是否要求至少输出一个内置图表（Agent 指令用可选）。
  */
 export function buildVisualizationPromptSection(allowedChartTypes: ChartType[] = [], options: { required?: boolean } = {}) {
+    if (!VISUALIZATION_OUTPUT_ENABLED) return '';
     const required = options.required ?? allowedChartTypes.length > 0;
     const types = allowedChartTypes.length > 0 ? allowedChartTypes : CHART_TYPE_ORDER;
     const lines: string[] = [];
@@ -87,10 +152,11 @@ export function buildVisualizationPromptSection(allowedChartTypes: ChartType[] =
     lines.push(required
         ? '分析中优先用内置图表展示最有价值的数据；有合适的内置类型时，至少输出一个 ```chart 代码块。'
         : '当分析适合用图表达时，输出 ```chart 代码块。');
-    lines.push('代码块内容是合法 JSON，格式为 {"chartType":"类型","title":"标题","data":{…}}，只用下列内置类型，并按各自的 data 结构填写：');
+    lines.push('代码块内容是合法 JSON，格式为 {"chartType":"类型","title":"标题","data":{…}}，只用下列内置类型，并按各自的 data 结构原样填写：');
     for (const type of types) {
         const hint = CHART_PROMPT_HINTS[type];
-        lines.push(`- ${type}（${hint.label}）：${hint.when}data 需包含 ${hint.data}`);
+        lines.push(`- ${type}（${hint.label}）：${hint.when}`);
+        lines.push(`  data: ${hint.schema}`);
     }
 
     lines.push(`chartType 只能取上面列出的值，不能自造（例如 network、bar）；哪一种都不合适时改用下面的 \`\`\`visual 或文字说明。${allowedChartTypes.length ? '' : `可用的 chartType：${CHART_TYPES.join('、')}。`}`);
@@ -106,5 +172,6 @@ export function buildVisualizationPromptSection(allowedChartTypes: ChartType[] =
 
 /** Agent 系统提示使用同一条可视化约定；回答完成后才渲染，正文负责说明图在讲什么。 */
 export function buildAgentVisualizationInstructions() {
+    if (!VISUALIZATION_OUTPUT_ENABLED) return '';
     return `需要图表时按下面的可视化约定输出；回答完成后才会渲染，正文里说明图在讲什么即可。\n${buildVisualizationPromptSection(CHART_TYPE_ORDER, { required: false })}`;
 }

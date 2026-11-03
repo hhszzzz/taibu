@@ -26,6 +26,8 @@ export interface LifeFortuneTrendData extends BaseChartData {
       startYear: number;
       endYear: number;
       scores: Partial<Record<FortuneDimensionKey, number>>;
+      /** 模型只给一个综合分、没有分维度分数时的兜底；渲染器用它画概览。 */
+      overall?: number;
       summary: string;
       highlights: string[];
       warnings: string[];
@@ -86,9 +88,10 @@ export interface WuxingElementData {
 }
 
 export interface WuxingInteraction {
-  from: WuxingElement;
-  to: WuxingElement;
-  type: string;
+  /** 兼容模型只写一句话的生克说明；缺省时只显示 impact。 */
+  from?: WuxingElement;
+  to?: WuxingElement;
+  type?: string;
   impact: string;
 }
 

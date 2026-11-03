@@ -248,3 +248,59 @@ test('parseChartSource keeps a legacy chart block that has no title', async () =
     assert.equal(chart?.chartType, 'fortune_radar');
     assert.equal(chart?.title, '');
 });
+
+test('normalizeChartData accepts wuxing elements written as [{name,value}]', async () => {
+    const { normalizeChartData } = await import('../lib/visualization/chart-data-extract');
+    const normalized = normalizeChartData({
+        chartType: 'wuxing_energy',
+        title: '五行',
+        data: {
+            elements: [
+                { name: '木', value: 40 },
+                { name: '火', value: 14 },
+                { name: '土', value: 20 },
+                { name: '金', value: 10 },
+                { name: '水', value: 16 },
+            ],
+            favorableElement: '火（用神·泄秀调候）',
+            unfavorableElement: '木（忌神·比劫）',
+            advice: '…',
+            interactions: ['寅卯辰三会木局：比劫成势'],
+        },
+    } as any);
+
+    const data = (normalized as any).data;
+    assert.equal(data.elements.wood.strength, 40);
+    assert.equal(data.elements.fire.strength, 14);
+    assert.equal(data.elements.metal.strength, 10);
+    assert.equal(data.favorableElement, 'fire');
+    assert.equal(data.unfavorableElement, 'wood');
+    assert.equal(data.elements.wood.level, '旺');
+    assert.deepEqual(data.interactions, [{ impact: '寅卯辰三会木局：比劫成势' }]);
+});
+
+test('normalizeChartData keeps life trend periods that only carry an overall score', async () => {
+    const { normalizeChartData } = await import('../lib/visualization/chart-data-extract');
+    const normalized = normalizeChartData({
+        chartType: 'life_fortune_trend',
+        title: '大运',
+        data: {
+            currentAge: 24,
+            currentYear: 2026,
+            parsed: true,
+            lifeHighlight: '22–31 庚申大限是变动中上位的十年',
+            periods: [
+                { age: '22-31', label: '庚申·破军禄', score: 72, desc: '变动开创期' },
+                { age: '32-41', label: '己未', score: 64, description: '宜守成' },
+            ],
+        },
+    } as any);
+
+    const data = (normalized as any).data;
+    assert.equal(data.periods.length, 2);
+    assert.deepEqual([data.periods[0].startAge, data.periods[0].endAge], [22, 31]);
+    assert.equal(data.periods[0].overall, 72);
+    assert.equal(data.periods[0].summary, '变动开创期');
+    assert.equal(data.periods[1].summary, '宜守成');
+    assert.equal(data.lifeHighlight.currentStatus, '22–31 庚申大限是变动中上位的十年');
+});

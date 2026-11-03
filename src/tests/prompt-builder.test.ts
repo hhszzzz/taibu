@@ -398,7 +398,7 @@ test('buildPromptWithSources should include visualization preference instruction
     assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'visualization_chart_style' && layer.included));
 });
 
-test('buildPromptWithSources injects chart contract for mention-driven analysis', async () => {
+test('buildPromptWithSources does not force a chart contract for mention-driven analysis', async () => {
     const pb = require('../lib/ai/prompt-builder') as any;
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
@@ -416,21 +416,17 @@ test('buildPromptWithSources injects chart contract for mention-driven analysis'
         userSettings: { expressionStyle: 'direct', userProfile: {}, customInstructions: '' },
     });
 
-    assert.ok(res.systemPrompt.includes('```chart'));
-    assert.ok(res.systemPrompt.includes('{"chartType":"类型","title":"标题","data":{…}}'));
-    // The same section offers the sandboxed HTML fallback.
-    assert.ok(res.systemPrompt.includes('```visual'));
-    assert.ok(res.systemPrompt.includes('64 KB'));
-    // Dynamic chart type: tarot mention → tarot_elements hint
-    assert.ok(res.systemPrompt.includes('tarot_elements'));
+    // 图表输出全局暂停：即使消息里提到可视化或带有记录，也不注入 ```chart 约定。
+    assert.ok(!res.systemPrompt.includes('```chart'));
+    assert.ok(!res.systemPrompt.includes('```visual'));
     assert.ok(
-        res.diagnostics.some(
+        !res.diagnostics.some(
             (layer: { id: string; included: boolean }) => layer.id === 'visualization_output_contract' && layer.included,
         ),
     );
 });
 
-test('buildPromptWithSources includes relevant chart types based on bazi chart context', async () => {
+test('buildPromptWithSources does not add chart types just because a bazi chart is in context', async () => {
     const pb = require('../lib/ai/prompt-builder') as any;
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
@@ -441,10 +437,10 @@ test('buildPromptWithSources includes relevant chart types based on bazi chart c
         chartContext: { baziChart: buildMinimalBaziChart() },
     });
 
-    // Bazi chart context → life_fortune_trend, fortune_radar, wuxing_energy hints
-    assert.ok(res.systemPrompt.includes('life_fortune_trend'));
-    assert.ok(res.systemPrompt.includes('fortune_radar'));
-    assert.ok(res.systemPrompt.includes('wuxing_energy'));
+    // 命盘上下文只提供分析数据，不再规定必须输出图表。
+    assert.ok(!res.systemPrompt.includes('life_fortune_trend'));
+    assert.ok(!res.systemPrompt.includes('fortune_radar'));
+    assert.ok(!res.systemPrompt.includes('wuxing_energy'));
 });
 
 test('buildPromptWithSources should enrich ziwei chart data from base birth info before rendering canonical text', async () => {
@@ -513,7 +509,7 @@ test('buildPromptWithSources does not token-truncate selected chart context when
     assert.ok(!res.systemPrompt.includes('# 八字命盘'));
 });
 
-test('buildPromptWithSources includes dream_association for dream mode', async () => {
+test('buildPromptWithSources keeps dream mode analysis without forcing a chart', async () => {
     const pb = require('../lib/ai/prompt-builder') as any;
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
@@ -524,7 +520,9 @@ test('buildPromptWithSources includes dream_association for dream mode', async (
         dreamMode: { enabled: true, baziText: '命盘文本', fortuneText: '运势文本' },
     });
 
-    assert.ok(res.systemPrompt.includes('dream_association'));
+    assert.ok(res.systemPrompt.includes('命盘文本'));
+    assert.ok(!res.systemPrompt.includes('dream_association'));
+    assert.ok(!res.systemPrompt.includes('```chart'));
 });
 
 test('resolvePersonalities selects dream and mangpai correctly', () => {

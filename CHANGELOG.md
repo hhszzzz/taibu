@@ -15,6 +15,7 @@
 
 - **图表渲染**：模型返回的五行能量、大运趋势等图表如果字段形状与模板不同，不再显示不完整；渲染器兼容数组式五行、简化的大运数据，历史图表也能正常展示。([84052bc](https://github.com/hhszzzz/taibu/commit/84052bc8e0844ab944d74beb7064457cd728f0ac))
 - **Agent 通知**：修正数据库监听通道名未加引号导致的 PostgreSQL 语法错误，Agent 事件订阅不再反复报错。([7f7d70a](https://github.com/hhszzzz/taibu/commit/7f7d70a86762b7862207cae7b1b874bda501bbba))
+- **输入框菜单**：普通对话的「+」菜单只保留可直接使用的项目，技能与连接器只在 Agent 对话中显示，避免点选后才发现不可用。([a0aa982](https://github.com/hhszzzz/taibu/commit/a0aa982b564723cbbcfe269eb23a190c824ff71c))
 
 ### 调整
 

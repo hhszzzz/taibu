@@ -449,16 +449,65 @@ html {
 }
 
 /* ===== 动画 ===== */
-@keyframes toastIn {
-  from { opacity: 0; transform: translateY(8px) scale(.98); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+@keyframes toast-in {
+  from { opacity: 0; translate: 0 16px; }
+  to { opacity: 1; translate: 0 0; }
 }
-.toast-item { animation: toastIn .18s cubic-bezier(.165, .84, .44, 1); }
-/* 离开时淡出并略微下沉、缩小，播完才从堆叠里移除（Toast.tsx），其余提示随后滑到新位置。 */
-.toast-item[data-leaving] { animation: motion-dialog-out var(--duration-snap) var(--ease-out) forwards; pointer-events: none; }
+@keyframes toast-out {
+  from { opacity: 1; translate: 0 0; scale: 1; }
+  to { opacity: 0; translate: 0 6px; scale: .98; }
+}
+.toast-viewport {
+  height: var(--toast-expanded-height);
+  /* 顶部留足空间，避免收起时裁到仍在移动的卡片。 */
+  clip-path: inset(-100vh -24px -24px -24px);
+}
+.toast-position {
+  height: var(--toast-height);
+  transform: translateY(calc(-1 * var(--toast-expanded-offset)));
+  transform-origin: top center;
+  transition: transform var(--duration-sheet) var(--ease-snap);
+}
+.toast-item {
+  animation: toast-in var(--duration-sheet) var(--ease-snap) backwards;
+  transition: box-shadow var(--duration-base) var(--ease-out);
+}
+.toast-position[data-leaving] { pointer-events: none; }
+.toast-item[data-leaving] { animation: toast-out var(--duration-base) var(--ease-out) forwards; }
+.toast-content {
+  opacity: 1;
+  visibility: visible;
+  transition: opacity .16s var(--ease-out) 60ms, visibility 0s linear 60ms;
+}
 /* 手机底部导航占位：提示条整体上移，避免盖住导航。 */
 @media (max-width: 1023px) { .app-toast-stack { bottom: calc(5rem + var(--sab)); } }
-@media (prefers-reduced-motion: reduce) { .toast-item { animation: none; } }
+/* 桌面端只展开最新卡片，旧卡片露出 10px；触屏始终保持完整列表。 */
+@media (hover: hover) {
+  .app-toast-stack:not([data-expanded]):not(:focus-within) .toast-viewport {
+    height: var(--toast-collapsed-height);
+    clip-path: inset(-100vh -24px 0 -24px);
+  }
+  .app-toast-stack[data-single]:not([data-expanded]):not(:focus-within) .toast-viewport { clip-path: inset(-100vh -24px -24px -24px); }
+  .app-toast-stack:not([data-expanded]):not(:focus-within) .toast-position {
+    transform: translateY(calc(-1 * var(--toast-collapsed-offset)));
+  }
+  .app-toast-stack:not([data-expanded]):not(:focus-within) .toast-position:not(:first-child) {
+    transform: translateY(calc(-1 * var(--toast-collapsed-offset))) scale(var(--toast-scale));
+    pointer-events: none;
+  }
+  .app-toast-stack:not([data-expanded]):not(:focus-within) .toast-position:not(:first-child) .toast-item {
+    box-shadow: inset 0 0 0 var(--ring-outer) var(--ring-color);
+  }
+  .app-toast-stack:not([data-expanded]):not(:focus-within) .toast-position:not(:first-child) .toast-content {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity .08s var(--ease-out), visibility 0s linear 80ms;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .toast-item { animation: none; }
+  .toast-viewport, .toast-position, .toast-content { transition: none; }
+}
 
 @keyframes pulse {
 

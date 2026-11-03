@@ -38,8 +38,11 @@ export interface ModelSettingsProps {
   onCollaboratorsChange?: (members: AgentCollaborator[]) => void;
   codeMode?: boolean;
   onCodeModeChange?: (enabled: boolean) => void;
+  /** 管理员关闭对应能力范围后为 false；未加载时为 undefined。 */
+  codeModeAvailable?: boolean;
   planMode?: boolean;
   onPlanModeChange?: (enabled: boolean) => void;
+  planModeAvailable?: boolean;
   approval?: AgentApprovalMode;
   onApprovalChange?: (mode: AgentApprovalMode) => void;
 }

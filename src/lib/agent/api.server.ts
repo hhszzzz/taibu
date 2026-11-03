@@ -8,7 +8,7 @@ import { systemDb } from "@/lib/db/context.server";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
 import { subscribeAgentTextDelta } from "./tail-bus.server";
 import { getGlobalAIFeatureGuardResponse } from "@/lib/api/ai-feature-guard";
-import { getByokPolicy, readFeatureModuleStateFresh } from "@/lib/app-settings";
+import { getByokPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from "@/lib/app-settings";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { isChatAttachment } from "@/lib/ai/document-formats";
 import { resolveUserTimeZone } from "@/lib/ai/prompt-time";
@@ -213,11 +213,17 @@ export async function agentCapabilities(request: NextRequest) {
     // A configuration that cannot be read does not advertise network access.
     mcpAvailable = searchAvailable = false;
   }
+  const [codeScope, planScope] = await Promise.all([
+    readFeatureModuleStateFresh(toAgentToolScopeFeatureId("code")),
+    readFeatureModuleStateFresh(toAgentToolScopeFeatureId("plan")),
+  ]);
   return jsonOk({
     enabled: state.status === "enabled",
     ready: state.status === "enabled" && (await store.workerReady()),
     webAvailable: searchAvailable || mcpAvailable,
     plainWebAvailable: searchAvailable,
+    codeModeAvailable: codeScope.status === "enabled",
+    planModeAvailable: planScope.status === "enabled",
   });
 }
 

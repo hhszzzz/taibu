@@ -150,7 +150,7 @@ export function FeatureTogglePanel() {
             <div className="mt-4 space-y-3">
                 <div>
                     <h3 className="text-sm font-medium text-foreground">Agent 工具范围</h3>
-                    <p className="mt-1 text-xs text-foreground-secondary">这些开关只影响 Agent 使用工具，不会隐藏用户页面。关闭后工具仍会保留在模型上下文中，但调用会返回可修正的权限错误。</p>
+                    <p className="mt-1 text-xs text-foreground-secondary">这些开关只影响 Agent 使用工具，不会隐藏用户页面。关闭后工具仍会保留在模型上下文中，但调用会返回可修正的权限错误。「代码模式」「计划模式」关闭后，输入框不再提供该模式，已保存的开关也会失效。</p>
                 </div>
                 {scopeState.error ? (
                     <div role="alert" className="settings-alert">

@@ -148,6 +148,7 @@ export function ChatComposer({
     reasoningEnabled = false,
     onReasoningChange,
     reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange, planMode, onPlanModeChange,
+    codeModeAvailable, planModeAvailable,
     approval, onApprovalChange,
     userId,
     attachmentState,
@@ -790,8 +791,10 @@ export function ChatComposer({
                     onCollaboratorsChange={onCollaboratorsChange}
                     codeMode={codeMode}
                     onCodeModeChange={onCodeModeChange}
+                    codeModeAvailable={codeModeAvailable}
                     planMode={planMode}
                     onPlanModeChange={onPlanModeChange}
+                    planModeAvailable={planModeAvailable}
                     approval={approval}
                     onApprovalChange={onApprovalChange}
                     contextData={contextData}

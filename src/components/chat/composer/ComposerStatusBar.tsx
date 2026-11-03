@@ -35,11 +35,15 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
 
     return (
         <div className="chat-composer-toolbar chat-composer-statusbar">
-            {/* 运行模式固定在 chin 行左端（原「+」的位置）：一个按钮打开弹窗选择默认 / 计划 / 代码。 */}
-            {agentMode && props.onPlanModeChange && props.onCodeModeChange && (
+            {/* 运行模式固定在 chin 行左端（原「+」的位置）：一个按钮打开弹窗选择默认 / 计划 / 代码。
+                管理员把计划与代码都关掉后不再显示入口。 */}
+            {agentMode && props.onPlanModeChange && props.onCodeModeChange
+                && (props.planModeAvailable !== false || props.codeModeAvailable !== false) && (
                 <AgentModeMenu
                     planMode={!!props.planMode}
                     codeMode={!!props.codeMode}
+                    planModeAvailable={props.planModeAvailable !== false}
+                    codeModeAvailable={props.codeModeAvailable !== false}
                     disabled={disabled}
                     onPlanModeChange={props.onPlanModeChange}
                     onCodeModeChange={props.onCodeModeChange}

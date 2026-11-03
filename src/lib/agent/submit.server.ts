@@ -2,7 +2,7 @@ import "server-only";
 import { createHash, randomUUID } from "node:crypto";
 import type { ScopedDb } from "@/lib/db/context.server";
 import { systemDb } from "@/lib/db/context.server";
-import { getByokPolicy, readFeatureModuleStateFresh } from "@/lib/app-settings";
+import { getByokPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from "@/lib/app-settings";
 import { BYOK_KEY_MAX, isByokRef } from "@/lib/byok/config";
 import { byokAgentConfig } from "@/lib/byok/agent.server";
 import { sealByokRunKeys } from "@/lib/byok/secrets.server";
@@ -118,6 +118,13 @@ export async function submitAgentTask(
   if (chatState.status === "unavailable") throw new AgentApiError("AI 功能状态暂时无法确认", 503, "FEATURE_STATE_UNAVAILABLE");
   if ((await readFeatureModuleStateFresh("agent")).status !== "enabled")
     throw new AgentApiError("Agent 功能未启用", 403, "FEATURE_DISABLED");
+  // 管理员关掉「代码模式」「计划模式」后，即使客户端仍带着旧配置也不再启用。
+  const [codeScope, planScope] = await Promise.all([
+    readFeatureModuleStateFresh(toAgentToolScopeFeatureId("code")),
+    readFeatureModuleStateFresh(toAgentToolScopeFeatureId("plan")),
+  ]);
+  const codeModeEnabled = codeScope.status === "enabled";
+  const planModeEnabled = planScope.status === "enabled";
   const compact = origin === "http" ? parseAgentCompactCommand(body.message.content) : null;
   const store = new AgentStore(systemDb());
   if (body.imageModel !== undefined && (typeof body.imageModel !== "string" || !body.imageModel || body.imageModel.length > 200))
@@ -315,8 +322,8 @@ export async function submitAgentTask(
     collaborators,
     // A compaction calls no tools: it only summarizes the context.
     webEnabled: !compact && body.webEnabled !== false,
-    codeMode: !compact && body.codeMode,
-    planMode: !compact && body.planMode,
+    codeMode: !compact && body.codeMode && codeModeEnabled,
+    planMode: !compact && body.planMode && planModeEnabled,
     approval: body.approval,
     ...(compact ? { compact } : {}),
     systemPrompt: prepared.systemPrompt,

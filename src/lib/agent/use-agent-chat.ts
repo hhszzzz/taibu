@@ -23,6 +23,9 @@ type AgentCapabilities = {
   webAvailable: boolean;
   /** Plain chat can search the web; reported here because every chat already polls this status. */
   plainWebAvailable: boolean;
+  /** 管理员关闭「代码模式」「计划模式」后，客户端不再提供对应选项；未加载时为空。 */
+  codeModeAvailable?: boolean;
+  planModeAvailable?: boolean;
 };
 const NO_CAPABILITIES: AgentCapabilities = {
   enabled: false,
@@ -48,6 +51,9 @@ export function useAgentChat(
   const [codeMode, setCodeMode] = useState(false);
   const [planMode, setPlanMode] = useState(false);
   const [approval, setApproval] = useState<AgentApprovalMode>('auto');
+  // 管理员随时可能关掉某种运行模式：旧对话里保存的开关也要跟着关闭。
+  if (capabilities.codeModeAvailable === false && codeMode) setCodeMode(false);
+  if (capabilities.planModeAvailable === false && planMode) setPlanMode(false);
   useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode, planMode, approval }, value => {
     state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode); setApproval(value.approval);
   });

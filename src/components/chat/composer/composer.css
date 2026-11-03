@@ -114,6 +114,9 @@
 .chat-run-mode-trigger { height: 24px; border-radius: 6px; padding: 0 8px; }
 .chat-run-mode-trigger > span { font-size: calc(13 / 16 * 1rem); font-weight: 500; }
 .chat-run-mode-trigger > svg:last-child { margin-left: -2px; opacity: .7; }
+/* 计划/代码模式下紧挨着模式键的关闭入口：一键回到默认模式。 */
+.chat-run-mode-close { width: 24px; height: 24px; justify-content: center; padding: 0; color: var(--foreground-tertiary); }
+.chat-run-mode-close:hover:not(:disabled) { color: var(--foreground); }
 /* 两三个短词的弹窗，收紧内边距和行高，不必撑成默认菜单的尺寸。 */
 .chat-run-mode-menu [role="menuitemradio"] { min-height: 28px; padding-inline: .5rem; }
 .chat-tool-button, .chat-tool-text, .chat-model-trigger, .chat-context-meter { flex-shrink: 0; height: 32px; border-radius: 8px; transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }

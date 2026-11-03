@@ -63,6 +63,7 @@ export const AGENT_TOOL_SCOPE_DEFINITIONS = [
   { id: 'archive', label: '档案写入', description: '记录用户事件或生成档案保存卡片。' },
   { id: 'collaboration', label: 'Agent 协作', description: '并行分析和后台子分析。' },
   { id: 'code', label: '代码模式', description: '允许 Agent 使用脚本批量调用工具。' },
+  { id: 'plan', label: '计划模式', description: '允许 Agent 先提交分析计划，经用户批准后再执行。' },
 ] as const;
 
 export type AgentToolScopeId = (typeof AGENT_TOOL_SCOPE_DEFINITIONS)[number]['id'];
@@ -117,6 +118,7 @@ export function getAgentToolScope(name: string): AgentToolScopeId | null {
   if (name === AGENT_ARCHIVE_TOOLS.record || name === AGENT_ARCHIVE_TOOLS.propose) return 'archive';
   if (name === 'parallel_analysis' || name === AGENT_BACKGROUND_TOOL) return 'collaboration';
   if (name === AGENT_CODEMODE_TOOL) return 'code';
+  if (name === AGENT_SUBMIT_PLAN_TOOL) return 'plan';
   return null;
 }
 

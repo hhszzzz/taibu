@@ -28,7 +28,7 @@ test('knowledge and web tools serve every member; networking still follows the t
 test('administrator Agent scope switches block tool execution before the provider is called', async t => {
   const settings = require('../lib/app-settings') as typeof import('../lib/app-settings');
   t.mock.method(settings, 'readFeatureModuleStateFresh', async (featureId: string) => ({
-    status: featureId === 'agent-tool:bazi' || featureId === 'agent-tool:web' ? 'disabled' as const : 'enabled' as const,
+    status: ['agent-tool:bazi', 'agent-tool:web', 'agent-tool:code', 'agent-tool:plan'].includes(featureId) ? 'disabled' as const : 'enabled' as const,
   }));
   const run = row();
 
@@ -39,6 +39,15 @@ test('administrator Agent scope switches block tool execution before the provide
   await assert.rejects(
     assertAgentToolAccess(new MemoryStore(), run, 'web_search', {}),
     /Agent 工具范围已关闭：联网与 MCP/,
+  );
+  // A task that started before the administrator closed a run mode cannot keep using its tool.
+  await assert.rejects(
+    assertAgentToolAccess(new MemoryStore(), run, 'codemode', {}),
+    /Agent 工具范围已关闭：代码模式/,
+  );
+  await assert.rejects(
+    assertAgentToolAccess(new MemoryStore(), run, 'submit_plan', {}),
+    /Agent 工具范围已关闭：计划模式/,
   );
 });
 

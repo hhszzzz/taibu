@@ -515,6 +515,12 @@ export async function executeAgentRun(
         checkpoint.questionId = cacheId;
         putAgentPart(checkpoint.parts, { type: 'question', id: cacheId, question: planQuestions[0].question, questions: planQuestions });
         const reply = await awaitReply({ plan }, api, toolContext);
+        // 管理员可能在这张计划等待审批时关掉计划模式：批准也要按当前开关重新核对。
+        try {
+          await assertAgentToolAccess(store, run, AGENT_SUBMIT_PLAN_TOOL, { plan }, { featureState: injected?.featureState });
+        } catch (error) {
+          return { output: [{ type: 'text' as const, text: error instanceof Error ? error.message : '计划模式已关闭' }], isError: true, details: { plan, approved: false } };
+        }
         const decision = (reply.answers as AgentAnswers | undefined)?.plan?.[0];
         const approved = decision === 'approve';
         // A custom answer is feedback; picking 要求修改 alone asks for a revision without saying what to change.

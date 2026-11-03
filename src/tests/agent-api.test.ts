@@ -20,6 +20,7 @@ import type { AIModelConfig } from "../types";
 import { DEFAULT_AGENT_EXTENSIONS_POLICY } from "../lib/agent/mcp/config";
 import { DEFAULT_BYOK_POLICY } from "../lib/byok/config";
 import type { ResolvedByokModel } from "../lib/byok/store.server";
+import type { FeatureModuleState } from "../lib/app-settings";
 
 const model: AIModelConfig = {
   id: "fixture",
@@ -436,6 +437,33 @@ test('network capability follows the search services and connectors set up, and 
   servers = [];
   searchReady = true;
   assert.deepEqual(await capabilities(), [true, true], 'a search service serves every member');
+});
+
+test('administrator code/plan scopes hide the capabilities and force stale task switches off', async t => {
+  const fixture = setup(t);
+  let states: Record<string, FeatureModuleState> = {
+    'agent-tool:code': { status: 'disabled' },
+    'agent-tool:plan': { status: 'unavailable' },
+  };
+  t.mock.method(fixture.features, 'readFeatureModuleStateFresh', async (featureId: string) => states[featureId] ?? { status: 'enabled' as const });
+  const capabilities = async () => {
+    const value = (await (await agentCapabilities(new NextRequest('http://localhost/api/agent/capabilities'))).json()) as { codeModeAvailable: boolean; planModeAvailable: boolean };
+    return [value.codeModeAvailable, value.planModeAvailable];
+  };
+  assert.deepEqual(await capabilities(), [false, false]);
+  // A browser still carrying the old switches must not start a task in either mode.
+  const body = { ...fixture.body, codeMode: true, planMode: true };
+  assert.equal((await agentEndpoint(() => createAgentTask(fixture.request(body)))).status, 201);
+  const refused = fixture.writes.at(-1)!.args.p_input as AgentRunRow['input'];
+  assert.equal(refused.codeMode, false);
+  assert.equal(refused.planMode, false);
+
+  states = {};
+  assert.deepEqual(await capabilities(), [true, true], 'a scope without a row is allowed');
+  assert.equal((await agentEndpoint(() => createAgentTask(fixture.request({ ...body, clientRequestId: randomUUID() })))).status, 201);
+  const allowed = fixture.writes.at(-1)!.args.p_input as AgentRunRow['input'];
+  assert.equal(allowed.codeMode, true);
+  assert.equal(allowed.planMode, true);
 });
 
 test('image capability is enforced before charging and when adding input to an existing task', async t => {

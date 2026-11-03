@@ -92,6 +92,7 @@ type TarotDrawOptions = {
 
 const TAROT_CARD_IMAGE_OVERRIDES: Partial<Record<string, string>> = {
     'The Lovers': '/tarot_cards/TheLovers.jpg',
+    Strength: '/tarot_cards/thestrength.jpeg',
 };
 
 const TAROT_CARD_LEGACY_NAME_ALIASES: Partial<Record<string, string[]>> = {

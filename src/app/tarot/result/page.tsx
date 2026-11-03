@@ -166,6 +166,16 @@ function TarotResultContent() {
         });
     }, [historyTimestamp, router, spreadId, sessionLoading, userId, resultOwnerId]);
 
+    // 进入结果页后自动逐张翻开，无需手动点击；历史恢复的牌面已经是全开状态。
+    useEffect(() => {
+        if (isLoading || sessionLoading || drawnCards.length === 0) return;
+        const stagger = drawnCards.length > 5 ? 240 : 380;
+        const timers = drawnCards.map((_, index) => window.setTimeout(() => {
+            setRevealedCards(prev => (prev.includes(index) ? prev : [...prev, index]));
+        }, 300 + index * stagger));
+        return () => timers.forEach(timer => window.clearTimeout(timer));
+    }, [drawnCards, isLoading, sessionLoading]);
+
     useEffect(() => {
         if (!selectedSpread || drawnCards.length === 0 || sessionLoading || resultOwnerId !== userId) return;
 
@@ -334,19 +344,14 @@ function TarotResultContent() {
                                     positionName={selectedSpread.positions[index]?.name || canonicalCard?.位置 || `第${index + 1}张`}
                                     name={canonicalCard?.塔罗牌 || card.card.nameChinese}
                                     image={card.card.image}
-                                    meaning={card.orientation === 'reversed' ? card.card.reversedMeaning : card.card.uprightMeaning}
                                     reversed={(canonicalCard?.状态 || (card.orientation === 'reversed' ? '逆位' : '正位')) === '逆位'}
                                     isRevealed={isRevealed}
-                                    isFlipped={false}
                                     large={drawnCards.length === 1}
                                     onClick={() => { if (!isRevealed) setRevealedCards(prev => [...prev, index]); }}
                                 />
                             );
                         })}
                     </div>
-                    {revealedCards.length < drawnCards.length && (
-                        <Button unstyled type="button" onClick={() => setRevealedCards(drawnCards.map((_, i) => i))} className="h-11 rounded-xl bg-accent px-6 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover">翻开所有牌面</Button>
-                    )}
                 </section>
 
                 {/* 牌义：宽屏为卡片网格，窄屏为列表卡 */}

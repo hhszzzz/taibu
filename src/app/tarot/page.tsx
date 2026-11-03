@@ -76,19 +76,41 @@ export default function TarotPage() {
                         </p>
                     </header>
 
-                    {/* 所问之事；出生日期为可选的数秘术参数，默认收起 */}
+                    {/* 所问之事；出生日期按钮点开后原位变成日期输入 */}
                     <div className="flex flex-col gap-2">
-                        <div className="flex items-baseline justify-between gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-2">
                             <label htmlFor="tarot-question" className="text-sm font-medium">你想问什么？</label>
-                            {!showBirthDate && (
-                                <Button unstyled
-                                    type="button"
-                                    onClick={() => setShowBirthDate(true)}
-                                    className="inline-flex items-center gap-1 rounded-md text-[13px] text-accent transition-colors hover:text-accent-strong"
-                                >
-                                    <Plus className="h-3.5 w-3.5" aria-hidden="true" />出生日期（数秘术）
-                                </Button>
-                            )}
+                            {/* 固定高度与宽度：按钮和日期输入切换时行高与位置不变 */}
+                            <div className="flex h-8 min-w-[190px] items-center justify-end">
+                                {showBirthDate ? (
+                                    <div className="flex items-center gap-1.5">
+                                        <Input
+                                            id="tarot-birth-date"
+                                            type="date"
+                                            aria-label="出生日期（数秘术）"
+                                            value={birthDate}
+                                            onChange={(e) => setBirthDate(e.target.value)}
+                                            className={`${FIELD_CLASS} h-8 w-[9.5rem] rounded-lg px-2 text-[13px]`}
+                                        />
+                                        <Button unstyled
+                                            type="button"
+                                            onClick={handleRemoveBirthDate}
+                                            aria-label="移除出生日期"
+                                            className="flex h-8 w-8 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
+                                        >
+                                            <X className="h-3.5 w-3.5" aria-hidden="true" />
+                                        </Button>
+                                    </div>
+                                ) : (
+                                    <Button unstyled
+                                        type="button"
+                                        onClick={() => setShowBirthDate(true)}
+                                        className="inline-flex h-8 items-center gap-1 rounded-md text-[13px] text-accent transition-colors hover:text-accent-strong"
+                                    >
+                                        <Plus className="h-3.5 w-3.5" aria-hidden="true" />出生日期（数秘术）
+                                    </Button>
+                                )}
+                            </div>
                         </div>
                         <Textarea
                             id="tarot-question"
@@ -98,59 +120,38 @@ export default function TarotPage() {
                             placeholder="例如：接下来三个月，我和他的关系会如何发展？"
                             className={`${FIELD_CLASS} min-h-[80px] resize-none rounded-2xl px-4 py-3.5 text-base leading-relaxed`}
                         />
-                        {showBirthDate && (
-                            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-2">
-                                <label htmlFor="tarot-birth-date" className="text-[13px] text-foreground-secondary">出生日期</label>
-                                <Input
-                                    id="tarot-birth-date"
-                                    type="date"
-                                    value={birthDate}
-                                    onChange={(e) => setBirthDate(e.target.value)}
-                                    className={`${FIELD_CLASS} h-10 min-w-[180px] rounded-xl px-3 text-sm`}
-                                />
-                                <span className="text-xs text-foreground-tertiary">用于塔罗数秘术，选填</span>
+                    </div>
+
+                    {/* 牌阵选择与操作 */}
+                    <section className="flex flex-col gap-3">
+                        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+                            <div className="flex items-center gap-4">
+                                <h2 id={spreadTitleId} className="font-display text-[1.25rem] font-medium lg:text-[1.375rem]">选择牌阵</h2>
+                                <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
+                                    <Checkbox checked={allowReversed} onCheckedChange={setAllowReversed} />
+                                    包含逆位
+                                </label>
+                            </div>
+                            <div className="flex items-center gap-2">
                                 <Button unstyled
                                     type="button"
-                                    onClick={handleRemoveBirthDate}
-                                    aria-label="移除出生日期"
-                                    className="flex h-7 w-7 items-center justify-center rounded-md text-foreground-tertiary transition-colors hover:bg-background-secondary hover:text-foreground"
+                                    onClick={() => setDailyOpen(true)}
+                                    className="h-9 rounded-xl border-[0.5px] border-border-hover bg-surface px-4 text-sm text-foreground transition-colors hover:bg-background-secondary"
                                 >
-                                    <X className="h-3.5 w-3.5" aria-hidden="true" />
+                                    每日一牌
+                                </Button>
+                                <Button unstyled
+                                    type="button"
+                                    onClick={handleStart}
+                                    disabled={!spreadId}
+                                    className="h-9 rounded-xl bg-accent px-5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+                                >
+                                    开始洗牌
                                 </Button>
                             </div>
-                        )}
-                    </div>
-
-                    {/* 牌阵选择 */}
-                    <section className="flex flex-col gap-3">
-                        <h2 id={spreadTitleId} className="font-display text-[1.25rem] font-medium lg:text-[1.375rem]">选择牌阵</h2>
+                        </div>
                         <TarotSpreadPicker spreads={TAROT_SPREADS} selectedId={spreadId} onSelect={setSpreadId} labelledBy={spreadTitleId} />
                     </section>
-
-                    {/* 逆位开关与操作 */}
-                    <div className="flex flex-wrap items-center justify-between gap-4 border-t-[0.5px] border-border pt-3">
-                        <label className="inline-flex cursor-pointer items-center gap-2 text-sm text-foreground">
-                            <Checkbox checked={allowReversed} onCheckedChange={setAllowReversed} />
-                            包含逆位
-                        </label>
-                        <div className="flex w-full gap-2 sm:w-auto">
-                            <Button unstyled
-                                type="button"
-                                onClick={() => setDailyOpen(true)}
-                                className="h-12 rounded-xl border-[0.5px] border-border-hover bg-surface px-[18px] text-[15px] text-foreground transition-colors hover:bg-background-secondary"
-                            >
-                                每日一牌
-                            </Button>
-                            <Button unstyled
-                                type="button"
-                                onClick={handleStart}
-                                disabled={!spreadId}
-                                className="h-12 flex-1 rounded-xl bg-accent px-6 text-[15px] font-medium text-on-accent transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 sm:flex-none"
-                            >
-                                开始洗牌
-                            </Button>
-                        </div>
-                    </div>
                 </div>
             </div>
             <TarotDailyCardDialog open={dailyOpen} onClose={() => setDailyOpen(false)} dailyCard={dailyCard} unavailable={dailyCardFailed} />

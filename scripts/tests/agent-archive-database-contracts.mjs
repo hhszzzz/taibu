@@ -20,14 +20,14 @@ export async function agentArchiveDatabaseContracts(t, { sql, asActor, asOwner, 
   const message = (id, content, role = 'user') => ({ id, role, content, createdAt: new Date().toISOString() });
   const conversation = (userId, title, messages = []) =>
     asActor(userId, `SELECT public.create_conversation_with_messages(${quote(userId)},${quote(title)},'general','chat','{}',${json(messages)});`);
-  const cp = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.4.0', seeded: true } };
+  const cp = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.5.0', seeded: true } };
   const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
   const said = '我2024年3月从老东家离职，换到了现在这家公司做产品经理';
   const evidence = '2024年3月从老东家离职，换到了现在这家公司';
 
   const id = randomUUID(), cid = await conversation(owner, '档案契约', [message('current', '这段对话里也提到跳槽')]);
   await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({ model: 'fixture', reasoning: false, webEnabled: false, memoryEnabled: true, systemPrompt: 'fixture', userMessage: message(`u:${id}`, said) })},${json(cp)},${json(assistant(id))},NULL,'exempt');`);
-  await admin("SELECT public.agent_worker_heartbeat('archive-db','pi-durable/1.4.0');");
+  await admin("SELECT public.agent_worker_heartbeat('archive-db','pi-durable/1.5.0');");
   const r = JSON.parse(await admin("SELECT to_jsonb(public.agent_claim_run('archive-db'));"));
   assert.equal(r.id, id);
   const finish = () => admin(`SELECT public.agent_finish_run(${quote(r.id)},${quote(r.worker_id)},${r.fence},'cancelled',${json(cp)},${json(assistant(r.id))});`);

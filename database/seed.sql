@@ -18,7 +18,7 @@ DECLARE r public.agent_runs; message jsonb;
 BEGIN
   PERFORM set_config('request.jwt.claims','{"sub":"00000000-0000-4000-8000-000000000001","role":"authenticated"}',true);
   FOR r IN SELECT * FROM public.agent_runs WHERE status IN ('queued','running','awaiting_input','cancelling')
-    AND (coalesce(checkpoint->>'version','')<>'2' OR coalesce(checkpoint#>>'{durable,engine}','')<>'pi-durable/1.4.0') FOR UPDATE LOOP
+    AND (coalesce(checkpoint->>'version','')<>'2' OR coalesce(checkpoint#>>'{durable,engine}','')<>'pi-durable/1.5.0') FOR UPDATE LOOP
     UPDATE public.agent_runs SET worker_id='engine-retirement',fence=fence+1,lease_until=now()+interval '60 seconds',status='running'
       WHERE id=r.id RETURNING * INTO r;
     message:=jsonb_set(r.public_message,'{agent}',coalesce(r.public_message->'agent','{}'::jsonb)||jsonb_build_object('error','运行版本已更新，请重新发起任务。'));

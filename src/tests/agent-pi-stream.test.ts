@@ -3,12 +3,12 @@ import assert from "node:assert/strict";
 import {
   normalizeContext,
   isContextOverflow,
-  Type,
   type Api,
   type AssistantMessage,
   type Message,
   type Model,
 } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import { BACKGROUND_CONTEXT } from '@earendil-works/chord/context';
 import { createGuardedAgentModels } from '../lib/agent/model-registry.server';
 import { generateSummary } from '../lib/agent/summary-usage.server';
@@ -64,7 +64,7 @@ const context = (messages: Message[] = [{ role: "user", content: "query", timest
   normalizeContext({
     systemPrompt: "existing personality",
     messages,
-    tools: [{ name: "search", description: "fixture tool", parameters: Type.Object({ query: Type.String() }) }],
+    tools: [{ name: "search", description: "fixture tool", parameters: obj({ query: str() }, { open: true }) }],
   });
 
 type Delta = { content?: string; reasoning_content?: string; tool_calls?: unknown[] };

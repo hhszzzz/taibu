@@ -4,10 +4,12 @@ import {
     AssistantEntry, LiveDoc, configure, defineDoc, defineTask, defineTool,
     type ConversationId, type Extension, type Harness, type PromptSection, type TaskId, type Tx,
 } from '@earendil-works/pi-durable';
-import { Type, type AssistantMessage, type Message } from '@earendil-works/pi-ai';
+import type { AssistantMessage, Message } from '@earendil-works/pi-ai';
+import { bool, obj, opt, str } from '@earendil-works/pi-schema';
 import type { AgentDurableStorage } from './durable-storage.server';
 import { PARALLEL_SYSTEMS, memberAgentChange, memberStats, memberSteps, memberTitle } from './parallel.server';
 import type { ParallelAnalysisResult } from './parallel-results';
+import { stringEnum } from './tool-schema';
 import { DEFAULT_AGENT_PROFILE, type AgentProfileView } from './profiles/config';
 import { systemTitle, type MemberKit, type MemberSetup } from './profiles/members.server';
 import { AGENT_BACKGROUND_TASKS, AGENT_BACKGROUND_TOOL } from './tool-catalog';
@@ -152,14 +154,14 @@ export function createBackgroundAgents(kit: MemberKit, timeZone = DEFAULT_DIVINA
     const tool = defineTool({
         name: AGENT_BACKGROUND_TOOL,
         description: `管理本对话的后台子分析：每个子分析按一个角色在后台独立工作，你不必等它。角色 agent：${kit.describe('background')}。spawn 新建（name、message 必填；agent 不填即 ${DEFAULT_AGENT_PROFILE}，此时必须填 system）；send 交给已有子分析新任务或补充（它正在分析时默认在下一步插入，followUp=true 排在当前任务之后）；stop 中止它当前的工作，它仍保留；dismiss 解散，不再保留；status 查看各子分析是否在工作。完成后结论会作为一条以「[后台子分析「名称」」开头的新消息自动送达，不要轮询。子分析常驻本对话，之后的提问中仍可 send，它记得此前的任务与结论。它只能使用角色给它的工具，不能追问用户、写记忆或再派子任务，交给它的出生资料、命盘引用与问题要完整。最多保留 ${BACKGROUND_AGENT_LIMIT} 个，每个任务最多发送 ${BACKGROUND_MESSAGE_LIMIT} 条。`,
-        parameters: Type.Object({
-            action: Type.String({ enum: [...ACTIONS] }),
-            name: Type.Optional(Type.String({ ...LABEL, description: '子分析的称呼，如“紫微复核”“应期推演”；status 不填' })),
-            agent: Type.Optional(Type.String({ enum: roles.map(role => role.name), description: 'spawn：它的角色，默认 specialist' })),
-            system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: 'spawn：它专攻的方法 id（体系或流派，如 bazi-mangpai）；specialist 必填' })),
-            message: Type.Optional(Type.String({ minLength: 1, maxLength: 4000, description: 'spawn 与 send 必填：交给它的任务，附上已确认的资料或命盘引用，不让它猜测' })),
-            followUp: Type.Optional(Type.Boolean({ description: 'send 时它正在分析：true 排在当前任务之后，默认在它下一步插入' })),
-        }),
+        parameters: obj({
+            action: stringEnum(ACTIONS),
+            name: opt(str({ ...LABEL, description: '子分析的称呼，如“紫微复核”“应期推演”；status 不填' })),
+            agent: opt(stringEnum(roles.map(role => role.name), { description: 'spawn：它的角色，默认 specialist' })),
+            system: opt(stringEnum(PARALLEL_SYSTEMS, { description: 'spawn：它专攻的方法 id（体系或流派，如 bazi-mangpai）；specialist 必填' })),
+            message: opt(str({ minLength: 1, maxLength: 4000, description: 'spawn 与 send 必填：交给它的任务，附上已确认的资料或命盘引用，不让它猜测' })),
+            followUp: opt(bool({ description: 'send 时它正在分析：true 排在当前任务之后，默认在它下一步插入' })),
+        }, { open: true }),
         // A call a crash interrupted is not rerun: repeating stop could stop newer work. The model sees the
         // interruption and can check with status. Only the model manages subagents; a code mode script cannot.
         replay: 'unsafe', executionMode: 'sequential', callers: ['model'],

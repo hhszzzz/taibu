@@ -7,9 +7,8 @@ import {
   type CompactionResult, type Conversation, type ConversationId, type ConversationWatch, type PromptSection, type ReportInfo, type SettledTask, type StorageWrite,
   type TaskId, type ToolExecutionApi, type ToolExecutionResult, type ToolHookCall, type UserInput,
 } from "@earendil-works/pi-durable";
-import {
-  Type, type Api, type AssistantMessage, type Message, type Model,
-} from "@earendil-works/pi-ai";
+import type { Api, AssistantMessage, Message, Model } from "@earendil-works/pi-ai";
+import { obj, str } from "@earendil-works/pi-schema";
 import type { AIModelConfig, ChatMessage } from "@/types";
 import { getModelConfigAsync } from "@/lib/server/ai-config";
 import { subscribeAgentSignals } from "@/lib/db/listen.server";
@@ -84,7 +83,10 @@ ${buildAgentVisualizationInstructions()}
 最终答复的最后另起一行写 <followups>，其后只写一个用户最可能接着问的问题（不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
 export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
-/** A step that kept taking its worker down was parked by Pi's crash-loop guard: the task stops instead of looping. */
+/**
+ * Crashes kept cutting off a step until Pi's crash-loop guard ended the run (`restart_limit`), or the model request in
+ * flight was lost with no retry left (`interrupted`): the task stops instead of looping.
+ */
 export const AGENT_RESTART_LIMIT_MESSAGE = "任务的某一步多次意外中断，已停止执行；可重新发起任务";
 /** An own model the task names is gone, or neither stored here nor staged by the browser with a key. */
 export const AGENT_BYOK_UNAVAILABLE_MESSAGE = "自定义模型不可用：可能已被删除，或它的 Key 没有保存到本站";
@@ -97,14 +99,17 @@ export class AgentRunError extends Error {}
  */
 export const AGENT_RETRY_POLICY = { enabled: true, maxRetries: 2, baseDelayMs: 3000 } as const;
 
-/** What a Pi report says, without its error: the report type and the task, extension or host callback involved. */
+/** The diagnostic codes of the error results the Harness writes itself instead of running a tool. */
+const HARNESS_RESULTS = new Set<string | undefined>(["tool_unavailable", "invalid_arguments", "blocked", "interrupted", "restart_limit", "aborted", "abandoned"]);
+
+/** What a Pi report says, without its error: the report kind and the task, extension or host callback involved. */
 export function agentReportFields(runId: string, info: ReportInfo) {
   return {
-    runId, code: info.type,
+    runId, code: info.kind,
     ...("task" in info && info.task ? { task: info.task.kind, taskId: Number(info.task.id) } : {}),
     ...("extension" in info && info.extension ? { extension: info.extension } : {}),
     ...("reason" in info ? { reason: info.reason } : {}),
-    ...(info.type === "host_error" ? { callback: info.callback } : {}),
+    ...(info.kind === "host_error" ? { callback: info.callback } : {}),
   };
 }
 const MANUAL_COMPACTION_TEXT = {
@@ -216,9 +221,6 @@ export async function executeAgentRun(
   let signalInterrupted!: () => void;
   const interruption = new Promise<"interrupted">(resolve => { signalInterrupted = () => resolve("interrupted"); });
   const interrupt = () => { interrupted = true; controlAbort.abort(); signalInterrupted(); scope.cancel(); };
-  // Pi parks a task that was cut off too often when it opens the log (its crash-loop guard). A parked task never runs
-  // again, so the conversation would never be idle: the run stops it and ends failed.
-  let parked = false;
   // A user cancel stops gracefully so the run settles as cancelled; interrupt()
   // is for shutdown and lease loss, where another worker resumes the run.
   const requestStop = () => {
@@ -506,9 +508,9 @@ export async function executeAgentRun(
     const submitPlan = defineTool({
       name: AGENT_SUBMIT_PLAN_TOOL,
       description: '计划模式：提交分析计划并等待用户批准；用户要求修改时按反馈修订后再次提交',
-      parameters: Type.Object({
-        plan: Type.String({ minLength: 1, maxLength: 12000, description: 'Markdown 计划：使用哪些体系与工具、按什么顺序判断、每个体系要回答什么、已知的资料缺口' }),
-      }),
+      parameters: obj({
+        plan: str({ minLength: 1, maxLength: 12000, description: 'Markdown 计划：使用哪些体系与工具、按什么顺序判断、每个体系要回答什么、已知的资料缺口' }),
+      }, { open: true }),
       callers: ['model'],
       replay: 'safe',
       execute: async ({ plan }, api, toolContext) => {
@@ -595,9 +597,11 @@ export async function executeAgentRun(
     const toolTitle = (name: string) => tools.find(tool => tool.name === name)?.label ?? mcp?.titles.get(name) ?? getAgentExtensionToolTitle(name) ?? name;
     /**
      * A code mode script's call becomes a public part under the script's card, committed with the call's result. The
-     * script reads the structured output, so the details stay only on the part and the native log keeps one copy.
+     * script reads the structured output, so the details stay only on the part and the native log keeps one copy. A
+     * result the Harness wrote instead of the tool (blocked, invalid, cut off) stays only in the script's list of calls.
      */
     const settleScriptCall = async (call: ToolHookCall, parent: NonNullable<ToolHookCall["parent"]>, result: ToolExecutionResult, taskId: number, hookContext: Context) => {
+      if (result.diagnostics?.some(diagnostic => HARNESS_RESULTS.has(diagnostic.code))) return;
       const assistant = modelCallEntry(await storage!.task(parent.taskId, hookContext));
       if (assistant !== undefined) {
         const canonicalText = publicCanonicalText(call.name, result.output ?? []);
@@ -757,11 +761,8 @@ export async function executeAgentRun(
         },
       },
       // Content-free: what failed and where, never the error text, which can quote the conversation. A failed Session
-      // has already interrupted the run through its storage; a parked task ends it.
-      onReport: (_error, info) => {
-        if (info.type === "task_parked") parked = true;
-        console.warn("[agent-durable]", agentReportFields(run.id, info));
-      },
+      // has already interrupted the run through its storage.
+      onReport: report => console.warn("[agent-durable]", agentReportFields(run.id, report)),
     }, context);
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
@@ -813,7 +814,7 @@ export async function executeAgentRun(
     let projectionQueued = false;
     const project = async () => {
       projectionQueued = false;
-      await projectDurableConversation(root!, storage!, checkpoint, toolTitle, context);
+      await projectDurableConversation(harness!, root!, storage!, checkpoint, toolTitle, context);
       await projectBackgroundAgents(harness!, storage!, checkpoint, memberTitles, context);
       if (checkpoint.runtime) checkpoint.runtime.usage = projectAgentUsage(await harness!.usage(context));
       await persistProjection();
@@ -833,12 +834,12 @@ export async function executeAgentRun(
         const handle = await (await harness!.conversation(id as ConversationId, context))?.watch(context);
         if (!handle) continue;
         subagentWatches.set(id, handle);
-        let seen = "";
-        handle.start(async view => {
+        let seen: number | undefined;
+        handle.start(async call => {
           // Streamed text alone changes no card; a new or finished step, input or answer is a new entry.
-          const key = `${view.entries.length}:${view.entries.at(-1)?.id ?? ""}`;
-          if (key === seen) return;
-          seen = key;
+          const newest = call.kind === "value" ? call.value.entries.at(-1)?.id : undefined;
+          if (newest === undefined || newest === seen) return;
+          seen = newest;
           if (projectionQueued || interrupted) return;
           projectionQueued = true;
           try { await reproject(); } catch { interrupt(); }
@@ -851,7 +852,7 @@ export async function executeAgentRun(
       try { await reproject(); } catch { interrupt(); }
     });
     let compacted: Awaited<ReturnType<typeof manualCompactionOutcome>> | undefined;
-    if (stopping || parked) {
+    if (stopping) {
       await root.abort(context, { background: true });
     } else if (run.input.compact) {
       // `/compact` answers nothing: it compacts the context it continues, which the next task then reuses.
@@ -923,14 +924,15 @@ export async function executeAgentRun(
       submission?.status === "unanswered";
     if (compacted && compacted !== "failed" && !stopping)
       putAgentPart(checkpoint.parts, { type: "text", id: "compact:result", text: MANUAL_COMPACTION_TEXT[compacted] });
-    const status = stopping ? "cancelled" : parked ? "failed" : checkpoint.question ? "awaiting_input" :
+    const status = stopping ? "cancelled" : checkpoint.question ? "awaiting_input" :
       compacted ? (compacted === "failed" ? "failed" : "completed") :
       failed || !text.trim() ? "failed" : "completed";
     // A blocking compaction that fails leaves the input unanswered with Pi's "Compaction failed: …" detail.
     const compactionFailed = submission?.status === "unanswered" && typeof submission.detail === "string" &&
       submission.detail.startsWith("Compaction failed");
+    const cutOff = submission?.status === "unanswered" && (submission.reason === "restart_limit" || submission.reason === "interrupted");
     // The member's own model fails with its provider's words, which they need to fix their connection.
-    await finish(status, parked ? AGENT_RESTART_LIMIT_MESSAGE : compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
+    await finish(status, cutOff ? AGENT_RESTART_LIMIT_MESSAGE : compacted ? AGENT_MANUAL_COMPACTION_FAILED_MESSAGE
       : last?.errorMessage && (AGENT_PUBLIC_STREAM_ERRORS.has(last.errorMessage) || ownMain) ? last.errorMessage
       : compactionFailed ? AGENT_COMPACTION_FAILED_MESSAGE : undefined);
   } catch (error) {

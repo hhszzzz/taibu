@@ -1,6 +1,6 @@
 import "server-only";
 import type { Context } from "@earendil-works/chord";
-import { MemoryStorage, type Seq, type StorageWrite } from "@earendil-works/pi-durable";
+import { MemoryStorage, type CommitResult, type Seq, type StorageWrite } from "@earendil-works/pi-durable";
 import type { AgentStore, AgentRunRow } from "./store.server";
 import type { AgentCheckpoint } from "./types";
 
@@ -16,9 +16,9 @@ export interface DurableCommitPersistence {
 /**
  * Postgres supplies the durable commit log and the run's lease. Pi's reference
  * backend supplies validation, document history, ancestry and query semantics.
- * prepareCommit is public in the pinned 1.4.0 backend and is also the boundary
- * used by Pi's JSONL implementation. Never apply or publish before Postgres
- * acknowledges the entire batch. A reopen replays only acknowledged batches.
+ * prepareCommit is public in the pinned backend and is also the boundary used by
+ * Pi's JSONL implementation. Never apply or publish before Postgres acknowledges
+ * a batch. A reopen replays only acknowledged batches.
  */
 export class AgentDurableStorage extends MemoryStorage {
   private sequence = 0;
@@ -42,25 +42,43 @@ export class AgentDurableStorage extends MemoryStorage {
     }
     return storage;
   }
-  override async commit(writes: readonly StorageWrite[], context: Context): Promise<Seq> {
+  /**
+   * One batch at a time: each is checked against the state the earlier ones left, which this backend shows only once
+   * they are applied, and none is applied before Postgres has it. Receipts follow, as MemoryStorage gives them.
+   */
+  override async commit(
+    batches: readonly (readonly StorageWrite[])[], receive: (index: number, seq: Seq) => void, context: Context,
+  ): Promise<CommitResult> {
     context.abortSignal?.throwIfAborted();
     if (this.unavailable) throw new Error("AGENT_DURABLE_STORAGE_UNAVAILABLE");
-    const prepared = this.prepareCommit(writes);
+    const stored: Seq[] = [];
+    let refused: { error: unknown } | undefined;
     try {
-      const sequence = await this.persistence.append(Number(prepared.seq), prepared.writes);
-      if (sequence !== Number(prepared.seq))
-        throw new Error("AGENT_DURABLE_SEQUENCE_MISMATCH");
-      // The write may have been acknowledged just as this invocation was cancelled.
-      // Applying an acknowledged batch is mandatory; cancellation affects its waiter.
-      prepared.apply();
-      this.sequence = sequence;
-      return prepared.seq;
-    } catch (error) {
-      // An ambiguous failure cannot expose speculative state or accept later writes.
-      // A fresh owner reopens the authoritative log instead of guessing its outcome.
-      this.unavailable = true;
-      throw error;
+      for (const writes of batches) {
+        let prepared;
+        // Durable's own checks refuse a batch before it reaches Postgres; the ones before it stay stored.
+        try { prepared = this.prepareCommit(writes); }
+        catch (error) { refused = { error }; break; }
+        try {
+          const sequence = await this.persistence.append(Number(prepared.seq), prepared.writes);
+          if (sequence !== Number(prepared.seq))
+            throw new Error("AGENT_DURABLE_SEQUENCE_MISMATCH");
+          // The write may have been acknowledged just as this invocation was cancelled.
+          // Applying an acknowledged batch is mandatory; cancellation affects its waiter.
+          prepared.apply();
+          this.sequence = sequence;
+          stored.push(prepared.seq);
+        } catch (error) {
+          // An ambiguous failure cannot expose speculative state or accept later writes.
+          // A fresh owner reopens the authoritative log instead of guessing its outcome.
+          this.unavailable = true;
+          throw error;
+        }
+      }
+    } finally {
+      for (const [index, seq] of stored.entries()) receive(index, seq);
     }
+    return refused ? { stored: stored.length, refused: refused.error } : { stored: stored.length };
   }
 }
 

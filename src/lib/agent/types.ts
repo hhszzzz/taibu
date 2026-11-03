@@ -1,4 +1,5 @@
-import type { Message, Tool, TSchema, Static, AssistantMessageEventStream, Model, Api, TranscriptContext, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
+import type { Message, Tool, AssistantMessageEventStream, Model, Api, TranscriptContext, SimpleStreamOptions, Usage } from "@earendil-works/pi-ai";
+import type { Schema, Static } from "@earendil-works/pi-schema";
 import type { ChatMessage } from "@/types";
 import type { AgentQuestion } from './questions';
 import type { AgentTodo } from './todos';
@@ -158,7 +159,7 @@ export interface DomainToolResult<T = unknown> {
 export type DomainToolCaller = { member?: boolean };
 
 /** Business tools have no dependency on an agent loop implementation. */
-export interface DomainTool<T extends TSchema = TSchema, R = unknown> extends Tool<T> {
+export interface DomainTool<T extends Schema = Schema, R = unknown> extends Tool<T> {
   label: string;
   replay?: "safe";
   execute(callId: string, args: Static<T>, signal?: AbortSignal, caller?: DomainToolCaller): Promise<DomainToolResult<R>>;

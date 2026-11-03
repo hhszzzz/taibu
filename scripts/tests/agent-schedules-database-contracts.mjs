@@ -128,12 +128,12 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     const [run] = (await parsed('SELECT coalesce(jsonb_agg(to_jsonb(r)),\'[]\') FROM public.claim_agent_schedules(10) r;')).filter(item => item.schedule_id === schedule.id);
     assert.ok(run);
     const agentRunId = randomUUID();
-    const checkpoint = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.4.0' } };
+    const checkpoint = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.5.0' } };
     const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
     await admin(`SELECT public.agent_create_run(${quote(agentRunId)},${quote(owner)},${quote(schedule.conversation_id)},${quote('sched:' + agentRunId)},'hash',
       ${json({ model: 'fixture', reasoning: false, webEnabled: false, systemPrompt: 'fixture', userMessage: { id: 'u1', role: 'user', content: '早上好', createdAt: new Date().toISOString() } })},
       ${json(checkpoint)},${json(assistant(agentRunId))},NULL,'exempt');`);
-    await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.4.0');");
+    await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.5.0');");
     const agentRun = await parsed("SELECT to_jsonb(public.agent_claim_run('sched-contracts'));");
     await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'running',${quote(agentRunId)},NULL,NULL);`);
     assert.equal(await asOwner(`SELECT status FROM public.agent_schedule_runs WHERE id=${quote(run.id)};`), 'running');
@@ -152,12 +152,12 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     const [run] = (await parsed('SELECT coalesce(jsonb_agg(to_jsonb(r)),\'[]\') FROM public.claim_agent_schedules(10) r;')).filter(item => item.schedule_id === schedule.id);
     assert.ok(run);
     const agentRunId = randomUUID();
-    const checkpoint = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.4.0' } };
+    const checkpoint = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.5.0' } };
     const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
     await admin(`SELECT public.agent_create_run(${quote(agentRunId)},${quote(owner)},${quote(schedule.conversation_id)},${quote('ask:' + agentRunId)},'hash',
       ${json({ model: 'fixture', reasoning: false, webEnabled: false, systemPrompt: 'fixture', userMessage: { id: 'u2', role: 'user', content: '早上好', createdAt: new Date().toISOString() } })},
       ${json(checkpoint)},${json(assistant(agentRunId))},NULL,'exempt');`);
-    await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.4.0');");
+    await admin("SELECT public.agent_worker_heartbeat('sched-contracts','pi-durable/1.5.0');");
     const agentRun = await parsed("SELECT to_jsonb(public.agent_claim_run('sched-contracts'));");
     await admin(`SELECT public.settle_agent_schedule_run(${quote(run.id)},'running',${quote(agentRunId)},NULL,NULL);`);
     // The generic task notice is suppressed only for a finished scheduled run; a

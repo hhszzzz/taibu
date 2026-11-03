@@ -906,7 +906,7 @@ test("unknown capacity still uses Pi's bounded compaction recovery on a reported
 });
 
 test('unsupported checkpoint engines are rejected before opening storage or invoking a model or tool', async () => {
-  for (const checkpoint of [{ version: 1 }, { version: 2 }, { version: 2, durable: { engine: 'pi-durable/1.0.4' } }, { version: 2, durable: { engine: 'pi-durable/1.1.0' } }, { version: 2, durable: { engine: 'pi-durable/1.3.0' } }, { version: 2, durable: { engine: 'pi-durable/9.9.9' } }]) {
+  for (const checkpoint of [{ version: 1 }, { version: 2 }, { version: 2, durable: { engine: 'pi-durable/1.0.4' } }, { version: 2, durable: { engine: 'pi-durable/1.1.0' } }, { version: 2, durable: { engine: 'pi-durable/1.3.0' } }, { version: 2, durable: { engine: 'pi-durable/1.4.0' } }, { version: 2, durable: { engine: 'pi-durable/9.9.9' } }]) {
     const store = new MemoryStore(), run = row();
     run.checkpoint = { ...run.checkpoint, ...checkpoint } as AgentRunRow['checkpoint'];
     if (!('durable' in checkpoint)) delete (run.checkpoint as Partial<AgentRunRow['checkpoint']>).durable;
@@ -969,7 +969,7 @@ test('a message steered in while an answer fails starts the next answer instead 
   assert.deepEqual(store.pending, [], 'the steer was placed, not left queued');
 });
 
-test('a step that takes its worker down five times in a row is parked and the task fails instead of looping', async () => {
+test('a tool call that takes its worker down five times in a row ends with an error the model reads, instead of looping', async () => {
   class CrashingStore extends MemoryStore {
     crashed = false;
     // The worker dies while the bazi call runs: no later commit of that process is acknowledged.
@@ -986,9 +986,10 @@ test('a step that takes its worker down five times in a row is parked and the ta
     }
   }
   const store = new CrashingStore(), run = row();
+  const contexts: Parameters<StreamFn>[1]['messages'][] = [];
   const streamFn = scripted(index => index === 0
     ? [{ type: 'toolCall', id: 'crash', name: 'bazi', arguments: { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 } }]
-    : [{ type: 'text', text: '不应作答' }]);
+    : [{ type: 'text', text: '排盘多次中断，请稍后再试。' }], messages => contexts.push(messages));
   const warnings: unknown[] = [];
   const warn = console.warn;
   console.warn = (...args: unknown[]) => { warnings.push(args); };
@@ -1009,15 +1010,57 @@ test('a step that takes its worker down five times in a row is parked and the ta
     console.warn = warn;
   }
   const finish = store.writes.find(w => w.name === 'agent_finish_run')!;
-  assert.equal(finish.args.p_status, 'failed');
-  assert.equal((finish.args.p_message as AgentRunRow['public_message']).agent?.error, AGENT_RESTART_LIMIT_MESSAGE);
-  assert.ok(warnings.some(entry => JSON.stringify(entry).includes('"code":"task_parked"')), 'the parked task is reported by kind, without its error');
+  assert.equal(finish.args.p_status, 'completed', 'the model answers from the error instead of the task failing');
+  const result = contexts.at(-1)!.find(message => message.role === 'toolResult');
+  assert.ok(result?.role === 'toolResult' && result.isError && JSON.stringify(result.content).includes('not run again'), JSON.stringify(result));
+  const bazi = (finish.args.p_message as AgentRunRow['public_message']).agent?.parts.find(part => part.type === 'tool' && part.name === 'bazi');
+  assert.equal(bazi?.type === 'tool' && bazi.status, 'failed');
+  assert.ok(warnings.some(entry => JSON.stringify(entry).includes('"code":"task_interrupted"') && JSON.stringify(entry).includes('"reason":"restart_limit"')),
+    'the cut-off call is reported by kind and reason, without its error');
 });
 
-test('Pi reports are logged by type and place, never with the error text', () => {
+test('a model request whose worker dies each time ends the task once no retry is left', async () => {
+  class CrashingStore extends MemoryStore {
+    crashed = false;
+    override async rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+      if ((name === 'agent_durable_commit' || name === 'agent_checkpoint') && this.crashed) throw new Error('worker died');
+      return super.rpc<T>(name, args);
+    }
+  }
+  const store = new CrashingStore(), run = row();
+  let requests = 0;
+  // The worker dies while the model answers: nothing that request led to is stored.
+  const streamFn: StreamFn = () => { requests++; store.crashed = true; throw new Error('worker died'); };
+  // Every reading of the clock is ten seconds on, so a retry's backoff has passed when the next worker looks.
+  let clock = Date.now();
+  const now = () => (clock += 10_000);
+  const keepAlive = setTimeout(() => {}, 30_000);
+  try {
+    // Each takeover counts the lost request as a failed attempt and retries it; the retries die the same way.
+    for (let attempt = 0; attempt < 3; attempt++) {
+      store.crashed = false;
+      await executeAgentRun(store, run, undefined, { config, streamFn, now });
+      assert.ok(!store.writes.some(w => w.name === 'agent_finish_run'), `attempt ${attempt} is left to a takeover`);
+      run.checkpoint = store.writes.filter(w => w.name === 'agent_durable_commit' || w.name === 'agent_checkpoint').at(-1)!.args.p_checkpoint as AgentRunRow['checkpoint'];
+      run.fence++;
+    }
+    store.crashed = false;
+    await executeAgentRun(store, run, undefined, { config, streamFn, now });
+  } finally {
+    clearTimeout(keepAlive);
+  }
+  assert.equal(requests, 3, 'the request and its two retries; none is sent again on open');
+  const finish = store.writes.find(w => w.name === 'agent_finish_run')!;
+  assert.equal(finish.args.p_status, 'failed');
+  assert.equal((finish.args.p_message as AgentRunRow['public_message']).agent?.error, AGENT_RESTART_LIMIT_MESSAGE);
+});
+
+test('Pi reports are logged by kind and place, never with the error text', () => {
   const task = { id: 7, kind: 'pi.tool', conversationId: 1 } as unknown as Parameters<typeof agentReportFields>[1] extends infer I ? I extends { task: infer T } ? T : never : never;
-  assert.deepEqual(agentReportFields('run', { type: 'task_faulted', task, extension: 'taibu', reason: 'threw' }),
+  assert.deepEqual(agentReportFields('run', { kind: 'task_faulted', task, extension: 'taibu', reason: 'threw' }),
     { runId: 'run', code: 'task_faulted', task: 'pi.tool', taskId: 7, extension: 'taibu', reason: 'threw' });
-  assert.deepEqual(agentReportFields('run', { type: 'host_error', callback: 'now' }), { runId: 'run', code: 'host_error', callback: 'now' });
-  assert.deepEqual(agentReportFields('run', { type: 'session_failed' }), { runId: 'run', code: 'session_failed' });
+  assert.deepEqual(agentReportFields('run', { kind: 'task_interrupted', task, reason: 'restart_limit', restarts: 5 }),
+    { runId: 'run', code: 'task_interrupted', task: 'pi.tool', taskId: 7, reason: 'restart_limit' });
+  assert.deepEqual(agentReportFields('run', { kind: 'host_error', callback: 'telemetry' }), { runId: 'run', code: 'host_error', callback: 'telemetry' });
+  assert.deepEqual(agentReportFields('run', { kind: 'storage_failed' }), { runId: 'run', code: 'storage_failed' });
 });

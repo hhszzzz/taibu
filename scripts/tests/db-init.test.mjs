@@ -373,7 +373,7 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
           [staleConversation, platformConversation, userId, JSON.stringify([message(finishedRun, 'completed'), message(staleRun, 'running')]), JSON.stringify([message(platformRun, 'running')])]);
         const run = (id, conversationId, status, input) => native.query(`
           INSERT INTO public.agent_runs (id, user_id, conversation_id, request_id, request_hash, status, input, checkpoint, public_message, billing, worker_id, lease_until)
-          VALUES ($1, $2, $3, $8, 'hash', $4, $5, '{"version":2,"durable":{"engine":"pi-durable/1.4.0"}}', $6, $7, 'worker-old', now() + interval '1 hour')`,
+          VALUES ($1, $2, $3, $8, 'hash', $4, $5, '{"version":2,"durable":{"engine":"pi-durable/1.5.0"}}', $6, $7, 'worker-old', now() + interval '1 hour')`,
         [id, userId, conversationId, status, JSON.stringify(input), JSON.stringify(message(id, status)), input.customProvider ? 'exempt' : 'metered', `request-${id}`]);
         await run(finishedRun, staleConversation, 'completed', { model: 'custom:gpt-4.1', customProvider: legacyProvider });
         await run(staleRun, staleConversation, 'running', { model: 'custom:gpt-4.1', customProvider: legacyProvider, title: '旧直连任务' });
@@ -512,7 +512,7 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         explain select id from public.agent_runs
         where status = 'queued'
           and checkpoint->>'version' = '2'
-          and checkpoint#>>'{durable,engine}' = 'pi-durable/1.4.0'
+          and checkpoint#>>'{durable,engine}' = 'pi-durable/1.5.0'
         order by created_at limit 1;`);
       assert.match(plan, /agent_claim_queued/u);
     });

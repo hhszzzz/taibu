@@ -1,6 +1,6 @@
 import 'server-only';
-import { Type } from '@earendil-works/pi-ai';
 import type { Extension, PromptSection } from '@earendil-works/pi-durable';
+import { num, obj, opt, str } from '@earendil-works/pi-schema';
 import { defineTool } from '@earendil-works/pi-durable';
 import { rankDeferredTools, TOOL_SEARCH_LIMIT, TOOL_SEARCH_MAX_LIMIT, type ToolSearchCandidate } from 'taibu-core/mcp';
 import { AGENT_CODEMODE_TOOL, AGENT_MCP_TOOL_PREFIX, AGENT_TOOL_SEARCH_TOOL, getAgentExtensionToolTitle } from './tool-catalog';
@@ -60,10 +60,10 @@ export function createAgentToolSearchExtension(titles: ReadonlyMap<string, strin
     tools: [defineTool({
       name: AGENT_TOOL_SEARCH_TOOL,
       description: '按中文关键词检索本任务尚未提供的低频工具（详查、大运、流年扫描、合盘、飞星、择日、外部服务等），命中后从下一次模型调用起可用。',
-      parameters: Type.Object({
-        query: Type.String({ minLength: 1, description: '中文关键词，如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」' }),
-        limit: Type.Optional(Type.Number({ description: `最多返回几个工具，默认 ${AGENT_TOOL_SEARCH_LIMIT}，最多 ${TOOL_SEARCH_MAX_LIMIT}` })),
-      }),
+      parameters: obj({
+        query: str({ minLength: 1, description: '中文关键词，如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」' }),
+        limit: opt(num({ description: `最多返回几个工具，默认 ${AGENT_TOOL_SEARCH_LIMIT}，最多 ${TOOL_SEARCH_MAX_LIMIT}` })),
+      }, { open: true }),
       // Loading changes what the model is offered; a script has its own searchTools().
       callers: ['model'],
       replay: 'safe',

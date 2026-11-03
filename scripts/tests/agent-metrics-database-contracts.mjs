@@ -27,7 +27,7 @@ export async function agentMetricsDatabaseContracts(t, { sql, asActor, adminId }
   await sql(`INSERT INTO public.conversations(id,user_id,title) VALUES(${quote(conversation)},${quote(member)},'metrics fixture');`);
   await sql(`INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing,status)
     VALUES(${runId},${quote(member)},${quote(conversation)},'metrics-request','metrics-hash','{}'::jsonb,
-      ${json({ version: 2, durable: { engine: 'pi-durable/1.4.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed');`);
+      ${json({ version: 2, durable: { engine: 'pi-durable/1.5.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed');`);
 
   await t.test('run metrics are written and read by administrators only', async () => {
     assert.equal(await asActor(adminId, metric(run)), run);
@@ -47,7 +47,7 @@ export async function agentMetricsDatabaseContracts(t, { sql, asActor, adminId }
       const other = randomUUID();
       await sql(`INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing,status)
         VALUES(${quote(other)},${quote(member)},${quote(conversation)},${quote(`request-${other}`)},'hash','{}'::jsonb,
-          ${json({ version: 2, durable: { engine: 'pi-durable/1.4.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed');`);
+          ${json({ version: 2, durable: { engine: 'pi-durable/1.5.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed');`);
       await assert.rejects(asActor(adminId, metric(other, extra)), /23514/, JSON.stringify(extra));
     }
   });
@@ -55,7 +55,7 @@ export async function agentMetricsDatabaseContracts(t, { sql, asActor, adminId }
   await t.test('the summary function returns per-model percentiles to administrators only', async () => {
     const addRun = async (id) => sql(`INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing,status)
       VALUES(${quote(id)},${quote(member)},${quote(conversation)},${quote(`request-${id}`)},'hash','{}'::jsonb,
-        ${json({ version: 2, durable: { engine: 'pi-durable/1.4.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed');`);
+        ${json({ version: 2, durable: { engine: 'pi-durable/1.5.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed');`);
     const fast = randomUUID();
     const slow = randomUUID();
     await addRun(fast);
@@ -73,7 +73,7 @@ export async function agentMetricsDatabaseContracts(t, { sql, asActor, adminId }
     const old = randomUUID();
     await sql(`INSERT INTO public.agent_runs(id,user_id,conversation_id,request_id,request_hash,input,checkpoint,public_message,billing,status,updated_at)
       VALUES(${quote(old)},${quote(member)},${quote(conversation)},${quote(`request-${old}`)},'hash','{}'::jsonb,
-        ${json({ version: 2, durable: { engine: 'pi-durable/1.4.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed',now() - interval '40 days');`);
+        ${json({ version: 2, durable: { engine: 'pi-durable/1.5.0' }, messages: [], parts: [] })},'{}'::jsonb,'exempt','completed',now() - interval '40 days');`);
     await asActor(adminId, metric(run));
     await asActor(adminId, metric(old, { ended_at: { sql: "now() - interval '40 days'" }, started_at: { sql: "now() - interval '41 days'" } }));
     assert.equal(await asActor(adminId, 'SELECT metrics_deleted FROM public.delete_agent_retention(30,7,24,1000,30);'), '1');

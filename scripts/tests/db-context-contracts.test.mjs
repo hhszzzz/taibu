@@ -208,7 +208,7 @@ RESET ROLE;`);
     await t.test('run metrics store their phase timeline through the application path', async () => {
       const conversation = randomUUID();
       const run = randomUUID();
-      const checkpoint = { version: 2, durable: { engine: 'pi-durable/1.4.0' }, messages: [], parts: [] };
+      const checkpoint = { version: 2, durable: { engine: 'pi-durable/1.5.0' }, messages: [], parts: [] };
       await sql(`insert into public.conversations (id, user_id, title) values
           (${quote(conversation)}, ${quote(ids.owner)}, 'metrics probe');
         insert into public.agent_runs (id, user_id, conversation_id, request_id, request_hash, input, checkpoint, public_message, billing, status) values

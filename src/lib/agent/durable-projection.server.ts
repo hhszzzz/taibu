@@ -1,12 +1,11 @@
 import "server-only";
 import type { Context } from "@earendil-works/chord";
 import type { AssistantMessage, ToolResultMessage } from "@earendil-works/pi-ai";
-import type { CompactionResult, Conversation, Cursor, EntryRecord, LiveState, TaskId, ToolTaskInput } from "@earendil-works/pi-durable";
-import { CompactionEntry } from "@earendil-works/pi-durable";
+import type { CompactionResult, Conversation, Cursor, DocumentReader, EntryRecord, LiveState, TaskId, ToolTaskInput } from "@earendil-works/pi-durable";
+import { CompactionEntry, LiveDoc } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
 import { putAgentPart, type AgentCheckpoint, type AgentPart, type AgentRuntimeInfo } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
-import { projectAgentUsage } from './usage';
 import { AGENT_CODEMODE_TOOL, CHART_TARGET_DIRECTORY_HEADING, projectsAgentCanonicalText } from './tool-catalog';
 import { splitAgentFollowUps } from './follow-ups';
 import { agentScriptCallNumber } from './codemode.server';
@@ -82,9 +81,9 @@ function taskTiming(task?: { startedAt?: number; endedAt?: number }) {
 }
 
 /**
- * A code mode script's calls. The runtime puts the part of each call that ran with its result (afterTool), so only
- * those stay; while a call waits or runs, its live slot shows a placeholder. A call that never ran (blocked, invalid)
- * remains only in the script's own list of calls.
+ * A code mode script's calls. The runtime puts the part of each call the tool answered with its result (afterTool), so
+ * only those stay; while a call waits or runs, its live slot shows a placeholder. A call the Harness answered itself
+ * (blocked, invalid, cut off) remains only in the script's own list of calls.
  */
 async function projectScriptCalls(storage: AgentDurableStorage, checkpoint: AgentCheckpoint, live: LiveState | undefined,
   title: (name: string) => string, context: Context) {
@@ -111,13 +110,10 @@ async function projectScriptCalls(storage: AgentDurableStorage, checkpoint: Agen
 
 /** Public messages are a projection; Durable entries remain the execution truth. */
 export async function projectDurableConversation(
-  root: Conversation, storage: AgentDurableStorage, checkpoint: AgentCheckpoint,
+  documents: DocumentReader, root: Conversation, storage: AgentDurableStorage, checkpoint: AgentCheckpoint,
   title: (name: string) => string, context: Context,
 ) {
-  const state = await root.viewState(context);
-  const live = state.value.docs["pi.live"] as LiveState | undefined;
-  const usage = projectAgentUsage(state.value.docs['pi.usage']);
-  state.dispose();
+  const live: LiveState | undefined = await documents.snapshot(LiveDoc, root.id, context);
   // A compaction changes active context, not the visible execution history.
   let cursor: Cursor | undefined;
   const history: EntryRecord[] = [];
@@ -130,7 +126,6 @@ export async function projectDurableConversation(
   await settleCompactionRetries(storage, checkpoint, history, context);
   await projectScriptCalls(storage, checkpoint, live, title, context);
   if (checkpoint.runtime) {
-    checkpoint.runtime.usage = usage;
     const transcript = await root.context(context);
     checkpoint.runtime.context = projectAgentContextUsage(transcript.messages, history.filter(entry => entry.kind === CompactionEntry.kind).length);
     const runningTool = live?.tools?.find(slot => slot.status === "running");
@@ -138,7 +133,7 @@ export async function projectDurableConversation(
     const content = live?.generation?.message?.content;
     checkpoint.runtime.activity = checkpoint.question ? { phase: "awaiting_input" }
       // A generation waits for a blocking compaction; a `/compact` task waits for its manual one.
-      : live?.compactions?.some(slot => slot.blocking || slot.reason === "manual") ? { phase: "compacting" }
+      : live?.compactions?.some(slot => slot.blocking || slot.trigger === "manual") ? { phase: "compacting" }
       : live?.generation?.retry ? { phase: "retrying", attempt: live.generation.attempt }
       : runningTool ? { phase: "tools", toolTitle: scriptCall ? `${title(runningTool.name)} · ${title(scriptCall.name)}` : title(runningTool.name) }
       : live?.generation ? { phase: content?.at(-1)?.type === "thinking" ? "thinking" : content?.some(part => part.type === "text") ? "responding" : "generating" }

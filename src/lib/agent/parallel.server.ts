@@ -1,10 +1,12 @@
 import 'server-only';
 import { configure, defineDoc, defineTool, type AgentChange, type ConversationId, type ConversationWatch, type Extension, type Harness } from '@earendil-works/pi-durable';
-import { Type, type Message } from '@earendil-works/pi-ai';
+import type { Message } from '@earendil-works/pi-ai';
+import { arr, obj, opt, str } from '@earendil-works/pi-schema';
 import { ANALYSIS_METHODS } from './methods.server';
 import { PARALLEL_TOPIC_LIMIT, normalizeParallelTopics, splitMemberPositions, type ParallelAnalysisResult, type ParallelMemberStep, type ParallelTopic } from './parallel-results';
 import { DEFAULT_AGENT_PROFILE, type AgentProfileView } from './profiles/config';
 import { systemTitle, type MemberKit, type MemberSetup } from './profiles/members.server';
+import { stringEnum } from './tool-schema';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { AIModelConfig } from '@/types';
 import { DEFAULT_DIVINATION_TIMEZONE } from 'taibu-core/timezone-utils';
@@ -104,15 +106,15 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
     const roleOf = (member: AgentCollaborator) => member.profile ?? DEFAULT_AGENT_PROFILE;
     const extension: Extension = { name: 'taibu_parallel', tools: [defineTool({
         name: 'parallel_analysis', description: `同时交给 1–4 位成员分头处理相互独立的子问题，并等待全部完成。每位成员按角色 agent 工作：${kit.describe('parallel')}。agent 不填即 ${DEFAULT_AGENT_PROFILE}，此时必须填 system（方法 id，同一体系可从不同角度或用不同流派的方法分析，如 bazi 与 bazi-mangpai）；其他角色给了 system 时以该方法为准。先确认每项必要资料完整；成员只完成所给子问题，由当前任务核对与汇总，整项任务仅计一次费用。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}，角色 ${roleOf(member)}：${member.focus}）`).join('；')}` : ''}`,
-        parameters: Type.Object({ tasks: Type.Array(Type.Object({
-          agent: Type.Optional(Type.String({ enum: roles.map(role => role.name), description: '成员的角色，默认 specialist' })),
-          system: Type.Optional(Type.String({ enum: PARALLEL_SYSTEMS, description: '方法 id；specialist 必填' })),
-          question: Type.String({ minLength: 1, maxLength: 4000 }),
-          agentId: Type.Optional(Type.String(collaborators.length ? { enum: collaborators.map(member => member.id) } : {})),
-          name: Type.Optional(Type.String({ ...LABEL, description: '这位成员在本任务里的称呼，如“格局派”“应期复核”；未配置协作成员时按分工起名' })) }), { minItems: 1, maxItems: 4 }),
-          title: Type.Optional(Type.String({ ...LABEL, description: '这次协作的简短标题，如“三派会诊”' })),
-          topics: Type.Optional(Type.Array(Type.Object({ title: Type.String(LABEL), options: Type.Optional(Type.Array(Type.String(LABEL), { minItems: 2, maxItems: 4 })) }), {
-            maxItems: PARALLEL_TOPIC_LIMIT, description: '需要每位成员表态的关键议题；给出 options 时成员只能原样选择一项，用于对照分歧' })) }),
+        parameters: obj({ tasks: arr(obj({
+          agent: opt(stringEnum(roles.map(role => role.name), { description: '成员的角色，默认 specialist' })),
+          system: opt(stringEnum(PARALLEL_SYSTEMS, { description: '方法 id；specialist 必填' })),
+          question: str({ minLength: 1, maxLength: 4000 }),
+          agentId: opt(collaborators.length ? stringEnum(collaborators.map(member => member.id)) : str()),
+          name: opt(str({ ...LABEL, description: '这位成员在本任务里的称呼，如“格局派”“应期复核”；未配置协作成员时按分工起名' })) }, { open: true }), { minItems: 1, maxItems: 4 }),
+          title: opt(str({ ...LABEL, description: '这次协作的简短标题，如“三派会诊”' })),
+          topics: opt(arr(obj({ title: str(LABEL), options: opt(arr(str(LABEL), { minItems: 2, maxItems: 4 })) }, { open: true }), {
+            maxItems: PARALLEL_TOPIC_LIMIT, description: '需要每位成员表态的关键议题；给出 options 时成员只能原样选择一项，用于对照分歧' })) }, { open: true }),
         // Only the model dispatches members; a code mode script cannot.
         replay: 'safe', executionMode: 'sequential', callers: ['model'],
         execute: async (args, api, context) => {
@@ -176,9 +178,9 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
             const followSteps = async (index: number): Promise<ConversationWatch | undefined> => {
                 const watch = await (await session().conversation(ids[index] as ConversationId, context))?.watch(context);
                 let seen = '';
-                watch?.start(async view => {
-                    if (progress[index].status !== 'running') return;
-                    const steps = memberSteps(view.entries.flatMap(entry => entry.model ?? []), titles);
+                watch?.start(async call => {
+                    if (call.kind !== 'value' || progress[index].status !== 'running') return;
+                    const steps = memberSteps(call.value.entries.flatMap(entry => entry.model ?? []), titles);
                     const key = JSON.stringify(steps);
                     if (key === seen) return;
                     seen = key;

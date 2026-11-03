@@ -1,5 +1,5 @@
 import 'server-only';
-import { Type } from '@earendil-works/pi-ai';
+import { obj, opt, str, unknown } from '@earendil-works/pi-schema';
 import { CodemodeSandbox, toCodemodeIdentifier, type CodemodeRunOptions, type CodemodeWasmModule } from '@earendil-works/pi-codemode';
 import { CODEMODE_TOOL_NAME, createCodemodeTool } from '@earendil-works/pi-durable/codemode';
 import type { Extension, PromptSection } from '@earendil-works/pi-durable';
@@ -57,11 +57,11 @@ function agentCodemodeSandbox() {
 }
 
 /** What charts, calculations and drilldowns give scripts, instead of only their text. */
-export const AGENT_SCRIPT_RESULT_SCHEMA = Type.Object({
-  artifactId: Type.Optional(Type.String()),
-  text: Type.String(),
-  data: Type.Unknown(),
-});
+export const AGENT_SCRIPT_RESULT_SCHEMA = obj({
+  artifactId: opt(str()),
+  text: str(),
+  data: unknown(),
+}, { open: true });
 
 export function agentScriptResult(output: { content: Array<{ text: string }>; details: unknown; canonicalText?: string }) {
   const details = output.details && typeof output.details === 'object' ? output.details as { artifactId?: unknown; result?: unknown } : {};

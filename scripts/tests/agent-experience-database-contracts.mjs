@@ -12,11 +12,11 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
   const conversation = () => asActor(owner,`SELECT public.create_conversation_with_messages(${quote(owner)},'经验契约','general','chat','{}','[]');`);
   const message = (id, content='资料问题') => ({ id, role:'user', content, createdAt:new Date().toISOString() });
   const assistant = (id, content='') => ({ id:`agent:${id}`,role:'assistant',content,createdAt:new Date().toISOString(),agent:{version:1,runId:id,status:'queued',parts:[]} });
-  const cp = {version:2,messages:[],parts:[],durable:{engine:'pi-durable/1.4.0',seeded:true}};
+  const cp = {version:2,messages:[],parts:[],durable:{engine:'pi-durable/1.5.0',seeded:true}};
   async function run() {
     const id=randomUUID(), cid=await conversation();
     await admin(`SELECT public.agent_create_run(${quote(id)},${quote(owner)},${quote(cid)},${quote(id)},'hash',${json({model:'fixture',reasoning:false,webEnabled:false,systemPrompt:'fixture',userMessage:message(`u:${id}`)})},${json(cp)},${json(assistant(id))},NULL,'exempt');`);
-    await admin("SELECT public.agent_worker_heartbeat('experience-db','pi-durable/1.4.0');");
+    await admin("SELECT public.agent_worker_heartbeat('experience-db','pi-durable/1.5.0');");
     const claimed=await parsed("SELECT to_jsonb(public.agent_claim_run('experience-db'));");
     assert.equal(claimed.id,id); return claimed;
   }

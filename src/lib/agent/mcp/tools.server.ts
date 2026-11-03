@@ -1,7 +1,7 @@
 import 'server-only';
 import { createHash } from 'node:crypto';
 import type { Context, JsonValue } from '@earendil-works/chord';
-import { Type } from '@earendil-works/pi-ai';
+import type { Schema } from '@earendil-works/pi-schema';
 import { defineTool, type ToolExecutionApi, type ToolExecutionResult, type ToolRegistration } from '@earendil-works/pi-durable';
 import { toLlmContent, type CallToolResult, type Tool } from '@earendil-works/pi-mcp';
 import { AGENT_MCP_TOOL_PREFIX } from '../tool-catalog';
@@ -103,7 +103,7 @@ export function defineMcpTool(spec: McpToolSpec, deps: {
   return defineTool({
     name: spec.name,
     description: spec.description,
-    parameters: Type.Unsafe<Record<string, unknown>>(spec.parameters),
+    parameters: spec.parameters as Schema<Record<string, unknown>>,
     // Rerun on recovery to resume a pending confirmation; the memo below keeps the remote call itself at most once.
     replay: 'safe',
     ...(spec.exposure === 'deferred' ? { deferred: true as const } : {}),

@@ -107,25 +107,8 @@ export async function calculatePromptBudget(
     return promptBudget(await resolveChatModelWindow(modelId, reasoningEnabled, modelWindow));
 }
 
-function promptBudget({ config, defaultMaxTokens }: ChatModelWindow): number {
-    // 可用于系统提示词的剩余上下文
-    const available = config.maxContext - config.reserveOutput - config.reserveHistory;
-    // 按模型比例分配的预算
-    const ratioBudget = Math.floor(available * config.promptRatio);
-    // 模型默认输出上限，用于估算提示词占比
-    const defaultMax = defaultMaxTokens ?? 4000;
-    // 提示词占默认输出上限的比例与上限
-    const capRatio = config.promptCapRatio ?? 1.0;
-    const capLimit = config.maxPromptTokens ?? 4000;
-    // 提示词预算下限，避免过低
-    const minLimit = config.minPromptTokens ?? 1000;
-    // 预算上限约束：比例预算不超过 capLimit
-    const ratioCapped = Math.min(ratioBudget, capLimit);
-    // 预算上限约束：输出上限约束不超过 capLimit
-    const outputCapped = Math.min(Math.floor(defaultMax * capRatio), capLimit);
-    // 最小预算不能突破输出上限，也不能超过输入窗口里实际可用的空间。
-    const upperLimit = Math.min(outputCapped, capLimit, Math.max(available, 0));
-    return Math.min(Math.max(ratioCapped, Math.min(minLimit, upperLimit)), upperLimit);
+function promptBudget({ config }: ChatModelWindow): number {
+    return Math.max(config.maxContext - config.reserveOutput - config.reserveHistory, 0);
 }
 
 // 通用准则（所有场景共用）

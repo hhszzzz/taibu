@@ -749,7 +749,7 @@ test("unknown Pi models carry an unknown capacity and expose native context usag
 test('known contexts start background compaction below the blocking threshold while generation continues', async t => {
   const store = new MemoryStore(), run = row();
   const windows = require('../lib/ai/model-context') as typeof import('../lib/ai/model-context');
-  t.mock.method(windows, 'resolveModelWindow', () => ({ maxContext: 64000, reserveOutput: 4096, promptRatio: 0.3, reserveHistory: 4000 }));
+  t.mock.method(windows, 'resolveModelWindow', () => ({ maxContext: 64000, reserveOutput: 4096, reserveHistory: 4000 }));
   run.checkpoint.messages = Array.from({ length: 6 }, (_, index) => ({ role: 'user' as const, content: `old ${index}: ${'history '.repeat(2000)}`, timestamp: index + 1 }));
   let summaryStarted = false, summaryFinished = false, generatedWhileCompacting = false;
   let release!: () => void;
@@ -790,7 +790,7 @@ test('known contexts start background compaction below the blocking threshold wh
 // Above the blocking line of a 16k window: every generation compacts first.
 function blockingCompactionRun(t: TestContext) {
   const windows = require('../lib/ai/model-context') as typeof import('../lib/ai/model-context');
-  t.mock.method(windows, 'resolveModelWindow', () => ({ maxContext: 16000, reserveOutput: 4096, promptRatio: 0.3, reserveHistory: 4000 }));
+  t.mock.method(windows, 'resolveModelWindow', () => ({ maxContext: 16000, reserveOutput: 4096, reserveHistory: 4000 }));
   const run = row();
   run.checkpoint.messages = Array.from({ length: 6 }, (_, index) => ({ role: 'user' as const, content: `old ${index}: ${'history '.repeat(2000)}`, timestamp: index + 1 }));
   return run;

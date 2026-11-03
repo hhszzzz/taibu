@@ -27,7 +27,7 @@ const buildOversizedCaseProfile = () => ({
         xiShen: { basic: ['金'], advanced: ['申金'] },
         jiShen: { basic: ['火'], advanced: [] },
         xianShen: { basic: ['土'], advanced: [] },
-        summary: '甲'.repeat(300),
+        summary: '甲'.repeat(60000),
     },
     ownerFeedback: {
         occupation: '上班族',
@@ -354,9 +354,10 @@ test('buildPromptWithSources should honor chartPromptDetailLevel for selected ba
 
 test('buildPromptWithSources skips P2 layers when budget exceeded', async () => {
     const pb = require('../lib/ai/prompt-builder') as any;
-    const hugeContent = 'a'.repeat(20000);
+    const hugeContent = 'a'.repeat(60000);
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
+        modelWindow: { contextWindow: 8000, maxOutput: 1000 },
         userMessage: '测试问题',
         mentions: [{ type: 'ming_record', id: 'r1', name: '记录1', preview: 'p', resolvedContent: hugeContent }],
         knowledgeHits: [],
@@ -490,6 +491,7 @@ test('buildPromptWithSources does not token-truncate selected chart context when
     const pb = require('../lib/ai/prompt-builder') as any;
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
+        modelWindow: { contextWindow: 6000, maxOutput: 1000 },
         userMessage: '请结合我选中的命盘继续分析事业',
         mentions: [],
         knowledgeHits: [],
@@ -675,13 +677,13 @@ test('prepared budget and personality preserve standalone output with one model 
     assert.deepEqual(prepared, standalone);
 });
 
-test('BYOK prompt budgets honor configured context and output limits without exceeding tiny windows', async () => {
+test('BYOK prompt budgets use the remaining model context without a fixed token cap', async () => {
     const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
     const model = 'byok:00000000-0000-4000-8000-0000000000b1';
     const window = await pb.resolveChatModelWindow(model, false, { contextWindow: 16_000, maxOutput: 2_000 });
     assert.equal(window.config.maxContext, 16_000);
     assert.equal(window.config.reserveOutput, 2_000);
     assert.equal(window.defaultMaxTokens, 2_000);
-    assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 20_000, maxOutput: 200 }), 200);
+    assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 20_000, maxOutput: 200 }), 15_800);
     assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 5_000, maxOutput: 12_000 }), 0);
 });

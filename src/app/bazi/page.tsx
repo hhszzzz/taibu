@@ -203,16 +203,15 @@ function BaziPageContent() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
-        if (formData.birthHour < 0) {
-            showToast('warning', '请填写出生时间');
-            return;
-        }
-        // 四柱模式下必须已反推出日期才能提交
+        // 四柱模式下必须已反推出具体日期和时间才能提交
         if (formData.calendarType === 'pillars') {
             if (!formData.birthYear || !formData.birthMonth || !formData.birthDay) {
-                showToast('warning', '请先选择完整的四柱并确认出生时间');
+                showToast('warning', '请先选择四柱反推出的具体时间');
                 return;
             }
+        } else if (formData.birthHour < 0) {
+            showToast('warning', '请填写出生时间');
+            return;
         }
 
         setIsSubmitting(true);

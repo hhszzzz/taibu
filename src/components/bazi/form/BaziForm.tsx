@@ -168,6 +168,13 @@ export function BaziForm({
                         <SmartPillarsInput
                             value={formData.pillars}
                             timeOptions={formData}
+                            resolvedDateTime={formData.birthYear > 0 && formData.birthHour >= 0 ? {
+                                year: formData.birthYear,
+                                month: formData.birthMonth,
+                                day: formData.birthDay,
+                                hour: formData.birthHour,
+                                minute: formData.birthMinute,
+                            } : null}
                             onChange={(pillars, dateTime) => {
                                 onUpdate('pillars', pillars);
                                 // 如果反推出了时间，同时更新日期和时间字段

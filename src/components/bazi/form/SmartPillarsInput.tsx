@@ -34,6 +34,14 @@ type SelectionStep = 'year_stem' | 'year_branch' | 'month' | 'day_stem' | 'day_b
 
 interface SmartPillarsInputProps {
     timeOptions?: BirthTimeResolution & { longitude?: number };
+    /** 已确定的出生时间；四柱未完全匹配到日期时为空。 */
+    resolvedDateTime?: {
+        year: number;
+        month: number;
+        day: number;
+        hour: number;
+        minute: number;
+    } | null;
     value?: {
         year: PillarData;
         month: PillarData;
@@ -146,10 +154,11 @@ const renderPillarButtons = (
     </div>
 );
 
-export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions }: SmartPillarsInputProps) {
+export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions, resolvedDateTime }: SmartPillarsInputProps) {
     const dateSelectorTitleId = useId();
     const [possibleDates, setPossibleDates] = useState<ReversedDateTime[]>([]);
     const [showDateSelector, setShowDateSelector] = useState(false);
+    const [reverseNotice, setReverseNotice] = useState<string | null>(null);
     const [searching, setSearching] = useState(false);
     const requestId = useRef(0);
     const { showToast } = useToast();
@@ -185,6 +194,7 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
         setSearching(false);
         setShowDateSelector(false);
         setPossibleDates([]);
+        setReverseNotice(null);
         updatePillars(next, dateTime);
     };
 
@@ -298,7 +308,9 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
             const dates = await reversePillars(completePillars, timeOptions);
             if (request !== requestId.current) return;
             if (dates.length === 0) {
-                showToast('warning', '在1900-2100年范围内未找到匹配的时间，请核对四柱及时间规则');
+                const message = '在 1900-2100 年范围内未找到匹配的时间，请核对四柱或清除后重新选择';
+                setReverseNotice(message);
+                showToast('warning', message);
             } else if (dates.length === 1) {
                 onChange(newPillars, dates[0]);
             } else {
@@ -306,7 +318,11 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                 setShowDateSelector(true);
             }
         } catch (error) {
-            if (request === requestId.current) showToast('error', error instanceof Error ? error.message : '反推失败');
+            if (request === requestId.current) {
+                const message = error instanceof Error ? error.message : '反推失败';
+                setReverseNotice(message);
+                showToast('error', message);
+            }
         } finally {
             if (request === requestId.current) setSearching(false);
         }
@@ -507,11 +523,25 @@ export function SmartPillarsInput({ value, onChange: updatePillars, timeOptions 
                     </div>
                 )}
 
-                {/* 全部完成提示 */}
-                {currentStep === 'complete' && (
-                    <div className="py-2 text-center text-sm text-success">
-                        四柱选择完成
+                {/* 反推失败提示与重新打开候选时间的入口 */}
+                {reverseNotice && (
+                    <p role="status" className="text-center text-sm text-warning">{reverseNotice}</p>
+                )}
+                {currentStep === 'complete' && possibleDates.length > 0 && !showDateSelector && (
+                    <div className="flex justify-center">
+                        <Button unstyled
+                            type="button"
+                            onClick={() => setShowDateSelector(true)}
+                            className="h-10 rounded-xl border-[0.5px] border-accent/40 bg-accent-light px-4 text-sm text-accent transition-colors hover:bg-accent-soft"
+                        >
+                            选择具体时间（{possibleDates.length} 个可能）
+                        </Button>
                     </div>
+                )}
+                {currentStep === 'complete' && resolvedDateTime && (
+                    <p className="text-center text-xs text-foreground-secondary">
+                        已确定出生时间：{resolvedDateTime.year}-{String(resolvedDateTime.month).padStart(2, '0')}-{String(resolvedDateTime.day).padStart(2, '0')} {String(resolvedDateTime.hour).padStart(2, '0')}:{String(resolvedDateTime.minute).padStart(2, '0')}
+                    </p>
                 )}
             </div>
 

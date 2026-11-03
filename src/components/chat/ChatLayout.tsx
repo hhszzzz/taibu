@@ -17,7 +17,7 @@ import { useToast } from '@/components/ui/Toast';
 import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
 import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
-import { LayoutDashboard, X } from 'lucide-react';
+import { LayoutDashboard, UsersRound, X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
@@ -25,7 +25,10 @@ import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
 import { ChatComposer } from '@/components/chat/ChatComposer';
-import { FeaturePromoCarousel } from '@/components/chat/FeaturePromoCarousel';
+import { FeaturePromoDialog, type FeaturePromoItem } from '@/components/chat/FeaturePromoDialog';
+import { AgentIcon, ConnectorsIcon, GaugeIcon, MemoryIcon, ScheduleIcon, SkillIcon, WalletIcon } from '@/lib/navigation/nav-icons';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { openSettingsCenter } from '@/lib/settings-center';
 import { QuoteSelection } from '@/components/chat/QuoteSelection';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
@@ -426,17 +429,72 @@ export function ChatLayout(props: ChatLayoutProps) {
     const questionLater = questionKey !== null && laterQuestion === questionKey;
     const collaborators = currentRun?.configuration?.collaborators.length ?? 0;
     const agent = props.agent;
-    // 推荐卡不按「是否用过」过滤：以后还会加新功能，「不再提示」一次覆盖整组。
-    const promoItems = useMemo(() => {
-        if (!userId || isAgentMode || !agent?.capabilities.ready) return [];
-        return [{
-            id: 'agent',
-            title: '试试 Agent',
-            description: '让太卜自己排盘、查资料、分步推理，并在右侧工作区展示过程。',
-            actionLabel: '切换到 Agent',
-            onAction: () => changeMode('agent'),
-        }];
-    }, [userId, isAgentMode, agent?.capabilities.ready, changeMode]);
+    const { isFeatureEnabled, loaded: featureTogglesLoaded } = useFeatureToggles();
+    // Beta 功能弹窗不按「是否用过」过滤：以后还会加新功能，「不再显示」一次覆盖整组。
+    const promoItems = useMemo<FeaturePromoItem[]>(() => {
+        if (!userId || !featureTogglesLoaded) return [];
+        // 只有 Agent 整体不可用时，Agent 相关条目才整组隐藏；关掉某一项工具范围不影响这里。
+        const agentOn = !!agent?.capabilities.ready && isFeatureEnabled('agent');
+        const items: (FeaturePromoItem | false)[] = [
+            agentOn && !isAgentMode && {
+                id: 'agent', label: 'Agent', title: 'Agent：自己动手的太卜',
+                description: '交给它一个问题，它会自己排盘、查资料、调用工具，一步步推理到结论。',
+                highlights: ['排盘、检索、调用工具一气呵成', '推理过程实时可见，随时可以停下', '成果在右侧工作区展开'],
+                actionLabel: '切换到 Agent', onAction: () => changeMode('agent'),
+                icon: size => <AgentIcon size={size} />,
+            },
+            agentOn && {
+                id: 'collaboration', label: '多模型协作', title: '多模型协作',
+                description: '在 Agent 里给主模型配几位协作者，分头分析同一个问题，再由主模型汇总取舍。',
+                highlights: ['在输入框的模型菜单里勾选即可启用', '可预设每位成员的名称、角色和分工', '每位成员按各自用量计费'],
+                actionLabel: '预设协作成员', onAction: () => openSettingsCenter('personalization'),
+                icon: size => <UsersRound size={size} aria-hidden="true" />,
+            },
+            agentOn && isFeatureEnabled('memory') && isFeatureEnabled('ai-personalization') && {
+                id: 'memory', label: '长期记忆', title: '长期记忆',
+                description: '开启后，太卜会记住你的偏好与重要经历，并能检索过往对话。',
+                highlights: ['值得记住的内容自动写入', '随时查看、添加或删除', '关闭不会删除已保存的记忆'],
+                actionLabel: '管理记忆', onAction: () => openSettingsCenter('personalization'),
+                icon: size => <MemoryIcon size={size} />,
+            },
+            agentOn && isFeatureEnabled('skills') && {
+                id: 'skills', label: '技能', title: '技能',
+                description: '把常用的分析方法写成技能，Agent 遇到相关任务时会自动加载。',
+                highlights: ['相关任务中自动加载', '输入 /skill:名称 直接调用', '可附带参考文件'],
+                actionLabel: '添加技能', onAction: () => openSettingsCenter('skills'),
+                icon: size => <SkillIcon size={size} />,
+            },
+            agentOn && isFeatureEnabled('connectors') && {
+                id: 'connectors', label: '连接器', title: '连接器',
+                description: '接入自己的 MCP 服务，让 Agent 在联网任务中调用它们的工具。',
+                highlights: ['接入远程 MCP 服务', '联网任务中按需调用', '随时停用或移除'],
+                actionLabel: '添加连接器', onAction: () => openSettingsCenter('connectors'),
+                icon: size => <ConnectorsIcon size={size} />,
+            },
+            agentOn && isFeatureEnabled('schedules') && {
+                id: 'schedules', label: '定时任务', title: '定时任务',
+                description: '让 Agent 按你设定的时间自动执行任务，结果写回绑定的对话。',
+                highlights: ['每天、每周、每月或自定义时间', '结果写入绑定的对话', '可暂停、恢复或立即运行'],
+                actionLabel: '查看定时任务', onAction: () => router.push('/scheduled'),
+                icon: size => <ScheduleIcon size={size} />,
+            },
+            isFeatureEnabled('billing') && {
+                id: 'billing', label: '钱包', title: '钱包',
+                description: '余额、订阅、充值与兑换码集中管理，随时看清每一笔钱的去向。',
+                highlights: ['自选先扣订阅额度还是先扣余额', '兑换码与订阅在同一处管理', '充值订单可随时查看'],
+                actionLabel: '打开钱包', onAction: () => openSettingsCenter('billing'),
+                icon: size => <WalletIcon size={size} />,
+            },
+            isFeatureEnabled('usage-log') && {
+                id: 'usage-log', label: '用量日志', title: '用量日志',
+                description: '每次模型调用的用量与费用都有记录，自带密钥的调用也会记一条。',
+                highlights: ['逐条查看 token 用量与费用', '充值、兑换、订阅等资金变动同屏', '按时间范围筛选'],
+                actionLabel: '查看用量', onAction: () => openSettingsCenter('usage-log'),
+                icon: size => <GaugeIcon size={size} />,
+            },
+        ];
+        return items.filter((item): item is FeaturePromoItem => !!item);
+    }, [userId, featureTogglesLoaded, agent?.capabilities.ready, isFeatureEnabled, isAgentMode, changeMode, router]);
     const modeControl: ChatModeControl | null = agent ? {
         mode: agent.mode,
         onChange: changeMode,
@@ -584,7 +642,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                 <BrandMark className="chat-empty-symbol" />
                                 <h1>{displayName ? `${greeting}，${displayName}` : `${greeting}，想问什么？`}</h1>
                             </div>
-                            <FeaturePromoCarousel items={promoItems} storageKey={`taibu:feature-promo:${userId ?? 'guest'}`} />
+                            <FeaturePromoDialog key={userId ?? 'guest'} items={promoItems} storageKey={`taibu:feature-promo:${userId ?? 'guest'}`} />
                             <ChatComposer {...composerProps} variant="hero" />
                         </div>
                     </div>

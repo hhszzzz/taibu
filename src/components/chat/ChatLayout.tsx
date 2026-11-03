@@ -25,6 +25,7 @@ import type { ChatMessage, AttachmentState, Mention, PrivateAttachment } from '@
 import { ChatMessageList } from '@/components/chat/ChatMessageList';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
 import { ChatComposer } from '@/components/chat/ChatComposer';
+import { FeaturePromoCarousel } from '@/components/chat/FeaturePromoCarousel';
 import { QuoteSelection } from '@/components/chat/QuoteSelection';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
@@ -425,6 +426,17 @@ export function ChatLayout(props: ChatLayoutProps) {
     const questionLater = questionKey !== null && laterQuestion === questionKey;
     const collaborators = currentRun?.configuration?.collaborators.length ?? 0;
     const agent = props.agent;
+    // 推荐卡不按「是否用过」过滤：以后还会加新功能，「不再提示」一次覆盖整组。
+    const promoItems = useMemo(() => {
+        if (!userId || isAgentMode || !agent?.capabilities.ready) return [];
+        return [{
+            id: 'agent',
+            title: '试试 Agent',
+            description: '让太卜自己排盘、查资料、分步推理，并在右侧工作区展示过程。',
+            actionLabel: '切换到 Agent',
+            onAction: () => changeMode('agent'),
+        }];
+    }, [userId, isAgentMode, agent?.capabilities.ready, changeMode]);
     const modeControl: ChatModeControl | null = agent ? {
         mode: agent.mode,
         onChange: changeMode,
@@ -481,6 +493,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         collaborators: props.collaborators, onCollaboratorsChange: props.onCollaboratorsChange,
         codeMode: agent?.codeMode, onCodeModeChange: agent?.setCodeMode,
         planMode: agent?.planMode, onPlanModeChange: agent?.setPlanMode,
+        codeModeAvailable: agent?.capabilities.codeModeAvailable,
+        planModeAvailable: agent?.capabilities.planModeAvailable,
         approval: agent?.approval, onApprovalChange: agent?.setApproval,
         agentMode: isAgentMode,
         onEnableAgent: () => {
@@ -575,6 +589,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                 <BrandMark className="chat-empty-symbol" />
                                 <h1>{displayName ? `${greeting}，${displayName}` : `${greeting}，想问什么？`}</h1>
                             </div>
+                            <FeaturePromoCarousel items={promoItems} storageKey={`taibu:feature-promo:${userId ?? 'guest'}`} />
                             <ChatComposer {...composerProps} variant="hero" />
                         </div>
                     </div>

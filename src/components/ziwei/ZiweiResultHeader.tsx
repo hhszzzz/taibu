@@ -114,14 +114,14 @@ export function ZiweiResultHeader({ title, summary, desktopSuffix, status, mode,
                     <AIFeatureGate>
                         {onAsk ? (
                             <Button unstyled type="button" onClick={onAsk}
-                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                                className="inline-flex h-8 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                             >
                                 问太卜
                             </Button>
                         ) : (
                             <Link
                                 href={ASK_TAIBU_HREF}
-                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
+                                className="inline-flex h-8 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors hover:bg-accent-hover"
                             >
                                 问太卜
                             </Link>

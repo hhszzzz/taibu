@@ -7,6 +7,7 @@
 import { useEffect } from 'react';
 import Link from 'next/link';
 import { Button, buttonVariants } from '@/components/ui/Button';
+import { cn } from '@/lib/utils';
 
 export default function TarotError({
     error,
@@ -30,10 +31,10 @@ export default function TarotError({
                     {error.message || '加载塔罗占卜时发生了意外错误'}
                 </p>
                 <div className="flex gap-3 justify-center">
-                    <Button size="lg" className="h-11 px-6" onClick={reset}>重试</Button>
+                    <Button size="lg" className="h-11 w-28 px-0" onClick={reset}>重试</Button>
                     <Link
                         href="/tarot"
-                        className={buttonVariants({ variant: 'secondary', size: 'lg', className: 'h-11 px-6' })}
+                        className={cn(buttonVariants({ variant: 'secondary', size: 'lg' }), 'h-11 w-28 px-0')}
                     >
                         返回塔罗
                     </Link>

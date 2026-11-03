@@ -119,12 +119,12 @@ export function ResultHeader({
                             <Button unstyled
                                 type="button"
                                 onClick={ask.onClick}
-                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
+                                className="inline-flex h-8 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
                             >{ask.label}</Button>
                         ) : (
                             <Link
                                 href={ASK_TAIBU_HREF}
-                                className="inline-flex h-10 items-center rounded-xl bg-accent px-4 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
+                                className="inline-flex h-8 items-center rounded-md bg-accent px-3.5 text-sm font-medium text-on-accent transition-colors duration-150 hover:bg-accent-hover"
                             >
                                 问太卜
                             </Link>

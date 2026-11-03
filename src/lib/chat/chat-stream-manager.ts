@@ -511,10 +511,13 @@ export class ChatStreamManager {
     }
 
     private async finishCompleted(task: ChatStreamTaskInternal): Promise<void> {
-        if (task.content.trim().length === 0 && task.reasoning.trim().length === 0) {
+        // 只有思考、没有正文不算完成：模型可能在推理里耗尽输出（或上游截断），留着空回答会让用户以为命盘数据丢了。
+        if (task.content.trim().length === 0) {
             await this.finishWithStatus(task, 'failed', {
                 code: 'REQUEST_FAILED',
-                message: '流式响应为空',
+                message: task.reasoning.trim().length > 0
+                    ? '模型只输出了思考过程，没有生成回答，请重试'
+                    : '流式响应为空',
             });
             return;
         }

@@ -158,7 +158,7 @@ test('own-model requests carry each format\'s thinking parameters, no temperatur
   assert.deepEqual(level.request.body?.stream_options, { include_usage: true });
   assert.deepEqual((level.request.body?.messages as Array<{ role: string }>).map(item => item.role), ['system', 'user'], 'a relay gets a plain system message');
   assert.equal(level.request.body?.store, undefined);
-  assert.deepEqual(level.result, { content: 'OK', reasoning: '', usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0 }, error: null, aborted: false });
+  assert.deepEqual(level.result, { content: 'OK', reasoning: '', usage: { input: 3, output: 2, cacheRead: 0, cacheWrite: 0 }, error: null, aborted: false, stopReason: 'stop' });
   assert.equal((await send(OPENAI, { mode: 'auto' })).request.body?.reasoning_effort, undefined, '「模型默认」 sends nothing');
 
   const claudeAuto = await send(CLAUDE, { mode: 'auto' });

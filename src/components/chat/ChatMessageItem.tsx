@@ -269,7 +269,10 @@ export const ChatMessageItem = memo(function ChatMessageItem({
 
     // AI 消息
     const showOwnModelAction = message.metadata?.byokErrorAction === 'settings';
-    const assistantActions = message.content && !isCurrentStreaming ? (
+    const hasAnswerText = message.content.trim().length > 0;
+    const hasReasoning = (message.reasoning ?? '').trim().length > 0;
+    // 只有思考没有正文的回答也要能重新生成；复制、引用等动作仍需要正文。
+    const assistantActions = (hasAnswerText || hasReasoning) && !isCurrentStreaming ? (
         <MessageActions
             message={message}
             disabled={disabled}
@@ -300,6 +303,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
             )}
             {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
+            {!message.agent && !hasAnswerText && hasReasoning && !isCurrentStreaming && (
+                <p className="chat-message-meta is-assistant">这次只完成了思考，没有生成正文。可以重新生成，或直接追问。</p>
+            )}
             <GeneratedImageGallery images={readGeneratedImageRefs(message.metadata?.generatedImages)} label="生成的图片" />
             {showOwnModelAction && !isCurrentStreaming && (
                 <Button

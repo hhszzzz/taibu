@@ -192,6 +192,8 @@ export interface ByokStreamResult {
   /** pi-ai's failure text (`401 …`), or null when the call finished. */
   error: string | null;
   aborted: boolean;
+  /** How the provider ended: `length` means the output cap cut it before any answer arrived. */
+  stopReason: string | null;
 }
 
 /** Reads a stream to its end, handing answer and reasoning text over as it arrives. */
@@ -216,5 +218,6 @@ export async function collectByokStream(
     content, reasoning, usage: byokUsage(result.usage),
     error: failed ? result.errorMessage ?? 'Request failed' : null,
     aborted: result.stopReason === 'aborted',
+    stopReason: result.stopReason ?? null,
   };
 }

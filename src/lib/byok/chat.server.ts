@@ -64,6 +64,13 @@ export async function serverByokModel(
 
 const SERVER_BYOK_RATE_LIMIT_KEY = '/api/byok/server';
 
+/** A completion that ended without an answer, worded for the two causes the providers actually show. */
+function emptyAnswerMessage(result: ByokStreamResult): string {
+  if (result.stopReason === 'length') return '模型在输出上限处结束，没有生成回答。请重试，或把推理档位调低后再试。';
+  if (result.reasoning.trim()) return '模型只输出了思考过程，没有生成回答。请重试，或把推理档位调低后再试。';
+  return '模型没有返回内容，请重试。';
+}
+
 /**
  * One whole answer from a stored-key own model, for the routes that return text rather than a stream (polishing, photo
  * reading). The model's thinking parameters stay unset unless `thinking` says otherwise.
@@ -109,6 +116,7 @@ export async function handleServerByokChat(request: NextRequest, body: ChatReque
   if (!body.stream) {
     const result = await run({});
     if (result.error) return jsonError(formatByokError(byokFailureFromMessage(result.error)), 502, { code: 'BYOK_REQUEST_FAILED' });
+    if (!result.aborted && !result.content.trim()) return jsonError(emptyAnswerMessage(result), 502, { code: 'BYOK_EMPTY_ANSWER' });
     return jsonOk({ content: result.content, metadata: prepared.metadata });
   }
 
@@ -128,6 +136,7 @@ export async function handleServerByokChat(request: NextRequest, body: ChatReque
       });
       if (open) writer.write({ type: open === 'reasoning' ? 'reasoning-end' : 'text-end', id: open });
       if (result.error && !result.aborted) writer.write({ type: 'error', errorText: formatByokError(byokFailureFromMessage(result.error)) });
+      else if (!result.aborted && !result.content.trim()) writer.write({ type: 'error', errorText: emptyAnswerMessage(result) });
       else writer.write({ type: 'finish' });
     },
     onError: error => formatByokError(byokFailureFromMessage(error instanceof Error ? error.message : String(error))),

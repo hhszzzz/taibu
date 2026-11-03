@@ -169,7 +169,8 @@
 .chat-transcript-row { padding: 0; }
 .chat-transcript-row[data-role="user"] { padding: 24px 0; }
 .chat-transcript-row[data-role="assistant"] { padding: 16px 0 8px; }
-.chat-user-column { width: min(max-content, 82%, 600px); max-width: min(82%, 600px); min-width: 0; gap: 4px; }
+/* 列宽必须用合法的 width 值：min()/max() 不接受 max-content 关键字，声明会被整条丢弃，短消息列会缩到内容宽再被气泡的 75% 上限压成一字一行。 */
+.chat-user-column { width: 100%; max-width: min(82%, 600px); min-width: 0; gap: 4px; }
 .chat-message-row.is-assistant { max-width: 100%; }
 .chat-message-versions { display: inline-flex; align-items: center; gap: 2px; font-size: calc(11 / 16 * 1rem); font-variant-numeric: tabular-nums; }
 .chat-message-chart-label { margin-left: 8px; font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }

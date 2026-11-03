@@ -610,6 +610,55 @@ test('chat stream manager fails empty streams instead of synthesizing fallback r
     unsubscribe();
 });
 
+test('chat stream manager fails a reasoning-only answer instead of completing an empty message', async () => {
+    const encoder = new TextEncoder();
+    const saved: Array<{ conversationId: string; messages: ChatMessage[] }> = [];
+    const manager = new ChatStreamManager({
+        fetcher: async () => {
+            const stream = new ReadableStream<Uint8Array>({
+                start(controller) {
+                    controller.enqueue(encoder.encode('data: {"type":"reasoning-delta","delta":"先看命盘"}\n\n'));
+                    controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+                    controller.close();
+                },
+            });
+            return new Response(stream, {
+                status: 200,
+                headers: { 'Content-Type': 'text/event-stream' },
+            });
+        },
+        saveConversation: async (conversationId, messages) => {
+            saved.push({ conversationId, messages: messages as ChatMessage[] });
+            return true;
+        },
+    });
+
+    const baseMessages = [createUserMessage()];
+    const events: Array<{ type: string; errorCode?: string; errorMessage?: string; messages?: ChatMessage[] }> = [];
+    const unsubscribe = manager.subscribe((event) => {
+        events.push({ type: event.type, errorCode: event.errorCode, errorMessage: event.errorMessage, messages: event.task.messages });
+    });
+
+    const started = await manager.startTask({
+        conversationId: 'conv-reasoning-only',
+        requestHeaders: { 'Content-Type': 'application/json' },
+        requestBody: { messages: baseMessages, stream: true },
+        baseMessages,
+        assistantMessage: createAssistantMessage('assistant-reasoning'),
+    });
+    assert.equal(started.ok, true);
+
+    await waitFor(() => events.some(e => e.type === 'task_failed'));
+    const failedEvent = events.find(e => e.type === 'task_failed');
+    assert.equal(failedEvent?.errorCode, 'REQUEST_FAILED');
+    assert.equal(failedEvent?.errorMessage, '模型只输出了思考过程，没有生成回答，请重试');
+    assert.equal(failedEvent?.messages?.at(-1)?.reasoning, '先看命盘');
+    assert.equal(failedEvent?.messages?.at(-1)?.content, '');
+    assert.equal(saved.length, 1, 'the reasoning is kept so the reader can still inspect it');
+
+    unsubscribe();
+});
+
 test('chat stream manager reports timeout when stream stays idle too long', async () => {
     const manager = new ChatStreamManager({
         fetcher: async (_input, init) => createStalledResponse(init?.signal as AbortSignal | undefined),

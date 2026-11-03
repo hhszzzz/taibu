@@ -36,6 +36,43 @@ function mergeMentions(rawUserContent: string, mentions?: Mention[]): Mention[] 
     .slice(0, 20);
 }
 
+function mentionKey(mention: Mention): string {
+  return `${mention.type}:${mention.id ?? mention.name}`;
+}
+
+function dedupeMentions(mentions: Mention[]): Mention[] {
+  const seen = new Set<string>();
+  return mentions.filter((mention) => {
+    const key = mentionKey(mention);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
+ * History keeps only the display name (`@命盘名`), not the structured mention, so a follow-up like 「继续」 would
+ * reach the model without the chart it was talking about. Carry the most recent earlier turn's mentions forward
+ * when the current turn names none of its own.
+ */
+function inheritedMentions(messages: ResolvedChatRequest['body']['messages'], currentIndex: number): Mention[] {
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === 'user' && message.mentions?.length) return message.mentions;
+  }
+  return [];
+}
+
+/** 直聊按会话里持久化的结构化 mention 逐轮解析；Agent 仍用自己的工具上下文。 */
+function conversationMentions(messages: ResolvedChatRequest['body']['messages'], currentIndex: number): Mention[] {
+  const collected: Mention[] = [];
+  for (let index = currentIndex - 1; index >= 0; index -= 1) {
+    const message = messages[index];
+    if (message.role === 'user' && message.mentions?.length) collected.push(...message.mentions);
+  }
+  return dedupeMentions(collected);
+}
+
 async function resolveMentionsForPrompt(
   mentions: Mention[],
   userId: string,
@@ -96,7 +133,7 @@ function applyUserSettingsOverrides(
  */
 export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
-  options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean; modelWindow?: { contextWindow?: number | null; maxOutput?: number | null } },
+  options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean; conversationMentions?: boolean; modelWindow?: { contextWindow?: number | null; maxOutput?: number | null } },
 ): Promise<ChatPromptContextResult> {
   const { body, userId, requestedModelId, reasoningEnabled } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
@@ -115,7 +152,16 @@ export async function buildChatPromptContext(
   // Runs while the rest of the context loads; mention tokens never leave for the search provider.
   const webSearch = options?.webSearch ? searchChatWeb(stripMentionTokens(userQuestionForSearch)) : undefined;
   const canUsePromptKnowledgeBase = knowledgeBaseFeatureEnabled;
-  const mergedMentions = mergeMentions(rawUserContent, body.mentions);
+  const currentMentions = dedupeMentions(
+    mergeMentions(rawUserContent, body.mentions).concat(lastUserMessage?.mentions ?? []),
+  ).slice(0, 20);
+  // 「继续」之类的新消息没有 @，但要接着上一条消息的命盘/资料回答。
+  const lastUserIndex = lastUserMessage ? body.messages.lastIndexOf(lastUserMessage) : -1;
+  const mergedMentions = options?.conversationMentions
+    ? dedupeMentions([...currentMentions, ...conversationMentions(body.messages, lastUserIndex)]).slice(0, 10)
+    : currentMentions.length
+      ? currentMentions
+      : dedupeMentions(inheritedMentions(body.messages, lastUserIndex));
   const effectiveMentions = canUsePromptKnowledgeBase
     ? mergedMentions
     : mergedMentions.filter((mention) => mention.type !== 'knowledge_base');

@@ -251,6 +251,123 @@ test('the last user message is dated in the zone the browser sent; earlier messa
   assert.match((await request('Not/AZone')).sanitizedMessages[2].content, /^【发送时间：[^】]+Asia\/Shanghai（UTC\+08:00）】\n/u);
 });
 
+test('a follow-up without its own mention keeps the chart from the previous user turn', async (t) => {
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const mentionsModule = require('../lib/mentions') as typeof import('../lib/mentions');
+  stubSettings(t, { expression_style: 'direct', user_profile: {}, custom_instructions: '', prompt_kb_ids: [], visualization_settings: {} });
+  t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
+  t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
+
+  const resolved: string[] = [];
+  t.mock.method(mentionsModule, 'resolveMention', async (mention: { id?: string }) => {
+    resolved.push(mention.id ?? '');
+    return '# 紫微命盘\n命宫在戌';
+  });
+
+  let capturedMentions: Array<{ id?: string; resolvedContent?: string }> = [];
+  t.mock.method(promptBuilderModule, 'buildPromptWithSources', async (context: { mentions: Array<{ id?: string; resolvedContent?: string }> }) => {
+    capturedMentions = context.mentions;
+    return { systemPrompt: '', userMessagePrefix: '', userMessageTokens: 0, sources: [], diagnostics: [], totalTokens: 0, budgetTotal: 0 };
+  });
+
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  const result = await buildChatPromptContext({
+    body: {
+      messages: [
+        {
+          id: 'm1', role: 'user', content: '@杨旭垲的紫微命盘 请分析命宫', createdAt: '2026-10-23T01:00:00.000Z',
+          mentions: [{ id: 'chart-1', type: 'ziwei_chart', name: '杨旭垲的紫微命盘', preview: '杨旭垲 · 2003-02-11' }],
+        },
+        { id: 'a1', role: 'assistant', content: '先说结论', createdAt: '2026-10-23T01:00:05.000Z' },
+        { id: 'm2', role: 'user', content: '继续', createdAt: '2026-10-23T01:00:10.000Z' },
+      ],
+      stream: false,
+    },
+    userId: 'user-1', metered: true, requestedModelId: 'deepseek-chat', reasoningEnabled: false,
+  });
+
+  assert.deepEqual(resolved, ['chart-1'], 'the earlier chart is re-resolved for the follow-up');
+  assert.equal(capturedMentions.length, 1);
+  assert.equal(capturedMentions[0]?.resolvedContent, '# 紫微命盘\n命宫在戌');
+  assert.equal(result.sanitizedMessages[2].content, '继续', 'the follow-up text itself stays untouched');
+});
+
+test('a current mention replaces the inherited one instead of stacking stale charts', async (t) => {
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const mentionsModule = require('../lib/mentions') as typeof import('../lib/mentions');
+  stubSettings(t, { expression_style: 'direct', user_profile: {}, custom_instructions: '', prompt_kb_ids: [], visualization_settings: {} });
+  t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 1024);
+  t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
+  t.mock.method(mentionsModule, 'resolveMention', async (mention: { id?: string }) => `resolved:${mention.id ?? ''}`);
+  let capturedMentions: Array<{ id?: string }> = [];
+  t.mock.method(promptBuilderModule, 'buildPromptWithSources', async (context: { mentions: Array<{ id?: string }> }) => {
+    capturedMentions = context.mentions;
+    return { systemPrompt: '', userMessagePrefix: '', userMessageTokens: 0, sources: [], diagnostics: [], totalTokens: 0, budgetTotal: 0 };
+  });
+
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  await buildChatPromptContext({
+    body: {
+      messages: [
+        {
+          id: 'm1', role: 'user', content: '@旧命盘 请分析', createdAt: '2026-10-23T01:00:00.000Z',
+          mentions: [{ id: 'old-chart', type: 'ziwei_chart', name: '旧命盘', preview: '旧' }],
+        },
+        { id: 'a1', role: 'assistant', content: '答', createdAt: '2026-10-23T01:00:05.000Z' },
+        {
+          id: 'm2', role: 'user', content: '@新命盘 换这张', createdAt: '2026-10-23T01:00:10.000Z',
+          mentions: [{ id: 'new-chart', type: 'ziwei_chart', name: '新命盘', preview: '新' }],
+        },
+      ],
+      stream: false,
+      mentions: [{ id: 'new-chart', type: 'ziwei_chart', name: '新命盘', preview: '新' }],
+    },
+    userId: 'user-1', metered: true, requestedModelId: 'deepseek-chat', reasoningEnabled: false,
+  });
+
+  assert.deepEqual(capturedMentions.map(mention => mention.id), ['new-chart']);
+});
+
+test('direct chat carries every persisted conversation mention forward', async (t) => {
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const mentionsModule = require('../lib/mentions') as typeof import('../lib/mentions');
+  stubSettings(t, { expression_style: 'direct', user_profile: {}, custom_instructions: '', prompt_kb_ids: [], visualization_settings: {} });
+  t.mock.method(promptBuilderModule, 'calculatePromptBudget', async () => 4096);
+  t.mock.method(appSettingsModule, 'isFeatureModuleEnabled', async () => false);
+  t.mock.method(mentionsModule, 'resolveMention', async (mention: { id?: string }) => `resolved:${mention.id ?? ''}`);
+  let capturedMentions: Array<{ id?: string }> = [];
+  t.mock.method(promptBuilderModule, 'buildPromptWithSources', async (context: { mentions: Array<{ id?: string }> }) => {
+    capturedMentions = context.mentions;
+    return { systemPrompt: '', userMessagePrefix: '', userMessageTokens: 0, sources: [], diagnostics: [], totalTokens: 0, budgetTotal: 0 };
+  });
+
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  await buildChatPromptContext({
+    body: {
+      messages: [
+        {
+          id: 'm1', role: 'user', content: '@旧命盘 请分析', createdAt: '2026-10-23T01:00:00.000Z',
+          mentions: [{ id: 'old-chart', type: 'ziwei_chart', name: '旧命盘', preview: '旧' }],
+        },
+        { id: 'a1', role: 'assistant', content: '答', createdAt: '2026-10-23T01:00:05.000Z' },
+        {
+          id: 'm2', role: 'user', content: '@新命盘 也看看', createdAt: '2026-10-23T01:00:10.000Z',
+          mentions: [{ id: 'new-chart', type: 'ziwei_chart', name: '新命盘', preview: '新' }],
+        },
+        { id: 'a2', role: 'assistant', content: '答', createdAt: '2026-10-23T01:00:15.000Z' },
+        { id: 'm3', role: 'user', content: '继续', createdAt: '2026-10-23T01:00:20.000Z' },
+      ],
+      stream: false,
+    },
+    userId: 'user-1', metered: true, requestedModelId: 'deepseek-chat', reasoningEnabled: false,
+  }, { conversationMentions: true });
+
+  assert.deepEqual(capturedMentions.map(mention => mention.id), ['new-chart', 'old-chart']);
+});
+
 test('quotes reach the prompt builder and move into the last message instead of staying on it', async (t) => {
   const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
   const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');

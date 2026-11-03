@@ -48,20 +48,58 @@ export async function resolveMention(mention: Mention, userId: string, ctx?: Dat
         console.warn(`[mention-resolve] SKIP: mention.id is missing for type=${mention.type} name=${mention.name}`);
         return '';
     }
-    if (mention.type === 'knowledge_base') {
-        return await resolveKnowledgeBase(mention.id, userId, ctx);
+
+    const key = mentionCacheKey(mention, userId, ctx);
+    const cached = mentionCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+        mentionCache.delete(key);
+        mentionCache.set(key, cached);
+        return cached.value;
     }
 
-    try {
-        const provider = await getProvider(mention.type);
-        const data = await provider.get(mention.id, userId, ctx);
-        if (!data) {
-            console.warn(`[mention-resolve] provider.get returned null for type=${mention.type} id=${mention.id}`);
+    const resolve = async () => {
+        if (mention.type === 'knowledge_base') {
+            return await resolveKnowledgeBase(mention.id!, userId, ctx);
         }
-        return data ? await provider.formatForAI(data, ctx) : '';
-    } catch (err) {
-        console.error(`[mention-resolve] ERROR for type=${mention.type} id=${mention.id}:`, err);
-        return '';
+        try {
+            const provider = await getProvider(mention.type);
+            const data = await provider.get(mention.id!, userId, ctx);
+            if (!data) {
+                console.warn(`[mention-resolve] provider.get returned null for type=${mention.type} id=${mention.id}`);
+            }
+            return data ? await provider.formatForAI(data, ctx) : '';
+        } catch (err) {
+            console.error(`[mention-resolve] ERROR for type=${mention.type} id=${mention.id}:`, err);
+            return '';
+        }
+    };
+
+    const content = await resolve();
+    if (content) {
+        if (mentionCache.size >= MENTION_CACHE_LIMIT) mentionCache.delete(mentionCache.keys().next().value!);
+        mentionCache.set(key, { value: content, expires: Date.now() + MENTION_CACHE_TTL_MS });
+    }
+    return content;
+}
+
+const MENTION_CACHE_TTL_MS = 60_000;
+const MENTION_CACHE_LIMIT = 200;
+const mentionCache = new Map<string, { value: string; expires: number }>();
+
+function mentionCacheKey(mention: Mention, userId: string, ctx?: DataSourceQueryContext): string {
+    return [
+        userId, mention.type, mention.id ?? '',
+        ctx?.maxTokens ?? '', ctx?.maxChars ?? '', ctx?.chartPromptDetailLevel ?? '', ctx?.caseEventLimit ?? '',
+    ].join('|');
+}
+
+export function clearMentionCache(): void {
+    mentionCache.clear();
+}
+
+export function invalidateMentionCache(referenceId: string): void {
+    for (const key of mentionCache.keys()) {
+        if (key.split('|')[2] === referenceId) mentionCache.delete(key);
     }
 }
 

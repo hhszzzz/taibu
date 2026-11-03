@@ -137,7 +137,7 @@ async function buildSharedPreviewContext({
         metered: false,
         requestedModelId,
         reasoningEnabled,
-    });
+    }, { conversationMentions: true });
 
   const previewText = sharedContext.systemPrompt.slice(0, PREVIEW_TEXT_LIMIT);
   const historyTokens = countMessageTokens(chatBody.messages as Array<{ content?: string }>);

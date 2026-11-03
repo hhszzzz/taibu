@@ -2,6 +2,7 @@ import { type NextRequest } from 'next/server';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { deleteFromDynamic, selectFromDynamic } from '@/lib/db/sql-helpers';
+import { invalidateMentionCache } from '@/lib/mentions';
 import {
     buildDefaultChartSettingsPayload,
     getUserSettingsSnapshot,
@@ -177,6 +178,7 @@ export async function DELETE(request: NextRequest) {
         .where('user_id', '=', auth.user.id)
         .returning('id')
         .execute());
+    if (data.length) invalidateMentionCache(id);
 
     if (data.length === 0) {
         return jsonError('命盘不存在', 404);

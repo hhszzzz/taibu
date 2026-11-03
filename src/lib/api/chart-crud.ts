@@ -11,6 +11,7 @@ import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { insertIntoDynamic, selectFromDynamic, updateTableDynamic } from '@/lib/db/sql-helpers';
 import { isValidUUID } from '@/lib/validation';
+import { invalidateMentionCache } from '@/lib/mentions';
 
 interface ChartCrudConfig {
     tableName: string;
@@ -219,6 +220,7 @@ export function createChartPostHandler(config: ChartCrudConfig) {
             return jsonError('保存命盘失败', 500);
         }
 
+        if (result.data?.id) invalidateMentionCache(String(result.data.id));
         return jsonOk({ id: result.data?.id ?? null }, 201);
     };
 }
@@ -296,6 +298,7 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
             return jsonError('未找到可更新的命盘', 404);
         }
 
+        invalidateMentionCache(body.chartId);
         return jsonOk({ success: true });
     };
 }

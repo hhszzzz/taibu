@@ -169,7 +169,7 @@ async function bindManagedChat(request: NextRequest, body: ChatRequestBody, obse
     buildPrompt: async (resolved) => {
       observation?.phase('prompt');
       try {
-        return await buildChatPromptContext(withRequestContext(resolved, body), { webSearch: resolved.input.webSearch === true });
+        return await buildChatPromptContext(withRequestContext(resolved, body), { webSearch: resolved.input.webSearch === true, conversationMentions: true });
       } catch (error) {
         observation?.fail('prompt');
         throw error;
@@ -204,6 +204,7 @@ export async function prepareBrowserDirectChatRequest(
           : null;
         return await buildChatPromptContext(withRequestContext(resolved, body), {
           webSearch: resolved.input.webSearch === true,
+          conversationMentions: true,
           ...(modelWindow?.usage === 'chat' ? { modelWindow: { contextWindow: modelWindow.contextWindow, maxOutput: modelWindow.maxOutput } } : {}),
         });
       } catch (error) {

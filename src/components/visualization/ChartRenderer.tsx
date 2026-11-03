@@ -26,6 +26,7 @@ interface ChartRendererProps {
   data: ChartData;
   compact?: boolean;
   className?: string;
+  onRenderError?: (error: Error) => void;
 }
 
 function ChartSkeleton() {
@@ -52,11 +53,15 @@ export function shouldResetChartError(prevResetKey: unknown, nextResetKey: unkno
   return prevResetKey !== nextResetKey;
 }
 
-export class ChartErrorBoundary extends Component<{ children: ReactNode; resetKey: unknown; fallback?: ReactNode }, ErrorBoundaryState> {
+export class ChartErrorBoundary extends Component<{ children: ReactNode; resetKey: unknown; fallback?: ReactNode; onError?: (error: Error) => void }, ErrorBoundaryState> {
   state: ErrorBoundaryState = { error: null };
 
   static getDerivedStateFromError(error: Error) {
     return { error };
+  }
+
+  componentDidCatch(error: Error) {
+    this.props.onError?.(error);
   }
 
   componentDidUpdate(prevProps: Readonly<{ children: ReactNode; resetKey: unknown }>) {
@@ -79,7 +84,7 @@ export class ChartErrorBoundary extends Component<{ children: ReactNode; resetKe
   }
 }
 
-export default function ChartRenderer({ data, compact = false, className = '' }: ChartRendererProps) {
+export default function ChartRenderer({ data, compact = false, className = '', onRenderError }: ChartRendererProps) {
   const normalizedData = useMemo(() => normalizeChartData(data), [data]);
   const ChartComponent = chartComponents[normalizedData.chartType as ChartType];
 
@@ -92,7 +97,7 @@ export default function ChartRenderer({ data, compact = false, className = '' }:
   }
 
   return (
-    <ChartErrorBoundary resetKey={normalizedData}>
+    <ChartErrorBoundary resetKey={normalizedData} onError={onRenderError} fallback={onRenderError ? null : undefined}>
       <Suspense fallback={<ChartSkeleton />}>
         {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
         <ChartComponent data={normalizedData as any} compact={compact} className={className} />

@@ -76,7 +76,7 @@ const SHENG_PAIRS: [WuxingElement, WuxingElement][] = [
 
 interface DonutProps {
   elements: WuxingEnergyData['data']['elements'];
-  favorableElement: WuxingElement;
+  favorableElement?: WuxingElement;
   interactions: WuxingEnergyData['data']['interactions'];
 }
 
@@ -212,7 +212,7 @@ function DonutChart({ elements, favorableElement, interactions }: DonutProps) {
         );
       })}
 
-      {/* Center text: 喜用神 */}
+      {/* Center text: only identify the favorable element when source data provides one. */}
       <text
         x={CX}
         y={CY - 8}
@@ -221,7 +221,7 @@ function DonutChart({ elements, favorableElement, interactions }: DonutProps) {
         className="text-[10px]"
         fill="var(--color-foreground-secondary)"
       >
-        喜用神
+        {favorableElement ? '喜用神' : '用神信息'}
       </text>
       <text
         x={CX}
@@ -229,10 +229,9 @@ function DonutChart({ elements, favorableElement, interactions }: DonutProps) {
         textAnchor="middle"
         dominantBaseline="central"
         className="text-[16px] font-bold"
-        fill="#D4AF37"
+        fill={favorableElement ? '#D4AF37' : 'var(--color-foreground-secondary)'}
       >
-        {ELEMENT_EMOJI[favorableElement]}{' '}
-        {ELEMENT_CN[favorableElement]}
+        {favorableElement ? `${ELEMENT_EMOJI[favorableElement]} ${ELEMENT_CN[favorableElement]}` : '未判定'}
       </text>
     </svg>
   );

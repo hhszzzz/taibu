@@ -1,6 +1,6 @@
 "use client";
 // 需要工作区上下文与折叠交互；任务过程与操作栏按设计稿组合
-import { useMemo, type ReactNode } from "react";
+import { useCallback, useMemo, useRef, type ReactNode } from "react";
 import { ArrowUpRight, CircleAlert, Globe } from "lucide-react";
 import type { AgentMessageData, AgentPart } from "@/lib/agent/types";
 import { collaborationProgress } from "@/lib/agent/parallel-results";
@@ -19,6 +19,7 @@ import { groupAgentParts } from './agent/presentation';
 import { GeneratedImageGallery } from './agent/GeneratedImageGallery';
 import { getAgentGeneratedImages } from '@/lib/agent/tool-presentation';
 import { AGENT_WEB_TOOLS } from "@/lib/agent/tool-catalog";
+import { useToast } from '@/components/ui/Toast';
 
 /**
  * [n] badges for what this answer's own task returned; a badge opens its source in the workspace.
@@ -50,6 +51,13 @@ function getArchiveEntries(parts: AgentPart[]): ArchiveEntry[] {
 }
 
 export function AgentMessage({ data, actions }: { data: AgentMessageData; actions?: ReactNode }) {
+  const { showToast } = useToast();
+  const chartErrorToasted = useRef(false);
+  const handleChartError = useCallback(() => {
+    if (chartErrorToasted.current) return;
+    chartErrorToasted.current = true;
+    showToast('error', '图表错误，已隐藏该图表；文字解读仍保留。');
+  }, [showToast]);
   const citations = useAnswerCitations(data.parts);
   const groups = groupAgentParts(data.parts);
   const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
@@ -87,7 +95,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
         if (part.type === "text") {
           const streaming = data.status === 'running' && index === groups.length - 1 && index === lastText;
           const text = index === lastText && liveText ? liveText : part.text;
-          return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={text} className="chat-prose" streaming={streaming} citations={citations} /></div>;
+          return <div key={part.id} className={`chat-answer${streaming ? ' is-streaming' : ''}`}><MarkdownContent content={text} className="chat-prose" streaming={streaming} citations={citations} onChartError={handleChartError} /></div>;
         }
         if (part.type === "source") {
           // 命中的来源现在列在对应检索调用的框里；只有检索调用不在这条消息里的旧记录才在正文下单独列出。

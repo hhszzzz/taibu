@@ -13,6 +13,7 @@ import type {
     WuxingElement,
     WuxingEnergyData,
 } from '@/lib/visualization/chart-types';
+import { isChartType } from '@/lib/visualization/chart-types';
 import { getDimensionConfig, normalizeDimensionKey } from '@/lib/visualization/dimensions';
 
 const CHART_BLOCK_REGEX = /```chart\s*\n([\s\S]*?)```/g;
@@ -93,15 +94,16 @@ export function extractVisualBlocks(markdown: string): VisualBlock[] {
     return blocks;
 }
 
-/** 把 ```chart 的 JSON 正文解析为 ChartData；不合法时返回 null。 */
+/** 把 ```chart 的 JSON 正文解析为可渲染的 ChartData；不合法或缺少核心数据时返回 null。 */
 export function parseChartSource(source: string): ChartData | null {
     const json = source.trim();
     if (!json) return null;
     try {
-        const parsed = JSON.parse(json) as ChartData;
-        if (parsed && typeof parsed.chartType === 'string') {
+        const parsed = asRecord(JSON.parse(json));
+        if (parsed && isChartType(parsed.chartType)) {
             // 旧消息可能没写 title；卡片标题栏会用「图表」兜底，不因此判为解析失败。
-            return normalizeChartData({ ...parsed, title: typeof parsed.title === 'string' ? parsed.title : '' });
+            const normalized = normalizeChartData({ ...parsed, chartType: parsed.chartType, title: typeof parsed.title === 'string' ? parsed.title : '' } as ChartData);
+            return hasRenderableChartData(normalized) ? normalized : null;
         }
     } catch {
         // Malformed chart JSON falls back to the source view.
@@ -114,8 +116,8 @@ function utf8Bytes(value: string): number {
 }
 
 /**
- * 从 markdown 文本中提取所有 chart 块并解析为 ChartData。
- * 无效 JSON 会被静默跳过。
+ * 从 markdown 文本中提取所有可渲染的 chart 块。
+ * 无效 JSON、未知类型或缺少核心数据的块会被跳过。
  */
 export function extractChartBlocks(markdown: string): ExtractedChart[] {
     const results: ExtractedChart[] = [];
@@ -125,22 +127,9 @@ export function extractChartBlocks(markdown: string): ExtractedChart[] {
     CHART_BLOCK_REGEX.lastIndex = 0;
 
     while ((match = CHART_BLOCK_REGEX.exec(markdown)) !== null) {
-        const jsonStr = match[1]?.trim();
-        if (!jsonStr) continue;
-
-        try {
-            const parsed = JSON.parse(jsonStr) as ChartData;
-            if (parsed && typeof parsed.chartType === 'string' && typeof parsed.title === 'string') {
-                const normalized = normalizeChartData(parsed);
-                results.push({
-                    chartType: normalized.chartType,
-                    title: normalized.title,
-                    raw: normalized,
-                });
-            }
-        } catch {
-            // Skip malformed chart blocks
-        }
+        const normalized = parseChartSource(match[1] ?? '');
+        if (!normalized) continue;
+        results.push({ chartType: normalized.chartType, title: normalized.title, raw: normalized });
     }
 
     return results;
@@ -211,6 +200,62 @@ export function normalizeChartData(chart: ChartData): ChartData {
     }
 
     return chart;
+}
+
+function hasRenderableChartData(chart: ChartData): boolean {
+    const data = asRecord(chart.data);
+    if (!data) return false;
+    const finite = (value: unknown) => typeof value === 'number' && Number.isFinite(value);
+    const string = (value: unknown) => typeof value === 'string' && value.trim().length > 0;
+    const records = (value: unknown, min = 1): value is Record<string, unknown>[] =>
+        Array.isArray(value) && value.length >= min && value.every(item => asRecord(item) !== undefined);
+    const recordArray = (value: unknown): value is Record<string, unknown>[] =>
+        Array.isArray(value) && value.every(item => asRecord(item) !== undefined);
+
+    switch (chart.chartType) {
+        case 'fortune_radar': {
+            const scores = asRecord(data.scores);
+            return !!scores && Object.keys(scores).length > 0 && Object.values(scores).every(item => finite(asRecord(item)?.score)) && finite(data.overallScore);
+        }
+        case 'life_fortune_trend':
+            return finite(data.currentAge) && finite(data.currentYear) && records(data.periods) &&
+                data.periods.every(period => finite(period.startAge) && finite(period.endAge) && finite(period.startYear) && finite(period.endYear) &&
+                    (finite(period.overall) || Object.values(asRecord(period.scores) ?? {}).some(finite)));
+        case 'fortune_calendar':
+            return finite(data.year) && finite(data.month) && records(data.days) && data.days.every(day => finite(day.date) && finite(day.overallScore)) && !!asRecord(data.monthSummary);
+        case 'wuxing_energy': {
+            const elements = asRecord(data.elements);
+            return !!elements && Object.values(elements).some(element => finite(asRecord(element)?.strength) && Number(asRecord(element)?.strength) > 0);
+        }
+        case 'life_timeline':
+            return finite(data.currentAge) && records(data.milestones) && data.milestones.every(item => finite(item.age) && finite(item.year) && string(item.label));
+        case 'compatibility_gauge':
+            return finite(data.overallScore) && records(data.dimensions) && data.dimensions.every(item => finite(item.score) && string(item.label)) &&
+                Array.isArray(data.highlights) && Array.isArray(data.challenges);
+        case 'divination_verdict':
+            return string(data.verdict) && finite(data.verdictScore) && ['high', 'medium', 'low'].includes(String(data.confidence)) &&
+                recordArray(data.keyFactors) && recordArray(data.timeline);
+        case 'mbti_spectrum': {
+            const dimensions = asRecord(data.dimensions);
+            return string(data.type) && !!dimensions && ['EI', 'SN', 'TF', 'JP'].every(key => finite(asRecord(dimensions[key])?.score)) && recordArray(data.traits) && Array.isArray(data.cognitiveStack);
+        }
+        case 'tarot_elements':
+            return records(data.positions) && data.positions.every(item => string(item.position) && string(item.card) && finite(item.energy)) && !!asRecord(data.coreCard);
+        case 'personality_petal':
+            return records(data.traits) && data.traits.every(item => finite(item.score) && string(item.label)) && string(data.summary) && Array.isArray(data.topTraits);
+        case 'yearly_sparklines':
+            return finite(data.year) && records(data.dimensions) && data.dimensions.every(item => finite(item.currentScore) && Array.isArray(item.monthlyScores) && item.monthlyScores.every(finite));
+        case 'physiognomy_annotation':
+            return (data.type === 'face' || data.type === 'palm') && string(data.overallAssessment) && records(data.annotations) &&
+                data.annotations.every(item => string(item.region) && string(item.label) && !!asRecord(item.position) && finite(asRecord(item.position)?.x) && finite(asRecord(item.position)?.y));
+        case 'fortune_comparison':
+            return !!asRecord(data.periodA) && !!asRecord(data.periodB) && records(data.dimensions) &&
+                data.dimensions.every(item => finite(item.scoreA) && finite(item.scoreB) && string(item.label));
+        case 'cross_system':
+            return records(data.systems) && finite(data.overallAgreement) && data.systems.every(item => !!asRecord(item.scores));
+        case 'dream_association':
+            return records(data.nodes) && string(data.coreInterpretation) && recordArray(data.edges);
+    }
 }
 
 function normalizeFortuneRadarData(data: Record<string, unknown>): FortuneRadarPayload {
@@ -392,14 +437,11 @@ function normalizeWuxingEnergyData(data: Record<string, unknown>): WuxingEnergyP
         return [key, { strength, level, stars: stars.get(key) ?? [] }];
     })) as WuxingEnergyPayload['elements'];
 
-    const strongest = [...strengths.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
-    const weakest = [...strengths.entries()].sort((a, b) => a[1] - b[1])[0]?.[0];
-
     return {
         ...data,
         elements,
-        favorableElement: normalizeWuxingElementKey(data.favorableElement) ?? strongest ?? 'wood',
-        unfavorableElement: normalizeWuxingElementKey(data.unfavorableElement) ?? weakest ?? 'wood',
+        favorableElement: normalizeWuxingElementKey(data.favorableElement),
+        unfavorableElement: normalizeWuxingElementKey(data.unfavorableElement),
         advice: normalizeString(data.advice),
         interactions: normalizeWuxingInteractions(data.interactions),
     };

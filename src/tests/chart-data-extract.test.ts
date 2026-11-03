@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
 
 
 test('extractChartBlocks should parse valid chart blocks from markdown', async () => {
@@ -11,7 +13,7 @@ test('extractChartBlocks should parse valid chart blocks from markdown', async (
 {
   "chartType": "fortune_radar",
   "title": "当前运势评分",
-  "data": { "period": "2026年", "scores": {}, "overallScore": 75, "overallLabel": "良好" }
+  "data": { "period": "2026年", "scores": { "career": { "score": 75, "label": "事业", "trend": "stable" } }, "overallScore": 75, "overallLabel": "良好", "topAdvice": "稳步推进" }
 }
 \`\`\`
 
@@ -21,7 +23,11 @@ test('extractChartBlocks should parse valid chart blocks from markdown', async (
 {
   "chartType": "life_fortune_trend",
   "title": "大运趋势",
-  "data": { "currentAge": 35, "currentYear": 2026, "periods": [] }
+  "data": {
+    "currentAge": 35, "currentYear": 2026,
+    "periods": [{ "startAge": 35, "endAge": 44, "startYear": 2026, "endYear": 2035, "scores": { "career": 70 }, "summary": "稳中有进", "highlights": [], "warnings": [] }],
+    "lifeHighlight": { "bestPeriod": { "label": "当前阶段", "ages": "35-44", "reason": "整体平稳" }, "currentStatus": "稳中有进", "nextTurningPoint": { "age": 45, "direction": "up", "reason": "阶段转换" } }
+  }
 }
 \`\`\`
 `;
@@ -34,7 +40,7 @@ test('extractChartBlocks should parse valid chart blocks from markdown', async (
     assert.equal(results[1].title, '大运趋势');
 });
 
-test('extractChartBlocks should skip malformed JSON blocks', async () => {
+test('extractChartBlocks skips malformed JSON and incomplete chart payloads', async () => {
     const { extractChartBlocks } = await import('../lib/visualization/chart-data-extract');
 
     const markdown = `\`\`\`chart
@@ -42,7 +48,10 @@ test('extractChartBlocks should skip malformed JSON blocks', async () => {
 \`\`\`
 
 \`\`\`chart
-{ "chartType": "fortune_radar", "title": "有效图表", "data": {} }
+{ "chartType": "fortune_radar", "title": "缺少数据", "data": {} }
+\`\`\`\n
+\`\`\`chart
+{ "chartType": "fortune_radar", "title": "有效图表", "data": { "period": "2026年", "scores": { "career": 70 }, "overallScore": 70, "overallLabel": "良好", "topAdvice": "稳步推进" } }
 \`\`\``;
 
     const results = extractChartBlocks(markdown);
@@ -56,7 +65,7 @@ test('extractChartsFromMessages should deduplicate by chartType + title', async 
     const messages = [
         {
             role: 'assistant',
-            content: '```chart\n{"chartType":"fortune_radar","title":"运势","data":{"v":1}}\n```',
+            content: '```chart\n{"chartType":"fortune_radar","title":"运势","data":{"v":1,"period":"2026年","scores":{"career":70},"overallScore":70,"overallLabel":"良好","topAdvice":"稳步推进"}}\n```',
         },
         {
             role: 'user',
@@ -64,7 +73,7 @@ test('extractChartsFromMessages should deduplicate by chartType + title', async 
         },
         {
             role: 'assistant',
-            content: '```chart\n{"chartType":"fortune_radar","title":"运势","data":{"v":2}}\n```',
+            content: '```chart\n{"chartType":"fortune_radar","title":"运势","data":{"v":2,"period":"2026年","scores":{"career":72},"overallScore":72,"overallLabel":"良好","topAdvice":"保持节奏"}}\n```',
         },
     ];
 
@@ -72,7 +81,7 @@ test('extractChartsFromMessages should deduplicate by chartType + title', async 
     assert.equal(results.length, 1);
     // Should keep the latest version
     assert.equal((results[0].raw as any).data.v, 2);
-    assert.deepEqual((results[0].raw as any).data.scores, {});
+    assert.equal((results[0].raw as any).data.scores.career.score, 72);
 });
 
 test('formatPreviousChartsForPrompt should produce non-empty text for non-empty input', async () => {
@@ -236,17 +245,28 @@ test('parseChartSource returns null for malformed JSON and normalizes valid data
     const { parseChartSource } = await import('../lib/visualization/chart-data-extract');
     assert.equal(parseChartSource('{ invalid }'), null);
     assert.equal(parseChartSource(''), null);
-    const chart = parseChartSource('{"chartType":"fortune_radar","title":"运势","data":{"scores":{"事业学业":"79.6"},"overallScore":"bad"}}');
+    const chart = parseChartSource('{"chartType":"fortune_radar","title":"运势","data":{"period":"2026年","scores":{"事业学业":"79.6"},"overallScore":"bad","overallLabel":"良好","topAdvice":"保持节奏"}}');
     assert.equal(chart?.chartType, 'fortune_radar');
     assert.deepEqual((chart as any).data.scores.career.score, 80);
     assert.equal((chart as any).data.overallScore, 80);
+    assert.equal(parseChartSource('{"chartType":"not_a_chart","title":"未知","data":{}}'), null);
+    assert.equal(parseChartSource('{"chartType":"fortune_radar","title":"空图","data":{}}'), null);
 });
 
 test('parseChartSource keeps a legacy chart block that has no title', async () => {
     const { parseChartSource } = await import('../lib/visualization/chart-data-extract');
-    const chart = parseChartSource('{"chartType":"fortune_radar","data":{}}');
+    const chart = parseChartSource('{"chartType":"fortune_radar","data":{"period":"2026年","scores":{"career":70},"overallScore":70,"overallLabel":"良好","topAdvice":"稳步推进"}}');
     assert.equal(chart?.chartType, 'fortune_radar');
     assert.equal(chart?.title, '');
+});
+
+test('an invalid chart block is replaced by an inline unavailable marker', async () => {
+    const { VisualizationBlock } = await import('../components/visualization/VisualizationBlock');
+    const html = renderToStaticMarkup(createElement(VisualizationBlock, {
+        kind: 'chart', source: '{ invalid json }',
+    }));
+    assert.match(html, /图表暂不可用，文字解读仍保留/u);
+    assert.ok(!html.includes('visualization-card'), 'the invalid chart card and raw source are hidden');
 });
 
 test('normalizeChartData accepts wuxing elements written as [{name,value}]', async () => {
@@ -277,6 +297,21 @@ test('normalizeChartData accepts wuxing elements written as [{name,value}]', asy
     assert.equal(data.unfavorableElement, 'wood');
     assert.equal(data.elements.wood.level, '旺');
     assert.deepEqual(data.interactions, [{ impact: '寅卯辰三会木局：比劫成势' }]);
+});
+
+test('normalizeChartData does not infer favorable elements from energy strength', async () => {
+    const { normalizeChartData } = await import('../lib/visualization/chart-data-extract');
+    const normalized = normalizeChartData({
+        chartType: 'wuxing_energy',
+        title: '五行',
+        data: { elements: [{ name: '木', value: 40 }, { name: '火', value: 10 }] },
+    } as any);
+
+    const data = (normalized as any).data;
+    assert.equal(data.elements.wood.strength, 40);
+    assert.equal(data.elements.fire.strength, 10);
+    assert.equal(data.favorableElement, undefined);
+    assert.equal(data.unfavorableElement, undefined);
 });
 
 test('normalizeChartData keeps life trend periods that only carry an overall score', async () => {

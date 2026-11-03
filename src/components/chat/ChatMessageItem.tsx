@@ -65,6 +65,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const [editMentions, setEditMentions] = useState<Mention[]>([]);
     const [copiedId, setCopiedId] = useState<string | null>(null);
     const { showToast } = useToast();
+    const chartErrorToasted = useRef(new Set<string>());
     const [editSaving, setEditSaving] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
     const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
@@ -174,6 +175,11 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     }, [message.content, message.id, showToast]);
 
     const isCurrentStreaming = isStreamingAI && isLastMessage;
+    const handleChartError = useCallback(() => {
+        if (chartErrorToasted.current.has(message.id)) return;
+        chartErrorToasted.current.add(message.id);
+        showToast('error', '图表错误，已隐藏该图表；文字解读仍保留。');
+    }, [message.id, showToast]);
 
     if (message.role === 'user') {
         return (
@@ -301,7 +307,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                 </p>
             )}
             {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
-                : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} /></div>}
+                : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} onChartError={handleChartError} /></div>}
             {!message.agent && !hasAnswerText && hasReasoning && !isCurrentStreaming && (
                 <p className="chat-message-meta is-assistant">这次只完成了思考，没有生成正文。可以重新生成，或直接追问。</p>
             )}

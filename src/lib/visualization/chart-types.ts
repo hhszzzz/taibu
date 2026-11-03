@@ -99,8 +99,8 @@ export interface WuxingEnergyData extends BaseChartData {
   chartType: 'wuxing_energy';
   data: {
     elements: Record<WuxingElement, WuxingElementData>;
-    favorableElement: WuxingElement;
-    unfavorableElement: WuxingElement;
+    favorableElement?: WuxingElement;
+    unfavorableElement?: WuxingElement;
     advice: string;
     interactions: WuxingInteraction[];
   };

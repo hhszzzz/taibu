@@ -7,7 +7,7 @@
 ### 新功能与体验
 
 - **出生时间**：时间输入框不再被中文输入法打断，数字可以直接键入；保留精确时间输入，同时恢复子、丑、寅、卯等十二时辰下拉，选中后显示单个时辰字。小时与分钟分别校验，越界时用 Toast 说明范围，空值显示 `08:30` 作为输入提示。([7a56cd1](https://github.com/hhszzzz/taibu/commit/7a56cd11422189e9a6a1ead7a8b93b29a8021a80))
-- **Agent 推荐**：空对话页新增可左右切换的功能推荐卡，引导试用 Agent。只有「不再显示」会永久关闭，体验过 Agent 也会继续显示，方便之后加入更多新功能。([739caf2](https://github.com/hhszzzz/taibu/commit/739caf21c9605b011ddabc09f3063445aedfc8b3))
+- **Beta 功能弹窗**：空对话页改为弹窗卡片，左侧列出 Agent、多模型协作、长期记忆、技能、连接器、定时任务、钱包与用量日志，右侧给出说明、三条能力点和直达入口。被管理员关闭的功能不会出现在列表里；Agent 整体不可用时，Agent 相关条目才会隐藏。只有「不再显示」会永久关闭，Esc、遮罩与关闭按钮只收起本次。([39494c1a](https://github.com/hhszzzz/taibu/commit/39494c1adb4b0bd65cde6018304bbf4241277b58))
 - **思考过程**：普通对话的思考改为与 Agent 一致：默认只显示折叠的状态行，展开后是带框的思考正文；去掉多余的分隔线，并收紧与回答之间的间距。([db8686d](https://github.com/hhszzzz/taibu/commit/db8686dff4223735b0b07a6d4f4806191ca3377d))
 - **运行模式管理**：管理员「功能开关 → Agent 工具范围」新增「计划模式」。关闭「代码模式」或「计划模式」后，输入框不再提供该选项，已保存的开关会自动失效；新建任务与运行中的工具调用都会被服务端拒绝。([d525f19](https://github.com/hhszzzz/taibu/commit/d525f19b9644880c1f617b345cfc938abd300938))
 
@@ -16,6 +16,9 @@
 - **图表渲染**：模型返回的五行能量、大运趋势等图表如果字段形状与模板不同，不再显示不完整；渲染器兼容数组式五行、简化的大运数据，历史图表也能正常展示。([84052bc](https://github.com/hhszzzz/taibu/commit/84052bc8e0844ab944d74beb7064457cd728f0ac))
 - **Agent 通知**：修正数据库监听通道名未加引号导致的 PostgreSQL 语法错误，Agent 事件订阅不再反复报错。([7f7d70a](https://github.com/hhszzzz/taibu/commit/7f7d70a86762b7862207cae7b1b874bda501bbba))
 - **输入框菜单**：普通对话的「+」菜单只保留可直接使用的项目，技能与连接器只在 Agent 对话中显示，避免点选后才发现不可用。([a0aa982](https://github.com/hhszzzz/taibu/commit/a0aa982b564723cbbcfe269eb23a190c824ff71c))
+- **图表兜底**：图表只在类型与核心字段齐全时才渲染；未知类型、字段缺失或渲染出错时，正文位置显示一行「图表暂不可用，文字解读仍保留」并提示一次，不再出现半张图或原始源码。五行图不再从最旺、最弱的五行推断喜用神与忌神，模型没给出时显示「未判定」。([d59dc0bf](https://github.com/hhszzzz/taibu/commit/d59dc0bfbda77a2a9a6a3d0b9b47ad5eb657a8d8))
+- **计划模式关闭**：管理员关闭计划模式时，正在等待批准的任务不再把用户的「批准」当作通过；受计划审批保护的工具保持禁止，任务整理已完成的研究后收尾，不再反复催促提交计划，工作区显示「计划模式已关闭」。([66c90136](https://github.com/hhszzzz/taibu/commit/66c90136d2c69e8536918da8558109582afbb184))
+- **侧栏入口**：侧栏改为按功能开关 ID 过滤，关闭「定时任务」后入口会立即消失（此前 `scheduled` 与 `schedules` 不一致，入口一直保留）。([cdad8503](https://github.com/hhszzzz/taibu/commit/cdad850317ccd170b157f8b3bab24c16c795a676))
 
 ### 调整
 

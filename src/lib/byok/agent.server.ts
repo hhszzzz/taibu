@@ -42,11 +42,17 @@ export function byokAgentPiModel(model: ResolvedByokModel, window: ModelContextC
 }
 
 /**
- * The thinking level Pi runs an own model at: a level only when one was chosen; 「模型默认」 (on, no level) and
- * 「关闭推理」 both run as Pi's off, which the model's stream tells apart (`byokOffMode`).
+ * The thinking level Pi runs an own model at: a chosen level, otherwise the model's configured default level;
+ * 「模型默认」 (on, no level) and 「关闭推理」 both run as Pi's off, which the model's stream tells apart
+ * (`byokOffMode`).
  */
-export function byokAgentThinkingLevel(model: Pick<AIModelConfig, 'thinkingLevels'>, reasoning: boolean, effort: AIReasoningEffort | null | undefined): ModelThinkingLevel {
-  return reasoning && effort ? clampByokLevel(model.thinkingLevels ?? [], effort) : 'off';
+export function byokAgentThinkingLevel(
+  model: Pick<AIModelConfig, 'thinkingLevels' | 'defaultReasoningEffort'>,
+  reasoning: boolean, effort: AIReasoningEffort | null | undefined,
+): ModelThinkingLevel {
+  if (!reasoning) return 'off';
+  if (effort) return clampByokLevel(model.thinkingLevels ?? [], effort);
+  return model.defaultReasoningEffort ? clampByokLevel(model.thinkingLevels ?? [], model.defaultReasoningEffort) : 'off';
 }
 
 /** Whether Pi's off means 「模型默认」 for this model in this task: someone using it chose thinking without a level. */

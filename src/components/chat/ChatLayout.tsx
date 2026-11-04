@@ -548,6 +548,7 @@ export function ChatLayout(props: ChatLayoutProps) {
     const composerProps = {
         draftKey: workspaceKey,
         reasoningEffort: props.reasoningEffort, onReasoningEffortChange: props.onReasoningEffortChange,
+        reasoningFromModel: props.reasoningFromModel, onReasoningFromModelChange: props.onReasoningFromModelChange,
         collaborators: props.collaborators, onCollaboratorsChange: props.onCollaboratorsChange,
         codeMode: agent?.codeMode, onCodeModeChange: agent?.setCodeMode,
         planMode: agent?.planMode, onPlanModeChange: agent?.setPlanMode,

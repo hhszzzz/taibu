@@ -104,7 +104,7 @@ export function priceFieldsFor(usageType: AIUsageType) {
 export const EMPTY_PRICING: AIModelPricing = { input: null, output: null, cacheRead: null, cacheWrite: null, image: null };
 
 export const THINKING_LEVEL_LABELS: Record<AIReasoningEffort, string> = {
-    minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '超高', max: '最高',
+    minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最高',
 };
 
 export type LimitPreset = { label: string; tokens: number };

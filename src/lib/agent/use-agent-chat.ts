@@ -54,8 +54,8 @@ export function useAgentChat(
   // 管理员随时可能关掉某种运行模式：旧对话里保存的开关也要跟着关闭。
   if (capabilities.codeModeAvailable === false && codeMode) setCodeMode(false);
   if (capabilities.planModeAvailable === false && planMode) setPlanMode(false);
-  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, collaborators: state.collaborators, webEnabled, codeMode, planMode, approval }, value => {
-    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode); setApproval(value.approval);
+  useNextTaskConfiguration(userId, state.activeConversationId, { model: state.selectedModel, reasoning: state.reasoningEnabled, reasoningEffort: state.reasoningEffort, reasoningFromModel: state.reasoningFromModel, collaborators: state.collaborators, webEnabled, codeMode, planMode, approval }, value => {
+    state.setSelectedModel(value.model); state.setReasoningEnabled(value.reasoning); state.setReasoningEffort(value.reasoningEffort); state.setReasoningFromModel(value.reasoningFromModel); state.setCollaborators(value.collaborators); setWebEnabled(value.webEnabled); setCodeMode(value.codeMode); setPlanMode(value.planMode); setApproval(value.approval);
   });
   // React's documented "adjust state during render" for a value that must change with the account.
   const [identity, setIdentity] = useState({ userId, epoch: 0 });
@@ -255,6 +255,7 @@ export function useAgentChat(
       model: options.model,
       reasoning: options.reasoning,
       reasoningEffort: state.reasoningEffort,
+      reasoningFromModel: state.reasoningFromModel,
       collaborators: state.collaborators,
       mentions: options.mentions,
       attachment: options.attachment,

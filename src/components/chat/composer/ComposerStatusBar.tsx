@@ -38,12 +38,12 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
             {/* 运行模式固定在 chin 行左端（原「+」的位置）：一个按钮打开弹窗选择默认 / 计划 / 代码。
                 管理员把计划与代码都关掉后不再显示入口。 */}
             {agentMode && props.onPlanModeChange && props.onCodeModeChange
-                && (props.planModeAvailable !== false || props.codeModeAvailable !== false) && (
+                && (props.planModeAvailable === true || props.codeModeAvailable === true) && (
                 <AgentModeMenu
                     planMode={!!props.planMode}
                     codeMode={!!props.codeMode}
-                    planModeAvailable={props.planModeAvailable !== false}
-                    codeModeAvailable={props.codeModeAvailable !== false}
+                    planModeAvailable={props.planModeAvailable === true}
+                    codeModeAvailable={props.codeModeAvailable === true}
                     disabled={disabled}
                     onPlanModeChange={props.onPlanModeChange}
                     onCodeModeChange={props.onCodeModeChange}
@@ -60,6 +60,7 @@ export function ComposerStatusBar(props: ComposerStatusBarProps) {
             <ModelSelector selectedModel={props.selectedModel} onModelChange={props.onModelChange}
                 reasoningEnabled={props.reasoningEnabled} onReasoningChange={props.onReasoningChange}
                 reasoningEffort={props.reasoningEffort} onReasoningEffortChange={props.onReasoningEffortChange}
+                reasoningFromModel={props.reasoningFromModel} onReasoningFromModelChange={props.onReasoningFromModelChange}
                 collaborators={agentMode ? props.collaborators : undefined} onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
                 codeMode={agentMode ? props.codeMode : undefined} onCodeModeChange={agentMode ? props.onCodeModeChange : undefined}
                 planMode={agentMode ? props.planMode : undefined} onPlanModeChange={agentMode ? props.onPlanModeChange : undefined}

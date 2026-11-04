@@ -881,7 +881,7 @@ export function createInterpretHandler<
         const result = await runServerByok(resolved.model, {
           userId, key: resolved.key, systemPrompt, source: 'analysis', signal: request.signal,
           messages: [{ role: 'user', content: [{ type: 'image', data: photo.imageBase64, mimeType: photo.imageMimeType }, { type: 'text', text: userPrompt }] }],
-          thinking: byokThinking(reasoningEnabled, effort, resolved.model.thinkingLevels),
+          thinking: byokThinking(reasoningEnabled, effort, resolved.model.thinkingLevels, resolved.model.defaultEffort),
         });
         if (result.error) throw new ByokRequestError(byokFailureFromMessage(result.error));
         return { content: result.content, reasoning: result.reasoning || null };

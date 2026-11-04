@@ -87,6 +87,8 @@ export type AgentSubmitBody = {
   approval: AgentApprovalMode;
   reasoning: boolean;
   reasoningEffort: AIReasoningEffort | null;
+  /** The effort follows the selected own model's default rather than a user choice. */
+  reasoningFromModel?: boolean;
   collaborators: AgentCollaborator[];
   dreamMode: boolean;
   mangpaiMode: boolean;
@@ -321,6 +323,7 @@ export async function submitAgentTask(
     model: modelId,
     reasoning,
     reasoningEffort: reasoning ? body.reasoningEffort : null,
+    ...(body.reasoningFromModel === true ? { reasoningFromModel: true } : {}),
     collaborators,
     // A compaction calls no tools: it only summarizes the context.
     webEnabled: !compact && body.webEnabled !== false,

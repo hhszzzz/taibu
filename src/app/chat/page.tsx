@@ -125,6 +125,8 @@ export default function ChatPage() {
                 onReasoningChange={state.setReasoningEnabled}
                 reasoningEffort={state.reasoningEffort}
                 onReasoningEffortChange={state.setReasoningEffort}
+                reasoningFromModel={state.reasoningFromModel}
+                onReasoningFromModelChange={state.setReasoningFromModel}
                 collaborators={state.collaborators}
                 onCollaboratorsChange={state.setCollaborators}
                 imageModel={state.imageModel}

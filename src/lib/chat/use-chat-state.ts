@@ -78,6 +78,9 @@ export interface ChatStateReturn {
     setReasoningEnabled: React.Dispatch<React.SetStateAction<boolean>>;
     reasoningEffort: AIReasoningEffort | null;
     setReasoningEffort: React.Dispatch<React.SetStateAction<AIReasoningEffort | null>>;
+    /** The effort follows the selected own model's configured default. */
+    reasoningFromModel: boolean;
+    setReasoningFromModel: (follows: boolean) => void;
     collaborators: AgentCollaborator[];
     setCollaborators: React.Dispatch<React.SetStateAction<AgentCollaborator[]>>;
     /** The image model for 生图 and the Agent's image tool; null until the menu picks the default. */
@@ -197,17 +200,26 @@ export function useChatState({
     // Model & reasoning
     const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
-    const [analysisSettings, setAnalysisSettings] = useState<{ owner: string | null; reasoningEffort: AIReasoningEffort | null; collaborators: AgentCollaborator[] }>({ owner: userId, reasoningEffort: null, collaborators: [] });
+    const [analysisSettings, setAnalysisSettings] = useState<{ owner: string | null; reasoningEffort: AIReasoningEffort | null; reasoningFromModel: boolean; collaborators: AgentCollaborator[] }>({ owner: userId, reasoningEffort: null, reasoningFromModel: false, collaborators: [] });
     const reasoningEffort = analysisSettings.owner === userId ? analysisSettings.reasoningEffort : null;
+    const reasoningFromModel = analysisSettings.owner === userId ? analysisSettings.reasoningFromModel : false;
     const collaborators = analysisSettings.owner === userId ? analysisSettings.collaborators : [];
     const setReasoningEffort = useCallback((value: React.SetStateAction<AIReasoningEffort | null>) => setAnalysisSettings(previous => ({
         owner: userId,
         reasoningEffort: typeof value === 'function' ? value(previous.owner === userId ? previous.reasoningEffort : null) : value,
+        reasoningFromModel: previous.owner === userId ? previous.reasoningFromModel : false,
+        collaborators: previous.owner === userId ? previous.collaborators : [],
+    })), [userId]);
+    const setReasoningFromModel = useCallback((follows: boolean) => setAnalysisSettings(previous => ({
+        owner: userId,
+        reasoningEffort: previous.owner === userId ? previous.reasoningEffort : null,
+        reasoningFromModel: follows,
         collaborators: previous.owner === userId ? previous.collaborators : [],
     })), [userId]);
     const setCollaborators = useCallback((value: React.SetStateAction<AgentCollaborator[]>) => setAnalysisSettings(previous => ({
         owner: userId,
         reasoningEffort: previous.owner === userId ? previous.reasoningEffort : null,
+        reasoningFromModel: previous.owner === userId ? previous.reasoningFromModel : false,
         collaborators: typeof value === 'function' ? value(previous.owner === userId ? previous.collaborators : []) : value,
     })), [userId]);
     const [imageModelChoice, setImageModelChoice] = useState(() => ({ owner: userId, model: readImageModel(userId) }));
@@ -509,7 +521,7 @@ export function useChatState({
         chatMode, setChatMode,
         selectedModel, setSelectedModel,
         reasoningEnabled, setReasoningEnabled,
-        reasoningEffort, setReasoningEffort, collaborators, setCollaborators,
+        reasoningEffort, setReasoningEffort, reasoningFromModel, setReasoningFromModel, collaborators, setCollaborators,
         imageModel,
         setImageModel,
         attachmentState, setAttachmentState,

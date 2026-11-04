@@ -7,7 +7,7 @@ import { PATCH, GET } from '../app/api/conversations/[id]/configuration/route';
 import { createMockAuthContext } from './helpers/auth-mock';
 
 const collaborators = ['first', 'second'].map(id => ({ id, name: id, model: id, focus: '核对盘面', reasoning: true, reasoningEffort: 'max' as const }));
-const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, webEnabled: false, codeMode: true, planMode: true, approval: 'auto' as const, collaborators };
+const configuration = { model: 'root', reasoning: true, reasoningEffort: 'xhigh' as const, reasoningFromModel: false, webEnabled: false, codeMode: true, planMode: true, approval: 'auto' as const, collaborators };
 
 function unwrap(value: unknown): unknown {
   if (!value || typeof value !== 'object' || !('toOperationNode' in value)) return value;
@@ -44,6 +44,12 @@ function database(id: string, owner: string) {
 
 test('model settings validate the whole bounded team and preserve explicit reasoning levels', () => {
   assert.deepEqual(parseNextTaskConfiguration(configuration), configuration);
+  // 旧配置没有来源标记：自有模型按模型默认理解，平台模型按用户选择理解。
+  const ownModel: Record<string, unknown> = { ...configuration, model: 'byok:00000000-0000-4000-8000-0000000000b1' };
+  delete ownModel.reasoningFromModel;
+  assert.equal(parseNextTaskConfiguration(ownModel).reasoningFromModel, true);
+  assert.equal(parseNextTaskConfiguration({ ...configuration, model: 'byok:00000000-0000-4000-8000-0000000000b1', reasoningFromModel: false }).reasoningFromModel, false);
+  assert.equal(parseNextTaskConfiguration({ ...configuration, reasoningFromModel: true }).reasoningFromModel, true);
   // 协作成员 0–4 个：空团队与单成员都合法，重复、超员与超长分工不合法。
   assert.deepEqual(parseAgentCollaborators([]), []);
   assert.deepEqual(parseAgentCollaborators([collaborators[0]]), [collaborators[0]]);

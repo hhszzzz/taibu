@@ -141,6 +141,7 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
     approval: parseAgentApproval(value.approval),
     reasoning: value.reasoning === true,
     reasoningEffort,
+    ...(value.reasoningFromModel === true ? { reasoningFromModel: true } : {}),
     collaborators,
     dreamMode: value.dreamMode === true,
     mangpaiMode: value.mangpaiMode === true,

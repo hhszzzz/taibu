@@ -77,10 +77,10 @@ function ModelDetails({ model }: { model: ClientModelConfig }) {
                 <div><dt>上下文</dt><dd>{formatCapacity(model.contextWindow)}</dd></div>
                 <div><dt>输出上限</dt><dd>{formatCapacity(model.maxTokens)}</dd></div>
                 <div><dt>图片输入</dt><dd>{model.supportsVision ? '支持' : '不支持'}</dd></div>
-                <div><dt>思考等级</dt><dd>{model.thinkingLevels?.length ? model.thinkingLevels.map(level => level === 'minimal' ? '最低' : level === 'low' ? '低' : level === 'medium' ? '中等' : level === 'high' ? '高' : level === 'xhigh' ? '超高' : '最高').join(' / ') : '不支持'}</dd></div>
+                <div><dt>思考等级</dt><dd>{model.thinkingLevels?.length ? model.thinkingLevels.map(level => level === 'minimal' ? '最低' : level === 'low' ? '低' : level === 'medium' ? '中等' : level === 'high' ? '高' : level === 'xhigh' ? '极高' : '最高').join(' / ') : '不支持'}</dd></div>
             </dl>
             <div className="chat-model-details-prices">
-                {model.own ? <p className="chat-model-details-desc">使用自己的 API Key，不消耗本站余额。{model.own.serverKey ? 'Key 保存在本站，由本站代为请求。' : 'Key 只在你的浏览器里，由浏览器直接请求。'}</p> : <>
+                {model.own ? <p className="chat-model-details-desc">使用自己的 API Key。</p> : <>
                     <p className="chat-model-details-label">每百万 token 的美元单价</p>
                     {priceRows.length ? (
                         <dl className="chat-model-details-grid">
@@ -99,7 +99,7 @@ const EFFORT_OPTIONS: Array<{ value: AIReasoningEffort; label: string; badge?: s
     { value: 'low', label: '低' },
     { value: 'medium', label: '中等' },
     { value: 'high', label: '高' },
-    { value: 'xhigh', label: '超高' },
+    { value: 'xhigh', label: '极高' },
     { value: 'max', label: '最高', badge: '3.5× 或更多用量', tone: 'warning' },
 ];
 
@@ -136,7 +136,7 @@ function groupByConnection(models: ClientModelConfig[]) {
 }
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
-    reasoningEffort, onReasoningEffortChange, collaborators = [], onCollaboratorsChange, extra, ownModelsEntry = false,
+    reasoningEffort, onReasoningEffortChange, reasoningFromModel = false, onReasoningFromModelChange, collaborators = [], onCollaboratorsChange, extra, ownModelsEntry = false,
     userId, disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
     const { showToast } = useToast();
@@ -186,6 +186,14 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         window.addEventListener(BYOK_KEY_REQUEST_EVENT, request);
         return () => window.removeEventListener(BYOK_KEY_REQUEST_EVENT, request);
     }, [onModelChange, own.models]);
+    useEffect(() => {
+        const ownModel = current?.own;
+        if (!reasoningFromModel || !ownModel || !onReasoningChange) return;
+        const effort = byokComposerEffort(ownModel.defaultEffort);
+        if (reasoningEnabled === effort.reasoning && (reasoningEffort ?? null) === effort.reasoningEffort) return;
+        onReasoningChange(effort.reasoning);
+        onReasoningEffortChange?.(effort.reasoningEffort);
+    }, [current, reasoningEnabled, reasoningEffort, reasoningFromModel, onReasoningChange, onReasoningEffortChange]);
     if (!onModelChange && !onReasoningChange) return null;
     // 没有平台模型时仍然可以打开菜单：自己的模型不依赖平台模型目录。
     const locked = disabled || query.isLoading;
@@ -195,10 +203,11 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     /** Own models start at their own default effort; one without a key on this device asks for it first. */
     const applyModel = (model: ClientModelConfig) => {
         onModelChange?.(model.id);
-        if (!model.own) return;
+        if (!model.own) { onReasoningFromModelChange?.(false); return; }
         const effort = byokComposerEffort(model.own.defaultEffort);
         onReasoningChange?.(effort.reasoning);
         onReasoningEffortChange?.(effort.reasoningEffort);
+        onReasoningFromModelChange?.(true);
     };
     const chooseModel = (id: string) => {
         const model = models.find(item => item.id === id);
@@ -236,6 +245,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     };
     const effortChoice = !reasoningEnabled ? 'off' : effectiveEffort ?? 'default';
     const chooseEffort = (effort: AIReasoningEffort | null) => {
+        onReasoningFromModelChange?.(false);
         onReasoningChange?.(true);
         onReasoningEffortChange?.(effort);
         close();
@@ -287,7 +297,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                         <MenuSubContent className="chat-model-menu chat-effort-menu" aria-label="努力程度">
                             <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，用量与费用也越高。</p>
                             <MenuRadioGroup value={effortChoice} onValueChange={value => {
-                                if (value === 'off') { onReasoningChange?.(false); close(); return; }
+                                if (value === 'off') { onReasoningFromModelChange?.(false); onReasoningChange?.(false); close(); return; }
                                 chooseEffort(value === 'default' ? null : value as AIReasoningEffort);
                             }}>
                                 {effortOptions.map(option => {
@@ -302,7 +312,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                         </MenuSubContent>
                     </MenuSub>
                     : <MenuCheckboxItem checked={reasoningEnabled} className="chat-model-action chat-model-menu-row"
-                        onCheckedChange={() => onReasoningChange?.(!reasoningEnabled)}>
+                        onCheckedChange={() => { onReasoningFromModelChange?.(false); onReasoningChange?.(!reasoningEnabled); }}>
                         <span>推理</span>
                     </MenuCheckboxItem>)}
                 {!reasoningSupported && onReasoningEffortChange && <MenuItem className="chat-model-action chat-model-menu-row" disabled>

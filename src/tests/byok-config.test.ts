@@ -78,6 +78,8 @@ test('effort: every level when unknown, medium first, a missing level moves to t
   assert.equal(clampByokLevel(['low', 'medium'], 'max'), 'medium', 'then downwards');
   assert.deepEqual(byokThinking(false, 'high'), { mode: 'off' });
   assert.deepEqual(byokThinking(true, null), { mode: 'auto' }, 'thinking on without a level is the model default');
+  assert.deepEqual(byokThinking(true, null, ['low', 'high'], 'high'), { mode: 'level', level: 'high' }, 'the model\'s configured default fills in');
+  assert.deepEqual(byokThinking(true, null, ['low', 'high'], 'off'), { mode: 'auto' });
   assert.deepEqual(byokThinking(true, 'xhigh', ['low', 'high']), { mode: 'level', level: 'high' });
   assert.deepEqual(byokComposerEffort('off'), { reasoning: false, reasoningEffort: null });
   assert.deepEqual(byokComposerEffort('auto'), { reasoning: true, reasoningEffort: null });

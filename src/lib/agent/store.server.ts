@@ -21,6 +21,7 @@ export interface AgentRunRow {
     model: string;
     reasoning: boolean;
     reasoningEffort?: AIReasoningEffort | null;
+    reasoningFromModel?: boolean;
     collaborators?: AgentCollaborator[];
     webEnabled: boolean;
     /** Whether the model may run code mode scripts; fixed when the task is created. Absent means off. */
@@ -205,7 +206,7 @@ export class AgentStore {
       userMessage: run.input?.userMessage,
       commandMessageIds: commands.filter(command => command.delivery_state !== 'cancelled').map(command => command.message.id),
       billing: run.billing,
-      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled, codeMode: run.input.codeMode === true, planMode: run.input.planMode === true, approval: run.input.approval ?? 'auto' } : undefined,
+      configuration: run.input ? { model: run.input.model, reasoning: run.input.reasoning, reasoningEffort: run.input.reasoningEffort ?? null, reasoningFromModel: run.input.reasoningFromModel === true, collaborators: run.input.collaborators ?? [], webEnabled: run.input.webEnabled, codeMode: run.input.codeMode === true, planMode: run.input.planMode === true, approval: run.input.approval ?? 'auto' } : undefined,
       queue: commands.map(command => ({ sequence: command.sequence, message: command.message, mode: command.mode, revision: command.revision ?? 1, sortOrder: command.sort_order ?? command.sequence, state: command.delivery_state ?? 'admitted' })),
     };
   }

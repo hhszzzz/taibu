@@ -305,7 +305,7 @@ export function PhotoReadingEntry({
             const reading = { ...extraFields, analysisType, question: question.trim() || undefined };
             let result: PhotoReadingOutcome;
             if (ownModel && !ownModel.serverKey) {
-                result = await analyzeInBrowser(endpoint, ownModel, photo, reading, byokThinking(reasoningEnabled, reasoningEffort, ownModel.thinkingLevels));
+                result = await analyzeInBrowser(endpoint, ownModel, photo, reading, byokThinking(reasoningEnabled, reasoningEffort, ownModel.thinkingLevels, ownModel.defaultEffort));
             } else {
                 const { ok, status, payload } = await postReading(endpoint, {
                     ...reading,

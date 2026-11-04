@@ -144,7 +144,7 @@ export function ChatComposer({
     onModelChange,
     reasoningEnabled = false,
     onReasoningChange,
-    reasoningEffort, onReasoningEffortChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange, planMode, onPlanModeChange,
+    reasoningEffort, onReasoningEffortChange, reasoningFromModel, onReasoningFromModelChange, collaborators, onCollaboratorsChange, codeMode, onCodeModeChange, planMode, onPlanModeChange,
     codeModeAvailable, planModeAvailable,
     approval, onApprovalChange,
     userId,
@@ -782,6 +782,8 @@ export function ChatComposer({
                     onReasoningChange={onReasoningChange}
                     reasoningEffort={reasoningEffort}
                     onReasoningEffortChange={onReasoningEffortChange}
+                    reasoningFromModel={reasoningFromModel}
+                    onReasoningFromModelChange={onReasoningFromModelChange}
                     collaborators={collaborators}
                     onCollaboratorsChange={onCollaboratorsChange}
                     codeMode={codeMode}

@@ -107,7 +107,7 @@ export async function handleServerByokChat(request: NextRequest, body: ChatReque
   const messages: ByokChatMessage[] = prepared.sanitizedMessages
     .filter(message => message.role === 'user' || message.role === 'assistant')
     .map(message => ({ role: message.role as 'user' | 'assistant', content: message.content }));
-  const thinking = byokThinking(body.reasoning === true, body.reasoningEffort ?? null, model.thinkingLevels);
+  const thinking = byokThinking(body.reasoning === true, body.reasoningEffort ?? null, model.thinkingLevels, model.defaultEffort);
   const reference = body.conversationId ? { type: 'conversation', id: body.conversationId } : undefined;
   const run = (handlers: { onText?: (delta: string) => void; onReasoning?: (delta: string) => void }) => runServerByok(model, {
     userId, key, systemPrompt: prepared.systemPrompt, messages, thinking, signal: request.signal, source: 'chat', reference, ...handlers,

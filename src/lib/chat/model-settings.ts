@@ -1,9 +1,10 @@
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { AGENT_PROFILE_NAME_PATTERN } from '@/lib/agent/profiles/config';
 import { parseAgentApproval, type AgentApprovalMode } from '@/lib/agent/mcp/config';
+import { isByokRef } from '@/lib/byok/config';
 
 export const REASONING_EFFORT_LABELS: Record<AIReasoningEffort, string> = {
-  minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '很高', max: '最高',
+  minimal: '最低', low: '低', medium: '中', high: '高', xhigh: '极高', max: '最高',
 };
 
 export interface AgentCollaborator {
@@ -21,6 +22,8 @@ export interface NextTaskConfiguration {
   model: string;
   reasoning: boolean;
   reasoningEffort: AIReasoningEffort | null;
+  /** The reasoning setting follows the selected own model's configured default, not a user choice. */
+  reasoningFromModel: boolean;
   webEnabled: boolean;
   /** Agent 代码模式：模型可写脚本批量调用工具；每个任务创建时固定。 */
   codeMode: boolean;
@@ -34,6 +37,8 @@ export interface NextTaskConfiguration {
 export interface ModelSettingsProps {
   reasoningEffort?: AIReasoningEffort | null;
   onReasoningEffortChange?: (effort: AIReasoningEffort | null) => void;
+  reasoningFromModel?: boolean;
+  onReasoningFromModelChange?: (follows: boolean) => void;
   collaborators?: AgentCollaborator[];
   onCollaboratorsChange?: (members: AgentCollaborator[]) => void;
   codeMode?: boolean;
@@ -78,9 +83,11 @@ export function parseNextTaskConfiguration(value: unknown): NextTaskConfiguratio
     typeof input.reasoning !== 'boolean' || typeof input.webEnabled !== 'boolean' ||
     (input.codeMode !== undefined && typeof input.codeMode !== 'boolean') ||
     (input.planMode !== undefined && typeof input.planMode !== 'boolean')) throw new Error('配置无效');
+  const model = input.model.trim();
   // 代码模式与计划模式、推理档位、协作成员一样有缺省值：缺省为关闭。
-  return { model: input.model.trim(), reasoning: input.reasoning, webEnabled: input.webEnabled, codeMode: input.codeMode === true, planMode: input.planMode === true,
+  return { model, reasoning: input.reasoning, webEnabled: input.webEnabled, codeMode: input.codeMode === true, planMode: input.planMode === true,
     approval: parseAgentApproval(input.approval),
+    reasoningFromModel: typeof input.reasoningFromModel === 'boolean' ? input.reasoningFromModel : isByokRef(model),
     reasoningEffort: parseReasoningEffort(input.reasoningEffort), collaborators: parseAgentCollaborators(input.collaborators) };
 }
 

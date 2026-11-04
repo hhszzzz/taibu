@@ -248,10 +248,15 @@ export function clampByokLevel(levels: readonly AIReasoningEffort[], level: AIRe
 /** How a request thinks: at a level, the model's own default (no parameters), or explicitly off. */
 export type ByokThinking = { mode: 'level'; level: AIReasoningEffort } | { mode: 'auto' } | { mode: 'off' };
 
-/** The composer's switch and level, read for an own model: off, on without a level (model default), or a level. */
-export function byokThinking(reasoning: boolean, effort: AIReasoningEffort | null | undefined, levels: readonly AIReasoningEffort[] = []): ByokThinking {
+/** The composer's switch and level, read for an own model: off, on without a level (the model's default), or a level. */
+export function byokThinking(
+  reasoning: boolean, effort: AIReasoningEffort | null | undefined, levels: readonly AIReasoningEffort[] = [],
+  defaultEffort: ByokDefaultEffort = 'auto',
+): ByokThinking {
   if (!reasoning) return { mode: 'off' };
-  return effort ? { mode: 'level', level: clampByokLevel(levels, effort) } : { mode: 'auto' };
+  if (effort) return { mode: 'level', level: clampByokLevel(levels, effort) };
+  if (defaultEffort === 'auto' || defaultEffort === 'off') return { mode: 'auto' };
+  return { mode: 'level', level: clampByokLevel(levels, defaultEffort) };
 }
 
 /** The composer state a model's default selects, applied when the user switches to that model. */

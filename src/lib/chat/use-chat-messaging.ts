@@ -53,7 +53,7 @@ function createOwnModelRunner(model: OwnModel): ChatStreamTaskRunner {
         await runBrowserByok(model, {
             systemPrompt: prepared.systemPrompt,
             messages: prepared.sanitizedMessages.filter((message): message is ByokChatMessage & { content: string } => message.role !== 'system'),
-            thinking: byokThinking(requestBody.reasoning === true, requestBody.reasoningEffort as AIReasoningEffort | null | undefined, model.thinkingLevels),
+            thinking: byokThinking(requestBody.reasoning === true, requestBody.reasoningEffort as AIReasoningEffort | null | undefined, model.thinkingLevels, model.defaultEffort),
             source: 'chat',
             conversationId: typeof requestBody.conversationId === 'string' ? requestBody.conversationId : undefined,
             signal,

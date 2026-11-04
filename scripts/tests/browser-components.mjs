@@ -472,6 +472,8 @@ function AgentChatProbe() {
       selectedModel={state.selectedModel} onModelChange={state.setSelectedModel} reasoningEnabled={state.reasoningEnabled} onReasoningChange={state.setReasoningEnabled}
       reasoningEffort={state.reasoningEffort} onReasoningEffortChange={state.setReasoningEffort} collaborators={state.collaborators} onCollaboratorsChange={state.setCollaborators}
       planMode={planMode} onPlanModeChange={setPlanMode} codeMode={codeMode} onCodeModeChange={setCodeMode}
+      codeModeAvailable={messaging.agent.capabilities.codeModeAvailable}
+      planModeAvailable={messaging.agent.capabilities.planModeAvailable}
       contextData={agentContextData} />
     <output data-testid="agent-status">{messaging.agent.run?.status ?? 'none'}</output>
     <output data-testid="agent-messages">{JSON.stringify(state.messages)}</output></section>;
@@ -986,7 +988,7 @@ export async function run(existingPage, bundlePath) {
       if (url.pathname.startsWith('/api/agent/')) {
         const method = init?.method ?? 'GET', body = init?.body ? JSON.parse(init.body) : null;
         agentIO.requests.push({ url: url.pathname, search: url.search, method, body });
-        if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false });
+        if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, codeModeAvailable: true, planModeAvailable: true });
         if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
         if (url.pathname === '/api/agent/skills') return Response.json({ skills: agentIO.skills ?? [] });
         // The roles a member may give a collaboration member, as an administrator set them up.
@@ -3030,7 +3032,7 @@ export async function run(existingPage, bundlePath) {
     check('Effort is a second-level menu with the five claude levels and a default', await effortMenu.getByRole('menuitemradio', { name: '低', exact: true }).count() === 1 &&
       await effortMenu.getByRole('menuitemradio', { name: '中等', exact: true }).count() === 1 &&
       await effortMenu.getByRole('menuitemradio', { name: '高', exact: true }).count() === 1 &&
-      await effortMenu.getByRole('menuitemradio', { name: '超高', exact: true }).count() === 1 &&
+      await effortMenu.getByRole('menuitemradio', { name: '极高', exact: true }).count() === 1 &&
       await effortMenu.getByRole('menuitemradio', { name: '最高', exact: true }).count() === 1 &&
       await effortMenu.getByRole('menuitemradio', { name: '模型默认', exact: true }).count() === 1);
     await effortMenu.getByRole('menuitemradio', { name: '最高', exact: true }).click();
@@ -4397,10 +4399,13 @@ export async function run(existingPage, bundlePath) {
     const modelIds = byokModels.getByLabel('模型 ID', { exact: true });
     await modelIds.first().waitFor();
     const providerList = page.locator('.byok-model-options');
-    await providerList.getByRole('button', { name: /fixture-chat/u }).click();
-    await byokModels.getByText(/上下文 1M/u).waitFor();
-    check('The model ID input offers the provider\'s list and fills the pick with what models.dev knows',
-      await modelIds.first().inputValue() === 'fixture-chat' && (await byokModels.innerText()).includes('上下文 1M')
+    const fixtureOption = providerList.getByRole('button', { name: /fixture-chat/u });
+    await fixtureOption.waitFor();
+    await providerList.getByText('1M', { exact: true }).waitFor();
+    const providerListText = await providerList.innerText();
+    await fixtureOption.click();
+    check('The model ID input offers the provider\'s list, with what models.dev knows beside it',
+      await modelIds.first().inputValue() === 'fixture-chat' && providerListText.includes('1M')
       && !(await byokModels.getByLabel('上下文（token）', { exact: true }).count()) && !(await byokModels.getByLabel('输出上限（token）', { exact: true }).count()));
     await byokModels.getByRole('button', { name: '添加模型', exact: true }).click();
     await modelIds.nth(1).click();
@@ -4408,18 +4413,18 @@ export async function run(existingPage, bundlePath) {
     check('Picked models keep the use their IDs suggest and a medium default effort',
       JSON.stringify(await modelIds.evaluateAll(inputs => inputs.map(input => input.value))) === JSON.stringify(['fixture-chat', 'gpt-image-1'])
       && JSON.stringify(await byokModels.getByRole('combobox', { name: '用途', exact: true }).allInnerTexts()) === JSON.stringify(['对话', '生图'])
-      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '默认：中等');
+      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '中等');
     await byokModels.getByRole('button', { name: '测试「fixture-chat」', exact: true }).click();
     await byokModels.getByText(/^可用：回复「OK」/u).waitFor();
     const chatTests = providerRequests.filter(entry => entry.pathname === '/provider/chat/completions');
     check('A model that refuses effort levels answers without one, and its default becomes the model\'s own',
       (await byokModels.getByText(/^可用：回复「OK」/u).innerText()).includes('它不接受努力程度参数，默认已改为「模型默认」')
-      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '默认：模型默认'
+      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '模型默认'
       && chatTests.length === 2 && chatTests[0].body.reasoning_effort === 'medium' && chatTests[1].body.reasoning_effort === undefined
       && chatTests.every(entry => entry.body.model === 'fixture-chat' && entry.body.temperature === undefined));
     await byokEditor.getByRole('button', { name: '添加', exact: true }).click();
     const byokList = page.getByRole('list', { name: '我的模型连接', exact: true });
-    await byokList.getByText('Key 在本设备', { exact: true }).waitFor();
+    await byokList.getByText(/^Key 在本设备 · sk-…vice$/u).waitFor();
     const createdByok = requests.find(entry => entry.pathname === '/api/byok/connections' && entry.method === 'POST');
     const savedByok = byokByUser.alice[0];
     check('A browser-key connection is saved for the account without its key, which stays on this device',
@@ -4429,13 +4434,13 @@ export async function run(existingPage, bundlePath) {
       && await page.evaluate(id => JSON.parse(localStorage.getItem('taibu:byok-keys:alice') ?? '{}')[id] === 'sk-fixture-device', savedByok.id));
     check('The card names the protocol, the host and what its models are for',
       (await byokList.innerText()).includes('OpenAI 兼容') && (await byokList.innerText()).includes('taibu-fixture.invalid · 1 个对话模型、1 个生图模型')
-      && JSON.stringify(await byokList.getByRole('list', { name: '「夹具中转」的模型' }).getByRole('listitem').allInnerTexts()) === JSON.stringify(['Fixture Chat', 'gpt-image-1生图']));
+      && JSON.stringify(await byokList.getByRole('list', { name: '「夹具中转」的模型' }).getByRole('listitem').allInnerTexts()) === JSON.stringify(['fixture-chat', 'gpt-image-1生图']));
     await page.getByRole('button', { name: '编辑「夹具中转」', exact: true }).click();
     await byokEditor.getByText(/只保存在这台设备的浏览器里/u).waitFor();
     await byokEditor.getByRole('switch', { name: '保存到本站', exact: true }).click();
     check('Turning the switch on states what the site does with the key', (await byokEditor.innerText()).includes('Key 加密保存在本站，只写不回显。'));
     await byokEditor.getByRole('button', { name: '保存', exact: true }).click();
-    await byokList.getByText('Key 保存在本站', { exact: true }).waitFor();
+    await byokList.getByText(/^Key 保存在本站 · sk-…vice$/u).waitFor();
     const movedByok = requests.filter(entry => entry.pathname === '/api/byok/connections/' + savedByok.id && entry.method === 'PATCH').at(-1);
     check('Saving moves the key: sent once to be stored here, gone from this device',
       JSON.stringify(movedByok?.body?.key) === JSON.stringify({ store: true, value: 'sk-fixture-device' })

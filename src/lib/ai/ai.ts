@@ -181,7 +181,7 @@ export async function callAI(
  *
  * 内部使用 AI SDK streamText()，输出转换为统一 SSE 事件协议
  */
-export async function callAIStream(
+async function callAIStream(
     messages: AIRequestMessage[],
     chartContext: string = '',
     modelId: string = DEFAULT_MODEL_ID,

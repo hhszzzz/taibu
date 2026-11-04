@@ -58,18 +58,20 @@ test('the offline runner executes a case through the real runtime and hard-check
   assert.equal(featureRead.mock.callCount(), 0);
 });
 
+/** A method that reads no chart: it must load its guide and leave Core tools alone. */
+const chartlessCase: AgentEvalCase = {
+  id: 'dream-unprompted',
+  tool: CHARTLESS_EVAL_TOOL,
+  guide: 'dream',
+  prompt: '昨晚梦见一条蛇追着我跑。',
+  assertions: ['加载并遵循解梦方法'],
+  arguments: {},
+};
+
 test('a chartless case passes when it loads its guide and runs no calculation', async () => {
-  const dreamCase: AgentEvalCase = {
-    id: 'dream-unprompted',
-    tool: CHARTLESS_EVAL_TOOL,
-    guide: 'dream',
-    prompt: '昨晚梦见一条蛇追着我跑。',
-    assertions: ['加载并遵循解梦方法'],
-    arguments: {},
-  };
   const outcome = await runAgentEvalCase({
     evalId: 'chartless-run',
-    case: dreamCase,
+    case: chartlessCase,
     config,
     createStream: baziScript(index => index === 0
       ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'dream' } }]
@@ -82,17 +84,9 @@ test('a chartless case passes when it loads its guide and runs no calculation', 
 });
 
 test('a chartless case fails when it computes a chart anyway', async () => {
-  const dreamCase: AgentEvalCase = {
-    id: 'dream-unprompted',
-    tool: CHARTLESS_EVAL_TOOL,
-    guide: 'dream',
-    prompt: '昨晚梦见一条蛇追着我跑。',
-    assertions: ['加载并遵循解梦方法'],
-    arguments: {},
-  };
   const outcome = await runAgentEvalCase({
     evalId: 'chartless-with-chart',
-    case: dreamCase,
+    case: chartlessCase,
     config,
     createStream: baziScript(index => index === 0
       ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'dream' } }]
@@ -105,7 +99,8 @@ test('a chartless case fails when it computes a chart anyway', async () => {
   assert.match(outcome.failedAssertions.join(' '), /不应产生计算成果/);
 });
 
-function scoringStream(text: string): PiStreamFn {  return model => {
+function scoringStream(text: string): PiStreamFn {
+  return model => {
     const events = createAssistantMessageEventStream(), answer = emptyPiAssistant(model);
     answer.content = [{ type: 'text', text }];
     answer.stopReason = 'stop';

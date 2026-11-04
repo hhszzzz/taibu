@@ -145,11 +145,9 @@ export class EvalAgentStore extends AgentStore {
 
   /** The method ids the model asked to load, in call order. */
   loadedGuides(): string[] {
-    return this.toolMessages()
-      .filter((message): message is Extract<Message, { role: 'assistant' }> => message.role === 'assistant')
-      .flatMap(message => message.content.flatMap(part => part.type === 'toolCall' && part.name === AGENT_SKILL_TOOLS.load
-        ? [String((part.arguments as { name?: unknown } | undefined)?.name ?? '')]
-        : []))
+    return this.toolCalls()
+      .filter(call => call.name === AGENT_SKILL_TOOLS.load)
+      .map(call => String((call.arguments as { name?: unknown } | undefined)?.name ?? ''))
       .filter(Boolean);
   }
 
@@ -157,10 +155,16 @@ export class EvalAgentStore extends AgentStore {
     return this.nativeEntries().flatMap(entry => entry.model ?? []);
   }
 
-  requestedTools(): string[] {
-    return [...new Set(this.toolMessages()
+  private toolCalls() {
+    return this.toolMessages()
       .filter((message): message is Extract<Message, { role: 'assistant' }> => message.role === 'assistant')
-      .flatMap(message => message.content.flatMap(part => part.type === 'toolCall' ? [part.name] : [])))];
+      .flatMap(message => message.content.flatMap(part => part.type === 'toolCall'
+        ? [{ name: part.name, arguments: part.arguments }]
+        : []));
+  }
+
+  requestedTools(): string[] {
+    return [...new Set(this.toolCalls().map(call => call.name))];
   }
 
   calledTools(): string[] {

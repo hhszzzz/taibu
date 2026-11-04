@@ -222,7 +222,7 @@ async function formatUserMessagePrefix(context: PromptContext, window: () => Pro
 }
 
 // 完整构建：返回 systemPrompt + sources + 诊断信息，供 chat 路由使用
-export async function buildPromptWithSources(context: PromptContext, prepared?: { budget?: number; includeBaseRole?: boolean }): Promise<{
+export async function buildPromptWithSources(context: PromptContext, options?: { budget?: number; includeBaseRole?: boolean }): Promise<{
     systemPrompt: string;
     userMessagePrefix: string;
     userMessageTokens: number;
@@ -234,7 +234,7 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
     // One catalog lookup serves both the prompt budget and an attached file's share of the window.
     let window: Promise<ChatModelWindow> | undefined;
     const chatWindow = () => (window ??= resolveChatModelWindow(context.modelId, context.reasoningEnabled, context.modelWindow));
-    const budget = prepared?.budget ?? promptBudget(await chatWindow());
+    const budget = options?.budget ?? promptBudget(await chatWindow());
     const tracker = createSourceTracker();
     let remaining = budget;
 
@@ -291,7 +291,7 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
     tryInject('base_rules', 'P0', getBaseRulesPrompt());
 
     // 普通对话带底座（角色 + 解读通则）；Agent 的解读规则由 load_skill 的方法卡提供，不重复注入。
-    if (prepared?.includeBaseRole !== false) {
+    if (options?.includeBaseRole !== false) {
         tryInject('base_chat_prompt', 'P0', BASE_SYSTEM_PROMPT);
     }
 

@@ -80,13 +80,16 @@ try {
                 const steps = [
                     { id: 'guide', name: AGENT_SKILL_TOOLS.load, arguments: () => ({ name: item.guide }) },
                     ...(item.chart ? [{ id: 'chart', name: item.chart.tool, arguments: () => item.chart.arguments }] : []),
-                    ...(item.tool !== CHARTLESS_EVAL_TOOL && isAgentDeferredTool(item.tool) ? [{ id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: () => ({ query: item.tool }) }] : []),
-                    ...(item.tool === CHARTLESS_EVAL_TOOL ? [] : [{ id: 'compute', name: item.tool, arguments: () => {
-                        if (!item.chart) return item.arguments;
-                        const chart = [...store.drafts.values()].find(artifact => artifact.tool_name === item.chart.tool);
-                        if (!chart) throw new Error('未找到 ' + item.chart.tool + ' 的成果，无法详查');
-                        return { reference: 'artifact:' + chart.id, ...item.arguments };
-                    } }]),
+                    // 无需排盘的用例只有加载方法一步。
+                    ...(item.tool === CHARTLESS_EVAL_TOOL ? [] : [
+                        ...(isAgentDeferredTool(item.tool) ? [{ id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: () => ({ query: item.tool }) }] : []),
+                        { id: 'compute', name: item.tool, arguments: () => {
+                            if (!item.chart) return item.arguments;
+                            const chart = [...store.drafts.values()].find(artifact => artifact.tool_name === item.chart.tool);
+                            if (!chart) throw new Error('未找到 ' + item.chart.tool + ' 的成果，无法详查');
+                            return { reference: 'artifact:' + chart.id, ...item.arguments };
+                        } },
+                    ]),
                 ];
                 if (index < steps.length) return [{ type: 'toolCall', id: steps[index].id, name: steps[index].name, arguments: steps[index].arguments() }];
                 return [{ type: 'text', text: '根据实际 Core 盘面给出结论。离线模式只检查结构，不评价解读质量。' }];

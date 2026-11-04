@@ -31,7 +31,8 @@ export interface AgentEvalToolCall {
 
 export type AgentEvalRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-/** Cases × models × repeats; the API refuses more. */export const AGENT_EVAL_CALL_LIMIT = 200;
+/** Cases × models × repeats; the API refuses more. */
+export const AGENT_EVAL_CALL_LIMIT = 200;
 export const AGENT_EVAL_REPEAT_LIMIT = 5;
 export const AGENT_EVAL_REPEAT_DEFAULT = 1;
 

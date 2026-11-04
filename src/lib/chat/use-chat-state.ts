@@ -24,7 +24,7 @@ import { useConversationDraft } from './use-conversation-draft';
 
 type ConversationDetailOverrides = Partial<Pick<
     Conversation,
-    'userId' | 'personality' | 'title' | 'createdAt' | 'updatedAt' | 'sourceType' | 'sourceData' | 'isArchived' | 'archivedKbIds'
+    'userId' | 'title' | 'createdAt' | 'updatedAt' | 'sourceType' | 'sourceData' | 'isArchived' | 'archivedKbIds'
 >>;
 
 export interface ChatStateReturn {
@@ -240,7 +240,6 @@ export function useChatState({
         return {
             id: conversationId,
             userId: overrides.userId ?? existing?.userId ?? listItem?.userId,
-            personality: overrides.personality ?? existing?.personality ?? listItem?.personality ?? 'general',
             title: overrides.title ?? existing?.title ?? listItem?.title ?? DEFAULT_CONVERSATION_TITLE,
             messages: messagesToCache,
             createdAt: overrides.createdAt ?? existing?.createdAt ?? listItem?.createdAt ?? nowIso,

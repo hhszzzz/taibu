@@ -85,7 +85,7 @@ export const metadata: Metadata = {
     locale: "zh_CN",
     siteName: "太卜",
     title: "太卜",
-    description: "AI驱动的个性化命理分析，多人格AI命理师，记忆式对话体验",
+    description: "AI 驱动的命理分析与占术解读，记忆式对话与可核查的排盘依据",
   },
   twitter: {
     card: "summary_large_image",

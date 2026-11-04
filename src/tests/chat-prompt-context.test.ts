@@ -49,7 +49,6 @@ test('buildChatPromptContext should load visualization_settings from user_settin
 
   let budgetCalls = 0;
   let capturedModelWindow: unknown = null;
-  const resolvePersonality = t.mock.method(promptBuilderModule, 'resolvePersonalities');
   let capturedVisualizationSettings: unknown = null;
 
   stubSettings(t, {
@@ -67,7 +66,7 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   promptBuilderModule.calculatePromptBudget = (async () => { budgetCalls++; return 1024; }) as typeof promptBuilderModule.calculatePromptBudget;
   promptBuilderModule.buildPromptWithSources = (async (context, prepared) => {
     assert.equal(prepared?.budget, 1024);
-    assert.ok(prepared?.personalityResolution);
+    assert.equal(prepared?.includeBaseRole, true);
     capturedVisualizationSettings = context.userSettings?.visualizationSettings;
     capturedModelWindow = context.modelWindow;
     return {
@@ -109,13 +108,49 @@ test('buildChatPromptContext should load visualization_settings from user_settin
   }, { modelWindow: { contextWindow: 128_000, maxOutput: 8_192 } });
 
   assert.equal(budgetCalls, 1);
-  assert.equal(resolvePersonality.mock.callCount(), 1);
   assert.deepEqual(capturedVisualizationSettings, {
     selectedDimensions: ['career', 'wealth'],
     dayunDisplayCount: 6,
     chartStyle: 'classic-chinese',
   });
   assert.deepEqual(capturedModelWindow, { contextWindow: 128_000, maxOutput: 8_192 });
+});
+
+test('buildChatPromptContext keeps the chat base role unless the caller is an agent task', async (t) => {
+  const promptBuilderModule = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+  const appSettingsModule = require('../lib/app-settings') as typeof import('../lib/app-settings');
+  const originalBuildPromptWithSources = promptBuilderModule.buildPromptWithSources;
+  const originalGetPromptBudget = promptBuilderModule.calculatePromptBudget;
+  const originalFeatureEnabled = appSettingsModule.isFeatureModuleEnabled;
+  stubSettings(t, { expression_style: 'direct', user_profile: {}, custom_instructions: '', prompt_kb_ids: [] });
+
+  const prepared: Array<{ includeBaseRole?: boolean }> = [];
+  promptBuilderModule.calculatePromptBudget = (async () => 4096) as typeof promptBuilderModule.calculatePromptBudget;
+  promptBuilderModule.buildPromptWithSources = (async (_context, options) => {
+    prepared.push(options ?? {});
+    return {
+      systemPrompt: '', userMessagePrefix: '', userMessageTokens: 0, sources: [], diagnostics: [], totalTokens: 0, budgetTotal: 0,
+    };
+  }) as typeof promptBuilderModule.buildPromptWithSources;
+  t.after(() => {
+    promptBuilderModule.buildPromptWithSources = originalBuildPromptWithSources;
+    promptBuilderModule.calculatePromptBudget = originalGetPromptBudget;
+    appSettingsModule.isFeatureModuleEnabled = originalFeatureEnabled;
+    delete require.cache[require.resolve('../lib/server/chat/prompt-context')];
+  });
+
+  const { buildChatPromptContext } = await import('../lib/server/chat/prompt-context');
+  const request = {
+    body: { messages: [{ id: 'm1', role: 'user' as const, content: '看看', createdAt: new Date().toISOString() }], stream: false },
+    userId: 'user-1',
+    metered: true,
+    requestedModelId: 'deepseek-chat',
+    reasoningEnabled: false,
+  };
+  await buildChatPromptContext(request, { deferKnowledgeSearch: true });
+  await buildChatPromptContext(request, { deferKnowledgeSearch: true, includeBaseRole: false });
+
+  assert.deepEqual(prepared.map(options => options.includeBaseRole), [true, false]);
 });
 
 test('buildChatPromptContext searches the prompt knowledge bases as the caller, whoever they are', async (t) => {

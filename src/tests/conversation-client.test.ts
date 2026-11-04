@@ -59,7 +59,6 @@ test('loadConversations should map paginated list payloads through the browser a
       conversations: [{
         id: 'conv-1',
         user_id: 'user-1',
-        personality: 'general',
         title: '测试对话',
         created_at: '2024-01-01T00:00:00.000Z',
         updated_at: '2024-01-02T00:00:00.000Z',
@@ -89,7 +88,6 @@ test('loadConversations should map paginated list payloads through the browser a
       conversations: [{
         id: 'conv-1',
         userId: 'user-1',
-        personality: 'general',
         title: '测试对话',
         createdAt: '2024-01-01T00:00:00.000Z',
         updatedAt: '2024-01-02T00:00:00.000Z',

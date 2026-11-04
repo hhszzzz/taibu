@@ -274,6 +274,9 @@ export async function submitAgentTask(
     },
     {
       deferKnowledgeSearch: true,
+      // 解读规则由 load_skill 的方法卡提供，不注入普通对话底座；时间改由 current_time 工具取。
+      includeBaseRole: false,
+      includeSentAt: false,
       ...(ownMain ? { modelWindow: { contextWindow: ownMain.contextWindow, maxOutput: ownMain.maxOutput } } : {}),
     },
   );

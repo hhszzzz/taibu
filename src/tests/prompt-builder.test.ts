@@ -488,81 +488,35 @@ test('buildPromptWithSources does not token-truncate selected chart context when
     assert.ok(!res.systemPrompt.includes('# 八字命盘'));
 });
 
-test('resolvePersonalities selects bazi/ziwei/general correctly', () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const baziZiwei = pb.resolvePersonalities({
-        chartContext: { baziChart: buildMinimalBaziChart(), ziweiChart: { palaces: {} } }
-    });
-    assert.deepEqual(baziZiwei, { personalities: ['bazi', 'ziwei'], isMultiple: true });
-
-    const ziweiOnly = pb.resolvePersonalities({
-        chartContext: { ziweiChart: { palaces: {} } }
-    });
-    assert.deepEqual(ziweiOnly, { personalities: ['ziwei'], isMultiple: false });
-
-    const none = pb.resolvePersonalities({});
-    assert.deepEqual(none, { personalities: ['general'], isMultiple: false });
-});
-
-test('resolvePersonalities considers mentions for bazi/ziwei', () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const baziMention = pb.resolvePersonalities({
-        mentions: [{ type: 'bazi_chart', id: 'b1', name: '八字', preview: 'p' }]
-    });
-    assert.deepEqual(baziMention, { personalities: ['bazi'], isMultiple: false });
-
-    const bothMentions = pb.resolvePersonalities({
-        mentions: [
-            { type: 'bazi_chart', id: 'b1', name: '八字', preview: 'p' },
-            { type: 'ziwei_chart', id: 'z1', name: '紫微', preview: 'p' }
-        ]
-    });
-    assert.deepEqual(bothMentions, { personalities: ['bazi', 'ziwei'], isMultiple: true });
-});
-
-test('buildPersonalityPrompt composes single and multi roles', () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const single = pb.buildPersonalityPrompt(['bazi']);
-    assert.ok(single.includes('子平法八字命理师'));
-    assert.ok(!single.includes('你同时具备以下专业能力'));
-
-    const multi = pb.buildPersonalityPrompt(['bazi', 'ziwei']);
-    assert.ok(multi.includes('【八字宗师】'));
-    assert.ok(multi.includes('【紫微斗数】'));
-    // 多人格直接拼接，不再包装额外指令
-    assert.ok(!multi.includes('你同时具备以下专业能力'));
-    // 解读通则随人格注入：证据引用与应期表述在普通对话里同样生效
-    for (const prompt of [single, multi]) {
-        assert.ok(prompt.includes('## 解读通则'));
-        assert.ok(prompt.includes('断语必须引用盘面证据'));
-        assert.ok(prompt.includes('应期先以范围与触发条件表述'));
-    }
-});
-
-test('personas fall back to their brief form when the whole prompt would crowd out the chart', async () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const { AI_PERSONALITIES } = require('../lib/ai/ai') as any;
-    const { countTokens } = require('../lib/token-utils') as any;
-    const full = pb.buildPersonalityPrompt(['bazi', 'ziwei']);
-    assert.ok(full.includes('## 断法'));
-    assert.equal(pb.buildPersonalityPrompt(['bazi', 'ziwei'], countTokens(full)), full, 'a prompt within the limit stays whole');
-    const brief = pb.buildPersonalityPrompt(['bazi', 'ziwei'], countTokens(full) - 1);
-    assert.ok(brief.includes('【八字宗师】') && brief.includes('【紫微斗数】') && brief.includes('## 输出要求') && brief.includes('## 安全红线'));
-    assert.ok(!brief.includes('## 断法'));
-    assert.equal(pb.buildPersonalityPrompt(['general'], 1), AI_PERSONALITIES.general.systemPrompt, 'a persona without a brief form stays as written');
-
-    // At the smallest budget the whole system card would be clipped and push the chart out; its brief form leaves room.
+test('ordinary chat carries the base role and the shared reading principles', async () => {
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
         userMessage: '看看事业',
         mentions: [],
         knowledgeHits: [],
         userSettings: {},
-        chartContext: { baziChart: buildMinimalBaziChart() },
-    }, { budget: 1000 });
-    assert.ok(res.systemPrompt.includes('子平法八字命理师') && !res.systemPrompt.includes('## 断法'));
-    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean; truncated: boolean }) => layer.id.startsWith('personality_role') && layer.included && !layer.truncated));
-    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'chart_context' && layer.included));
+    });
+    assert.ok(res.systemPrompt.includes('## 作答方式'));
+    assert.ok(res.systemPrompt.includes('## 解读通则'));
+    assert.ok(res.systemPrompt.includes('断语必须引用所据资料中的证据'));
+    assert.ok(res.systemPrompt.includes('条件不足，无法准确判断'));
+    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'base_chat_prompt' && layer.included));
+});
+
+test('an agent task skips the base role because its method card already carries the principles', async () => {
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const res = await pb.buildPromptWithSources({
+        modelId: 'deepseek-chat',
+        userMessage: '用盲派看看事业',
+        mentions: [],
+        knowledgeHits: [],
+        userSettings: {},
+    }, { includeBaseRole: false });
+    assert.ok(res.systemPrompt.includes('## 数据使用规则'));
+    assert.ok(!res.systemPrompt.includes('## 解读通则'));
+    assert.ok(!res.systemPrompt.includes('## 作答方式'));
+    assert.ok(!res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'base_chat_prompt'));
 });
 
 test('countTokens estimates Chinese heavier than Latin', () => {
@@ -612,7 +566,7 @@ test('SourceTracker de-duplicates sources by type and id', () => {
     assert.ok(sources[0].preview.includes('第二次更新'));
 });
 
-test('prepared budget and personality preserve standalone output with one model budget lookup', async t => {
+test('a prepared budget preserves standalone output with one model budget lookup', async t => {
     const models = require('../lib/server/ai-config') as typeof import('../lib/server/ai-config');
     const lookup = t.mock.method(models, 'getModelConfigAsync', async () => undefined);
     const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
@@ -622,7 +576,7 @@ test('prepared budget and personality preserve standalone output with one model 
     const standalone = await pb.buildPromptWithSources(context);
     assert.equal(lookup.mock.callCount(), 1);
     const budget = await pb.calculatePromptBudget(context.modelId);
-    const prepared = await pb.buildPromptWithSources(context, { budget, personalityResolution: pb.resolvePersonalities(context) });
+    const prepared = await pb.buildPromptWithSources(context, { budget });
     assert.equal(lookup.mock.callCount(), 2);
     assert.deepEqual(prepared, standalone);
 });

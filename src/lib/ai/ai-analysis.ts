@@ -13,21 +13,7 @@ import {
     type AnalysisSourceData,
     type AnalysisSourceType,
 } from '@/lib/source-contracts';
-import type { AIPersonality, ChatMessage } from '@/types';
-
-
-const SOURCE_PERSONALITY_MAP: Partial<Record<AnalysisSourceType, AIPersonality>> = {
-    bazi_wuxing: 'bazi',
-    bazi_personality: 'bazi',
-    tarot: 'tarot',
-    liuyao: 'liuyao',
-    mbti: 'mbti',
-    hepan: 'hepan',
-    qimen: 'qimen',
-    daliuren: 'daliuren',
-    meihua: 'meihua',
-    xiaoliuren: 'xiaoliuren',
-};
+import type { ChatMessage } from '@/types';
 
 export class AIAnalysisConversationPersistenceError extends Error {
     sourceType: AnalysisSourceType;
@@ -78,14 +64,12 @@ export async function createAIAnalysisConversation(params: CreateAIAnalysisParam
         },
     ];
 
-    const personality = SOURCE_PERSONALITY_MAP[params.sourceType] ?? 'general';
     if (params.historyBinding) {
         const data = await systemDb().rpc('create_analysis_conversation_with_history_as_service', {
             p_user_id: params.userId,
             p_source_type: params.sourceType,
             p_source_data: normalizedSourceData,
             p_title: params.title,
-            p_personality: personality,
             p_messages: messages,
             p_history_type: params.historyBinding.type,
             p_history_payload: params.historyBinding.payload,
@@ -103,7 +87,6 @@ export async function createAIAnalysisConversation(params: CreateAIAnalysisParam
     const data = await systemDb().rpc('create_conversation_with_messages', {
         p_user_id: params.userId,
         p_title: params.title,
-        p_personality: personality,
         p_source_type: params.sourceType,
         p_source_data: normalizedSourceData,
         p_messages: messages,

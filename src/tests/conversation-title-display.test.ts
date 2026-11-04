@@ -11,7 +11,6 @@ function createConversation(overrides: Partial<ConversationListItem>): Conversat
   return {
     id: 'conv-1',
     userId: 'user-1',
-    personality: 'general',
     title: '默认标题',
     createdAt: '2026-04-13T00:00:00.000Z',
     updatedAt: '2026-04-13T00:00:00.000Z',

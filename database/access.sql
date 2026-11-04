@@ -676,9 +676,9 @@ GRANT ALL ON FUNCTION public.community_author_profiles(p_user_ids uuid[]) TO aut
 
 GRANT ALL ON FUNCTION public.community_author_profiles(p_user_ids uuid[]) TO anon;
 
-GRANT ALL ON FUNCTION public.create_analysis_conversation_with_history_as_service(p_user_id uuid, p_source_type text, p_source_data jsonb, p_title text, p_personality text, p_messages jsonb, p_history_type text, p_history_payload jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.create_analysis_conversation_with_history_as_service(p_user_id uuid, p_source_type text, p_source_data jsonb, p_title text, p_messages jsonb, p_history_type text, p_history_payload jsonb) TO authenticated;
 
-GRANT ALL ON FUNCTION public.create_conversation_with_messages(p_user_id uuid, p_title text, p_personality text, p_source_type text, p_source_data jsonb, p_messages jsonb) TO authenticated;
+GRANT ALL ON FUNCTION public.create_conversation_with_messages(p_user_id uuid, p_title text, p_source_type text, p_source_data jsonb, p_messages jsonb) TO authenticated;
 
 GRANT ALL ON FUNCTION public.create_knowledge_base_with_limit(p_user_id uuid, p_name text, p_description text, p_weight text, p_limit integer) TO authenticated;
 
@@ -737,7 +737,7 @@ GRANT ALL ON FUNCTION public.toggle_ming_record_pin(p_record_id uuid) TO authent
 
 GRANT ALL ON FUNCTION public.toggle_community_vote(p_target_type text, p_target_id uuid, p_vote_type text) TO authenticated;
 
-GRANT ALL ON FUNCTION public.update_conversation_with_messages(p_conversation_id uuid, p_title text, p_title_present boolean, p_personality text, p_personality_present boolean, p_messages jsonb, p_messages_present boolean) TO authenticated;
+GRANT ALL ON FUNCTION public.update_conversation_with_messages(p_conversation_id uuid, p_title text, p_title_present boolean, p_messages jsonb, p_messages_present boolean) TO authenticated;
 
 GRANT SELECT ON TABLE public.conversation_shares TO authenticated;
 

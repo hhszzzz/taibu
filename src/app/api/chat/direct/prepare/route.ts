@@ -34,7 +34,6 @@ export async function POST(request: NextRequest) {
       systemPrompt: prepared.systemPrompt,
       sanitizedMessages: prepared.sanitizedMessages,
       metadata: prepared.metadata,
-      fallbackPersonality: prepared.fallbackPersonality,
       requestedModelId: prepared.requestedModelId,
     });
   } catch {

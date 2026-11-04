@@ -1,6 +1,6 @@
 import 'server-only';
 
-import { buildPromptWithSources, calculatePromptBudget, resolvePersonalities } from '@/lib/ai/prompt-builder';
+import { buildPromptWithSources, calculatePromptBudget } from '@/lib/ai/prompt-builder';
 import { systemDb } from '@/lib/db/context.server';
 import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
@@ -126,13 +126,21 @@ function applyUserSettingsOverrides(
   };
 }
 
-/**
- * `webSearch` is granted by the admitting adapter, never read from the body: the preview builds the same context
- * and must not search.
- */
+export interface ChatPromptContextOptions {
+  deferKnowledgeSearch?: boolean;
+  /** Granted by the admitting adapter, never read from the body: the preview builds the same context and must not search. */
+  webSearch?: boolean;
+  conversationMentions?: boolean;
+  modelWindow?: { contextWindow?: number | null; maxOutput?: number | null };
+  /** 普通对话底座（角色 + 解读通则）；Agent 传 false，解读规则由 load_skill 的方法卡提供 */
+  includeBaseRole?: boolean;
+  /** 用户消息开头的发送时间；Agent 传 false，改用 current_time 工具 */
+  includeSentAt?: boolean;
+}
+
 export async function buildChatPromptContext(
   resolvedRequest: ResolvedChatRequest,
-  options?: { deferKnowledgeSearch?: boolean; webSearch?: boolean; conversationMentions?: boolean; modelWindow?: { contextWindow?: number | null; maxOutput?: number | null } },
+  options?: ChatPromptContextOptions,
 ): Promise<ChatPromptContextResult> {
   const { body, userId, requestedModelId, reasoningEnabled } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
@@ -209,10 +217,6 @@ export async function buildChatPromptContext(
       })
     : [];
 
-  const personalityResolution = resolvePersonalities({
-    mentions: resolvedMentions,
-  });
-
   const web = await webSearch;
   const promptBuild = await buildPromptWithSources({
     modelId: requestedModelId,
@@ -222,10 +226,10 @@ export async function buildChatPromptContext(
     mentions: resolvedMentions,
     knowledgeHits,
     userSettings: effectiveUserSettings,
-    sentAt: { at: new Date(), timeZone: resolveUserTimeZone(body.timezone) },
+    ...(options?.includeSentAt === false ? {} : { sentAt: { at: new Date(), timeZone: resolveUserTimeZone(body.timezone) } }),
     quotes: lastUserMessage?.quotes,
     attachments: { file: body.attachment, web },
-  }, { budget: mentionBudget, personalityResolution });
+  }, { budget: mentionBudget, includeBaseRole: options?.includeBaseRole !== false });
 
   const metadata = {
     sources: promptBuild.sources,
@@ -256,13 +260,10 @@ export async function buildChatPromptContext(
     return message;
   });
 
-  const fallbackPersonality = personalityResolution.personalities[0] ?? 'general';
-
   return {
     sanitizedMessages,
     agentMemoryEnabled: effectiveUserSettings.memoryEnabled === true,
     metadata,
-    fallbackPersonality,
     systemPrompt: promptBuild.systemPrompt,
     promptKnowledgeBases,
   };

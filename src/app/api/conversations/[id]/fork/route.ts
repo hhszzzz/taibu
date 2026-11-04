@@ -18,7 +18,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     if (typeof body?.messageId !== 'string' || body.messageId.length > 200) return jsonError('回答 ID 无效', 400);
     const parentResult = await db.tx((trx) => trx
         .selectFrom('conversations')
-        .select(['id', 'title', 'personality', 'messages'])
+        .select(['id', 'title', 'messages'])
         .where('id', '=', id)
         .where('user_id', '=', auth.user.id)
         .executeTakeFirst()).then((parent) => ({ parent, error: null }), (error) => ({ parent: null, error }));

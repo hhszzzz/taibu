@@ -964,8 +964,9 @@ test('a message steered in while an answer fails starts the next answer instead 
   const finish = store.writes.find(w => w.name === 'agent_finish_run')!;
   assert.equal(finish.args.p_status, 'completed', JSON.stringify(finish.args.p_message));
   assert.equal(calls, 2);
-  // Dated when the server received it, in the zone the task was created in.
-  assert.ok(contexts[0].includes('【发送时间：2026-10-24 23:51 星期六，Asia/Shanghai（UTC+08:00）】\\n另外看看事业'), contexts[0]);
+  // Undated: the task reads the moment from current_time, not from the message.
+  assert.ok(contexts[0].includes('另外看看事业'), contexts[0]);
+  assert.ok(!contexts[0].includes('【发送时间：'), contexts[0]);
   assert.deepEqual(store.pending, [], 'the steer was placed, not left queued');
 });
 

@@ -37,8 +37,7 @@ function setup(t: TestContext, model: ResolvedByokModel | null = ownModel()) {
   t.mock.method(chatRequest, 'prepareBrowserDirectChatRequest', async (_request: unknown, body: import('../lib/server/chat/request').ChatRequestBody) => ({
     body, userId: 'user-1', metered: false, requestedModelId: String(body.model), reasoningEnabled: body.reasoning === true,
     sanitizedMessages: [{ role: 'system', content: 'client system' }, { role: 'user', content: '今天运势？' }, { role: 'assistant', content: '先看日柱。' }, { role: 'user', content: '继续' }],
-    systemPrompt: '太卜系统提示', metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 }, fallbackPersonality: 'general', promptKnowledgeBases: [],
-  }) as never);
+    systemPrompt: '太卜系统提示', metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 }, promptKnowledgeBases: [] }) as never);
   const managed = t.mock.method(chatRequest, 'prepareChatRequest', async () => { throw new Error('own models never take the platform path'); });
   t.mock.method(store, 'resolveByokModel', async () => model);
   const sent: Array<{ url: string; auth: string | null; body: Record<string, unknown> }> = [];

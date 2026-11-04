@@ -1,4 +1,4 @@
-import type { AIMessageMetadata, AIModelPricing, AIPersonality, ChatAttachment, ChatMessage } from '@/types';
+import type { AIMessageMetadata, AIModelPricing, ChatAttachment, ChatMessage } from '@/types';
 import type { Mention } from '@/types/mentions';
 import type { UserIdentityProfile } from '@/lib/user/settings';
 import type { VisualizationSettings } from '@/lib/visualization/settings';
@@ -68,7 +68,6 @@ export interface ChatPromptContext {
       userMessageTokens: number;
     };
   };
-  fallbackPersonality: AIPersonality;
   systemPrompt: string;
   promptKnowledgeBases: Array<{ id: string; name: string }>;
 }

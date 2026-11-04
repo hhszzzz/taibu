@@ -693,8 +693,8 @@ BEGIN
   SELECT count(*) INTO v_count FROM public.agent_schedules WHERE user_id=v_user;
   IF v_count >= v_limit THEN RAISE EXCEPTION 'AGENT_SCHEDULE_LIMIT' USING ERRCODE='23505'; END IF;
   v_next := public.agent_next_run_at(p_cadence,p_timezone,now());
-  INSERT INTO public.conversations(user_id,title,personality,messages)
-    VALUES(v_user,'定时 · '||left(btrim(p_name),60),'general','[]'::jsonb)
+  INSERT INTO public.conversations(user_id,title,messages)
+    VALUES(v_user,'定时 · '||left(btrim(p_name),60),'[]'::jsonb)
     RETURNING id INTO v_conversation;
   INSERT INTO public.agent_schedules(user_id,name,template,prompt,cadence,timezone,conversation_id,options,enabled,next_run_at)
     VALUES(v_user,btrim(p_name),p_template,p_prompt,p_cadence,coalesce(nullif(btrim(p_timezone),''),'Asia/Shanghai'),v_conversation,p_options,true,v_next)
@@ -2192,7 +2192,7 @@ begin
 end;
 $$;
 
-CREATE OR REPLACE FUNCTION public.create_analysis_conversation_with_history_as_service(p_user_id uuid, p_source_type text, p_source_data jsonb, p_title text, p_personality text, p_messages jsonb, p_history_type text, p_history_payload jsonb) RETURNS text
+CREATE OR REPLACE FUNCTION public.create_analysis_conversation_with_history_as_service(p_user_id uuid, p_source_type text, p_source_data jsonb, p_title text, p_messages jsonb, p_history_type text, p_history_payload jsonb) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'pg_catalog', 'public'
     AS $$
@@ -2209,7 +2209,6 @@ BEGIN
       p_source_type,
       p_source_data,
       p_title,
-      p_personality,
       p_messages,
       p_history_type,
       p_history_payload
@@ -2221,13 +2220,12 @@ BEGIN
   END IF;
 
   INSERT INTO public.conversations (
-    user_id, source_type, source_data, title, personality, messages
+    user_id, source_type, source_data, title, messages
   ) VALUES (
     p_user_id,
     p_source_type,
     COALESCE(p_source_data, '{}'::jsonb),
     p_title,
-    COALESCE(NULLIF(p_personality, ''), 'general'),
     '[]'::jsonb
   ) RETURNING id INTO v_conversation_id;
 
@@ -2255,7 +2253,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.create_analysis_conversation_with_history_legacy_as_service(p_user_id uuid, p_source_type text, p_source_data jsonb, p_title text, p_personality text, p_messages jsonb, p_history_type text, p_history_payload jsonb) RETURNS text
+CREATE OR REPLACE FUNCTION public.create_analysis_conversation_with_history_legacy_as_service(p_user_id uuid, p_source_type text, p_source_data jsonb, p_title text, p_messages jsonb, p_history_type text, p_history_payload jsonb) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -2276,7 +2274,6 @@ BEGIN
     source_type,
     source_data,
     title,
-    personality,
     messages
   )
   VALUES (
@@ -2284,7 +2281,6 @@ BEGIN
     p_source_type,
     COALESCE(p_source_data, '{}'::jsonb),
     p_title,
-    COALESCE(NULLIF(p_personality, ''), 'general'),
     '[]'::jsonb
   )
   RETURNING id
@@ -2531,7 +2527,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.create_conversation_with_messages(p_user_id uuid, p_title text, p_personality text DEFAULT NULL::text, p_source_type text DEFAULT NULL::text, p_source_data jsonb DEFAULT NULL::jsonb, p_messages jsonb DEFAULT '[]'::jsonb) RETURNS text
+CREATE OR REPLACE FUNCTION public.create_conversation_with_messages(p_user_id uuid, p_title text, p_source_type text DEFAULT NULL::text, p_source_data jsonb DEFAULT NULL::jsonb, p_messages jsonb DEFAULT '[]'::jsonb) RETURNS text
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -2554,7 +2550,6 @@ BEGIN
   INSERT INTO public.conversations (
     user_id,
     title,
-    personality,
     source_type,
     source_data,
     messages
@@ -2562,7 +2557,6 @@ BEGIN
   VALUES (
     p_user_id,
     COALESCE(NULLIF(p_title, ''), '新对话'),
-    COALESCE(NULLIF(p_personality, ''), 'general'),
     p_source_type,
     p_source_data,
     '[]'::jsonb
@@ -2781,7 +2775,7 @@ BEGIN
  IF parent.messages IS DISTINCT FROM p_source_messages THEN RAISE EXCEPTION 'BRANCH_CHANGED' USING ERRCODE='40001'; END IF;
  SELECT value INTO target FROM jsonb_array_elements(parent.messages) WHERE value->>'id'=p_through;
  IF target IS NULL OR target->>'role'<>'assistant' OR (target->'agent' IS NOT NULL AND target#>>'{agent,status}'<>'completed') THEN RAISE EXCEPTION 'ANSWER_NOT_COMPLETED' USING ERRCODE='22023'; END IF;
- RETURN public.create_conversation_with_messages(auth.uid(),coalesce(parent.title,'对话')||' · 分叉',parent.personality,NULL,jsonb_build_object('kind','fork','parentConversationId',p_parent,'parentMessageId',p_through),p_messages);
+ RETURN public.create_conversation_with_messages(auth.uid(),coalesce(parent.title,'对话')||' · 分叉',NULL,jsonb_build_object('kind','fork','parentConversationId',p_parent,'parentMessageId',p_through),p_messages);
 END;
 $$;
 
@@ -3851,7 +3845,7 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.update_conversation_with_messages(p_conversation_id uuid, p_title text DEFAULT NULL::text, p_title_present boolean DEFAULT false, p_personality text DEFAULT NULL::text, p_personality_present boolean DEFAULT false, p_messages jsonb DEFAULT NULL::jsonb, p_messages_present boolean DEFAULT false) RETURNS jsonb
+CREATE OR REPLACE FUNCTION public.update_conversation_with_messages(p_conversation_id uuid, p_title text DEFAULT NULL::text, p_title_present boolean DEFAULT false, p_messages jsonb DEFAULT NULL::jsonb, p_messages_present boolean DEFAULT false) RETURNS jsonb
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public'
     AS $$
@@ -3884,7 +3878,6 @@ BEGIN
   UPDATE public.conversations
   SET
     title = CASE WHEN p_title_present THEN p_title ELSE title END,
-    personality = CASE WHEN p_personality_present THEN p_personality ELSE personality END,
     updated_at = now()
   WHERE id = p_conversation_id;
 
@@ -3937,7 +3930,6 @@ $$;
 CREATE OR REPLACE VIEW public.conversations_with_archive_status WITH (security_invoker='on') AS
  SELECT id,
     user_id,
-    personality,
     title,
     messages,
     created_at,

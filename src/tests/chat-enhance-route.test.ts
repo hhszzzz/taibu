@@ -51,7 +51,7 @@ function setup(t: TestContext) {
     return async () => undefined;
   };
   ai.callAI = async (...args: unknown[]) => {
-    const options = args[4] as { beforeModelAttempt?: () => Promise<void> };
+    const options = args[3] as { beforeModelAttempt?: () => Promise<void> };
     state.billers.push(options);
     await options.beforeModelAttempt?.();
     return state.ai();

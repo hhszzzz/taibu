@@ -6,7 +6,7 @@ import { queryKeys } from '../lib/query/keys';
 import type { ConversationListItem } from '../types';
 
 function item(id: string, title = id): ConversationListItem {
-  return { id, title, personality: 'general', createdAt: '2026-01-01', updatedAt: '2026-01-01' };
+  return { id, title, createdAt: '2026-01-01', updatedAt: '2026-01-01' };
 }
 
 test('conversation ref, functional updates and external stream writes share one Query-owned list', () => {

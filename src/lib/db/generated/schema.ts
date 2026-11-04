@@ -505,7 +505,6 @@ export interface Conversations {
   next_task_config: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
   id: Generated<string>;
   user_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  personality: Generated<string | null>;
   title: Generated<string | null>;
   messages: Generated<Json | null>;
   created_at: Generated<string | null>;
@@ -517,7 +516,6 @@ export interface Conversations {
 export interface ConversationsWithArchiveStatus {
   id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   user_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
-  personality: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   title: ColumnType<string | null, string | null | undefined, string | null | undefined>;
   messages: ColumnType<Json | null, Json | null | undefined, Json | null | undefined>;
   created_at: ColumnType<string | null, string | null | undefined, string | null | undefined>;

@@ -11,7 +11,7 @@ import {
     requestBrowserPayloadOrThrow,
 } from '@/lib/browser-api';
 import { normalizeConversationSourceType } from '@/lib/source-contracts';
-import type { AIPersonality, ChatMessage, Conversation, ConversationListItem } from '@/types';
+import type { ChatMessage, Conversation, ConversationListItem } from '@/types';
 
 interface PaginatedConversations {
     conversations: ConversationListItem[];
@@ -24,7 +24,6 @@ interface PaginatedConversations {
 type ConversationDetailApiRow = {
     id: string;
     user_id: string;
-    personality?: string | null;
     title?: string | null;
     messages?: ChatMessage[] | null;
     created_at: string;
@@ -38,7 +37,6 @@ type ConversationDetailApiRow = {
 type ConversationListApiRow = {
     id: string;
     user_id: string;
-    personality?: string | null;
     title?: string | null;
     created_at: string;
     updated_at: string;
@@ -60,19 +58,6 @@ export const CONVERSATION_PAGE_SIZE = 7;
 const CONVERSATION_MAX_PAGES = 50;
 export const DEFAULT_CONVERSATION_TITLE = '新对话';
 
-const AI_PERSONALITY_VALUES: ReadonlySet<string> = new Set<AIPersonality>([
-    'bazi', 'ziwei', 'tarot', 'liuyao',
-    'mbti', 'hepan', 'qimen', 'daliuren', 'general',
-    'meihua', 'xiaoliuren',
-]);
-
-const normalizePersonality = (value?: string | null): AIPersonality => {
-    if (value && AI_PERSONALITY_VALUES.has(value)) {
-        return value as AIPersonality;
-    }
-    return 'general';
-};
-
 function getErrorMessage(error: unknown, fallbackMessage: string): string {
     return error instanceof Error && error.message ? error.message : fallbackMessage;
 }
@@ -81,7 +66,6 @@ function toConversation(row: ConversationDetailApiRow): Conversation {
     return {
         id: row.id,
         userId: row.user_id,
-        personality: normalizePersonality(row.personality),
         title: row.title || DEFAULT_CONVERSATION_TITLE,
         messages: hydrateConversationMessages(row.messages || [], row.source_data || undefined),
         createdAt: row.created_at,
@@ -97,7 +81,6 @@ function toConversationListItem(row: ConversationListApiRow): ConversationListIt
     return {
         id: row.id,
         userId: row.user_id,
-        personality: normalizePersonality(row.personality),
         title: row.title || DEFAULT_CONVERSATION_TITLE,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -111,7 +94,6 @@ function toConversationListItem(row: ConversationListApiRow): ConversationListIt
 }
 
 export async function createConversation(params: {
-    personality?: AIPersonality;
     title?: string;
 }): Promise<string | null> {
     try {
@@ -121,7 +103,6 @@ export async function createConversation(params: {
                 method: 'POST',
                 headers: JSON_HEADERS,
                 body: JSON.stringify({
-                    personality: params.personality || 'general',
                     title: params.title || DEFAULT_CONVERSATION_TITLE,
                     messages: [],
                 }),

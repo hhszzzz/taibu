@@ -50,8 +50,8 @@ export interface RpcRegistry {
   "community_author_profiles": { args: { "p_user_ids": string[] | null; }; result: { user_id: string; nickname: string; avatar_url: string; }[] };
   "create_agent_schedule": { args: { "p_name": string | null; "p_template": string | null; "p_prompt": string | null; "p_cadence": unknown | null; "p_timezone": string | null; "p_options": unknown | null; }; result: Record<string, unknown> };
   "create_agent_schedule_run": { args: { "p_schedule_id": string | null; "p_user_id": string | null; }; result: Record<string, unknown> };
-  "create_analysis_conversation_with_history_as_service": { args: { "p_user_id": string | null; "p_source_type": string | null; "p_source_data": unknown | null; "p_title": string | null; "p_personality": string | null; "p_messages": unknown | null; "p_history_type": string | null; "p_history_payload": unknown | null; }; result: string };
-  "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_personality"?: string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
+  "create_analysis_conversation_with_history_as_service": { args: { "p_user_id": string | null; "p_source_type": string | null; "p_source_data": unknown | null; "p_title": string | null; "p_messages": unknown | null; "p_history_type": string | null; "p_history_payload": unknown | null; }; result: string };
+  "create_conversation_with_messages": { args: { "p_user_id": string | null; "p_title": string | null; "p_source_type"?: string | null; "p_source_data"?: unknown | null; "p_messages"?: unknown | null; }; result: string };
   "create_knowledge_base_with_limit": { args: { "p_user_id": string | null; "p_name": string | null; "p_description"?: string | null; "p_weight"?: string | null; "p_limit"?: number | null; }; result: Json };
   "delete_agent_retention": { args: { "p_event_days"?: number | null; "p_commit_days"?: number | null; "p_worker_hours"?: number | null; "p_limit"?: number | null; "p_metric_days"?: number | null; }; result: { events_deleted: number; commits_deleted: number; workers_deleted: number; metrics_deleted: number; }[] };
   "delete_conversation_graph": { args: { "p_conversation_id": string | null; }; result: boolean };
@@ -81,7 +81,7 @@ export interface RpcRegistry {
   "toggle_community_vote": { args: { "p_target_type": string | null; "p_target_id": string | null; "p_vote_type": string | null; }; result: Json };
   "toggle_ming_record_pin": { args: { "p_record_id": string | null; }; result: Json };
   "update_agent_schedule": { args: { "p_id": string | null; "p_name": string | null; "p_prompt": string | null; "p_cadence": unknown | null; "p_timezone": string | null; "p_options": unknown | null; "p_enabled": boolean | null; }; result: Record<string, unknown> };
-  "update_conversation_with_messages": { args: { "p_conversation_id": string | null; "p_title"?: string | null; "p_title_present"?: boolean | null; "p_personality"?: string | null; "p_personality_present"?: boolean | null; "p_messages"?: unknown | null; "p_messages_present"?: boolean | null; }; result: Json };
+  "update_conversation_with_messages": { args: { "p_conversation_id": string | null; "p_title"?: string | null; "p_title_present"?: boolean | null; "p_messages"?: unknown | null; "p_messages_present"?: boolean | null; }; result: Json };
   "upsert_conversation_share": { args: { "p_conversation": string | null; "p_token": string | null; "p_title": string | null; "p_snapshot": unknown | null; "p_include_charts": boolean | null; "p_source_updated_at": string | null; }; result: Record<string, unknown> };
 }
 
@@ -139,8 +139,8 @@ export const RPC_SPECS = {
   "community_author_profiles": { args: [["p_user_ids", "uuid[]", false]], returns: "setof" },
   "create_agent_schedule": { args: [["p_name", "text", false], ["p_template", "text", false], ["p_prompt", "text", false], ["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_options", "jsonb", false]], returns: "row" },
   "create_agent_schedule_run": { args: [["p_schedule_id", "uuid", false], ["p_user_id", "uuid", false]], returns: "row" },
-  "create_analysis_conversation_with_history_as_service": { args: [["p_user_id", "uuid", false], ["p_source_type", "text", false], ["p_source_data", "jsonb", false], ["p_title", "text", false], ["p_personality", "text", false], ["p_messages", "jsonb", false], ["p_history_type", "text", false], ["p_history_payload", "jsonb", false]], returns: "scalar" },
-  "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_personality", "text", true], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
+  "create_analysis_conversation_with_history_as_service": { args: [["p_user_id", "uuid", false], ["p_source_type", "text", false], ["p_source_data", "jsonb", false], ["p_title", "text", false], ["p_messages", "jsonb", false], ["p_history_type", "text", false], ["p_history_payload", "jsonb", false]], returns: "scalar" },
+  "create_conversation_with_messages": { args: [["p_user_id", "uuid", false], ["p_title", "text", false], ["p_source_type", "text", true], ["p_source_data", "jsonb", true], ["p_messages", "jsonb", true]], returns: "scalar" },
   "create_knowledge_base_with_limit": { args: [["p_user_id", "uuid", false], ["p_name", "text", false], ["p_description", "text", true], ["p_weight", "text", true], ["p_limit", "integer", true]], returns: "scalar" },
   "delete_agent_retention": { args: [["p_event_days", "integer", true], ["p_commit_days", "integer", true], ["p_worker_hours", "integer", true], ["p_limit", "integer", true], ["p_metric_days", "integer", true]], returns: "setof" },
   "delete_conversation_graph": { args: [["p_conversation_id", "text", false]], returns: "scalar" },
@@ -170,6 +170,6 @@ export const RPC_SPECS = {
   "toggle_community_vote": { args: [["p_target_type", "text", false], ["p_target_id", "uuid", false], ["p_vote_type", "text", false]], returns: "scalar" },
   "toggle_ming_record_pin": { args: [["p_record_id", "uuid", false]], returns: "scalar" },
   "update_agent_schedule": { args: [["p_id", "uuid", false], ["p_name", "text", false], ["p_prompt", "text", false], ["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_options", "jsonb", false], ["p_enabled", "boolean", false]], returns: "row" },
-  "update_conversation_with_messages": { args: [["p_conversation_id", "uuid", false], ["p_title", "text", true], ["p_title_present", "boolean", true], ["p_personality", "text", true], ["p_personality_present", "boolean", true], ["p_messages", "jsonb", true], ["p_messages_present", "boolean", true]], returns: "scalar" },
+  "update_conversation_with_messages": { args: [["p_conversation_id", "uuid", false], ["p_title", "text", true], ["p_title_present", "boolean", true], ["p_messages", "jsonb", true], ["p_messages_present", "boolean", true]], returns: "scalar" },
   "upsert_conversation_share": { args: [["p_conversation", "uuid", false], ["p_token", "text", false], ["p_title", "text", false], ["p_snapshot", "jsonb", false], ["p_include_charts", "boolean", false], ["p_source_updated_at", "timestamp with time zone", false]], returns: "row" },
 } as const satisfies Record<string, { args: readonly (readonly [string, string, boolean])[]; returns: RpcReturnShape }>;

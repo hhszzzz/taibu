@@ -1,7 +1,7 @@
 import type { Mention } from '@/types/mentions';
-import type { AIPersonality, AIPersonalityConfig, ChatAttachment, PromptLayerPriority, PromptLayerDiagnostic } from '@/types';
+import type { ChatAttachment, PromptLayerPriority, PromptLayerDiagnostic } from '@/types';
 import type { ChatWebSearch } from './web-search.server';
-import { AI_PERSONALITIES } from './ai';
+import { BASE_SYSTEM_PROMPT } from './base-prompt';
 import type { KnowledgeHit } from '@/lib/knowledge-base/types';
 import type { InjectedSource } from '@/lib/source-tracker';
 import { createSourceTracker } from '@/lib/source-tracker';
@@ -105,118 +105,12 @@ function promptBudget({ config }: ChatModelWindow): number {
     return Math.max(config.maxContext - config.reserveOutput - config.reserveHistory, 0);
 }
 
-// 通用准则（所有场景共用）
+// 取数优先级（普通对话与 Agent 共用）；条件不足、不编造与来源标注见解读通则与 Agent 指令
 function getBaseRulesPrompt(): string {
     return `## 数据使用规则
 1. 优先使用用户 @ 显式引用的数据
 2. 其次参考用户知识库（按权重排序）
-3. 再次使用系统已有的命盘和历史数据
-4. 信息不足时明确提示「条件不足，无法准确判断」
-5. 禁止编造不存在的数据
-6. 推理结论需注明数据来源`;
-}
-
-export interface PersonalityResolution {
-    personalities: AIPersonality[];
-    isMultiple: boolean;
-}
-
-/** mention.type → AIPersonality 映射（数据驱动，新增占术只需加一行） */
-const MENTION_PERSONALITY_MAP: Partial<Record<string, AIPersonality>> = {
-    bazi_chart: 'bazi',
-    ziwei_chart: 'ziwei',
-    tarot_reading: 'tarot',
-    liuyao_divination: 'liuyao',
-    mbti_reading: 'mbti',
-    hepan_chart: 'hepan',
-    qimen_chart: 'qimen',
-    daliuren_divination: 'daliuren',
-    meihua_divination: 'meihua',
-    xiaoliuren_divination: 'xiaoliuren',
-};
-
-export function resolvePersonalities(context: {
-    chartContext?: PromptContext['chartContext'];
-    mentions?: PromptContext['mentions'];
-}): PersonalityResolution {
-    const personalities: AIPersonality[] = [];
-    const addPersonality = (personality: AIPersonality) => {
-        if (!personalities.includes(personality)) {
-            personalities.push(personality);
-        }
-    };
-
-    if (context.chartContext?.baziChart) {
-        addPersonality('bazi');
-    }
-
-    if (context.chartContext?.ziweiChart) {
-        addPersonality('ziwei');
-    }
-
-    // 根据 mention 类型自动匹配人格
-    for (const mention of context.mentions || []) {
-        const personality = MENTION_PERSONALITY_MAP[mention.type];
-        if (personality) {
-            addPersonality(personality);
-        }
-    }
-
-    if (personalities.length === 0) {
-        addPersonality('general');
-    }
-
-    return {
-        personalities,
-        isMultiple: personalities.length > 1
-    };
-}
-
-/** 人格层最多占提示词预算的一半，其余留给盘面与用户引用的数据。 */
-const PERSONALITY_BUDGET_SHARE = 0.5;
-
-/**
- * 单人格直接用其提示词；多人格直接拼接各分析师提示词。
- * 拼接结果超过 maxTokens 时改用各人格的精简提示词（无精简版的保持原样）。
- */
-export function buildPersonalityPrompt(personalities: AIPersonality[], maxTokens = Number.POSITIVE_INFINITY): string {
-    const compose = (prompt: (config: AIPersonalityConfig) => string) => personalities.length === 1
-        ? prompt(AI_PERSONALITIES[personalities[0]])
-        : personalities.map(personality => `【${AI_PERSONALITIES[personality].name}】\n${prompt(AI_PERSONALITIES[personality])}`).join('\n\n');
-    const full = compose(config => config.systemPrompt);
-    return countTokens(full) <= maxTokens ? full : compose(config => config.briefPrompt ?? config.systemPrompt);
-}
-
-export function buildMinimalChatSystemPrompt(input: {
-    expressionStyle?: 'direct' | 'gentle';
-    customInstructions?: string | null;
-}): {
-    systemPrompt: string;
-    personalities: AIPersonality[];
-} {
-    const personalityResolution = resolvePersonalities({
-        mentions: [],
-    });
-
-    const parts = [
-        getBaseRulesPrompt(),
-        buildPersonalityPrompt(personalityResolution.personalities),
-    ];
-
-    const expressionStyle = formatExpressionStyle(input.expressionStyle);
-    if (expressionStyle) {
-        parts.push(expressionStyle);
-    }
-
-    const customInstructions = input.customInstructions?.trim();
-    if (customInstructions) {
-        parts.push(`【用户自定义指令】\n${customInstructions}`);
-    }
-
-    return {
-        systemPrompt: parts.join('\n\n'),
-        personalities: personalityResolution.personalities,
-    };
+3. 再次使用系统已有的命盘和历史数据`;
 }
 
 const VISUALIZATION_MENTION_TYPES = new Set(
@@ -328,7 +222,7 @@ async function formatUserMessagePrefix(context: PromptContext, window: () => Pro
 }
 
 // 完整构建：返回 systemPrompt + sources + 诊断信息，供 chat 路由使用
-export async function buildPromptWithSources(context: PromptContext, prepared?: { budget?: number; personalityResolution?: PersonalityResolution }): Promise<{
+export async function buildPromptWithSources(context: PromptContext, prepared?: { budget?: number; includeBaseRole?: boolean }): Promise<{
     systemPrompt: string;
     userMessagePrefix: string;
     userMessageTokens: number;
@@ -396,13 +290,10 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
     // ========== P0 层：必须注入 ==========
     tryInject('base_rules', 'P0', getBaseRulesPrompt());
 
-    const personalityResolution = prepared?.personalityResolution ?? resolvePersonalities({
-        chartContext: context.chartContext,
-        mentions: context.mentions
-    });
-    // 层级 ID 编码人格名称，便于客户端显示具体分析师类型
-    const personalityTag = personalityResolution.personalities.join('+');
-    tryInject(`personality_role:${personalityTag}`, 'P0', buildPersonalityPrompt(personalityResolution.personalities, Math.floor(budget * PERSONALITY_BUDGET_SHARE)));
+    // 普通对话带底座（角色 + 解读通则）；Agent 的解读规则由 load_skill 的方法卡提供，不重复注入。
+    if (prepared?.includeBaseRole !== false) {
+        tryInject('base_chat_prompt', 'P0', BASE_SYSTEM_PROMPT);
+    }
 
     if (context.chartContext && (context.chartContext.baziChart || context.chartContext.ziweiChart)) {
         const chartPrompt = formatChartContextPrompt(context.chartContext, context.userSettings?.chartPromptDetailLevel);

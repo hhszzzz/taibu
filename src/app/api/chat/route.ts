@@ -62,7 +62,6 @@ export async function POST(request: NextRequest) {
       reasoningEnabled,
       sanitizedMessages,
       metadata,
-      fallbackPersonality,
       systemPrompt,
     } = preparedRequest;
     const onUsage = metered && userId
@@ -76,7 +75,6 @@ export async function POST(request: NextRequest) {
     if (resolvedBody.stream) {
       const streamResult = await callAIUIMessageResult(
         sanitizedMessages,
-        fallbackPersonality,
         '',
         requestedModelId,
         { abortSignal: request.signal, reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined, onUsage }
@@ -106,7 +104,6 @@ export async function POST(request: NextRequest) {
 
     const content = await callAI(
       sanitizedMessages,
-      fallbackPersonality,
       requestedModelId,
       '',
       { abortSignal: request.signal, reasoning: reasoningEnabled, reasoningEffort: reasoningEnabled ? resolvedBody.reasoningEffort : null, systemPromptOverride: systemPrompt, conversationId: resolvedBody.conversationId, cacheScope: userId ?? undefined, onUsage }

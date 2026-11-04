@@ -119,16 +119,13 @@ function setupRouteMocks(
     const rateLimitModule = require('../lib/rate-limit') as any;
 
     const originals = {
-        callAIStream: aiModule.callAIStream,
         callAIUIMessageResult: aiModule.callAIUIMessageResult,
         getSpendableMicros: billingModule.getSpendableMicros,
         usageBiller: billingModule.usageBiller,
         getModelConfigAsync: aiConfigServerModule.getModelConfigAsync,
         getDefaultModelConfigAsync: aiConfigServerModule.getDefaultModelConfigAsync,
         buildPromptWithSources: promptBuilderModule.buildPromptWithSources,
-        buildMinimalChatSystemPrompt: promptBuilderModule.buildMinimalChatSystemPrompt,
         calculatePromptBudget: promptBuilderModule.calculatePromptBudget,
-        resolvePersonalities: promptBuilderModule.resolvePersonalities,
         systemDb: contextModule.systemDb,
         requireUserContext: apiUtilsModule.requireUserContext,
         checkRateLimit: rateLimitModule.checkRateLimit,
@@ -147,10 +144,9 @@ function setupRouteMocks(
         aiOptions: null,
     };
 
-    aiModule.callAIStream = async () => createUIChunkStream([]);
     aiModule.callAIUIMessageResult = async (...args: unknown[]) => {
         state.aiUiCalls += 1;
-        state.aiOptions = (args[4] ?? null) as Record<string, unknown> | null;
+        state.aiOptions = (args[3] ?? null) as Record<string, unknown> | null;
         const chunks: Array<Record<string, unknown>> = [];
         const reader = streamBody.getReader();
         while (true) {
@@ -202,11 +198,6 @@ function setupRouteMocks(
     aiConfigServerModule.getDefaultModelConfigAsync = async () => mockModelConfig;
 
     promptBuilderModule.calculatePromptBudget = async () => 1024;
-    promptBuilderModule.resolvePersonalities = () => ({ personalities: ['general'] });
-    promptBuilderModule.buildMinimalChatSystemPrompt = () => ({
-        systemPrompt: '',
-        personalities: ['general'],
-    });
     promptBuilderModule.buildPromptWithSources = async () => {
         state.events.push('prompt');
         state.promptCalls += 1;
@@ -256,16 +247,13 @@ function setupRouteMocks(
     delete require.cache[requestModulePath];
 
     t.after(() => {
-        aiModule.callAIStream = originals.callAIStream;
         aiModule.callAIUIMessageResult = originals.callAIUIMessageResult;
         billingModule.getSpendableMicros = originals.getSpendableMicros;
         billingModule.usageBiller = originals.usageBiller;
         aiConfigServerModule.getModelConfigAsync = originals.getModelConfigAsync;
         aiConfigServerModule.getDefaultModelConfigAsync = originals.getDefaultModelConfigAsync;
         promptBuilderModule.buildPromptWithSources = originals.buildPromptWithSources;
-        promptBuilderModule.buildMinimalChatSystemPrompt = originals.buildMinimalChatSystemPrompt;
         promptBuilderModule.calculatePromptBudget = originals.calculatePromptBudget;
-        promptBuilderModule.resolvePersonalities = originals.resolvePersonalities;
         contextModule.systemDb = originals.systemDb;
         apiUtilsModule.requireUserContext = originals.requireUserContext;
         rateLimitModule.checkRateLimit = originals.checkRateLimit;

@@ -41,7 +41,7 @@ import {
   type CompleteManagedAnalysis,
   type ManagedAnalysisOutcome,
 } from '@/lib/server/analysis';
-import type { AIPersonality, AIReasoningEffort } from '@/types';
+import type { AIReasoningEffort } from '@/types';
 import type { ChartType } from '@/lib/visualization/chart-types';
 import { buildVisualizationPromptSection } from '@/lib/visualization/prompt';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
@@ -220,8 +220,6 @@ export interface DivinationRouteConfig<
   generateTitle: (input: T, context?: TContext) => string;
   /** Default model ID (defaults to DEFAULT_MODEL_ID). */
   defaultModelId?: string;
-  /** AI personality for the call (defaults to 'general'). */
-  personality?: AIPersonality;
   /** Whether this is a vision route (face/palm). */
   isVision?: boolean;
   /** Vision-specific options builder. Only used when isVision=true. */
@@ -683,7 +681,6 @@ export function createInterpretHandler<
     buildSourceData,
     generateTitle,
     defaultModelId = DEFAULT_MODEL_ID,
-    personality = 'general',
     isVision = false,
     buildVisionOptions,
     modelAccessOptions,
@@ -800,7 +797,6 @@ export function createInterpretHandler<
             const visionOpts = buildVisionOptions!(input);
             const content = await callAIVision(
               [{ role: 'user', content: userPrompt }],
-              personality,
               resolvedModelId,
               `\n\n${systemPrompt}\n\n`,
               { reasoning: reasoningEnabled, temperature: 0.7, ...visionOpts, onUsage },
@@ -809,7 +805,6 @@ export function createInterpretHandler<
           }
           return callAIWithReasoning(
             [{ role: 'user', content: userPrompt }],
-            personality,
             resolvedModelId,
             `\n\n${systemPrompt}\n\n`,
             { reasoning: reasoningEnabled, temperature: 0.7, onUsage },
@@ -923,7 +918,6 @@ export function createInterpretHandler<
   ): Promise<Response> {
     const streamResult = await callAIUIMessageResult(
       [{ role: 'user', content: userPrompt }],
-      personality,
       `\n\n${systemPrompt}\n\n`,
       resolvedModelId,
       { abortSignal: signal, reasoning: reasoningEnabled, temperature: 0.7, onUsage },

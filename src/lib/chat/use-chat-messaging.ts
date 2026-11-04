@@ -328,7 +328,6 @@ export function useChatMessaging({
         setPendingSidebarTitle(draftTitle || DEFAULT_CONVERSATION_TITLE);
         setHasLoadedConversations(true);
         const newId = await createConversation({
-            personality: 'general',
             title: draftTitle || DEFAULT_CONVERSATION_TITLE,
         });
         if (!newId) { setPendingSidebarTitle(null); return null; }
@@ -344,7 +343,7 @@ export function useChatMessaging({
         setConversations(prev => {
             const nextConversation: ConversationListItem = {
                 id: newId, userId,
-                personality: 'general', title: draftTitle || DEFAULT_CONVERSATION_TITLE,
+                title: draftTitle || DEFAULT_CONVERSATION_TITLE,
                 createdAt: nowIso, updatedAt: nowIso, sourceType: 'chat', questionPreview: null,
                 isArchived: false, archivedKbIds: [],
             };
@@ -553,7 +552,6 @@ export function useChatMessaging({
                 conversationId, requestHeaders: headers,
                 requestBody: {
                     messages: newMessages,
-                    personality: 'general',
                     conversationId,
                     stream: true,
                     model: selectedModel,
@@ -651,7 +649,6 @@ export function useChatMessaging({
                 conversationId: targetConversationId, requestHeaders: headers,
                 requestBody: {
                     messages: newMessages,
-                    personality: 'general',
                     conversationId: targetConversationId,
                     stream: true,
                     model: selectedModel,
@@ -759,7 +756,6 @@ export function useChatMessaging({
                 conversationId: targetConversationId, requestHeaders: headers,
                 requestBody: {
                     messages: updatedPreviousMessages,
-                    personality: 'general',
                     conversationId: targetConversationId,
                     stream: true,
                     model: selectedModel,

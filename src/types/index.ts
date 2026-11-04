@@ -76,24 +76,6 @@ export interface BaziFormData extends BirthTimeResolution {
 
 // ===== AI 对话相关类型 =====
 
-/** AI 人格类型 */
-export type AIPersonality = 'bazi' | 'ziwei' | 'tarot' | 'liuyao' | 'mbti' | 'hepan' | 'qimen' | 'daliuren' | 'meihua' | 'xiaoliuren' | 'general';
-
-/** AI 人格配置 */
-export interface AIPersonalityConfig {
-    id: AIPersonality;
-    name: string;        // 显示名称
-    title: string;       // 称号
-    description: string; // 风格描述
-    emoji: string;       // 图标
-    systemPrompt: string; // 系统提示词
-    briefPrompt?: string; // 精简提示词：多体系同问而完整提示词超出预算时替代 systemPrompt
-    // 扩展字段（可选）
-    color?: string;      // 主题色
-    greeting?: string;   // 欢迎语
-    traits?: string[];   // 人格特征标签
-}
-
 /** 消息角色 */
 export type MessageRole = 'user' | 'assistant' | 'system';
 
@@ -221,7 +203,6 @@ export type { MentionType, Mention, MentionTarget } from '@/types/mentions';
 export interface Conversation {
     id: string;
     userId?: string;
-    personality: AIPersonality;
     title: string;
     messages: ChatMessage[];
     createdAt: string;
@@ -236,7 +217,6 @@ export interface Conversation {
 export interface ConversationListItem {
     id: string;
     userId?: string;
-    personality: AIPersonality;
     title: string;
     createdAt: string;
     updatedAt: string;

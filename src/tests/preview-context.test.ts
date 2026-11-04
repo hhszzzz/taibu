@@ -37,7 +37,6 @@ test('buildPreviewPromptContext reuses shared prompt builder even with preview-o
             capture.request = request;
             return {
                 sanitizedMessages: [],
-                fallbackPersonality: 'general' as const,
                 systemPrompt: '共享系统提示词',
                 promptKnowledgeBases: [{ id: 'kb-1', name: '知识库' }],
                 metadata: {

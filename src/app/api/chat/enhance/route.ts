@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     if (balanceGuard) return balanceGuard;
     let quotaExceeded = false;
     try {
-        const text = await callAI([{ role: 'user', content: body.text }], 'general', config.id, '', { maxTokens: PROMPT_ENHANCEMENT_MAX_TOKENS, reasoning: false,
+        const text = await callAI([{ role: 'user', content: body.text }], config.id, '', { maxTokens: PROMPT_ENHANCEMENT_MAX_TOKENS, reasoning: false,
             systemPromptOverride: PROMPT_ENHANCEMENT_SYSTEM_PROMPT,
             onUsage: usageBiller(auth.user.id, 'enhance'),
             beforeModelAttempt: async () => {

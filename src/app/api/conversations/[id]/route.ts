@@ -9,7 +9,6 @@ import type { ChatMessage } from '@/types';
 type ConversationPatchBody = {
     title?: string | null;
     messages?: unknown[];
-    personality?: string | null;
 };
 
 function hasOwn(body: object, key: string) {
@@ -35,7 +34,6 @@ function normalizeConversationTitle(title: string | null | undefined): string | 
 type ConversationDetailRow = {
     id: string;
     user_id: string;
-    personality?: string | null;
     title?: string | null;
     created_at?: string;
     updated_at?: string;
@@ -79,7 +77,6 @@ export async function GET(
             : [
                 'id',
                 'user_id',
-                'personality',
                 'title',
                 'created_at',
                 'updated_at',
@@ -205,9 +202,6 @@ export async function PATCH(
     if (!isNullableString(body.title)) {
         return jsonError('title 必须是字符串或 null', 400);
     }
-    if (!isNullableString(body.personality)) {
-        return jsonError('personality 必须是字符串或 null', 400);
-    }
 
     const normalizedTitle = normalizeConversationTitle(body.title);
     if (body.title !== undefined && normalizedTitle === '') {
@@ -233,8 +227,6 @@ export async function PATCH(
         p_conversation_id: id,
         p_title: normalizedTitle ?? null,
         p_title_present: body.title !== undefined,
-        p_personality: body.personality ?? null,
-        p_personality_present: body.personality !== undefined,
         p_messages: nextMessages,
         p_messages_present: hasMessagesField,
     }).catch((error) => {

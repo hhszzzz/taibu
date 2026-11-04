@@ -734,7 +734,6 @@ CREATE TABLE public.conversations (
     next_task_config jsonb,
     id uuid DEFAULT gen_random_uuid() NOT NULL,
     user_id uuid,
-    personality text DEFAULT 'master'::text,
     title text DEFAULT '新对话'::text,
     messages jsonb DEFAULT '[]'::jsonb,
     created_at timestamp with time zone DEFAULT now(),

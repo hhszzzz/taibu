@@ -164,7 +164,7 @@ test('enhancement serves every member on a priced model with a balance, and clai
     t.mock.method(billing,'assertSpendable',async()=>{ if (spendable<=0) throw new billing.InsufficientBalanceError(); });
     const model = { pricing: undefined as { input: number; output: number; cacheRead: null; cacheWrite: null; image: null } | undefined };
     t.mock.method(configs,'getModelConfigAsync',async()=>({id:'fixture',name:'fixture',vendor:'other',pricing:model.pricing}));
-    t.mock.method(ai,'callAI',async (...args: Parameters<typeof ai.callAI>) => { await args[4]?.beforeModelAttempt?.(); attempts++; return '清晰的问题'; });
+    t.mock.method(ai,'callAI',async (...args: Parameters<typeof ai.callAI>) => { await args[3]?.beforeModelAttempt?.(); attempts++; return '清晰的问题'; });
     assert.equal((await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}))).status,403,'an unpriced model is not offered'); assert.equal(attempts,0);
     model.pricing={input:1,output:2,cacheRead:null,cacheWrite:null,image:null};
     const refused=await enhance(request('/api/chat/enhance',{text:'问题',model:'fixture'}));

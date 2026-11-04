@@ -30,7 +30,6 @@ const prompt: ChatPromptContext = {
     kbHitCount: 0,
     promptDiagnostics: { modelId: 'canonical-model', layers: [], totalTokens: 0, budgetTotal: 1024, userMessageTokens: 0 },
   },
-  fallbackPersonality: 'general',
   systemPrompt: 'system prompt',
   promptKnowledgeBases: [],
 };

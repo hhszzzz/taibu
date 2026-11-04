@@ -35,7 +35,6 @@ test('conversations POST should create through transactional rpc', async (t) => 
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       title: '会话标题',
-      personality: 'general',
       messages: [
         {
           id: 'm-1',
@@ -56,7 +55,6 @@ test('conversations POST should create through transactional rpc', async (t) => 
   assert.deepEqual(rpcCall.args, {
     p_user_id: 'user-1',
     p_title: '会话标题',
-    p_personality: 'general',
     p_source_type: null,
     p_source_data: null,
     p_messages: [
@@ -98,7 +96,7 @@ test('conversations POST should reject non-object request bodies', async (t) => 
   assert.equal(payload.error, '请求体必须是对象');
 });
 
-test('conversations POST should reject non-string title and personality payloads', async (t) => {
+test('conversations POST should reject non-string titles', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/conversations/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
@@ -124,14 +122,6 @@ test('conversations POST should reject non-string title and personality payloads
   assert.equal(badTitleResponse.status, 400);
   assert.equal(badTitlePayload.error, 'title 必须是字符串或 null');
 
-  const badPersonalityResponse = await POST(new NextRequest('http://localhost/api/conversations', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ personality: 123 }),
-  }));
-  const badPersonalityPayload = await badPersonalityResponse.json();
-  assert.equal(badPersonalityResponse.status, 400);
-  assert.equal(badPersonalityPayload.error, 'personality 必须是字符串或 null');
 });
 
 test('conversations POST should normalize blank titles back to the default title', async (t) => {
@@ -289,7 +279,6 @@ test('conversation detail PATCH should update through transactional rpc', async 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: '更新标题',
-        personality: 'master',
         messages: [
           {
             id: 'm-2',
@@ -313,8 +302,6 @@ test('conversation detail PATCH should update through transactional rpc', async 
     p_conversation_id: VALID_CONVERSATION_ID,
     p_title: '更新标题',
     p_title_present: true,
-    p_personality: 'master',
-    p_personality_present: true,
     p_messages: [
       {
         id: 'm-2',
@@ -404,8 +391,6 @@ test('conversation detail PATCH should normalize messages null into an empty tra
     p_conversation_id: VALID_CONVERSATION_ID,
     p_title: null,
     p_title_present: false,
-    p_personality: null,
-    p_personality_present: false,
     p_messages: [],
     p_messages_present: true,
   });
@@ -472,7 +457,7 @@ test('conversation detail PATCH should reject non-object request bodies', async 
   assert.equal(payload.error, '请求体必须是对象');
 });
 
-test('conversation detail PATCH should reject non-string title and personality payloads', async (t) => {
+test('conversation detail PATCH should reject non-string titles', async (t) => {
   const apiUtilsModule = require('../lib/api-utils') as any;
   const routePath = require.resolve('../app/api/conversations/[id]/route');
   const originalRequireUserContext = apiUtilsModule.requireUserContext;
@@ -501,17 +486,6 @@ test('conversation detail PATCH should reject non-string title and personality p
   assert.equal(badTitleResponse.status, 400);
   assert.equal(badTitlePayload.error, 'title 必须是字符串或 null');
 
-  const badPersonalityResponse = await PATCH(
-    new NextRequest(`http://localhost/api/conversations/${VALID_CONVERSATION_ID}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ personality: 123 }),
-    }),
-    { params: Promise.resolve({ id: VALID_CONVERSATION_ID }) },
-  );
-  const badPersonalityPayload = await badPersonalityResponse.json();
-  assert.equal(badPersonalityResponse.status, 400);
-  assert.equal(badPersonalityPayload.error, 'personality 必须是字符串或 null');
 });
 
 test('conversation detail PATCH should reject blank titles after trimming', async (t) => {
@@ -760,7 +734,6 @@ test('conversation detail route should fail loudly when message storage cannot b
         id: VALID_CONVERSATION_ID,
         user_id: 'user-1',
         title: 'Test',
-        personality: 'general',
         created_at: '2026-03-18T00:00:00.000Z',
         updated_at: '2026-03-18T00:00:00.000Z',
         source_type: 'chat',

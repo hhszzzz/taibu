@@ -118,7 +118,6 @@ function setup(t: TestContext, messages: unknown[] = []) {
       sanitizedMessages: request.body.messages,
       metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 },
       systemPrompt: "trusted personality",
-      fallbackPersonality: "general",
       promptKnowledgeBases: [],
     }),
   );
@@ -215,7 +214,7 @@ test('the task keeps the browser\'s time zone for dating the messages sent into 
   const context = require('../lib/server/chat/prompt-context') as typeof import('../lib/server/chat/prompt-context');
   t.mock.method(context, 'buildChatPromptContext', async (request: Parameters<typeof context.buildChatPromptContext>[0]) => {
     zones.push(request.body.timezone);
-    return { sanitizedMessages: request.body.messages, metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 }, systemPrompt: 'trusted personality', fallbackPersonality: 'general', promptKnowledgeBases: [] };
+    return { sanitizedMessages: request.body.messages, metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 }, systemPrompt: 'trusted personality', promptKnowledgeBases: [] };
   });
   for (const timezone of ['America/New_York', 'Mars/Olympus'])
     assert.equal((await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID(), timezone })))).status, 201);
@@ -330,7 +329,7 @@ test('/skill: brings the skill into the task\'s turn while the conversation keep
     prepared.push(request.body.messages.at(-1)!.content);
     return {
       sanitizedMessages: request.body.messages, metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 },
-      systemPrompt: 'trusted personality', fallbackPersonality: 'general', promptKnowledgeBases: [],
+      systemPrompt: 'trusted personality', promptKnowledgeBases: [],
     };
   });
   const response = await agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, message: { id: 'user', content: '/skill:case-review 看看这张盘' } })));
@@ -386,7 +385,6 @@ test('a document carried into Agent mode reaches the model in a new task and in 
       sanitizedMessages: messages.map((message, index) => index === messages.length - 1 ? { ...message, content: `【文件】${document.text}【问题】${message.content}` } : message),
       metadata: { sources: [], kbSearchEnabled: false, kbHitCount: 0 },
       systemPrompt: 'trusted personality',
-      fallbackPersonality: 'general' as const,
       promptKnowledgeBases: [],
     };
   });

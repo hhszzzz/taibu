@@ -481,7 +481,7 @@ test('divination pipeline charges the metered usage the model call reports', asy
   const { aiModule, billers, charges, loadPipeline } = setupPipelineMocks(t);
   const usage = { inputTokens: 120, outputTokens: 30, totalTokens: 150 };
   aiModule.callAIWithReasoning = async (
-    _messages: unknown, _personality: unknown, modelId: unknown, _prefix: unknown, options: unknown,
+    _messages: unknown, modelId: unknown, _prefix: unknown, options: unknown,
   ) => {
     assert.equal(modelId, 'test-model');
     await (options as { onUsage?: (report: unknown) => Promise<void> }).onUsage?.({

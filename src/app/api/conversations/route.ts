@@ -42,7 +42,6 @@ export async function GET(request: NextRequest) {
             .select([
                 'id',
                 'user_id',
-                'personality',
                 'title',
                 'created_at',
                 'updated_at',
@@ -94,7 +93,6 @@ export async function POST(request: NextRequest) {
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
 
     let body: {
-        personality?: string;
         title?: string;
         messages?: unknown[] | null;
     };
@@ -111,9 +109,6 @@ export async function POST(request: NextRequest) {
 
     if (!isNullableString(body.title)) {
         return jsonError('title 必须是字符串或 null', 400);
-    }
-    if (!isNullableString(body.personality)) {
-        return jsonError('personality 必须是字符串或 null', 400);
     }
 
     const normalizedTitle = normalizeConversationTitle(body.title);
@@ -135,7 +130,6 @@ export async function POST(request: NextRequest) {
     const data = await auth.db.rpc('create_conversation_with_messages', {
         p_user_id: auth.user.id,
         p_title: normalizedTitle || '新对话',
-        p_personality: body.personality || 'general',
         p_source_type: null,
         p_source_data: null,
         p_messages: initialMessages,

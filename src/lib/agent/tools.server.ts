@@ -785,7 +785,7 @@ export async function createAgentTools(
       }),
   );
   tools.push(
-    wrap('current_time', '取此刻用户所在时区的真实时间。用户消息开头的【发送时间】是本任务开始的时间；任务运行到很晚、或用户问「现在几点」而需要此刻时调用。',
+    wrap('current_time', '取此刻用户所在时区的真实时间。涉及占当下、今天、今年、流年、年龄、「最近」或用户问「现在几点」时调用，任务跨过零点后重新取一次，不凭印象推算。',
       obj({}, { open: true }),
       async () => textResult(`现在：${formatUserTime(new Date(), resolveUserTimeZone(run.input.timezone))}`)),
   );

@@ -73,7 +73,7 @@ test('private input contains stable attachment IDs without embedding upload data
     assert.ok(!text.includes('发送时间'), 'undated without a time zone');
 });
 
-test('a message sent into a running task opens with when the server received it, in the user\'s time zone', () => {
+test('a task handed to a member opens with when the server received it, in the user\'s time zone', () => {
     const message={content:'现在帮我起一卦',createdAt:'2026-10-24T15:51:30.000Z'} as Pick<ChatMessage, 'content'|'attachments'|'createdAt'>;
     assert.equal(agentInputContent(message,'Asia/Shanghai'),'【发送时间：2026-10-24 23:51 星期六，Asia/Shanghai（UTC+08:00）】\n现在帮我起一卦');
     assert.equal(agentInputContent(message,'America/New_York').split('\n')[0],'【发送时间：2026-10-24 11:51 星期六，America/New_York（UTC-04:00）】');

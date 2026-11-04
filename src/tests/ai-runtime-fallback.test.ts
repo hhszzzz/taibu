@@ -67,7 +67,6 @@ test('callAI should fall back from primary source to backup source', async (t) =
 
   const result = await aiModule.callAI(
     [{ role: 'user', content: 'hello' }],
-    'general',
     'deepseek-v3.2',
     '',
   );
@@ -136,7 +135,6 @@ test('callAI skips a source whose gateway has no saved key', async (t) => {
 
   const result = await aiModule.callAI(
     [{ role: 'user', content: 'hello' }],
-    'general',
     'deepseek-v3.2',
     '',
   );
@@ -242,7 +240,7 @@ for (const [name, overrides] of [
     });
 
     await assert.rejects(
-      ai.callAI([{ role: 'user', content: 'hello' }], 'general', 'routing-test', ''),
+      ai.callAI([{ role: 'user', content: 'hello' }], 'routing-test', ''),
       /No AI sources configured for model: routing-test/u,
     );
     assert.equal(fetchCalls, 0);

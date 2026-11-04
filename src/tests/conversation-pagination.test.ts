@@ -16,8 +16,7 @@ test('loadConversationWindow should preserve the already loaded conversation win
         conversations: Array.from({ length: 7 }, (_, index) => ({
           id: `conv-${index + 1}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `对话 ${index + 1}`,
+            title: `对话 ${index + 1}`,
           created_at: '2026-03-17T00:00:00.000Z',
           updated_at: '2026-03-17T00:00:00.000Z',
           messages: [],
@@ -37,8 +36,7 @@ test('loadConversationWindow should preserve the already loaded conversation win
         conversations: Array.from({ length: 7 }, (_, index) => ({
           id: `conv-${index + 8}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `对话 ${index + 8}`,
+            title: `对话 ${index + 8}`,
           created_at: '2026-03-16T00:00:00.000Z',
           updated_at: '2026-03-16T00:00:00.000Z',
           messages: [],
@@ -87,8 +85,7 @@ test('loadConversationWindow should fetch only the remaining target rows for vie
         conversations: Array.from({ length: 7 }, (_, index) => ({
           id: `conv-${index + 1}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `对话 ${index + 1}`,
+            title: `对话 ${index + 1}`,
           created_at: '2026-03-17T00:00:00.000Z',
           updated_at: '2026-03-17T00:00:00.000Z',
           messages: [],
@@ -108,8 +105,7 @@ test('loadConversationWindow should fetch only the remaining target rows for vie
         conversations: Array.from({ length: 3 }, (_, index) => ({
           id: `conv-${index + 8}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `对话 ${index + 8}`,
+            title: `对话 ${index + 8}`,
           created_at: '2026-03-16T00:00:00.000Z',
           updated_at: '2026-03-16T00:00:00.000Z',
           messages: [],
@@ -158,8 +154,7 @@ test('loadConversationWindow should keep fetching until previously loaded conver
         conversations: Array.from({ length: 7 }, (_, index) => ({
           id: `new-${index + 1}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `新对话 ${index + 1}`,
+            title: `新对话 ${index + 1}`,
           created_at: '2026-03-18T00:00:00.000Z',
           updated_at: '2026-03-18T00:00:00.000Z',
           messages: [],
@@ -179,8 +174,7 @@ test('loadConversationWindow should keep fetching until previously loaded conver
         conversations: Array.from({ length: 7 }, (_, index) => ({
           id: `conv-${index + 1}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `旧对话 ${index + 1}`,
+            title: `旧对话 ${index + 1}`,
           created_at: '2026-03-17T00:00:00.000Z',
           updated_at: '2026-03-17T00:00:00.000Z',
           messages: [],
@@ -200,8 +194,7 @@ test('loadConversationWindow should keep fetching until previously loaded conver
         conversations: Array.from({ length: 7 }, (_, index) => ({
           id: `conv-${index + 8}`,
           user_id: 'user-1',
-          personality: 'general',
-          title: `旧对话 ${index + 8}`,
+            title: `旧对话 ${index + 8}`,
           created_at: '2026-03-16T00:00:00.000Z',
           updated_at: '2026-03-16T00:00:00.000Z',
           messages: [],

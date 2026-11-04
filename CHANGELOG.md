@@ -10,6 +10,7 @@
 
 ### 调整
 
+- **模型超时**：单次模型请求改为「连续 5 分钟没有返回数据」才中止，与 Pi 的默认一致，另设 30 分钟总上限；持续输出但较慢的模型不再被总时长切断。这是 11-03 线上 7 次失败的原因（全部来自同一用户的自带模型）。([9cd870d](https://github.com/hhszzzz/taibu/commit/9cd870d4))
 - **崩溃恢复**：某一步连续 5 次让 worker 意外中断时，工具调用以错误结果结束，模型据此继续回答，不再让整个任务失败；模型请求进行中 worker 崩溃时，这次请求按失败计入原有的两次重试，不会在接管后原样重发，重试用完后任务以失败结束并提示重新发起。([d305a32](https://github.com/hhszzzz/taibu/commit/d305a32f))
 - **运行指标**：管理后台「日志 → Agent 任务 → 性能」中的「挂起」改为「中断」，统计 Pi 因崩溃结束的步骤。([50fa428](https://github.com/hhszzzz/taibu/commit/50fa4280))
 - **Agent 运行时**：升级到 Pi Durable 1.5.0，工具参数改用官方 JSON Schema 校验，模型看到的参数说明不变。([d305a32](https://github.com/hhszzzz/taibu/commit/d305a32f))

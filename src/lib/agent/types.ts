@@ -129,6 +129,12 @@ export interface AgentCheckpoint {
    * by the next task that continues this context, each with its requests and answers but not its tool calls.
    */
   background?: AgentBackgroundResident[];
+  /**
+   * Deferred tools the main conversation loaded (`control.addTools`: a search, or a direct call that loaded its tool),
+   * offered again by the next task that continues this context: Pi keeps them in the conversation's `pi.agent`, which
+   * every task creates anew.
+   */
+  loadedTools?: string[];
   streamingAssistantId?: string;
   runtime?: AgentRuntimeInfo;
   durable: {

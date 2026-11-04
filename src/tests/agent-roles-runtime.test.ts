@@ -60,7 +60,7 @@ const timers = () => process.getActiveResourcesInfo().filter(resource => resourc
 
 test('members work as the roles the main agent gives them, with only the tools and model each role grants', { timeout: 30000 }, async () => {
   const store = new MemoryStore(), run = row();
-  const members = new Map<string, { model: string; tools: string[]; refused?: Message }>();
+  const members = new Map<string, { model: string; tools: string[]; refused?: Message; deferred?: Message }>();
   const before = timers();
   const streamFn: PiStreamFn = (model, context) => {
     const tools = offered(context.messages);
@@ -74,10 +74,10 @@ test('members work as the roles the main agent gives them, with only the tools a
     }
     const question = textOf(context.messages.find(message => message.role === 'user'));
     const key = question.includes('整理用户') ? 'archivist' : question.includes('紫微') ? 'specialist' : 'researcher';
-    const refused = results(context.messages, 'bazi')[0];
-    members.set(key, { model: model.id, tools, ...(refused ? { refused } : {}) });
-    // The archivist tries a Core tool its role does not grant before answering.
-    if (key === 'archivist' && !refused) return respond(model, [call('chart', 'bazi', BAZI)]);
+    const refused = results(context.messages, 'bazi')[0], deferred = results(context.messages, 'bazi_dayun')[0];
+    members.set(key, { model: model.id, tools, ...(refused ? { refused } : {}), ...(deferred ? { deferred } : {}) });
+    // The archivist tries a Core tool and a deferred one its role does not grant before answering.
+    if (key === 'archivist' && !refused) return respond(model, [call('chart', 'bazi', BAZI), call('dayun', 'bazi_dayun', BAZI)]);
     return respond(model, say(`${key} 的结论。`));
   };
   await executeAgentRun(store, run, undefined, { config, configs: [ROLE_MODEL], profiles: PROFILES, streamFn });
@@ -88,6 +88,7 @@ test('members work as the roles the main agent gives them, with only the tools a
   assert.equal(archivist.model, ROLE_MODEL.id, 'a role with its own model runs on it');
   assert.equal(archivist.refused?.role === 'toolResult' && archivist.refused.isError, true);
   assert.match(textOf(archivist.refused), /not available/, 'pi refuses a tool the member was not offered');
+  assert.match(textOf(archivist.deferred), /not available/, 'a deferred tool the role does not grant is not loaded by calling it');
   assert.equal([...store.drafts.values()].filter(draft => draft.tool_name === 'bazi').length, 0, 'the refused call ran nothing');
 
   assert.deepEqual(specialist.tools.toSorted(), ['load_skill', 'ziwei', 'ziwei_flying_star', 'ziwei_horoscope', 'ziwei_palace']);

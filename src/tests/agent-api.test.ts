@@ -406,6 +406,21 @@ test('a document carried into Agent mode reaches the model in a new task and in 
   assert.equal(invalid.status, 400); assert.equal((await invalid.json()).error, '附件内容无效');
 });
 
+test('a continued task keeps the tools its context loaded; an edited one starts without them', async t => {
+  const fixture = setup(t, earlierTurn);
+  t.mock.method(AgentStore.prototype, 'currentRun', async () => ({
+    id: randomUUID(), user_id: fixture.owner, status: 'completed', public_message: { id: 'answered' },
+    checkpoint: { version: 2, durable: { engine: AGENT_ENGINE }, messages: [{ role: 'user', content: '帮我看看八字', timestamp: 1 }], parts: [], loadedTools: ['bazi_dayun'] },
+  }) as unknown as AgentRunRow);
+  const send = (extra: Record<string, unknown> = {}) => agentEndpoint(() => createAgentTask(fixture.request({ ...fixture.body, clientRequestId: randomUUID(), ...extra })));
+  const checkpoint = () => fixture.writes.at(-1)?.args.p_checkpoint as AgentRunRow['checkpoint'];
+  assert.equal((await send()).status, 201);
+  assert.deepEqual(checkpoint().loadedTools, ['bazi_dayun']);
+  // Editing rebuilds the context from the visible messages, which hold no tool calls.
+  assert.equal((await send({ replaceFromMessageId: 'asked' })).status, 201);
+  assert.equal(checkpoint().loadedTools, undefined);
+});
+
 test("Agent feature admission fails closed when fresh configuration cannot be read", async (t) => {
   const fixture = setup(t);
   t.mock.method(fixture.features, "readFeatureModuleStateFresh", async () => ({ status: "unavailable" as const }));

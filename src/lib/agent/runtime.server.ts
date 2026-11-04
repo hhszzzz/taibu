@@ -739,7 +739,10 @@ export async function executeAgentRun(
     registry.install(background.extension);
     if (servers.extension) registry.install(servers.extension);
     if (checkpoint.runtime) checkpoint.runtime.mcp = servers.runtime;
-    registry.install(createAgentToolSearchExtension(memberTitles, new Map([...titles, ...servers.searchTitles])));
+    // What Pi adds to the main conversation's pi.agent, kept for the next task, which creates pi.agent anew.
+    registry.install(createAgentToolSearchExtension(() => harness!, memberTitles, new Map([...titles, ...servers.searchTitles]), (conversationId, names) => {
+      if (conversationId === root?.id) checkpoint.loadedTools = [...new Set([...(checkpoint.loadedTools ?? []), ...names])];
+    }));
     if (run.input.codeMode) registry.install(createAgentCodemodeExtension());
     // The main model's thresholds apply harness-wide; a collaborator with a smaller or larger window compacts by its own.
     const policies = new Map(bindings.map(binding => [binding.model.id, agentCompactionPolicy(windows.get(binding.model.id) ?? null, binding.model.maxTokens)]));
@@ -764,11 +767,16 @@ export async function executeAgentRun(
       // has already interrupted the run through its storage.
       onReport: report => console.warn("[agent-durable]", agentReportFields(run.id, report)),
     }, context);
+    // Tools loaded by earlier tasks of this context. root() applies the change only when it creates the conversation, so
+    // a takeover keeps what this task loaded since.
+    const loaded = new Set(checkpoint.loadedTools);
+    const reloaded = registry.snapshot().tools().map(({ tool }) => tool).filter(tool => loaded.has(tool.name));
     root = await harness.root(context, { agent: {
       model: { provider: "taibu", modelId: config.id },
       thinkingLevel: ownMain ? byokAgentThinkingLevel(config, run.input.reasoning, run.input.reasoningEffort)
         : run.input.reasoning ? resolveThinkingLevel(config, run.input.reasoningEffort) : 'off',
       instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + (collaborators.length ? `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}` : ''),
+      ...(reloaded.length ? { modelTools: { add: reloaded } } : {}),
     } });
     const enqueued = new Set<number>();
     const readCommands = async (safeBoundary = false) => {

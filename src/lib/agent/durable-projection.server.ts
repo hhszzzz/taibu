@@ -9,6 +9,7 @@ import { projectAgentContextUsage } from "./context-usage";
 import { AGENT_CODEMODE_TOOL, CHART_TARGET_DIRECTORY_HEADING, projectsAgentCanonicalText } from './tool-catalog';
 import { splitAgentFollowUps } from './follow-ups';
 import { agentScriptCallNumber } from './codemode.server';
+import { isAgentToolLoadCall } from './tool-search.server';
 
 /** The assistant entry of a model-issued call; a nested call (a code mode script's) has none. */
 export function modelCallEntry(task?: { input: unknown }) {
@@ -108,7 +109,10 @@ async function projectScriptCalls(storage: AgentDurableStorage, checkpoint: Agen
   }
 }
 
-/** Public messages are a projection; Durable entries remain the execution truth. */
+/**
+ * Public messages are a projection; Durable entries remain the execution truth. A direct call that only loaded its
+ * deferred tool leaves no card: the model calls the tool again at once, and that call is the step.
+ */
 export async function projectDurableConversation(
   documents: DocumentReader, root: Conversation, storage: AgentDurableStorage, checkpoint: AgentCheckpoint,
   title: (name: string) => string, context: Context,
@@ -148,6 +152,7 @@ export async function projectDurableConversation(
   const responses: NonNullable<AgentRuntimeInfo['responses']> = [];
   const cards = new Map<string, Extract<AgentPart, { type: "tool" }>>();
   const byCall = new Map<string, string>();
+  const loadCalls = new Set<string>();
   const attached = new Map<string, AgentPart[]>();
   const attachedIds = new Set<string>();
   // Suggestions come from the latest answer only; an earlier block is no longer current.
@@ -207,7 +212,8 @@ export async function projectDurableConversation(
         const assistant = modelCallEntry(task);
         const key = assistant ? agentToolCardId(assistant, message.toolCallId) : byCall.get(message.toolCallId);
         const card = key ? cards.get(key) : undefined;
-        if (card) {
+        if (card && isAgentToolLoadCall(message.details)) loadCalls.add(card.id);
+        else if (card) {
           card.status = message.isError ? "failed" : "completed";
           card.output = card.name === AGENT_CODEMODE_TOOL ? scriptOutput(message) : message.details ?? message.content;
           Object.assign(card, taskTiming(task));
@@ -230,7 +236,9 @@ export async function projectDurableConversation(
     const assistant = modelCallEntry(task);
     const key = assistant ? agentToolCardId(assistant, slot.callId) : byCall.get(slot.callId);
     const card = key ? cards.get(key) : undefined;
-    if (card) {
+    // Until its result says otherwise, a call to a tool its request did not offer is taken for one that loads it.
+    if (card && slot.unoffered && slot.status !== "done") loadCalls.add(card.id);
+    else if (card) {
       Object.assign(card, taskTiming(task));
       if (slot.taskId) attach(card.id, `${slot.taskId}:${slot.callId}`);
       if (slot.status === "done" && !slot.entry) card.status = "failed";
@@ -243,7 +251,7 @@ export async function projectDurableConversation(
   checkpoint.parts = [
     ...checkpoint.parts.filter(p => !p.id.startsWith("native:") && !p.id.startsWith("native-live:") &&
       !p.id.startsWith("native-tool:") && !attachedIds.has(`${p.type}:${p.id}`)),
-    ...native.flatMap(p => [p, ...(p.type === "tool" ? attached.get(p.id) ?? [] : [])]),
+    ...native.flatMap(p => p.type !== "tool" ? [p] : loadCalls.has(p.id) ? [] : [p, ...attached.get(p.id) ?? []]),
   ];
   const followUps = latestText === null ? [] : splitAgentFollowUps(latestText).followUps;
   checkpoint.followUps = followUps.length ? followUps : undefined;

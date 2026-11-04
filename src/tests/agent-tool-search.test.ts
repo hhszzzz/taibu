@@ -30,6 +30,8 @@ const candidates = definitions.filter(definition => isAgentDeferredTool(definiti
   .map(definition => ({ name: definition.name, description: definition.description }));
 const titles = new Map(definitions.map(definition => [definition.name, definition.title]));
 const rank = (query: string, limit?: number) => rankDeferredTools(query, candidates, titles, limit);
+const dayun = definitions.find(definition => definition.name === 'bazi_dayun')!.inputSchema.examples![0] as JsonObject;
+const checkpointOf = (store: MemoryStore) => finished(store).args.p_checkpoint as AgentRunRow['checkpoint'];
 
 test('deferred tools are the fifteen low-frequency Core tools, the notes and conversation searches, and every MCP tool', () => {
   assert.deepEqual([...AGENT_CORE_DEFERRED_TOOLS].sort(), [
@@ -102,7 +104,6 @@ test('a Chinese query finds the tool a model means, before tools that merely men
 test('the model loads a deferred tool before it is offered, and the loaded tool stays for the next request', async () => {
   const store = new MemoryStore(), run = row();
   const offered: string[][] = [];
-  const dayun = definitions.find(definition => definition.name === 'bazi_dayun')!.inputSchema.examples![0] as JsonObject;
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: '大运' } }];
     if (index === 1) return [{ type: 'toolCall', id: 'dayun', name: 'bazi_dayun', arguments: dayun }];
@@ -124,6 +125,64 @@ test('the model loads a deferred tool before it is offered, and the loaded tool 
   assert.equal(parts.filter(part => part.name === 'bazi_dayun' && part.status === 'completed').length, 1);
 });
 
+test('calling a deferred tool before it is offered loads it, and the call again runs it as the only step shown', async () => {
+  const store = new MemoryStore();
+  const offered: string[][] = [], contexts: Parameters<NonNullable<Parameters<typeof scripted>[1]>>[0][] = [];
+  await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(index => {
+    if (index === 0) return [{ type: 'toolCall', id: 'direct', name: 'bazi_dayun', arguments: dayun }];
+    if (index === 1) return [{ type: 'toolCall', id: 'again', name: 'bazi_dayun', arguments: dayun }];
+    return [{ type: 'text', text: '大运已排好' }];
+  }, messages => { offered.push(getCurrentTools(messages).map(tool => tool.name)); contexts.push(messages); }) });
+  assert.equal(finished(store).args.p_status, 'completed');
+  assert.ok(!offered[0].includes('bazi_dayun'));
+  assert.ok(offered[1].includes('bazi_dayun'), 'the call loads the tool for the next request, without a search');
+  const loading = contexts[1].find(message => message.role === 'toolResult' && message.toolCallId === 'direct');
+  const text = loading?.role === 'toolResult' ? loading.content.map(part => part.type === 'text' ? part.text : '').join('') : '';
+  assert.ok(loading?.role === 'toolResult' && loading.isError, 'the model reads that the call did not run');
+  assert.match(text, /没有执行/);
+  assert.match(text, /bazi_dayun（[^）]+）/, 'and what it loaded, by name and title');
+  assert.doesNotMatch(text, /not available/, "pi's refusal is replaced, not added to");
+  assert.equal([...store.drafts.values()].filter(draft => draft.tool_name === 'bazi_dayun').length, 1, 'only the second call ran');
+  assert.deepEqual(toolParts(store).filter(part => part.name === 'bazi_dayun').map(part => part.status), ['completed'], 'the load leaves no card');
+  const shown = store.writes.flatMap(write => (write.args.p_checkpoint as AgentRunRow['checkpoint'] | undefined)?.parts ?? []);
+  assert.ok(!shown.some(part => part.type === 'tool' && part.id.endsWith(':direct')), 'nor shows one while it waits to run');
+  assert.deepEqual(checkpointOf(store).loadedTools, ['bazi_dayun'], 'the next task that continues this context is offered it too');
+});
+
+test('a call to a tool that is neither offered nor deferred is still refused and loads nothing', async () => {
+  const store = new MemoryStore();
+  let offered: string[] = [];
+  await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'invented', name: 'bazi_invented', arguments: {} }]
+    : [{ type: 'text', text: '没有这个工具' }], messages => { offered = getCurrentTools(messages).map(tool => tool.name); }) });
+  assert.equal(finished(store).args.p_status, 'completed');
+  assert.deepEqual(toolParts(store).filter(part => part.name === 'bazi_invented').map(part => part.status), ['failed']);
+  assert.ok(!offered.includes('bazi_invented'));
+  assert.equal(checkpointOf(store).loadedTools, undefined);
+});
+
+test('tools one task loaded are offered from the first request of the next task that continues its context', async () => {
+  const store = new MemoryStore();
+  await executeAgentRun(store, row(), undefined, { config, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'search', name: AGENT_TOOL_SEARCH_TOOL, arguments: { query: '大运' } }]
+    : [{ type: 'text', text: '已加载' }]) });
+  const loaded = checkpointOf(store).loadedTools ?? [];
+  assert.ok(loaded.includes('bazi_dayun'));
+  // Each task opens a new Pi conversation; the checkpoint carries the loaded tools into it (submit.server.ts). A tool
+  // no longer registered, such as one of a removed MCP server, is not offered but stays for when it is again.
+  const nextStore = new MemoryStore(), next = row();
+  next.checkpoint.loadedTools = [...loaded, 'mcp__gone__search'];
+  const offered: string[][] = [];
+  await executeAgentRun(nextStore, next, undefined, { config, streamFn: scripted(index => index === 0
+    ? [{ type: 'toolCall', id: 'dayun', name: 'bazi_dayun', arguments: dayun }]
+    : [{ type: 'text', text: '大运已排好' }], messages => offered.push(getCurrentTools(messages).map(tool => tool.name))) });
+  assert.equal(finished(nextStore).args.p_status, 'completed');
+  for (const name of loaded) assert.ok(offered[0].includes(name), `${name} is offered without another search`);
+  assert.ok(!offered[0].includes('almanac_select') && !offered[0].includes('mcp__gone__search'), 'tools no task loaded, or gone, are not offered');
+  assert.equal(toolParts(nextStore).find(part => part.name === 'bazi_dayun')?.status, 'completed');
+  assert.deepEqual(checkpointOf(nextStore).loadedTools, [...loaded, 'mcp__gone__search']);
+});
+
 test('a search with no match says so and loads nothing', async () => {
   const store = new MemoryStore(), run = row();
   let offered: string[] = [];
@@ -133,6 +192,7 @@ test('a search with no match says so and loads nothing', async () => {
   }, messages => { offered = getCurrentTools(messages).map(tool => tool.name); }) });
   const search = toolParts(store).find(part => part.name === AGENT_TOOL_SEARCH_TOOL)!;
   assert.deepEqual(search.output, { loaded: [], labels: [] }, 'no match loads nothing and names nothing');
+  assert.equal(checkpointOf(store).loadedTools, undefined);
   assert.equal(search.status, 'completed');
   assert.ok(!offered.includes('bazi_dayun'));
   assert.equal(AGENT_TOOL_SEARCH_LIMIT, 8);

@@ -304,6 +304,8 @@ export async function submitAgentTask(
     citations: { base: getAgentCitationBase(history), calls: {} },
     // Background subagents continue with the context they belong to; a rebuilt context starts without them.
     ...(replay && previous?.checkpoint.background?.length ? { background: previous.checkpoint.background } : {}),
+    // So do the tools it loaded: a rebuilt context holds no tool calls, and the model loads them again.
+    ...(replay && previous?.checkpoint.loadedTools?.length ? { loadedTools: previous.checkpoint.loadedTools } : {}),
   };
   const assistant: ChatMessage = {
     id: `agent:${runId}`,

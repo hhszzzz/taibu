@@ -47,7 +47,9 @@ const toolSearchSection: PromptSection = {
 };
 
 /** A direct call that only loaded its tool; the answer leaves the step out (durable-projection.server.ts). */
-export function isAgentToolLoadCall(details: unknown) {
+export function isAgentToolLoadCall(input: unknown, details: unknown) {
+  if (!input || typeof input !== 'object' || !('kind' in input) || input.kind !== 'model' ||
+    !('unoffered' in input) || input.unoffered !== true) return false;
   return !!details && typeof details === 'object' && 'loadedOnCall' in details;
 }
 

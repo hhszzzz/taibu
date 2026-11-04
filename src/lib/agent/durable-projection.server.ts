@@ -212,7 +212,7 @@ export async function projectDurableConversation(
         const assistant = modelCallEntry(task);
         const key = assistant ? agentToolCardId(assistant, message.toolCallId) : byCall.get(message.toolCallId);
         const card = key ? cards.get(key) : undefined;
-        if (card && isAgentToolLoadCall(message.details)) loadCalls.add(card.id);
+        if (card && isAgentToolLoadCall(task?.input, message.details)) loadCalls.add(card.id);
         else if (card) {
           card.status = message.isError ? "failed" : "completed";
           card.output = card.name === AGENT_CODEMODE_TOOL ? scriptOutput(message) : message.details ?? message.content;

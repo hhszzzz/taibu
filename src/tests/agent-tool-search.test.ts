@@ -7,7 +7,7 @@ import type { AgentRunRow } from '../lib/agent/store.server';
 import type { AgentPart } from '../lib/agent/types';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { AGENT_CORE_DEFERRED_TOOLS, AGENT_DATA_DEFERRED_TOOLS, AGENT_DEFERRED_TOOLS, AGENT_TOOL_SEARCH_TOOL, isAgentDeferredTool } from '../lib/agent/tool-catalog';
-import { AGENT_TOOL_SEARCH_LIMIT } from '../lib/agent/tool-search.server';
+import { AGENT_TOOL_SEARCH_LIMIT, isAgentToolLoadCall } from '../lib/agent/tool-search.server';
 import { summarizeAgentTool } from '../components/chat/agent/presentation';
 import { config, MemoryStore, row, scripted } from './helpers/agent-runtime-fixture';
 
@@ -48,6 +48,13 @@ test('deferred tools are the fifteen low-frequency Core tools, the notes and con
   assert.equal(isAgentDeferredTool('mcp__archive__search'), false, 'an MCP server sets its own exposure');
   assert.equal(isAgentDeferredTool('bazi'), false);
   assert.equal(isAgentDeferredTool('__proto__'), false);
+});
+
+test('only an unoffered model call can be hidden as a deferred-tool load', () => {
+  const details = { loadedOnCall: 'bazi_dayun' };
+  assert.equal(isAgentToolLoadCall({ kind: 'model', unoffered: true }, details), true);
+  assert.equal(isAgentToolLoadCall({ kind: 'model' }, details), false, 'a tool result cannot hide itself with matching details');
+  assert.equal(isAgentToolLoadCall({ kind: 'nested', unoffered: true }, details), false);
 });
 
 /** The prompt sections Pi sends with a request, as one string to match against. */

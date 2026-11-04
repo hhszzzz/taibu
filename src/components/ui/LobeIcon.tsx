@@ -8,11 +8,21 @@ import { cn } from '@/lib/utils';
 
 const loaded = new Map<string, IconType>();
 const pending = new Map<string, Promise<void>>();
-const listeners = new Set<() => void>();
+const listeners = new Map<string, Set<() => void>>();
+const subscriptions = new Map<string, (listener: () => void) => () => void>();
 
-function subscribe(listener: () => void) {
-    listeners.add(listener);
-    return () => { listeners.delete(listener); };
+function subscribe(id: string) {
+    let subscription = subscriptions.get(id);
+    if (!subscription) {
+        subscription = (listener: () => void) => {
+            const set = listeners.get(id) ?? new Set<() => void>();
+            listeners.set(id, set);
+            set.add(listener);
+            return () => { set.delete(listener); };
+        };
+        subscriptions.set(id, subscription);
+    }
+    return subscription;
 }
 
 function load(id: string): Promise<void> {
@@ -21,7 +31,7 @@ function load(id: string): Promise<void> {
     let request = pending.get(id);
     if (!request) {
         request = loader().then(
-            module => { loaded.set(id, module.default); listeners.forEach(listener => listener()); },
+            module => { loaded.set(id, module.default); listeners.get(id)?.forEach(listener => listener()); },
             () => undefined,
         ).finally(() => pending.delete(id));
         pending.set(id, request);
@@ -40,7 +50,7 @@ export function preloadLobeIcons(ids: Iterable<string | null | undefined>) {
 
 /** lobehub 图标；下载完成前是同尺寸的空位，不会挤动布局。 */
 export function LobeIcon({ id, size = 18, className }: { id: string; size?: number; className?: string }) {
-    const Icon = useSyncExternalStore(subscribe, () => loaded.get(id) ?? null, () => null);
+    const Icon = useSyncExternalStore(subscribe(id), () => loaded.get(id) ?? null, () => null);
     useEffect(() => { void load(id); }, [id]);
     if (!Icon) return <span aria-hidden="true" className={cn('inline-block shrink-0', className)} style={{ width: size, height: size }} />;
     return createElement(Icon, { size, 'aria-hidden': true, className: cn('shrink-0', className) });

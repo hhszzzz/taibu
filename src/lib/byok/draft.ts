@@ -4,7 +4,7 @@
  */
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import {
-  BYOK_CONTEXT_RANGE, BYOK_DISPLAY_NAME_MAX, BYOK_KEY_MAX, BYOK_MODEL_ID_MAX, BYOK_NAME_MAX, BYOK_OUTPUT_RANGE,
+  BYOK_CONTEXT_RANGE, BYOK_KEY_MAX, BYOK_MODEL_ID_MAX, BYOK_NAME_MAX, BYOK_OUTPUT_RANGE,
   byokAddressError, byokHost, clampByokLevel, defaultByokEffort, normalizeByokAddress,
   type ByokCapability, type ByokConnectionView, type ByokDefaultEffort, type ByokModelView, type ByokPolicy, type ByokProtocol,
   type ByokUsage,
@@ -152,8 +152,7 @@ export function connectionBody(draft: ByokConnectionDraft, saved: ByokConnection
     const unique = `${model.usage}:${modelId}`;
     if (seen.has(unique)) throw new Error(`模型「${modelId}」重复添加了`);
     seen.add(unique);
-    const displayName = model.displayName.trim() || modelId;
-    if (displayName.length > BYOK_DISPLAY_NAME_MAX) throw new Error(`「${modelId}」的显示名称不能超过 ${BYOK_DISPLAY_NAME_MAX} 个字符`);
+    const displayName = modelId;
     const chat = model.usage === 'chat';
     const levels = chat ? AI_REASONING_EFFORTS.filter(level => model.thinkingLevels.includes(level)) : [];
     return {

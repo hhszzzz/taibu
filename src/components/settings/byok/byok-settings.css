@@ -4,6 +4,7 @@
 .byok-chips { display: flex; flex-wrap: wrap; gap: .375rem; margin-top: .25rem; }
 .byok-chip { display: inline-flex; align-items: center; gap: .3125rem; height: 1.5rem; padding: 0 .5rem; border-radius: .5rem; background: var(--fill-field); font-size: .75rem; color: var(--foreground-secondary); }
 .byok-muted { font-size: .75rem; color: var(--foreground-tertiary); }
+.byok-server-meta { font-family: var(--font-mono); font-size: .75rem; font-weight: 400; color: var(--foreground-tertiary); }
 .byok-url { font-family: var(--font-mono); font-size: .75rem; overflow-wrap: anywhere; color: var(--foreground); }
 
 .byok-editor { display: flex; flex-direction: column; gap: 1.25rem; }
@@ -26,20 +27,28 @@ p.byok-result { display: block; }
 .byok-models-head h4 { font-size: .875rem; font-weight: 500; color: var(--foreground); }
 .byok-models-actions { display: flex; gap: .25rem; }
 .byok-model { display: flex; flex-direction: column; gap: .5rem; padding: .75rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--surface); }
-.byok-model-main { display: grid; grid-template-columns: auto minmax(0, 3fr) minmax(0, 2fr) 6.5rem auto auto; align-items: center; gap: .5rem; }
-.byok-model-icon { display: inline-flex; width: 1.5rem; justify-content: center; }
+.byok-model-main { display: flex; flex-wrap: wrap; align-items: flex-end; gap: .5rem .625rem; }
+.byok-model-icon { display: inline-flex; flex: 0 0 1.5rem; justify-content: center; padding-bottom: .4375rem; }
+.byok-model-field { display: flex; min-width: 0; flex-direction: column; gap: .25rem; }
+.byok-model-field > span:first-child { font-size: .6875rem; line-height: 1.2; color: var(--foreground-tertiary); white-space: nowrap; }
+.byok-model-id-field { flex: 1 1 12rem; }
 .byok-model-id { position: relative; min-width: 0; }
-.byok-model-id-toggle { display: inline-flex; width: 1.5rem; height: 1.5rem; align-items: center; justify-content: center; border-radius: .375rem; color: var(--foreground-tertiary); }
-.byok-model-id-toggle:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
-.byok-model-options { display: flex; width: max(100%, 18rem); flex-direction: column; gap: 1px; padding: .25rem; }
+.byok-model-usage { flex: 0 0 6.5rem; }
+.byok-model-vision { flex: 0 0 auto; }
+.byok-model-check { display: inline-flex; height: 2rem; align-items: center; gap: .375rem; font-size: .8125rem; color: var(--foreground-secondary); white-space: nowrap; }
+.byok-model-effort { flex: 0 1 9.5rem; }
+.byok-model-effort > [role=combobox] { width: 100%; }
+.byok-model-id-toggle { position: absolute; inset: 0; width: 100%; border-radius: .5rem; color: var(--foreground-tertiary); pointer-events: none; }
+.byok-model-id-chevron { position: absolute; top: 50%; right: .25rem; translate: 0 -50%; display: inline-flex; width: 1.5rem; height: 1.5rem; align-items: center; justify-content: center; border-radius: .375rem; pointer-events: auto; }
+.byok-model-id-chevron:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.byok-model-options { display: flex; width: var(--anchor-width, 18rem); max-width: calc(100vw - 1rem); flex-direction: column; gap: 1px; padding: .25rem; }
 .byok-model-option { display: flex; width: 100%; min-height: 2rem; align-items: center; gap: .375rem; padding: 0 .5rem; border-radius: .375rem; font-size: .8125rem; text-align: left; overflow-wrap: anywhere; }
 .byok-model-option:hover, .byok-model-option[aria-pressed=true] { background: var(--fill-ghost-hover); }
+.byok-option-context { margin-left: auto; font-size: .75rem; color: var(--foreground-tertiary); }
 .byok-model-empty { display: flex; flex-direction: column; align-items: flex-start; gap: .5rem; padding: .25rem; font-size: .8125rem; color: var(--foreground-secondary); }
 .byok-model-options > li { display: flex; min-height: 2rem; flex-shrink: 0; align-items: center; gap: .375rem; padding: 0 .5rem; border-radius: .375rem; cursor: pointer; font-size: .8125rem; overflow-wrap: anywhere; }
 .byok-model-options > li:hover, .byok-model-options > li[aria-selected=true] { background: var(--fill-ghost-hover); }
 .byok-model-options > .byok-option-hint { cursor: default; font-size: .75rem; color: var(--foreground-tertiary); }
-.byok-model-detail { display: grid; grid-template-columns: auto minmax(0, 1.4fr); align-items: center; gap: .5rem .75rem; padding-left: 2rem; }
-.byok-model-detail > .is-wide { grid-column: 1 / -1; }
 .byok-model > .mcp-hint { padding-left: 2rem; }
 
 .byok-editor-foot { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding-top: 1rem; border-top: 1px solid var(--border); }
@@ -47,8 +56,7 @@ p.byok-result { display: block; }
 .byok-spacer { flex: 1; }
 
 @media (max-width: 767px) {
-  .byok-model-main { grid-template-columns: auto minmax(0, 1fr) auto auto; }
-  .byok-model-main > :is(.byok-model-name, .byok-model-usage) { order: 1; grid-column: 2 / -1; }
-  .byok-model-detail { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-left: 0; }
+  .byok-model-id-field { flex-basis: calc(100% - 2rem); }
+  .byok-model-effort { flex: 1 1 8rem; }
   .byok-model > .mcp-hint { padding-left: 0; }
 }

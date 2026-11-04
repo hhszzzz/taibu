@@ -19,7 +19,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { matchModelIcon } from '@/lib/ai/lobe-icons';
 import { deleteByokConnection, useByokCatalog } from '@/lib/byok/client';
-import { BYOK_PROTOCOL_LABELS, byokHost, type ByokCatalog, type ByokConnectionView, type ByokPolicy } from '@/lib/byok/config';
+import { BYOK_PROTOCOL_LABELS, byokHost, byokKeyHint, type ByokCatalog, type ByokConnectionView, type ByokPolicy } from '@/lib/byok/config';
 import { setDeviceKey, useDeviceKeys } from '@/lib/byok/device-keys';
 import { readCollaborationPreset, writeCollaborationPreset } from '@/lib/chat/collaboration-preset';
 import { queryKeys } from '@/lib/query/keys';
@@ -32,10 +32,12 @@ const NEW = 'new';
 function keyBadge(connection: ByokConnectionView, policy: ByokPolicy, deviceKey: string | undefined) {
   if (connection.keyHint) {
     return policy.allowServerKeys
-      ? <span className="mcp-badge mcp-badge-accent">Key 保存在本站</span>
-      : <span className="mcp-badge mcp-badge-muted" title="管理员已关闭「保存到本站」，已保存的 Key 暂不使用">本站保存已停用</span>;
+      ? <span className="mcp-badge mcp-badge-accent">Key 保存在本站 · {connection.keyHint}</span>
+      : <span className="mcp-badge mcp-badge-muted" title="管理员已关闭「保存到本站」，已保存的 Key 暂不使用">本站保存已停用 · {connection.keyHint}</span>;
   }
-  return deviceKey ? <span className="mcp-badge">Key 在本设备</span> : <span className="mcp-badge mcp-badge-muted">本设备未填 Key</span>;
+  return deviceKey
+    ? <span className="mcp-badge">Key 在本设备 · {byokKeyHint(deviceKey)}</span>
+    : <span className="mcp-badge mcp-badge-muted">本设备未填 Key</span>;
 }
 
 function modelCounts(connection: ByokConnectionView) {
@@ -117,9 +119,7 @@ export function ByokSettings({ userId }: { userId: string }) {
   return (
     <div className="flex flex-col gap-4">
       <p className="mcp-notice">
-        <strong>Key 默认只保存在这台设备。</strong>浏览器直接请求服务商，退出登录时清除，换设备需要重新填写。
-        打开「保存到本站」的连接由本站加密保存 Key 并代为请求，定时任务也能使用。自定义模型的调用不计费。
-        {policy.allowServerKeys ? null : ' 管理员已关闭「保存到本站」：已保存的 Key 暂不使用，这些连接需要在本设备填写 Key。'}
+        <strong>Key 默认只保存在这台设备。</strong>打开「保存到本站」由本站加密保存 Key。自定义模型调用不计费。请控制 Key 的额度，避免泄露。
       </p>
       {connections.length === 0 ? (
         <p className="mcp-hint">
@@ -142,16 +142,16 @@ export function ByokSettings({ userId }: { userId: string }) {
                 <div className="settings-list-item-text">
                   <strong className="mcp-server-title">
                     {connection.name}
+                    <span className="byok-server-meta">{byokHost(connection.baseUrl)} · {modelCounts(connection)}</span>
                     <span className="mcp-badge">{BYOK_PROTOCOL_LABELS[connection.protocol]}</span>
                     {keyBadge(connection, policy, keys[connection.id])}
                   </strong>
-                  <p className="mcp-server-line">{byokHost(connection.baseUrl)} · {modelCounts(connection)}</p>
                   {connection.models.length ? (
                     <ul className="byok-chips" aria-label={`「${connection.name}」的模型`}>
                       {connection.models.map(model => (
                         <li key={model.id} className="byok-chip">
                           <ModelIcon icon={matchModelIcon(model.modelId)} vendor="other" size={14} />
-                          {model.displayName}
+                          {model.modelId}
                           {model.usage === 'image' ? <span className="byok-muted">生图</span> : null}
                         </li>
                       ))}

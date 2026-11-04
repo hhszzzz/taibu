@@ -27,9 +27,9 @@ import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { matchModelIcon } from '@/lib/ai/lobe-icons';
 import { fetchByokCapabilities, probeOnServer, saveByokConnection } from '@/lib/byok/client';
 import {
-  BYOK_PROTOCOL_LABELS, byokAddressError, byokEffortLevels, formatByokError, inferByokProtocol,
+  BYOK_PROTOCOL_LABELS, byokAddressError, byokEffortLevels, byokKeyHint, formatByokError, inferByokProtocol,
   normalizeByokAddress,
-  type ByokConnectionView, type ByokDefaultEffort, type ByokPolicy, type ByokUsage,
+  type ByokConnectionView, type ByokDefaultEffort, type ByokPolicy, type ByokUsage, type ByokCapability,
 } from '@/lib/byok/config';
 import { setDeviceKey } from '@/lib/byok/device-keys';
 import {
@@ -40,9 +40,15 @@ import { byokBrowserFetch } from '@/lib/byok/pi-model';
 import { probeByokConnection, testByokModel, type ByokListedModel } from '@/lib/byok/probe';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 
-const EFFORT_LABELS: Record<AIReasoningEffort, string> = { minimal: '最低', low: '低', medium: '中等', high: '高', xhigh: '超高', max: '最高' };
+const EFFORT_LABELS: Record<AIReasoningEffort, string> = { minimal: '最低', low: '低', medium: '中等', high: '高', xhigh: '极高', max: '最高' };
 const PROTOCOL_OPTIONS = (['openai', 'anthropic'] as const).map(value => ({ value, label: BYOK_PROTOCOL_LABELS[value] }));
 const MAX_OPTIONS = 50;
+
+/** The provider's list outlives one editor opening, so reopening the card does not need another fetch. */
+const listedCache = new Map<string, ByokListedModel[]>();
+const capabilityCache = new Map<string, ByokCapability>();
+const listedKey = (userId: string, connectionId: string | null, protocol: string, address: string) =>
+  `${userId}:${connectionId ?? 'new'}:${protocol}:${address}`;
 
 type ConnectionTest =
   | { status: 'idle' }
@@ -86,7 +92,15 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   const [modelTests, setModelTests] = useState<Record<string, ModelTest>>({});
   const [fetchingModels, setFetchingModels] = useState(false);
   /** The provider's list, read by 「获取模型」; each model ID input offers it. */
-  const [listed, setListed] = useState<ByokListedModel[]>([]);
+  const initialListKey = listedKey(userId, saved?.id ?? null, draft.protocol, normalizeByokAddress(draft.baseUrl));
+  const [listed, setListed] = useState<ByokListedModel[]>(() => listedCache.get(initialListKey) ?? []);
+  /** What models.dev knows of the listed model IDs, shown beside each option. */
+  const [capabilities, setCapabilities] = useState<Record<string, ByokCapability>>(() => Object.fromEntries(
+    (listedCache.get(initialListKey) ?? []).flatMap(item => {
+      const capability = capabilityCache.get(item.id);
+      return capability ? [[item.id, capability] as const] : [];
+    }),
+  ));
   const [modelListError, setModelListError] = useState('');
   /** The model row whose ID input has the provider's list open. */
   const [openRow, setOpenRow] = useState<string | null>(null);
@@ -149,12 +163,14 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   const fillModel = async (model: ByokModelDraft) => {
     const modelId = model.modelId.trim();
     if (!modelId || model.usage !== 'chat') return;
-    const capability = (await fetchByokCapabilities(userId, [modelId]))[modelId];
+    const known = capabilities[modelId];
+    const capability = known ?? (await fetchByokCapabilities(userId, [modelId]))[modelId];
     if (capability) setDraft(current => ({ ...current, models: current.models.map(item => item.key === model.key && item.modelId.trim() === modelId ? applyCapability(item, capability) : item) }));
   };
 
   /** Reads the provider's list so each model ID input can offer it. */
   const fetchModels = async () => {
+    if (fetchingModels) return;
     const blocked = testBlocked();
     if (blocked) { setModelListError(blocked); return; }
     setFetchingModels(true);
@@ -168,7 +184,13 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
       return;
     }
     setListed(result.models);
+    listedCache.set(listedKey(userId, saved?.id ?? null, draft.protocol, address), result.models);
     showToast('success', `已获取 ${result.models.length} 个模型`);
+    const ids = result.models.slice(0, 200).map(item => item.id);
+    if (ids.length) void fetchByokCapabilities(userId, ids).then(models => {
+      for (const [id, capability] of Object.entries(models)) capabilityCache.set(id, capability);
+      setCapabilities(current => ({ ...current, ...models }));
+    });
     if (!draft.models.length && modelRoom > 0) {
       const row = newModelDraft('', 'chat');
       setDraft(current => ({ ...current, models: [...current.models, row] }));
@@ -180,8 +202,9 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   const pickModel = async (model: ByokModelDraft, listed: ByokListedModel) => {
     const usage = guessUsage(listed.id, draft.protocol);
     setOpenRow(null);
-    const capability = usage === 'chat' ? (await fetchByokCapabilities(userId, [listed.id]))[listed.id] : null;
-    const next = { ...newModelDraft(listed.id, usage, capability), key: model.key, id: model.id, displayName: listed.name ?? listed.id };
+    const known = capabilities[listed.id];
+    const capability = usage === 'chat' ? known ?? (await fetchByokCapabilities(userId, [listed.id]))[listed.id] : null;
+    const next = { ...newModelDraft(listed.id, usage, capability), key: model.key, id: model.id };
     setDraft(current => ({ ...current, models: current.models.map(item => item.key === model.key ? next : item) }));
   };
 
@@ -210,9 +233,12 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   };
 
   const keyToggle = showKey ? '隐藏 API Key' : '显示 API Key';
+  const savedKeyHint = draft.key.trim() ? null
+    : onSite && canUseStoredKey ? saved?.keyHint ?? null
+      : deviceKey ? byokKeyHint(deviceKey) : null;
   const keyDescription = onSite
-    ? 'Key 加密保存在本站，只写不回显。'
-    : '只保存在这台设备的浏览器里，退出登录时清除；定时任务无法使用。出现其他错误时，请打开「保存到本站」。';
+    ? `Key 加密保存在本站，只写不回显。${savedKeyHint ? `当前 ${savedKeyHint}。` : ''}`
+    : `只保存在这台设备的浏览器里，退出登录时清除；定时任务无法使用。出现其他错误时，请打开「保存到本站」。${savedKeyHint ? `当前 ${savedKeyHint}。` : ''}`;
   const storeDescription = !policy.allowServerKeys
     ? saved?.keyHint ? '管理员已关闭「保存到本站」：已保存的 Key 暂不使用；关闭开关并保存会删除它。' : '管理员已关闭「保存到本站」。'
     : 'Key 加密保存在本站，请求由本站发出，可用定时任务等完整权限。';
@@ -269,7 +295,7 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
           {props => (
             <div className="relative">
               <Input {...props} type={showKey ? 'text' : 'password'} value={draft.key} autoComplete="off" spellCheck={false}
-                className="pr-11 font-mono placeholder:font-sans" placeholder={saved?.keyHint && onSite && !keyMoves ? '留空则不修改' : 'sk-...'}
+                className="pr-11 font-mono placeholder:font-sans" placeholder={savedKeyHint ? `当前 ${savedKeyHint}，留空则不修改` : 'sk-...'}
                 onChange={event => patch({ key: event.target.value })} />
               <span className="absolute inset-y-0 right-1.5 flex items-center">
                 <IconButton label={keyToggle} title={keyToggle} expand="none" className="h-8 w-8 rounded-lg" onClick={() => setShowKey(value => !value)}>
@@ -313,31 +339,33 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
           return <div key={model.key} className="byok-model">
             <div className="byok-model-main">
               <span className="byok-model-icon"><ModelIcon icon={matchModelIcon(model.modelId)} vendor="other" size={18} /></span>
-              <div className="byok-model-id">
+              <div className="byok-model-field byok-model-id-field">
+                <span>模型 ID</span>
+                <div className="byok-model-id">
                 <Popover open={open} onOpenChange={next => setOpenRow(next ? model.key : null)}>
                   <Input size="sm" aria-label="模型 ID" value={model.modelId} className="pr-8 font-mono placeholder:font-sans" placeholder="模型 ID，例如 deepseek-chat"
                     autoComplete="off" spellCheck={false}
                     onFocus={() => setOpenRow(model.key)}
                     onChange={event => patchModel(model.key, { modelId: event.target.value })}
                     onBlur={() => { void fillModel(model); }} />
-                  <span className="absolute inset-y-0 right-1 flex items-center">
-                    <PopoverTrigger className="byok-model-id-toggle" aria-label="选择服务商的模型" title="选择服务商的模型"
-                      onClick={() => { if (!listed.length) void fetchModels(); }}>
-                      <ChevronDown size={14} aria-hidden="true" />
-                    </PopoverTrigger>
-                  </span>
-                  <PopoverContent side="bottom" align="end" sideOffset={4} className="byok-model-options">
+                  <PopoverTrigger className="byok-model-id-toggle" aria-label="选择服务商的模型" title="选择服务商的模型"
+                    onClick={() => { if (!listed.length) void fetchModels(); }}>
+                    <span className="byok-model-id-chevron"><ChevronDown size={14} aria-hidden="true" /></span>
+                  </PopoverTrigger>
+                  <PopoverContent side="bottom" align="start" sideOffset={4} className="byok-model-options">
                     {listed.length ? (
                       <div role="group" aria-label="服务商的模型">
-                        {offered.slice(0, MAX_OPTIONS).map(item => (
-                          <Button unstyled key={item.id} type="button" className="byok-model-option" aria-pressed={item.id === model.modelId}
+                        {offered.slice(0, MAX_OPTIONS).map(item => {
+                          const contextWindow = capabilities[item.id]?.contextWindow;
+                          return <Button unstyled key={item.id} type="button" className="byok-model-option" aria-pressed={item.id === model.modelId}
                             onClick={() => { void pickModel(model, item); }}>
                             <ModelIcon icon={matchModelIcon(item.id)} vendor="other" size={16} />
                             <span className="font-mono">{item.id}</span>
                             {item.name ? <span className="byok-muted">{item.name}</span> : null}
+                            {contextWindow ? <span className="byok-option-context">{formatTokens(String(contextWindow))}</span> : null}
                             {guessUsage(item.id, draft.protocol) === 'image' ? <span className="mcp-badge">生图</span> : null}
-                          </Button>
-                        ))}
+                          </Button>;
+                        })}
                         {offered.length > MAX_OPTIONS ? <p className="byok-option-hint">只显示前 {MAX_OPTIONS} 个，继续输入可缩小范围。</p> : null}
                       </div>
                     ) : (
@@ -348,40 +376,44 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
                     )}
                   </PopoverContent>
                 </Popover>
+                </div>
               </div>
-              <Input size="sm" aria-label="显示名称" className="byok-model-name" value={model.displayName === model.modelId ? '' : model.displayName}
-                placeholder={model.modelId || '显示名称'} onChange={event => patchModel(model.key, { displayName: event.target.value })} />
-              <div className="byok-model-usage">
-                <Select<ByokUsage> ariaLabel="用途" value={model.usage} className="h-8 rounded-lg"
+              <div className="byok-model-field byok-model-usage">
+                <span>用途</span>
+                <Select<ByokUsage> ariaLabel="用途" value={model.usage} className="h-8 rounded-lg" popupClassName="w-[var(--anchor-width)] min-w-0"
+                  title="对话用于聊天与 Agent；生图用于生成图片"
                   options={[{ value: 'chat', label: '对话' }, { value: 'image', label: '生图', disabled: draft.protocol === 'anthropic' }]}
                   onChange={usage => patchModel(model.key, { usage })} />
               </div>
-              {chat ? <IconButton label={`测试「${model.modelId || '模型'}」`} title="测试" size="sm" disabled={test?.status === 'testing'}
-                onClick={() => { void testModel(model); }}>
-                <Zap size={16} aria-hidden="true" />
-              </IconButton> : null}
+              {chat ? <>
+                <div className="byok-model-field byok-model-vision">
+                  <span>图片输入</span>
+                  <label className="byok-model-check" title="是否支持图片输入">
+                    <Checkbox aria-label="是否支持图片输入" checked={model.supportsVision} onCheckedChange={supportsVision => patchModel(model.key, { supportsVision })} />支持
+                  </label>
+                </div>
+                <div className="byok-model-field byok-model-effort">
+                  <span>默认思考</span>
+                  <Select<string> ariaLabel="默认努力程度" value={model.defaultEffort} className="h-8 rounded-lg"
+                    title="选中这个模型时，输入框默认使用的思考档位"
+                    options={[
+                      ...levels.map(level => ({ value: level, label: EFFORT_LABELS[level] })),
+                      { value: 'auto', label: '模型默认' },
+                      { value: 'off', label: '关闭推理' },
+                    ]}
+                    onChange={value => patchModel(model.key, { defaultEffort: value as ByokDefaultEffort })} />
+                </div>
+                <IconButton label={`测试「${model.modelId || '模型'}」`} title="测试" size="sm" disabled={test?.status === 'testing'}
+                  onClick={() => { void testModel(model); }}>
+                  <Zap size={16} aria-hidden="true" />
+                </IconButton>
+              </> : null}
               <IconButton label={`移除「${model.modelId || '模型'}」`} title="移除" tone="danger" size="sm"
                 onClick={() => setDraft(current => ({ ...current, models: current.models.filter(item => item.key !== model.key) }))}>
                 <Trash2 size={16} aria-hidden="true" />
               </IconButton>
             </div>
-            {chat ? <div className="byok-model-detail">
-              <label className="mcp-check">
-                <Checkbox checked={model.supportsVision} onCheckedChange={supportsVision => patchModel(model.key, { supportsVision })} />识图
-              </label>
-              <Select<string> ariaLabel="默认努力程度" value={model.defaultEffort} className="h-8 rounded-lg"
-                options={[
-                  ...levels.map(level => ({ value: level, label: `默认：${EFFORT_LABELS[level]}` })),
-                  { value: 'auto', label: '默认：模型默认' },
-                  { value: 'off', label: '默认：关闭推理' },
-                ]}
-                onChange={value => patchModel(model.key, { defaultEffort: value as ByokDefaultEffort })} />
-              <p className="mcp-hint is-wide">
-                {model.contextWindow ? `上下文 ${formatTokens(model.contextWindow)}` : ''}
-                {model.contextWindow ? ' · ' : ''}
-                {model.thinkingLevels.length ? `努力程度：${levels.map(level => EFFORT_LABELS[level]).join(' / ')}` : '努力程度档位未知：模型菜单提供全部档位。'}
-              </p>
-            </div> : <p className="mcp-hint">生图模型调用 /images/generations，在输入框「生图」与 Agent 生图中使用。</p>}
+            {chat ? null : <p className="mcp-hint">生图模型调用 /images/generations，在输入框「生图」与 Agent 生图中使用。</p>}
             {test ? <p className="byok-result" data-tone={test.status === 'error' ? 'error' : test.status === 'ok' ? 'ok' : undefined} role={test.status === 'error' ? 'alert' : 'status'}>
               {test.status === 'testing' ? '正在测试…' : test.status === 'ok' ? `可用：回复「${test.reply || '（空）'}」${test.note}` : test.message}
             </p> : null}

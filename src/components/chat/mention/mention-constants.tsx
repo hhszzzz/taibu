@@ -2,8 +2,8 @@
  * MentionPopover 共享类型、常量与工具函数
  */
 import type { ReactNode } from 'react';
-import { ChevronRight, Folder } from 'lucide-react';
 import type { MentionType } from '@/types';
+import { MoreHorizontal } from 'lucide-react';
 import {
     BaziIcon, DaliurenIcon, DailyIcon, FaceIcon, HepanIcon, KnowledgeIcon, LiuyaoIcon,
     MbtiIcon, MeihuaIcon, MonthlyIcon, PalmIcon, QimenIcon, RecordsIcon, TarotIcon,
@@ -20,7 +20,7 @@ export type ViewItem = {
     key: string;
     label: string;
     hint?: string;
-    icon: ReactNode;
+    icon?: ReactNode;
     raw?: DataSourceSummary | KnowledgeBaseSummary;
     disabled?: boolean;
 };
@@ -76,30 +76,17 @@ export const TYPE_ICONS: Record<MentionType, ReactNode> = {
     xiaoliuren_divination: mentionNavIcon(XiaoliurenIcon),
 };
 
-export const HEPAN_TYPE_LABELS: Record<string, string> = {
-    love: '情侣合婚',
-    business: '商业合伙',
-    family: '亲子关系',
-};
-
-export const HEPAN_TYPE_ICONS: Record<string, ReactNode> = {
-    love: mentionNavIcon(HepanIcon),
-    business: mentionNavIcon(HepanIcon),
-    family: mentionNavIcon(HepanIcon),
-};
-
-export const FOLDER_ICON = <Folder className="w-4 h-4" />;
 export const KB_ICON = mentionNavIcon(KnowledgeIcon);
-export const CHEVRON_ICON = <ChevronRight className="w-4 h-4 opacity-50" />;
+
+/** A first-level row that opens records of one type (rather than mentioning something itself). */
+export const TYPE_ITEM_PREFIX = 'type:';
+export const isTypeItem = (item: ViewItem) => item.key.startsWith(TYPE_ITEM_PREFIX);
+
+/** A first-level row that opens the records of the arts not pinned to the sidebar. */
+export const GROUP_ITEM_PREFIX = 'group:';
+export const GROUP_ICON = <MoreHorizontal className="w-5 h-5" />;
 
 // ---- Helpers ----
-
-export const getHepanSubtype = (item: DataSourceSummary): 'love' | 'business' | 'family' | null => {
-    if (item.hepanType === 'love' || item.hepanType === 'business' || item.hepanType === 'family') {
-        return item.hepanType;
-    }
-    return null;
-};
 
 export const shouldShowHint = (item: DataSourceSummary) => {
     if (item.type === 'bazi_chart' || item.type === 'ziwei_chart') return false;

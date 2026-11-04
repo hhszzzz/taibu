@@ -15,7 +15,8 @@ import type {
     ViewItem, ViewModel, Level, MentionPopoverState,
     DataSourceSummary, KnowledgeBaseSummary,
 } from '@/components/chat/mention/mention-constants';
-import { DATA_SUBCATEGORY_DIVIDE } from '@/components/chat/mention/mention-data-catalog';
+import { isTypeItem, TYPE_ITEM_PREFIX, GROUP_ITEM_PREFIX } from '@/components/chat/mention/mention-constants';
+import type { DataSourceType } from '@/lib/data-sources/types';
 
 interface MentionItemListProps {
     view: ViewModel;
@@ -55,48 +56,22 @@ export function MentionItemList({
     const handleItemClick = (item: ViewItem) => {
         if (item.disabled) return;
 
-        if (activeLevel === 'search') {
-            selectRawItem(item);
+        if ((activeLevel === 'root' || activeLevel === 'types') && isTypeItem(item)) {
+            onNavigate({
+                level: 'item', selectedCategory: 'data',
+                selectedType: item.key.slice(TYPE_ITEM_PREFIX.length) as DataSourceType,
+                parent: activeLevel === 'types' ? 'types' : 'root',
+                activeIndex: 0,
+            });
             return;
         }
 
-        if (activeLevel === 'category') {
-            if (item.key === 'data') {
-                onNavigate({ level: 'subcategory', selectedCategory: 'data', activeIndex: 0 });
-            } else if (!knowledgeBaseLocked) {
-                onNavigate({ level: 'item', selectedCategory: 'knowledge', activeIndex: 0 });
-            }
+        if (activeLevel === 'root' && item.key.startsWith(GROUP_ITEM_PREFIX)) {
+            onNavigate({ level: 'types', activeIndex: 0 });
             return;
         }
 
-        if (activeLevel === 'subcategory') {
-            if (DATA_SUBCATEGORY_DIVIDE.has(item.key)) {
-                onNavigate({ level: 'type', selectedCategory: 'data', selectedSubcategory: item.key, activeIndex: 0 });
-            } else {
-                onNavigate({ level: 'item', selectedCategory: 'data', selectedSubcategory: item.key, activeIndex: 0 });
-            }
-            return;
-        }
-
-        if (activeLevel === 'type') {
-            onNavigate({ level: 'item', selectedCategory: 'data', selectedSubcategory: state.selectedSubcategory, selectedType: item.key, activeIndex: 0 });
-            return;
-        }
-
-        if (activeLevel === 'item' && state.selectedCategory === 'data') {
-            const raw = item.raw;
-            if (!raw || !('type' in raw)) return;
-            onSelect({ type: (raw as DataSourceSummary).type, id: raw.id, name: raw.name, preview: (raw as DataSourceSummary).preview });
-            onClose();
-            return;
-        }
-
-        // knowledge base item
-        const raw = item.raw;
-        if (!raw || 'type' in raw) return;
-        if (knowledgeBaseLocked) return;
-        onSelect({ type: 'knowledge_base', id: raw.id, name: raw.name, preview: (raw as KnowledgeBaseSummary).description || '知识库' });
-        onClose();
+        selectRawItem(item);
     };
 
     const selectRawItem = (item: ViewItem) => {
@@ -118,7 +93,9 @@ export function MentionItemList({
             ? (knowledgeBaseLocked ? '知识库已关闭' : '你还没有知识库')
             : activeLevel === 'item' && state.selectedCategory === 'data'
                 ? '该分类暂无数据'
-                : '没有匹配项';
+                : activeLevel === 'root' || activeLevel === 'types'
+                    ? '还没有可提及的内容'
+                    : '没有匹配项';
 
     return (
         <div ref={listRef} className="chat-mention-list">
@@ -149,9 +126,8 @@ export function MentionItemList({
                         <span className="chat-mention-item-icon">{item.icon}</span>
                         <span className="chat-mention-item-body">
                             <span className="chat-mention-item-label">{item.label}</span>
-                            {!!item.hint && <span className="chat-mention-item-hint">{item.hint}</span>}
                         </span>
-                        {(activeLevel === 'category' || activeLevel === 'subcategory') && <ChevronRight className="w-4 h-4 chat-mention-item-tail" />}
+                        {!!item.hint && <span className="chat-mention-item-hint">{item.hint}</span>}                        {(activeLevel === 'root' || activeLevel === 'types') && (isTypeItem(item) || item.key.startsWith(GROUP_ITEM_PREFIX)) && <ChevronRight className="w-4 h-4 chat-mention-item-tail" />}
                     </Button>
                 ))
             )}

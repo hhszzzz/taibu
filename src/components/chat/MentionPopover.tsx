@@ -12,25 +12,33 @@ import { BookOpenText } from 'lucide-react';
 import type { Mention } from '@/types';
 import {
     type DataSourceSummary, type DataSourceLoadError, type KnowledgeBaseSummary,
-    type ViewModel, type MentionPopoverState, type Level,
-    TYPE_LABELS, TYPE_ICONS,
-    HEPAN_TYPE_LABELS, HEPAN_TYPE_ICONS,
-    FOLDER_ICON, KB_ICON, CHEVRON_ICON,
-    getHepanSubtype, shouldShowHint,
+    type ViewItem, type ViewModel, type MentionPopoverState, type Level,
+    TYPE_LABELS, TYPE_ICONS, KB_ICON, GROUP_ICON,
+    isTypeItem, shouldShowHint, TYPE_ITEM_PREFIX, GROUP_ITEM_PREFIX,
     normalizeQuery, getQueryHint,
 } from '@/components/chat/mention/mention-constants';
 import {
     getBackNavigationState,
     getInitialMentionNavigationState,
 } from '@/components/chat/mention/mention-navigation';
-import {
-    getVisibleDataSubcategories,
-    getVisibleDataTypesForSubcategory,
-} from '@/components/chat/mention/mention-visibility';
-import { DATA_SUBCATEGORY_MAP, DATA_SUBCATEGORY_DIVIDE } from '@/components/chat/mention/mention-data-catalog';
 import { MentionHeader } from '@/components/chat/mention/MentionHeader';
 import { MentionItemList } from '@/components/chat/mention/MentionItemList';
+import { getDataSourceNavId } from '@/lib/data-sources/catalog';
 import type { DataSourceType } from '@/lib/data-sources/types';
+import { useSidebarPins } from '@/lib/navigation/sidebar-pins';
+
+/** Divination records in sidebar order; daily and monthly fortunes are mentioned directly instead. */
+const ROOT_METHOD_TYPES: DataSourceType[] = [
+    'bazi_chart', 'hepan_chart', 'ziwei_chart', 'tarot_reading', 'liuyao_divination', 'qimen_chart',
+    'daliuren_divination', 'meihua_divination', 'xiaoliuren_divination', 'face_reading', 'palm_reading', 'mbti_reading',
+];
+const ROOT_FORTUNE_TYPES: DataSourceType[] = ['daily_fortune', 'monthly_fortune'];
+/** Always first level, even when unpinned: the user reads charts from here most often. */
+const ALWAYS_FIRST: ReadonlySet<DataSourceType> = new Set(['bazi_chart', 'ziwei_chart']);
+const RECORDS_GROUP = `${GROUP_ITEM_PREFIX}records`;
+
+/** 「今日运势（2026-11-04）」 reads as just the date: the row already names the fortune. */
+const fortuneDate = (name: string) => /[（(]([^）)]+)[）)]/.exec(name)?.[1] ?? '';
 
 interface MentionPopoverProps {
     query: string;
@@ -48,25 +56,21 @@ interface MentionPopoverProps {
 
 export function MentionPopover({ query, dataSources, knowledgeBases, enabledDataSourceTypes, loadError = null, dataSourceErrors = [], loading = false, defaultCategory, knowledgeBaseLocked = false, onSelect, onClose }: MentionPopoverProps) {
     const [state, setState] = useState<MentionPopoverState>(() => getInitialMentionNavigationState({ defaultCategory, knowledgeBaseLocked }));
+    const { pins } = useSidebarPins();
     const normalizedQuery = useMemo(() => normalizeQuery(query), [query]);
     const queryHint = useMemo(() => getQueryHint(query), [query]);
-    const visibleSubcategories = useMemo(
-        () => getVisibleDataSubcategories(enabledDataSourceTypes),
-        [enabledDataSourceTypes]
-    );
 
     const effectiveState = useMemo<MentionPopoverState>(() => {
         if (!queryHint || normalizedQuery) return state;
         if (queryHint === 'data') {
-            return { ...state, level: 'subcategory', selectedCategory: 'data', selectedSubcategory: undefined, activeIndex: 0 };
+            return { level: 'root', activeIndex: 0 };
         }
-        if (queryHint === 'knowledge') {
-            return { ...state, level: 'item', selectedCategory: 'knowledge', selectedSubcategory: undefined, activeIndex: 0 };
-        }
-        return state;
+        return { level: 'item', selectedCategory: 'knowledge', activeIndex: 0 };
     }, [queryHint, normalizedQuery, state]);
 
     const activeLevel: Level = normalizedQuery ? 'search' : effectiveState.level;
+    /** Root reads as a plain list like the slash menu; sub levels keep the back row (and its title). */
+    const showBack = activeLevel === 'types' || (activeLevel === 'item' && !knowledgeBaseLocked);
 
     // ---- Navigation ----
 
@@ -105,19 +109,25 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
         return counts;
     }, [dataSources]);
 
-    const hepanTypeCounts = useMemo(() => {
-        const counts: Record<string, number> = { love: 0, business: 0, family: 0 };
-        dataSources.filter(item => item.type === 'hepan_chart').forEach(item => {
-            const key = getHepanSubtype(item);
-            if (!key) return;
-            counts[key] = (counts[key] || 0) + 1;
-        });
-        return counts;
-    }, [dataSources]);
+    const typeRows = useMemo(() => {
+        const enabled = new Set(enabledDataSourceTypes);
+        const pinned = new Set(pins);
+        const atRoot = ROOT_METHOD_TYPES.filter(type => enabled.has(type) && (ALWAYS_FIRST.has(type) || pinned.has(getDataSourceNavId(type))));
+        const inRecords = ROOT_METHOD_TYPES.filter(type => enabled.has(type) && !atRoot.includes(type));
+        return { atRoot, inRecords };
+    }, [enabledDataSourceTypes, pins]);
 
     // ---- View model ----
 
     const view = useMemo((): ViewModel => {
+        const enabled = new Set(enabledDataSourceTypes);
+        const typeRow = (type: DataSourceType): ViewItem => ({
+            key: `${TYPE_ITEM_PREFIX}${type}`,
+            label: TYPE_LABELS[type],
+            hint: `${typeCounts.get(type) || 0} 条`,
+            icon: TYPE_ICONS[type],
+        });
+
         if (activeLevel === 'search') {
             const dataItems = filteredDataSources.map((i) => ({
                 key: `data-${i.id}`,
@@ -138,88 +148,94 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
             return { title: '搜索结果', items: [...dataItems, ...kbItems] };
         }
 
-        if (activeLevel === 'category') {
-            return {
-                title: '选择类别',
-                items: [
-                    { key: 'data', label: '@数据', hint: dataSourceErrors.length ? `部分来源失败（${dataSourceErrors.length}）` : '命盘/记录/运势', icon: FOLDER_ICON },
-                    { key: 'knowledge', label: '@知识库', hint: knowledgeBaseLocked ? '知识库已关闭' : '你的知识库', icon: KB_ICON, disabled: knowledgeBaseLocked },
-                ],
-            };
-        }
-
-        if (activeLevel === 'subcategory' && effectiveState.selectedCategory === 'data') {
-            return {
-                title: '@数据',
-                items: visibleSubcategories.map((s) => ({ key: s, label: s, icon: FOLDER_ICON })),
-            };
-        }
-
-        if (activeLevel === 'type' && effectiveState.selectedCategory === 'data') {
-            const sub = effectiveState.selectedSubcategory || '命盘';
-            if (sub === '合盘记录') {
-                const items = Object.keys(HEPAN_TYPE_LABELS).map(key => ({
-                    key: `hepan:${key}`,
-                    label: HEPAN_TYPE_LABELS[key],
-                    hint: `${hepanTypeCounts[key] || 0} 条`,
-                    icon: HEPAN_TYPE_ICONS[key],
-                }));
-                return { title: `@数据 / ${sub}`, items };
-            }
-            const allowed = getVisibleDataTypesForSubcategory(sub, enabledDataSourceTypes);
-            return {
-                title: `@数据 / ${sub}`,
-                items: allowed.map((t) => ({
-                    key: t,
-                    label: TYPE_LABELS[t],
-                    hint: `${typeCounts.get(t) || 0} 条`,
-                    icon: TYPE_ICONS[t],
-                })),
-            };
-        }
-
-        if (activeLevel === 'item' && effectiveState.selectedCategory === 'data') {
-            const sub = effectiveState.selectedSubcategory || '命盘';
-            const selectedType = effectiveState.selectedType;
-            let items = filteredDataSources;
-            if (selectedType) {
-                if (selectedType.startsWith('hepan:')) {
-                    const typeKey = selectedType.replace('hepan:', '');
-                    items = items.filter(i => i.type === 'hepan_chart' && i.hepanType === typeKey);
-                } else {
-                    items = items.filter(i => i.type === selectedType);
+        if (activeLevel === 'root') {
+            const items: ViewItem[] = typeRows.atRoot.map(typeRow);
+            for (const type of ROOT_FORTUNE_TYPES) {
+                if (!enabled.has(type)) continue;
+                for (const item of filteredDataSources.filter(source => source.type === type)) {
+                    items.push({ key: `data-${item.id}`, label: TYPE_LABELS[type], hint: fortuneDate(item.name), icon: TYPE_ICONS[type], raw: item });
                 }
-            } else {
-                const allowed = new Set(DATA_SUBCATEGORY_MAP[sub] || []);
-                items = items.filter(i => allowed.has(i.type));
             }
+            if (enabled.has('ming_record')) items.push(typeRow('ming_record'));
+            if (!knowledgeBaseLocked) {
+                items.push(...filteredKnowledgeBases.map((kb) => ({
+                    key: `kb-${kb.id}`, label: kb.name, hint: kb.description || '知识库', icon: KB_ICON, raw: kb,
+                })));
+                if (!filteredKnowledgeBases.length) {
+                    items.push({ key: 'kb-empty', label: '知识库', hint: '还没有知识库', icon: KB_ICON, disabled: true });
+                }
+            }
+            if (typeRows.inRecords.length) {
+                const count = typeRows.inRecords.reduce((sum, type) => sum + (typeCounts.get(type) || 0), 0);
+                items.push({ key: RECORDS_GROUP, label: '更多', hint: `${count} 条`, icon: GROUP_ICON });
+            }
+            return { title: '@提及', items };
+        }
+
+        if (activeLevel === 'types') {
+            return { title: '更多', items: typeRows.inRecords.map(typeRow) };
+        }
+
+        if (effectiveState.selectedCategory === 'knowledge') {
             return {
-                title: `@数据 / ${sub}`,
-                items: items.map((i) => ({
-                    key: i.id,
-                    label: i.name,
-                    hint: shouldShowHint(i) ? i.preview : '',
-                    icon: TYPE_ICONS[i.type],
-                    raw: i,
-                })),
+                title: '@知识库',
+                items: knowledgeBaseLocked
+                    ? [{ key: 'kb-locked', label: '知识库', hint: '知识库已关闭', icon: KB_ICON, disabled: true }]
+                    : filteredKnowledgeBases.map((kb) => ({ key: kb.id, label: kb.name, hint: kb.description || '知识库', icon: KB_ICON, raw: kb })),
             };
         }
 
+        const type = effectiveState.selectedType;
+        const items = filteredDataSources.filter(item => !type || item.type === type);
         return {
-            title: '@知识库',
-            items: knowledgeBaseLocked
-                ? [{ key: 'kb-locked', label: '知识库', hint: '知识库已关闭', icon: KB_ICON, disabled: true }]
-                : filteredKnowledgeBases.map((kb) => ({ key: kb.id, label: kb.name, hint: kb.description || '知识库', icon: CHEVRON_ICON, raw: kb })),
+            title: type ? TYPE_LABELS[type] : '@提及',
+            items: items.map((i) => ({
+                key: i.id,
+                label: i.name,
+                hint: shouldShowHint(i) ? i.preview : '',
+                icon: TYPE_ICONS[i.type],
+                raw: i,
+            })),
         };
-    }, [activeLevel, dataSourceErrors.length, effectiveState.selectedCategory, effectiveState.selectedSubcategory, effectiveState.selectedType, enabledDataSourceTypes, filteredDataSources, filteredKnowledgeBases, hepanTypeCounts, knowledgeBaseLocked, typeCounts, visibleSubcategories]);
+    }, [activeLevel, effectiveState.selectedCategory, effectiveState.selectedType, enabledDataSourceTypes, filteredDataSources, filteredKnowledgeBases, knowledgeBaseLocked, typeCounts, typeRows]);
 
     // ---- Keyboard navigation ----
 
     useEffect(() => {
+        const selectRawItem = (item: ViewItem) => {
+            const raw = item.raw;
+            if (!raw) return;
+            if ('type' in raw) {
+                onSelect({ type: raw.type, id: raw.id, name: raw.name, preview: raw.preview });
+                onClose();
+                return;
+            }
+            if (knowledgeBaseLocked) return;
+            onSelect({ type: 'knowledge_base', id: raw.id, name: raw.name, preview: raw.description || '知识库' });
+            onClose();
+        };
+
+        const openRow = (item: ViewItem) => {
+            if (isTypeItem(item)) {
+                setState({
+                    level: 'item', selectedCategory: 'data',
+                    selectedType: item.key.slice(TYPE_ITEM_PREFIX.length) as DataSourceType,
+                    parent: activeLevel === 'types' ? 'types' : 'root',
+                    activeIndex: 0,
+                });
+                return true;
+            }
+            if (item.key.startsWith(GROUP_ITEM_PREFIX)) {
+                setState({ level: 'types', activeIndex: 0 });
+                return true;
+            }
+            return false;
+        };
+
         const onKeyDown = (e: KeyboardEvent) => {
             if (e.key === 'Escape') {
                 e.preventDefault();
-                if (activeLevel === 'category' || activeLevel === 'search') onClose();
+                if (activeLevel === 'root' || activeLevel === 'search') onClose();
                 else goBack();
                 return;
             }
@@ -239,106 +255,40 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
                 return;
             }
             if (e.key === 'ArrowRight') {
-                handleArrowRight();
+                e.preventDefault();
+                const item = view.items[effectiveState.activeIndex];
+                if (item && (activeLevel === 'root' || activeLevel === 'types')) openRow(item);
                 return;
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
-                handleEnter();
+                const item = view.items[effectiveState.activeIndex];
+                if (!item || item.disabled) return;
+                if ((activeLevel === 'root' || activeLevel === 'types') && openRow(item)) return;
+                selectRawItem(item);
             }
-        };
-
-        const handleArrowRight = () => {
-            if (activeLevel === 'category') {
-                const key = view.items[effectiveState.activeIndex]?.key;
-                if (key === 'data') {
-                    setState({ level: 'subcategory', selectedCategory: 'data', activeIndex: 0 });
-                } else if (key === 'knowledge' && !knowledgeBaseLocked) {
-                    setState({ level: 'item', selectedCategory: 'knowledge', activeIndex: 0 });
-                }
-            } else if (activeLevel === 'subcategory') {
-                const sub = view.items[effectiveState.activeIndex]?.key;
-                if (sub) {
-                    if (DATA_SUBCATEGORY_DIVIDE.has(sub)) {
-                        setState({ level: 'type', selectedCategory: 'data', selectedSubcategory: sub, activeIndex: 0 });
-                    } else {
-                        setState({ level: 'item', selectedCategory: 'data', selectedSubcategory: sub, activeIndex: 0 });
-                    }
-                }
-            } else if (activeLevel === 'type') {
-                const nextType = view.items[effectiveState.activeIndex]?.key;
-                if (nextType) {
-                    setState({ level: 'item', selectedCategory: 'data', selectedSubcategory: effectiveState.selectedSubcategory, selectedType: nextType, activeIndex: 0 });
-                }
-            }
-        };
-
-        const handleEnter = () => {
-            const item = view.items[effectiveState.activeIndex];
-            if (!item) return;
-            if (activeLevel === 'search') {
-                const raw = item.raw;
-                if (!raw) return;
-                if ('type' in raw) {
-                    onSelect({ type: raw.type, id: raw.id, name: raw.name, preview: raw.preview });
-                    onClose();
-                    return;
-                }
-                if (knowledgeBaseLocked) return;
-                onSelect({ type: 'knowledge_base', id: raw.id, name: raw.name, preview: raw.description || '知识库' });
-                onClose();
-                return;
-            }
-            if (activeLevel === 'category') {
-                if (item.key === 'data') setState({ level: 'subcategory', selectedCategory: 'data', activeIndex: 0 });
-                else if (!item.disabled) setState({ level: 'item', selectedCategory: 'knowledge', activeIndex: 0 });
-                return;
-            }
-            if (activeLevel === 'subcategory' && effectiveState.selectedCategory === 'data') {
-                if (DATA_SUBCATEGORY_DIVIDE.has(item.key)) {
-                    setState({ level: 'type', selectedCategory: 'data', selectedSubcategory: item.key, activeIndex: 0 });
-                } else {
-                    setState({ level: 'item', selectedCategory: 'data', selectedSubcategory: item.key, activeIndex: 0 });
-                }
-                return;
-            }
-            if (activeLevel === 'type' && effectiveState.selectedCategory === 'data') {
-                setState({ level: 'item', selectedCategory: 'data', selectedSubcategory: effectiveState.selectedSubcategory, selectedType: item.key, activeIndex: 0 });
-                return;
-            }
-            if (activeLevel === 'item' && effectiveState.selectedCategory === 'data') {
-                const raw = item.raw;
-                if (!raw || !('type' in raw)) return;
-                onSelect({ type: raw.type, id: raw.id, name: raw.name, preview: raw.preview });
-                onClose();
-                return;
-            }
-            const raw = item.raw;
-            if (!raw) return;
-            if ('type' in raw) {
-                onSelect({ type: raw.type, id: raw.id, name: raw.name, preview: raw.preview });
-                onClose();
-                return;
-            }
-            if (knowledgeBaseLocked) return;
-            onSelect({ type: 'knowledge_base', id: raw.id, name: raw.name, preview: raw.description || '知识库' });
-            onClose();
         };
 
         window.addEventListener('keydown', onKeyDown);
         return () => window.removeEventListener('keydown', onKeyDown);
-    }, [activeLevel, goBack, knowledgeBaseLocked, onClose, onSelect, effectiveState.activeIndex, effectiveState.selectedCategory, effectiveState.selectedSubcategory, view.items]);
+    }, [activeLevel, goBack, knowledgeBaseLocked, onClose, onSelect, effectiveState.activeIndex, view.items]);
 
     return (
         <div className="absolute bottom-full mb-2 z-40 left-2 right-2 md:left-0 md:right-auto md:w-[min(576px,100%)]">
             <div className="chat-mention-popover">
-                <MentionHeader
-                    title={view.title}
-                    activeLevel={activeLevel}
-                    loadError={loadError}
-                    dataSourceErrors={dataSourceErrors}
-                    onGoBack={goBack}
-                />
+                {showBack && (
+                    <MentionHeader
+                        title={view.title}
+                        showBack={showBack}
+                        onGoBack={goBack}
+                    />
+                )}
+                {!!loadError && <div className="chat-mention-alert is-error">{loadError}</div>}
+                {!loadError && dataSourceErrors.length > 0 && (
+                    <div className="chat-mention-alert is-warning">
+                        数据源加载部分失败：{dataSourceErrors.slice(0, 2).map(e => e.type).join('、')}{dataSourceErrors.length > 2 ? '…' : ''}
+                    </div>
+                )}
                 <MentionItemList
                     view={view}
                     activeLevel={activeLevel}

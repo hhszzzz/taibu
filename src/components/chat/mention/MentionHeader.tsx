@@ -8,42 +8,27 @@
 
 import { ArrowLeft } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import type { Level, DataSourceLoadError } from '@/components/chat/mention/mention-constants';
 
 interface MentionHeaderProps {
     title: string;
-    activeLevel: Level;
-    loadError: string | null;
-    dataSourceErrors: DataSourceLoadError[];
+    showBack: boolean;
     onGoBack: () => void;
 }
 
-export function MentionHeader({ title, activeLevel, loadError, dataSourceErrors, onGoBack }: MentionHeaderProps) {
+export function MentionHeader({ title, showBack, onGoBack }: MentionHeaderProps) {
     return (
-        <>
-            <div className="chat-mention-head">
-                {activeLevel !== 'category' && activeLevel !== 'search' && (
-                    <Button unstyled
-                        type="button"
-                        onClick={onGoBack}
-                        className="chat-mention-back"
-                        aria-label="返回"
-                    >
-                        <ArrowLeft className="w-4 h-4" />
-                    </Button>
-                )}
-                <div className="chat-mention-head-title">{title}</div>
-            </div>
-            {!!loadError && (
-                <div className="chat-mention-alert is-error">
-                    {loadError}
-                </div>
+        <div className="chat-mention-head">
+            {showBack && (
+                <Button unstyled
+                    type="button"
+                    onClick={onGoBack}
+                    className="chat-mention-back"
+                    aria-label="返回"
+                >
+                    <ArrowLeft className="w-4 h-4" />
+                </Button>
             )}
-            {!loadError && dataSourceErrors.length > 0 && (
-                <div className="chat-mention-alert is-warning">
-                    数据源加载部分失败：{dataSourceErrors.slice(0, 2).map(e => e.type).join('、')}{dataSourceErrors.length > 2 ? '…' : ''}
-                </div>
-            )}
-        </>
+            <div className="chat-mention-head-title">{title}</div>
+        </div>
     );
 }

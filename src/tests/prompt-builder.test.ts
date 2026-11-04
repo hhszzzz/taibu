@@ -193,27 +193,6 @@ test('buildPromptWithSources injects identity as semantic text instead of raw js
     assert.ok(!res.systemPrompt.includes('"identity"'));
 });
 
-test('buildPromptWithSources injects dream and mangpai layers', async () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const res = await pb.buildPromptWithSources({
-        modelId: 'deepseek-chat',
-        userMessage: '测试问题',
-        mentions: [],
-        knowledgeHits: [],
-        userSettings: { expressionStyle: 'direct', userProfile: {}, customInstructions: '' },
-        dreamMode: { enabled: true, baziText: '命盘文本', fortuneText: '运势文本' },
-        chartContext: { baziChart: buildMinimalBaziChart(), analysisMode: 'mangpai' }
-    });
-
-    assert.ok(res.systemPrompt.includes('解梦'));
-    assert.ok(res.systemPrompt.includes('【命盘信息】'));
-    assert.ok(res.systemPrompt.includes('【今日运势】'));
-    assert.ok(res.systemPrompt.includes('盲派'));
-    assert.ok(res.systemPrompt.includes('【盲派口诀】'));
-    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id.startsWith('personality_role') && layer.included));
-    assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'mangpai_data' && layer.included));
-});
-
 test('buildPromptWithSources appends structured bazi case profile context', async () => {
     const pb = require('../lib/ai/prompt-builder') as any;
     const res = await pb.buildPromptWithSources({
@@ -509,33 +488,6 @@ test('buildPromptWithSources does not token-truncate selected chart context when
     assert.ok(!res.systemPrompt.includes('# 八字命盘'));
 });
 
-test('buildPromptWithSources keeps dream mode analysis without forcing a chart', async () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const res = await pb.buildPromptWithSources({
-        modelId: 'deepseek-chat',
-        userMessage: '我梦到了飞翔',
-        mentions: [],
-        knowledgeHits: [],
-        userSettings: { expressionStyle: 'direct', userProfile: {}, customInstructions: '' },
-        dreamMode: { enabled: true, baziText: '命盘文本', fortuneText: '运势文本' },
-    });
-
-    assert.ok(res.systemPrompt.includes('命盘文本'));
-    assert.ok(!res.systemPrompt.includes('dream_association'));
-    assert.ok(!res.systemPrompt.includes('```chart'));
-});
-
-test('resolvePersonalities selects dream and mangpai correctly', () => {
-    const pb = require('../lib/ai/prompt-builder') as any;
-    const dreamOnly = pb.resolvePersonalities({ dreamMode: { enabled: true } });
-    assert.deepEqual(dreamOnly, { personalities: ['dream'], isMultiple: false });
-
-    const mangpai = pb.resolvePersonalities({
-        chartContext: { baziChart: buildMinimalBaziChart(), analysisMode: 'mangpai' }
-    });
-    assert.deepEqual(mangpai, { personalities: ['mangpai'], isMultiple: false });
-});
-
 test('resolvePersonalities selects bazi/ziwei/general correctly', () => {
     const pb = require('../lib/ai/prompt-builder') as any;
     const baziZiwei = pb.resolvePersonalities({
@@ -570,8 +522,8 @@ test('resolvePersonalities considers mentions for bazi/ziwei', () => {
 
 test('buildPersonalityPrompt composes single and multi roles', () => {
     const pb = require('../lib/ai/prompt-builder') as any;
-    const single = pb.buildPersonalityPrompt(['dream']);
-    assert.ok(single.includes('解梦'));
+    const single = pb.buildPersonalityPrompt(['bazi']);
+    assert.ok(single.includes('子平法八字命理师'));
     assert.ok(!single.includes('你同时具备以下专业能力'));
 
     const multi = pb.buildPersonalityPrompt(['bazi', 'ziwei']);
@@ -599,16 +551,16 @@ test('personas fall back to their brief form when the whole prompt would crowd o
     assert.ok(!brief.includes('## 断法'));
     assert.equal(pb.buildPersonalityPrompt(['general'], 1), AI_PERSONALITIES.general.systemPrompt, 'a persona without a brief form stays as written');
 
-    // At the smallest budget the whole 盲派 card would be clipped and push the chart out; its brief form leaves room.
+    // At the smallest budget the whole system card would be clipped and push the chart out; its brief form leaves room.
     const res = await pb.buildPromptWithSources({
         modelId: 'deepseek-chat',
         userMessage: '看看事业',
         mentions: [],
         knowledgeHits: [],
         userSettings: {},
-        chartContext: { baziChart: buildMinimalBaziChart(), analysisMode: 'mangpai' },
+        chartContext: { baziChart: buildMinimalBaziChart() },
     }, { budget: 1000 });
-    assert.ok(res.systemPrompt.includes('盲派') && !res.systemPrompt.includes('## 断法'));
+    assert.ok(res.systemPrompt.includes('子平法八字命理师') && !res.systemPrompt.includes('## 断法'));
     assert.ok(res.diagnostics.some((layer: { id: string; included: boolean; truncated: boolean }) => layer.id.startsWith('personality_role') && layer.included && !layer.truncated));
     assert.ok(res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'chart_context' && layer.included));
 });

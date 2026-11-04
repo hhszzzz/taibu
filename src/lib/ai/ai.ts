@@ -103,8 +103,6 @@ function cardPersonality(personality: AIPersonality, card: string): AIPersonalit
 export const AI_PERSONALITIES: Record<AIPersonality, AIPersonalityConfig> = {
     bazi: cardPersonality('bazi', 'bazi'),
     ziwei: cardPersonality('ziwei', 'ziwei'),
-    dream: cardPersonality('dream', 'dream'),
-    mangpai: cardPersonality('mangpai', 'bazi-mangpai'),
     general: {
         ...AI_PERSONALITY_META.general,
         systemPrompt: `你是一位精通多种命理体系的综合分析师，涵盖八字、紫微斗数、六爻、塔罗、奇门遁甲、大六壬等。

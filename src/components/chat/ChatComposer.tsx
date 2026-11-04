@@ -31,7 +31,6 @@ import { ComposerToolbar, ComposerSendCluster, type ComposerImageGeneration, typ
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import { QuoteBar } from '@/components/chat/composer/QuoteBar';
 import type { MessageQuote } from '@/lib/chat/quotes';
-import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { AgentMessageData } from '@/lib/agent/types';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
@@ -89,8 +88,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     onStop?: () => void;
     onAuthRequired?: () => void;
     disabled?: boolean;
-    chatMode?: ChatMode;
-    onChatModeChange?: (mode: ChatMode) => void;
     selectedModel?: string;
     onModelChange?: (modelId: string) => void;
     reasoningEnabled?: boolean;
@@ -106,8 +103,6 @@ interface ChatComposerProps extends ModelSettingsProps {
     /** 追问命盘追加的 chip（与提及同形态，但不在资料列表里）。 */
     chartAsks?: Array<{ token: string; kind: AgentChartKind }>;
     promptKnowledgeBases?: KnowledgeBaseSummary[];
-    dreamContext?: { baziChartName?: string; dailyFortune?: string };
-    dreamContextLoading?: boolean;
     knowledgeBaseEnabled?: boolean;
     /** 本对话最近的 Agent 消息（上下文环的数据源）。 */
     contextData?: AgentMessageData;
@@ -138,8 +133,6 @@ export function ChatComposer({
     onStop,
     onAuthRequired,
     disabled = false,
-    chatMode = 'normal',
-    onChatModeChange,
     selectedModel = DEFAULT_MODEL_ID,
     onModelChange,
     reasoningEnabled = false,
@@ -156,15 +149,12 @@ export function ChatComposer({
     onRemoveQuote,
     chartAsks = [],
     promptKnowledgeBases = [],
-    dreamContext,
-    dreamContextLoading = false,
     knowledgeBaseEnabled = true,
     contextData,
     onOpenContextResource,
 }: ChatComposerProps) {
     const { showToast } = useToast();
     const { isFeatureEnabled } = useFeatureToggles();
-    const canUseBaziChart = isFeatureEnabled('bazi');
     const enabledMentionDataSourceTypes = useMemo(
         () => getEnabledDataSourceTypes(isFeatureEnabled),
         [isFeatureEnabled]
@@ -174,7 +164,6 @@ export function ChatComposer({
     const mentionSettlingRef = useRef(false);
     // `+` 菜单按钮：自定义模型弹窗关闭后焦点回到这里。
     const addMenuRef = useRef<HTMLButtonElement>(null);
-    const isDreamMode = chatMode === 'dream';
     // 生图模式：发送走独立接口，不经过对话模型；没有可用模型时按钮不出现。
     const [imageMode, setImageMode] = useState(false);
     const [imageSize, setImageSize] = useState<string>('1024x1024');
@@ -329,7 +318,6 @@ export function ChatComposer({
     const acceptFiles = (files: File[]) => {
         if (!files.length || disabled) return;
         if (!userId) { onAuthRequired?.(); return; }
-        if (isDreamMode) { showToast('info', '解梦模式不支持附件'); return; }
         if (agentMode) { if (!uploads.uploading) void uploads.upload(files); return; }
         const { file, notice } = pickPlainAttachment(files);
         if (notice) showToast('info', notice);
@@ -456,7 +444,7 @@ export function ChatComposer({
                 }
             }
         }
-        if (e.key === 'Enter' && !e.shiftKey && !disabled && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !dreamContextLoading && !mentionSettlingRef.current && inputValue.trim()) {
+        if (e.key === 'Enter' && !e.shiftKey && !disabled && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && !mentionSettlingRef.current && inputValue.trim()) {
             e.preventDefault();
             if (!userId && onAuthRequired) {
                 onAuthRequired();
@@ -584,7 +572,6 @@ export function ChatComposer({
     else if (awaitingInput) { inputPlaceholder = '补充信息，继续当前任务…'; inputLabel = '补充任务信息'; }
     else if (running) { inputPlaceholder = '补充信息或调整方向…'; inputLabel = '补充信息或调整方向'; }
     else if (imageMode) { inputPlaceholder = '描述要生成的图片，例如：水墨风格的山间小筑，晨雾缭绕…'; inputLabel = '描述要生成的图片'; }
-    else if (isDreamMode) { inputPlaceholder = '说说你做了什么梦…'; inputLabel = '描述梦境'; }
     else if (hero) {
         inputPlaceholder = agentMode ? '例如：我明年适合换工作吗？' : '问问命盘、运势，或最近困惑的事…';
         inputLabel = '描述你的问题';
@@ -594,10 +581,9 @@ export function ChatComposer({
     } else { inputPlaceholder = '问问命盘、运势，或最近困惑的事…'; inputLabel = '输入消息'; }
 
     const send: ComposerSendState = isSendingToList || uploads.uploading ? { kind: 'sending' }
-        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled || dreamContextLoading, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
+        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
         : isLoading && onStop ? { kind: 'stop' }
-        : { kind: 'send', disabled: !hasDraft || dreamContextLoading };
-    const styles = useMemo<ChatMode[]>(() => ['normal', ...(canUseBaziChart && userId ? ['mangpai' as const] : []), ...(userId ? ['dream' as const] : [])], [canUseBaziChart, userId]);
+        : { kind: 'send', disabled: !hasDraft };
     const toolbarProps = {
         agentMode,
         disabled,
@@ -632,9 +618,6 @@ export function ChatComposer({
             onInputChange(`/skill:${name} `);
             requestAnimationFrame(() => textareaRef.current?.focus());
         },
-        chatMode,
-        onChatModeChange: onChatModeChange && ((mode: ChatMode) => { onChatModeChange(mode); textareaRef.current?.focus(); }),
-        styles,
         addButtonRef: addMenuRef,
         polish: commands.polish,
         send,
@@ -674,9 +657,6 @@ export function ChatComposer({
                         attachmentState={attachmentState}
                         onAttachmentChange={onAttachmentChange}
                         disabled={disabled}
-                        isDreamMode={isDreamMode}
-                        dreamContextLoading={dreamContextLoading}
-                        dreamContext={dreamContext}
                     />
 
                     {!hero && <ComposerToolbar {...toolbarProps} showSend={false} />}

@@ -6,6 +6,7 @@ import { runAgentEvalCase } from '../lib/agent/eval/runner.server';
 import { buildAgentEvalLeaderboard } from '../lib/agent/eval/leaderboard';
 import { BUILTIN_AGENT_EVAL_CASES } from '../lib/agent/eval/builtin-cases';
 import type { AgentEvalCase } from '../lib/agent/eval/types';
+import { CHARTLESS_EVAL_TOOL } from '../lib/agent/eval/types';
 import type { PiStreamFn } from '../lib/agent/types';
 import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
 import { config, scripted } from './helpers/agent-runtime-fixture';
@@ -57,8 +58,54 @@ test('the offline runner executes a case through the real runtime and hard-check
   assert.equal(featureRead.mock.callCount(), 0);
 });
 
-function scoringStream(text: string): PiStreamFn {
-  return model => {
+test('a chartless case passes when it loads its guide and runs no calculation', async () => {
+  const dreamCase: AgentEvalCase = {
+    id: 'dream-unprompted',
+    tool: CHARTLESS_EVAL_TOOL,
+    guide: 'dream',
+    prompt: '昨晚梦见一条蛇追着我跑。',
+    assertions: ['加载并遵循解梦方法'],
+    arguments: {},
+  };
+  const outcome = await runAgentEvalCase({
+    evalId: 'chartless-run',
+    case: dreamCase,
+    config,
+    createStream: baziScript(index => index === 0
+      ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'dream' } }]
+      : [{ type: 'text', text: '这更像是一个象梦。' }]),
+  });
+
+  assert.equal(outcome.hardPassed, true);
+  assert.equal(outcome.guideLoaded, true);
+  assert.deepEqual(outcome.toolTrace.map(call => [call.name, call.status]), [['load_skill', 'ok']]);
+});
+
+test('a chartless case fails when it computes a chart anyway', async () => {
+  const dreamCase: AgentEvalCase = {
+    id: 'dream-unprompted',
+    tool: CHARTLESS_EVAL_TOOL,
+    guide: 'dream',
+    prompt: '昨晚梦见一条蛇追着我跑。',
+    assertions: ['加载并遵循解梦方法'],
+    arguments: {},
+  };
+  const outcome = await runAgentEvalCase({
+    evalId: 'chartless-with-chart',
+    case: dreamCase,
+    config,
+    createStream: baziScript(index => index === 0
+      ? [{ type: 'toolCall', id: 'guide', name: 'load_skill', arguments: { name: 'dream' } }]
+      : index === 1
+        ? [{ type: 'toolCall', id: 'compute', name: 'bazi', arguments: baziArguments }]
+        : [{ type: 'text', text: '先从命盘看。' }]),
+  });
+
+  assert.equal(outcome.hardPassed, false);
+  assert.match(outcome.failedAssertions.join(' '), /不应产生计算成果/);
+});
+
+function scoringStream(text: string): PiStreamFn {  return model => {
     const events = createAssistantMessageEventStream(), answer = emptyPiAssistant(model);
     answer.content = [{ type: 'text', text }];
     answer.stopReason = 'stop';

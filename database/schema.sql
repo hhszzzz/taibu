@@ -741,7 +741,7 @@ CREATE TABLE public.conversations (
     updated_at timestamp with time zone DEFAULT now(),
     source_type text DEFAULT 'chat'::text,
     source_data jsonb,
-    CONSTRAINT conversations_source_type_check CHECK ((source_type = ANY (ARRAY['chat'::text, 'bazi_wuxing'::text, 'bazi_personality'::text, 'tarot'::text, 'liuyao'::text, 'mbti'::text, 'hepan'::text, 'palm'::text, 'face'::text, 'dream'::text, 'qimen'::text, 'daliuren'::text, 'meihua'::text, 'xiaoliuren'::text, 'ziwei'::text])))
+    CONSTRAINT conversations_source_type_check CHECK ((source_type = ANY (ARRAY['chat'::text, 'bazi_wuxing'::text, 'bazi_personality'::text, 'tarot'::text, 'liuyao'::text, 'mbti'::text, 'hepan'::text, 'palm'::text, 'face'::text, 'qimen'::text, 'daliuren'::text, 'meihua'::text, 'xiaoliuren'::text, 'ziwei'::text])))
 );
 
 CREATE TABLE public.daliuren_divinations (

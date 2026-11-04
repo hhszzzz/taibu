@@ -66,7 +66,7 @@ export default function ChatPage() {
     const balanceInsufficient = !!models.data && !!balance && balance.spendableMicros <= 0 && !freeModel && !isByokRef(state.selectedModel);
 
     const messaging = useChatMessaging({
-        state, userId, user,
+        state, userId,
         refreshViewerState: appBootstrap.refresh, markViewerBalanceExhausted: appBootstrap.markBalanceExhausted,
         showToast, router, searchParams, balanceInsufficient,
     });
@@ -117,8 +117,6 @@ export default function ChatPage() {
                 inputValue={state.inputValue}
                 onInputChange={state.setInputValue}
                 disabled={bootstrapLocked}
-                chatMode={state.chatMode}
-                onChatModeChange={state.setChatMode}
                 selectedModel={state.selectedModel}
                 onModelChange={state.setSelectedModel}
                 reasoningEnabled={state.reasoningEnabled}
@@ -137,8 +135,6 @@ export default function ChatPage() {
                 mentions={state.mentions}
                 onMentionsChange={state.setMentions}
                 promptKnowledgeBases={promptKnowledgeBases}
-                dreamContext={state.dreamContext}
-                dreamContextLoading={state.dreamContextLoading}
                 knowledgeBaseEnabled={knowledgeBaseEnabled}
             >
                 {state.kbTargetMessage && state.activeConversationId && isFeatureEnabled('knowledge-base') && (

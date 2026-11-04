@@ -266,8 +266,6 @@ export function useAgentChat(
       codeMode,
       planMode,
       approval,
-      dreamMode: state.chatMode === "dream",
-      mangpaiMode: state.chatMode === "mangpai",
       timezone: browserTimeZone(),
     };
     const key = JSON.stringify({

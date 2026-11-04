@@ -33,20 +33,6 @@ export const AI_PERSONALITY_META: Record<AIPersonality, AIPersonalityMeta> = {
         description: '结构清晰、注重星曜与宫位关系，给出可执行建议',
         emoji: '✨',
     },
-    dream: {
-        id: 'dream',
-        name: '周公解梦',
-        title: '周公解梦分析',
-        description: '辨梦类、取梦象，落到个人处境，兼顾心理视角',
-        emoji: '🌙',
-    },
-    mangpai: {
-        id: 'mangpai',
-        name: '盲派分析',
-        title: '盲派命理分析',
-        description: '以宾主、体用与做功为纲，取象直断事件',
-        emoji: '🧿',
-    },
     general: {
         id: 'general',
         name: '通用分析',

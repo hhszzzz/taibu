@@ -32,10 +32,9 @@ export const SOURCE_TYPE_CONFIG: Record<ConversationSourceType, {
   daliuren: { label: '大六壬', icon: DaliurenIcon, color: 'text-foreground-secondary' },
   meihua: { label: '梅花易数', icon: MeihuaIcon, color: 'text-foreground-secondary' },
   xiaoliuren: { label: '小六壬', icon: XiaoliurenIcon, color: 'text-foreground-secondary' },
-  dream: { label: '周公解梦', icon: MessageSquare, color: 'text-foreground-secondary' },
 };
 
 /** 显示顺序 — bazi_personality 合并到 bazi_wuxing */
 export const SOURCE_TYPE_ORDER: ConversationSourceType[] = [
-  'chat', 'dream', 'bazi_wuxing', 'ziwei', 'tarot', 'liuyao', 'qimen', 'daliuren', 'meihua', 'xiaoliuren', 'mbti', 'hepan', 'palm', 'face',
+  'chat', 'bazi_wuxing', 'ziwei', 'tarot', 'liuyao', 'qimen', 'daliuren', 'meihua', 'xiaoliuren', 'mbti', 'hepan', 'palm', 'face',
 ];

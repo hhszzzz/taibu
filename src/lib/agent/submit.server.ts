@@ -90,8 +90,6 @@ export type AgentSubmitBody = {
   /** The effort follows the selected own model's default rather than a user choice. */
   reasoningFromModel?: boolean;
   collaborators: AgentCollaborator[];
-  dreamMode: boolean;
-  mangpaiMode: boolean;
   attachment?: ChatAttachment;
   timezone: string;
 };
@@ -152,8 +150,6 @@ export async function submitAgentTask(
     replaceFromMessageId: body.replaceFromMessageId ?? null,
     mentions: Array.isArray(body.mentions) ? body.mentions : [],
     attachment: body.attachment ?? null,
-    dreamMode: body.dreamMode === true,
-    mangpaiMode: body.mangpaiMode === true,
   });
   const existing = await store.db.tx((trx) => trx
     .selectFrom("agent_runs")
@@ -267,8 +263,6 @@ export async function submitAgentTask(
         messages: [...history, skillTurn ? { ...userMessage, content: skillTurn.args } : userMessage],
         model: modelId,
         reasoning,
-        mangpaiMode: body.mangpaiMode === true,
-        dreamMode: body.dreamMode === true,
         mentions: body.mentions,
         attachment: body.attachment,
         timezone: body.timezone,

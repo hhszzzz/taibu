@@ -38,7 +38,7 @@ export async function generateAnnualReport(
         const featureUsage = {
             bazi: 0, ziwei: 0, liuyao: 0, tarot: 0,
             palm: 0, face: 0, mbti: 0, hepan: 0, fortune: 0,
-            qimen: 0, daliuren: 0, meihua: 0, xiaoliuren: 0, dream: 0, chat: 0,
+            qimen: 0, daliuren: 0, meihua: 0, xiaoliuren: 0, chat: 0,
         };
 
         const monthlyUsage: Record<number, number> = {};

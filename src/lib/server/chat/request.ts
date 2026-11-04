@@ -86,7 +86,6 @@ function toPreparationInput(body: ChatRequestBody): ChatPreparationInput {
   return {
     messages: body.messages,
     stream: body.stream,
-    mangpaiMode: body.mangpaiMode,
     model: body.model,
     reasoning: body.reasoning,
     reasoningEffort: body.reasoningEffort,
@@ -94,7 +93,6 @@ function toPreparationInput(body: ChatRequestBody): ChatPreparationInput {
     webSearch: body.webSearch,
     timezone: body.timezone,
     mentions: body.mentions,
-    dreamMode: body.dreamMode,
     expressionStyle: body.expressionStyle,
     customInstructions: body.customInstructions,
     userProfile: body.userProfile,

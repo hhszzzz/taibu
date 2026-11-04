@@ -1,6 +1,10 @@
+/** A case whose method reads no chart: it must load the guide and call no Core tool. */
+export const CHARTLESS_EVAL_TOOL = 'none';
+
 /** One evaluation case: a prompt, the Core tool it must use, and what the answer must satisfy. */
 export interface AgentEvalCase {
   id: string;
+  /** The Core tool the answer must use; `CHARTLESS_EVAL_TOOL` for a method that reads no chart. */
   tool: string;
   guide: string;
   prompt: string;
@@ -27,8 +31,7 @@ export interface AgentEvalToolCall {
 
 export type AgentEvalRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'cancelled';
 
-/** Cases × models × repeats; the API refuses more. */
-export const AGENT_EVAL_CALL_LIMIT = 200;
+/** Cases × models × repeats; the API refuses more. */export const AGENT_EVAL_CALL_LIMIT = 200;
 export const AGENT_EVAL_REPEAT_LIMIT = 5;
 export const AGENT_EVAL_REPEAT_DEFAULT = 1;
 

@@ -143,8 +143,6 @@ function createBody(value: Record<string, unknown>): AgentSubmitBody {
     reasoningEffort,
     ...(value.reasoningFromModel === true ? { reasoningFromModel: true } : {}),
     collaborators,
-    dreamMode: value.dreamMode === true,
-    mangpaiMode: value.mangpaiMode === true,
     /** A plain chat document carried into Agent mode, as text the server extracted. */
     attachment: value.attachment !== undefined && isChatAttachment(value.attachment) ? value.attachment : undefined,
     /** The browser's IANA time zone; the user's messages are dated in it. */

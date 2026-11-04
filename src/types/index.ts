@@ -77,7 +77,7 @@ export interface BaziFormData extends BirthTimeResolution {
 // ===== AI 对话相关类型 =====
 
 /** AI 人格类型 */
-export type AIPersonality = 'bazi' | 'ziwei' | 'dream' | 'mangpai' | 'tarot' | 'liuyao' | 'mbti' | 'hepan' | 'qimen' | 'daliuren' | 'meihua' | 'xiaoliuren' | 'general';
+export type AIPersonality = 'bazi' | 'ziwei' | 'tarot' | 'liuyao' | 'mbti' | 'hepan' | 'qimen' | 'daliuren' | 'meihua' | 'xiaoliuren' | 'general';
 
 /** AI 人格配置 */
 export interface AIPersonalityConfig {
@@ -123,14 +123,6 @@ export interface MessageAttachment {
     webSearchEnabled?: boolean;    // 是否启用了网络搜索
 }
 
-/** 解梦信息 */
-export interface DreamInterpretationInfo {
-    userName: string;        // 解梦用户名
-    dreamDate: string;       // 梦境日期（ISO 格式）
-    dreamContent: string;    // 梦境内容摘要（前50字）
-    baziChartName?: string;  // 使用的八字命盘名称（如果有）
-}
-
 /** 聊天消息 */
 export interface ChatMessage {
     id: string;
@@ -155,12 +147,9 @@ export interface ChatMessage {
     chartInfo?: {
         baziName?: string;
         ziweiName?: string;
-        baziAnalysisMode?: 'traditional' | 'mangpai';
     };
     // 附件信息（仅用户消息）- 记录发送该消息时使用的附件/搜索
     attachments?: MessageAttachment;
-    // 解梦信息（解梦模式消息）
-    dreamInfo?: DreamInterpretationInfo;
 }
 
 export type { InjectedSource };
@@ -195,15 +184,14 @@ export const ANONYMOUS_DISPLAY_NAME = '用户';
 
 /**
  * AI 消息元数据
- * @description 包含 AI 响应的附加信息，如数据源引用、知识库命中、解梦上下文等
- * 
+ * @description 包含 AI 响应的附加信息，如数据源引用、知识库命中等
+ *
  * @example
  * ```typescript
  * const metadata: AIMessageMetadata = {
  *   sources: [{ type: 'knowledge_base', id: '...', name: '...', preview: '...', tokens: 100, truncated: false }],
  *   kbSearchEnabled: true,
- *   kbHitCount: 3,
- *   dreamContext: { baziChartName: '张三', dailyFortune: '已参考' }
+ *   kbHitCount: 3
  * };
  * ```
  */
@@ -216,16 +204,6 @@ export interface AIMessageMetadata extends Record<string, unknown> {
     kbSearchEnabled?: boolean;
     /** 知识库命中数量 */
     kbHitCount?: number;
-    /**
-     * 解梦模式上下文
-     * @description 仅在解梦模式下填充，包含用于解梦的命盘和运势参考信息
-     * - baziChartName: 使用的八字命盘名称（用于前端显示"已参考"）
-     * - dailyFortune: 今日运势参考状态，固定值 '已参考' 或 undefined
-     */
-    dreamContext?: {
-        baziChartName?: string;
-        dailyFortune?: string;
-    };
     /** 普通对话的联网搜索：是否完成，以及回答参考的网页 */
     webSearch?: {
         status: 'ok' | 'failed' | 'unavailable';

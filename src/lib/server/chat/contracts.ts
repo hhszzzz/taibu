@@ -7,7 +7,6 @@ import type { VisualizationSettings } from '@/lib/visualization/settings';
 export interface ChatPreparationInput {
   messages: ChatMessage[];
   stream?: boolean;
-  mangpaiMode?: boolean;
   model?: string;
   reasoning?: boolean;
   reasoningEffort?: import('@/types').AIReasoningEffort | null;
@@ -18,7 +17,6 @@ export interface ChatPreparationInput {
   /** The browser's IANA time zone, which the last user message is dated in; China Standard Time when absent or unknown. */
   timezone?: string;
   mentions?: Mention[];
-  dreamMode?: boolean;
   expressionStyle?: 'direct' | 'gentle';
   customInstructions?: string | null;
   userProfile?: UserIdentityProfile | null;
@@ -69,7 +67,6 @@ export interface ChatPromptContext {
       budgetTotal: number;
       userMessageTokens: number;
     };
-    dreamContext?: { baziChartName?: string; dailyFortune?: string };
   };
   fallbackPersonality: AIPersonality;
   systemPrompt: string;

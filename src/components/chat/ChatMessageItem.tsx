@@ -239,14 +239,8 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 )}
                             </div>
                         )}
-                        {message.dreamInfo && (
-                            <p className="chat-message-meta">解梦 · {new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN')}</p>
-                        )}
                         {message.quotes?.length ? <MessageQuoteCards quotes={message.quotes} /> : null}
-                        <div className={`chat-user-bubble text-foreground ${message.dreamInfo
-                            ? 'is-dream bg-hua-quan/10 border border-hua-quan/20'
-                            : ''
-                        }`}>
+                        <div className="chat-user-bubble text-foreground">
                             <p className="whitespace-pre-wrap text-base leading-relaxed">
                                 {highlightedUserContentParts.map((part) => (
                                     part.kind === 'mention'
@@ -300,11 +294,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     duration={message.reasoningDuration}
                     variant="chat"
                 />
-            )}
-            {message.dreamInfo && (
-                <p className="chat-message-meta is-assistant">
-                    {['解梦', message.dreamInfo.userName, new Date(message.dreamInfo.dreamDate).toLocaleDateString('zh-CN'), message.dreamInfo.baziChartName && `参考命盘 ${message.dreamInfo.baziChartName}`].filter(Boolean).join(' · ')}
-                </p>
             )}
             {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} onChartError={handleChartError} /></div>}

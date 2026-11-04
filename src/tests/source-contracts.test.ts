@@ -22,6 +22,13 @@ test('conversation source registry should preserve qimen and daliuren across rea
   assert.equal(toFeatureUsageBucket('daliuren'), 'daliuren');
 });
 
+test('retired dream conversations read back as chat', () => {
+  assert.equal((CONVERSATION_SOURCE_TYPES as readonly string[]).includes('dream'), false);
+  assert.equal(normalizeConversationSourceType('dream'), 'chat');
+  assert.equal(toFeatureUsageBucket('dream'), 'chat');
+  assert.equal(normalizeAnalysisSourceType('dream'), 'chat');
+});
+
 test('archived source registry should stay aligned with current data-source manifest additions', () => {
   for (const sourceType of ['qimen_chart', 'daliuren_divination'] as const) {
     assert.equal(DATA_SOURCE_TYPES.includes(sourceType), true, `${sourceType} should be a supported data source`);

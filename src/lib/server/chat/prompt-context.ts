@@ -6,7 +6,6 @@ import { buildKnowledgeHits } from '@/lib/knowledge-base/hits';
 import { parseMentions, resolveMention, stripMentionTokens } from '@/lib/mentions';
 import type { ChatPromptContext } from '@/lib/server/chat/contracts';
 import type { Mention } from '@/types/mentions';
-import { buildDreamContextPayload } from '@/lib/chat/chat-context';
 import { extractUserQuestion } from '@/lib/chat/message-utils';
 import type { ResolvedChatRequest } from '@/lib/server/chat/request';
 import { isFeatureModuleEnabled } from '@/lib/app-settings';
@@ -138,14 +137,6 @@ export async function buildChatPromptContext(
   const { body, userId, requestedModelId, reasoningEnabled } = resolvedRequest;
   const knowledgeBaseFeatureEnabled = await isFeatureModuleEnabled('knowledge-base');
 
-  let dreamContext: { baziChartName?: string; dailyFortune?: string } | undefined;
-  let dreamPayload: { baziText?: string; fortuneText?: string } | undefined;
-  if (body.dreamMode && userId) {
-    const { payload, context } = await buildDreamContextPayload(userId);
-    dreamPayload = payload;
-    dreamContext = context;
-  }
-
   const lastUserMessage = [...body.messages].reverse().find((message) => message.role === 'user');
   const rawUserContent = lastUserMessage?.content || '';
   const userQuestionForSearch = extractUserQuestion(rawUserContent);
@@ -218,20 +209,7 @@ export async function buildChatPromptContext(
       })
     : [];
 
-  const promptChartContext = body.mangpaiMode
-    ? { analysisMode: 'mangpai' as const }
-    : undefined;
-  const promptDreamMode = body.dreamMode
-    ? {
-        enabled: true,
-        baziText: dreamPayload?.baziText,
-        fortuneText: dreamPayload?.fortuneText,
-      }
-    : undefined;
-
   const personalityResolution = resolvePersonalities({
-    chartContext: promptChartContext,
-    dreamMode: promptDreamMode,
     mentions: resolvedMentions,
   });
 
@@ -244,8 +222,6 @@ export async function buildChatPromptContext(
     mentions: resolvedMentions,
     knowledgeHits,
     userSettings: effectiveUserSettings,
-    chartContext: promptChartContext,
-    dreamMode: promptDreamMode,
     sentAt: { at: new Date(), timeZone: resolveUserTimeZone(body.timezone) },
     quotes: lastUserMessage?.quotes,
     attachments: { file: body.attachment, web },
@@ -262,7 +238,6 @@ export async function buildChatPromptContext(
       budgetTotal: promptBuild.budgetTotal,
       userMessageTokens: promptBuild.userMessageTokens,
     },
-    dreamContext,
     webSearch: web && {
       status: web.status,
       sources: web.status === 'ok' ? web.results.map(({ title, url }) => ({ title, url })) : [],

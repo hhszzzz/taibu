@@ -19,8 +19,6 @@ const PREVIEW_TEXT_LIMIT = 500;
 export interface PreviewRequestBody {
     model?: unknown;
     reasoning?: unknown;
-    mangpaiMode?: boolean;
-    dreamMode?: unknown;
     attachment?: unknown;
     mentions?: unknown;
     messages?: unknown;
@@ -98,8 +96,6 @@ function buildPreviewChatBody(
 ): ChatRequestBody {
     return {
         messages: applyPreviewUserMessage(getMessagePayload(body.messages), body.userMessage),
-        mangpaiMode: body.mangpaiMode,
-        dreamMode: body.dreamMode === true,
         attachment: isChatAttachment(body.attachment) ? body.attachment : undefined,
         mentions: getRequestMentions(body.mentions),
         model: requestedModelId,

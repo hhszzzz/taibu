@@ -22,8 +22,6 @@ import {
 import type { AttachmentState } from '@/types';
 import { useConversationDraft } from './use-conversation-draft';
 
-export type ChatMode = 'normal' | 'dream' | 'mangpai';
-
 type ConversationDetailOverrides = Partial<Pick<
     Conversation,
     'userId' | 'personality' | 'title' | 'createdAt' | 'updatedAt' | 'sourceType' | 'sourceData' | 'isArchived' | 'archivedKbIds'
@@ -67,10 +65,6 @@ export interface ChatStateReturn {
     messageScrollContainerRef: React.MutableRefObject<HTMLDivElement | null>;
     shouldAutoScrollRef: React.MutableRefObject<boolean>;
 
-    // Chat mode (normal / dream / mangpai)
-    chatMode: ChatMode;
-    setChatMode: React.Dispatch<React.SetStateAction<ChatMode>>;
-
     // Model & reasoning
     selectedModel: string;
     setSelectedModel: React.Dispatch<React.SetStateAction<string>>;
@@ -98,12 +92,6 @@ export interface ChatStateReturn {
     setKbModalOpen: React.Dispatch<React.SetStateAction<boolean>>;
     kbTargetMessage: ChatMessage | null;
     setKbTargetMessage: React.Dispatch<React.SetStateAction<ChatMessage | null>>;
-
-    // Dream context (kept separate — only relevant when chatMode === 'dream')
-    dreamContext: { baziChartName?: string; dailyFortune?: string } | undefined;
-    setDreamContext: React.Dispatch<React.SetStateAction<{ baziChartName?: string; dailyFortune?: string } | undefined>>;
-    dreamContextLoading: boolean;
-    setDreamContextLoading: React.Dispatch<React.SetStateAction<boolean>>;
 
     // Streaming
     streamingConversationIds: Set<string>;
@@ -194,9 +182,6 @@ export function useChatState({
     const conversationValidatedRef = useRef(false);
     const conversationDetailsRef = useRef<Map<string, Conversation>>(new Map());
 
-    // Chat mode
-    const [chatMode, setChatMode] = useState<ChatMode>('normal');
-
     // Model & reasoning
     const [selectedModel, setSelectedModel] = useState<string>(DEFAULT_MODEL_ID);
     const [reasoningEnabled, setReasoningEnabled] = useState(false);
@@ -234,10 +219,6 @@ export function useChatState({
     // Attachments & mentions
     const [kbModalOpen, setKbModalOpen] = useState(false);
     const [kbTargetMessage, setKbTargetMessage] = useState<ChatMessage | null>(null);
-
-    // Dream context
-    const [dreamContext, setDreamContext] = useState<{ baziChartName?: string; dailyFortune?: string } | undefined>(undefined);
-    const [dreamContextLoading, setDreamContextLoading] = useState(false);
 
     // Streaming state
     const [streamingConversationIds, setStreamingConversationIds] = useState<Set<string>>(new Set());
@@ -420,7 +401,6 @@ export function useChatState({
         setActiveConversationId(null);
         setMessages([]);
         conversationValidatedRef.current = false;
-        setChatMode('normal');
         if (searchParams.get('id')) {
             router.replace('/chat');
         }
@@ -518,7 +498,6 @@ export function useChatState({
         moveDraft, captureSubmittedDraft,
         isSendingToList, setIsSendingToList,
         messagesEndRef, messageScrollContainerRef, shouldAutoScrollRef,
-        chatMode, setChatMode,
         selectedModel, setSelectedModel,
         reasoningEnabled, setReasoningEnabled,
         reasoningEffort, setReasoningEffort, reasoningFromModel, setReasoningFromModel, collaborators, setCollaborators,
@@ -528,8 +507,6 @@ export function useChatState({
         mentions, setMentions,
         kbModalOpen, setKbModalOpen,
         kbTargetMessage, setKbTargetMessage,
-        dreamContext, setDreamContext,
-        dreamContextLoading, setDreamContextLoading,
         streamingConversationIds, setStreamingConversationIds,
         isLoading,
         refreshConversationList,

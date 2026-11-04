@@ -8,9 +8,8 @@ import { createSourceTracker } from '@/lib/source-tracker';
 import { countTokens, truncateToTokens } from '@/lib/token-utils';
 import { getModelConfigAsync } from '@/lib/server/ai-config';
 import { formatBaziCaseProfileForAI, type BaziCaseProfile } from '@/lib/bazi-case-profile';
-import { formatBaziPromptText, resolveBaziPromptData, type BaziPromptInput } from '@/lib/bazi-prompt';
+import { formatBaziPromptText, type BaziPromptInput } from '@/lib/bazi-prompt';
 import { formatZiweiPromptText, type ZiweiPromptInput } from '@/lib/ziwei-chart-prompt';
-import { extractDayPillar, getMangpaiByDayPillar } from '@/lib/divination/mangpai';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import type { UserIdentityProfile } from '@/lib/user/settings';
 import {
@@ -47,12 +46,6 @@ export interface PromptContext {
     chartContext?: {
         baziChart?: BaziChartInput;
         ziweiChart?: ZiweiPromptInput;
-        analysisMode?: 'traditional' | 'mangpai';
-    };
-    dreamMode?: {
-        enabled: boolean;
-        baziText?: string;
-        fortuneText?: string;
     };
     /** 本条消息的发送时间与用户时区，写在消息开头 */
     sentAt?: { at: Date; timeZone: string };
@@ -144,7 +137,6 @@ const MENTION_PERSONALITY_MAP: Partial<Record<string, AIPersonality>> = {
 
 export function resolvePersonalities(context: {
     chartContext?: PromptContext['chartContext'];
-    dreamMode?: PromptContext['dreamMode'];
     mentions?: PromptContext['mentions'];
 }): PersonalityResolution {
     const personalities: AIPersonality[] = [];
@@ -154,13 +146,7 @@ export function resolvePersonalities(context: {
         }
     };
 
-    if (context.dreamMode?.enabled) {
-        addPersonality('dream');
-    }
-
-    if (context.chartContext?.analysisMode === 'mangpai') {
-        addPersonality('mangpai');
-    } else if (context.chartContext?.baziChart) {
+    if (context.chartContext?.baziChart) {
         addPersonality('bazi');
     }
 
@@ -202,8 +188,6 @@ export function buildPersonalityPrompt(personalities: AIPersonality[], maxTokens
 }
 
 export function buildMinimalChatSystemPrompt(input: {
-    dreamMode?: boolean;
-    mangpaiMode?: boolean;
     expressionStyle?: 'direct' | 'gentle';
     customInstructions?: string | null;
 }): {
@@ -211,8 +195,6 @@ export function buildMinimalChatSystemPrompt(input: {
     personalities: AIPersonality[];
 } {
     const personalityResolution = resolvePersonalities({
-        chartContext: input.mangpaiMode ? { analysisMode: 'mangpai' } : undefined,
-        dreamMode: input.dreamMode ? { enabled: true } : undefined,
         mentions: [],
     });
 
@@ -261,9 +243,6 @@ function resolveAllowedChartTypes(context: PromptContext): ChartType[] {
     }
     if (context.chartContext?.ziweiChart) {
         for (const t of SOURCE_CHART_TYPE_MAP.ziwei_chart) types.add(t);
-    }
-    if (context.dreamMode?.enabled) {
-        types.add('dream_association');
     }
     return [...types];
 }
@@ -348,16 +327,6 @@ async function formatUserMessagePrefix(context: PromptContext, window: () => Pro
     return sent + (parts.length ? `${parts.join('\n\n')}\n\n【用户的问题如下】\n` : '');
 }
 
-function resolveDayPillar(chart?: BaziChartInput): string | null {
-    if (!chart) return null;
-    const resolved = resolveBaziPromptData(chart);
-    if (resolved) {
-        const { stem, branch } = resolved.output.fourPillars.day;
-        return `${stem}${branch}`;
-    }
-    return extractDayPillar(chart as { fourPillars?: { day?: { stem?: string; branch?: string } } });
-}
-
 // 完整构建：返回 systemPrompt + sources + 诊断信息，供 chat 路由使用
 export async function buildPromptWithSources(context: PromptContext, prepared?: { budget?: number; personalityResolution?: PersonalityResolution }): Promise<{
     systemPrompt: string;
@@ -429,7 +398,6 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
 
     const personalityResolution = prepared?.personalityResolution ?? resolvePersonalities({
         chartContext: context.chartContext,
-        dreamMode: context.dreamMode,
         mentions: context.mentions
     });
     // 层级 ID 编码人格名称，便于客户端显示具体分析师类型
@@ -528,26 +496,6 @@ export async function buildPromptWithSources(context: PromptContext, prepared?: 
     }
 
     // ========== P2 层：数据类 ==========
-    if (context.chartContext?.analysisMode === 'mangpai' && context.chartContext.baziChart) {
-        const dayPillar = resolveDayPillar(context.chartContext.baziChart);
-        if (dayPillar) {
-            const mangpai = getMangpaiByDayPillar(dayPillar);
-            if (mangpai) {
-                const mangpaiData = `【盲派口诀】\n日柱：${mangpai.type}\n称号：${mangpai.称号}\n口诀：${mangpai.口诀}`;
-                tryInject('mangpai_data', 'P2', mangpaiData);
-            }
-        }
-    }
-
-    if (context.dreamMode?.enabled) {
-        if (context.dreamMode.baziText) {
-            tryInject('dream_bazi', 'P2', `【命盘信息】\n${context.dreamMode.baziText}`);
-        }
-        if (context.dreamMode.fortuneText) {
-            tryInject('dream_fortune', 'P2', `【今日运势】\n${context.dreamMode.fortuneText}`);
-        }
-    }
-
     for (const mention of context.mentions || []) {
         if (!mention.resolvedContent || !mention.id) {
             console.log(`[prompt-build] SKIP mention: id=${mention.id ?? 'MISSING'} hasContent=${!!mention.resolvedContent}`);

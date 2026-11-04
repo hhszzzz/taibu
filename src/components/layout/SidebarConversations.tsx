@@ -200,7 +200,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
 
     const groupedConversations = useMemo(() => {
         const groups: Record<ConversationSourceType, ConversationListItem[]> = {
-            chat: [], dream: [], bazi_wuxing: [], bazi_personality: [],
+            chat: [], bazi_wuxing: [], bazi_personality: [],
             tarot: [], liuyao: [], ziwei: [], mbti: [], hepan: [],
             palm: [], face: [], qimen: [], daliuren: [],
             meihua: [], xiaoliuren: [],

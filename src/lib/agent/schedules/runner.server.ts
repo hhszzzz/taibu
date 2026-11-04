@@ -137,8 +137,6 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
       reasoning: schedule.options.reasoning,
       reasoningEffort: schedule.options.reasoningEffort,
       collaborators: schedule.options.collaborators,
-      dreamMode: false,
-      mangpaiMode: false,
       timezone: schedule.timezone,
     };
     const agentRun = await submitAgentTask({ db, userId: schedule.userId }, body, 'schedule', { runId: randomUUID() });

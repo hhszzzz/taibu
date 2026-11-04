@@ -10,7 +10,6 @@ export const CONVERSATION_SOURCE_TYPES = [
   'hepan',
   'palm',
   'face',
-  'dream',
   'qimen',
   'daliuren',
   'meihua',
@@ -31,7 +30,6 @@ export type FeatureUsageBucket =
   | 'mbti'
   | 'hepan'
   | 'fortune'
-  | 'dream'
   | 'qimen'
   | 'daliuren'
   | 'meihua'
@@ -52,7 +50,6 @@ const SOURCE_META: Record<ConversationSourceType, SourceContractMeta> = {
   hepan: { featureUsageBucket: 'hepan' },
   palm: { featureUsageBucket: 'palm' },
   face: { featureUsageBucket: 'face' },
-  dream: { featureUsageBucket: 'dream', questionField: 'dreamContent' },
   qimen: { featureUsageBucket: 'qimen', questionField: 'question' },
   daliuren: { featureUsageBucket: 'daliuren', questionField: 'question' },
   meihua: { featureUsageBucket: 'meihua', questionField: 'question' },
@@ -78,11 +75,9 @@ export function toFeatureUsageBucket(sourceType?: string | null): FeatureUsageBu
 
 // ===== Analysis source types (merged from ai/source-contract.ts) =====
 
-export const ANALYSIS_SOURCE_TYPES = CONVERSATION_SOURCE_TYPES.filter(
-  (value): value is Exclude<ConversationSourceType, 'dream'> => value !== 'dream',
-);
+export const ANALYSIS_SOURCE_TYPES = [...CONVERSATION_SOURCE_TYPES];
 
-export type AnalysisSourceType = Exclude<ConversationSourceType, 'dream'>;
+export type AnalysisSourceType = ConversationSourceType;
 
 export type CommonAnalysisSourceData = {
   schema_version?: 1;
@@ -120,7 +115,6 @@ export type AnalysisSourceDataMap = {
   hepan: CommonAnalysisSourceData;
   palm: CommonAnalysisSourceData;
   face: CommonAnalysisSourceData;
-  dream: CommonAnalysisSourceData;
   qimen: CommonAnalysisSourceData & {
     dun_type?: string | null;
     ju_number?: number | null;
@@ -157,8 +151,7 @@ export type AnalysisSourceData<T extends AnalysisSourceType = AnalysisSourceType
   AnalysisSourceDataMap[T];
 
 export function normalizeAnalysisSourceType(value?: string | null): AnalysisSourceType {
-  const normalized = normalizeConversationSourceType(value);
-  return normalized === 'dream' ? 'chat' : normalized;
+  return normalizeConversationSourceType(value);
 }
 
 export function normalizeAnalysisSourceData<T extends AnalysisSourceType>(

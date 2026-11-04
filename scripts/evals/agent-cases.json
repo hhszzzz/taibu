@@ -465,6 +465,19 @@
     "sourceEvalId": 7
   },
   {
+    "id": "dream-unprompted",
+    "tool": "none",
+    "guide": "dream",
+    "arguments": {},
+    "prompt": "昨晚梦见一条蛇追着我跑，最后钻进了老家的柜子里。醒来心里发慌，这梦是什么意思？",
+    "assertions": [
+      "加载并遵循解梦方法（dream），不调用排盘工具",
+      "先辨梦之类（如象梦、思梦、惧梦），再取象，并落到做梦者的处境与近期情绪",
+      "传统梦书说法只作常见说法，不虚构典籍条目或原文，不作凶兆断言",
+      "给出心理视角（梦与白天关切、情绪的联系）与具体可行的建议"
+    ]
+  },
+  {
     "id": "astrology-transit-window",
     "tool": "astrology",
     "guide": "astrology",

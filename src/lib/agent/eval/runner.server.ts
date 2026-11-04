@@ -16,6 +16,7 @@ import type {
   AgentCheckpoint, AgentFeatureStateProvider, AgentRunStatus, AgentRuntimeInfo, PiStreamFn,
 } from '../types';
 import type { AgentEvalCase, AgentEvalToolCall } from './types';
+import { CHARTLESS_EVAL_TOOL } from './types';
 
 /** The evaluation runs as this synthetic member: no user data, no billing, no run rows. */
 const EVAL_USER_ID = '00000000-0000-4000-8000-00000000e5a1';
@@ -140,6 +141,16 @@ export class EvalAgentStore extends AgentStore {
   guideLoaded(): boolean {
     return this.nativeEntries().some(entry => entry.model?.some(message =>
       message.role === 'toolResult' && message.toolName === AGENT_SKILL_TOOLS.load && !message.isError));
+  }
+
+  /** The method ids the model asked to load, in call order. */
+  loadedGuides(): string[] {
+    return this.toolMessages()
+      .filter((message): message is Extract<Message, { role: 'assistant' }> => message.role === 'assistant')
+      .flatMap(message => message.content.flatMap(part => part.type === 'toolCall' && part.name === AGENT_SKILL_TOOLS.load
+        ? [String((part.arguments as { name?: unknown } | undefined)?.name ?? '')]
+        : []))
+      .filter(Boolean);
   }
 
   private toolMessages() {
@@ -402,7 +413,14 @@ export async function runAgentEvalCase(options: RunAgentEvalCaseOptions): Promis
   stage = 'core-integrity';
   try {
     // A visual case has no Core tool to recompute; its image assertions are the caller's check.
-    if (!evalCase.visual) await assertAgentEvaluation(run, evalCase.tool, store.artifacts(), store);
+    if (evalCase.visual) {
+      // The caller checks the image.
+    } else if (evalCase.tool === CHARTLESS_EVAL_TOOL) {
+      if (!store.loadedGuides().includes(evalCase.guide)) throw new Error(`未加载 ${evalCase.guide} 方法`);
+      if (store.artifacts().some(artifact => artifact.kind === 'calculation')) throw new Error('无需排盘的用例不应产生计算成果');
+    } else {
+      await assertAgentEvaluation(run, evalCase.tool, store.artifacts(), store);
+    }
   } catch (error) {
     return {
       ...base,

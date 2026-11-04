@@ -1,8 +1,8 @@
 /**
- * Composer 底部工具栏：添加资料、联网、风格与发送
+ * Composer 底部工具栏：添加资料、联网、模型与发送
  * （引用命盘/知识库走打字 @ 触发（见 MentionPopover）；「对话方式」已上移到侧栏品牌行，见 components/chat/ModeSwitch.tsx）
  *
- * `+` 菜单从上到下：上传或添加文件 / 技能 / 连接器 / 知识库 / 分析风格 / 记忆 / 搜索 / 润色问题。
+ * `+` 菜单从上到下：上传或添加文件 / 技能 / 连接器 / 知识库 / 记忆 / 搜索 / 润色问题。
  *
  * 'use client' 标记说明：
  * - 菜单开关、文件选择与模型弹层需要交互状态
@@ -14,13 +14,12 @@ import { useRouter } from 'next/navigation';
 import { Tooltip } from '@/components/ui/Tooltip';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
-import { Check, ImagePlus, Paperclip, Plus, Settings2, SlidersHorizontal, Square, Undo2, WandSparkles, X } from 'lucide-react';
+import { Check, ImagePlus, Paperclip, Plus, Settings2, Square, Undo2, WandSparkles, X } from 'lucide-react';
 import { ConnectorsIcon, KnowledgeIcon, MemoryIcon, SearchIcon, SkillIcon } from '@/lib/navigation/nav-icons';
 import { BetaBadge } from '@/components/ui/BetaBadge';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import type { ChatMode } from '@/lib/chat/use-chat-state';
 import type { ModelSettingsProps } from '@/lib/chat/model-settings';
-import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
+import { Menu, MenuCheckboxItem, MenuContent, MenuItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from '@/components/ui/Menu';
 import { DOCUMENT_ACCEPT } from '@/lib/ai/document-formats';
 import { PRIVATE_ATTACHMENT_ACCEPT } from '@/lib/chat/composer-files';
 import type { KnowledgeBaseSummary } from './useComposerState';
@@ -80,9 +79,6 @@ export type ComposerSendState =
     | { kind: 'stop' }
     | { kind: 'split'; disabled: boolean; onSupplement: () => void; onFollowUp?: () => void; onStop?: () => void };
 
-const STYLE_LABELS: Record<ChatMode, string> = { normal: '标准', mangpai: '盲派', dream: '解梦' };
-const STYLE_MENU_LABELS: Record<ChatMode, string> = { normal: '标准', mangpai: '盲派分析', dream: '周公解梦' };
-
 interface ComposerToolbarProps extends ModelSettingsProps {
     agentMode: boolean;
     disabled: boolean;
@@ -104,10 +100,6 @@ interface ComposerToolbarProps extends ModelSettingsProps {
         items: KnowledgeBaseSummary[]; savingId: string | null; loading: boolean;
         onLoad: () => void; onToggle: (id: string) => void; onRemove: (id: string) => void;
     };
-    // Analysis style
-    chatMode: ChatMode;
-    onChatModeChange?: (mode: ChatMode) => void;
-    styles: ChatMode[];
     /** `+` 菜单按钮的上层引用：自定义模型弹窗关闭后要把焦点还给它。 */
     addButtonRef?: React.RefObject<HTMLButtonElement | null>;
     /** Agent 技能：从 + 菜单选中后填入 `/skill:名称 `。 */
@@ -124,7 +116,7 @@ interface ComposerToolbarProps extends ModelSettingsProps {
 }
 
 export function ComposerToolbar(props: ComposerToolbarProps) {
-    const { agentMode, disabled, userId, webControl, memory, image, chatMode, onChatModeChange, styles, send, fileInputRef } = props;
+    const { agentMode, disabled, userId, webControl, memory, image, send, fileInputRef } = props;
     const internalAddRef = useRef<HTMLButtonElement>(null);
     const plusRef = props.addButtonRef ?? internalAddRef;
     const router = useRouter();
@@ -157,7 +149,7 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                     </MenuTrigger>
                 </Tooltip>
                 <MenuContent side="top" sideOffset={6} className="chat-plus-menu" aria-label={addLabel}>
-                    <MenuItem disabled={chatMode === 'dream'} onClick={() => fileInputRef.current?.click()}>
+                    <MenuItem onClick={() => fileInputRef.current?.click()}>
                         <Paperclip size={16} aria-hidden="true" /><span className="chat-plus-label">上传或添加文件</span><kbd>⌘U</kbd>
                     </MenuItem>
                     <MenuSeparator className="chat-plus-divider" />
@@ -221,19 +213,6 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                     </MenuSub> : <MenuItem onClick={() => props.onLoginRequired?.()}>
                         <KnowledgeIcon size={18} /><span className="chat-plus-label">知识库</span>
                     </MenuItem>)}
-                    {!!onChatModeChange && styles.length > 1 && <MenuSub>
-                        <MenuSubTrigger>
-                            <SlidersHorizontal size={16} aria-hidden="true" /><span className="chat-plus-label">分析风格</span>
-                            <span className="chat-plus-value">{STYLE_LABELS[chatMode]}</span>
-                        </MenuSubTrigger>
-                        <MenuSubContent className="chat-plus-menu chat-style-menu" aria-label="分析风格">
-                            <MenuRadioGroup value={chatMode} onValueChange={value => onChatModeChange?.(value as ChatMode)}>
-                                {styles.map(style => <MenuRadioItem key={style} value={style} closeOnClick>
-                                    <span className="chat-plus-label">{STYLE_MENU_LABELS[style]}</span>
-                                </MenuRadioItem>)}
-                            </MenuRadioGroup>
-                        </MenuSubContent>
-                    </MenuSub>}
                     <MenuSeparator className="chat-plus-divider" />
                     {memory && <MenuCheckboxItem checked={memory.enabled} closeOnClick disabled={memory.disabled || memory.busy} title={memory.title}
                         onCheckedChange={() => memory.onToggle()}>

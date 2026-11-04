@@ -34,7 +34,6 @@ import { MobileChatDrawer } from '@/components/chat/MobileChatDrawer';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { BrandMark } from '@/components/brand/BrandMark';
 import type { ChatBootstrapKnowledgeBase } from '@/lib/chat/bootstrap';
-import type { ChatMode } from '@/lib/chat/use-chat-state';
 import { AgentWorkspacePanel } from './agent/AgentWorkspacePanel';
 import { prefersReducedMotion, useEntranceMotion } from '@/lib/motion/entrance';
 import { SessionDetailsPanel } from './agent/SessionDetailsPanel';
@@ -103,8 +102,6 @@ interface ChatLayoutProps extends ModelSettingsProps {
     inputValue: string;
     onInputChange: (value: string) => void;
     disabled: boolean;
-    chatMode: ChatMode;
-    onChatModeChange: (mode: ChatMode) => void;
     selectedModel: string;
     onModelChange: (model: string) => void;
     reasoningEnabled: boolean;
@@ -120,8 +117,6 @@ interface ChatLayoutProps extends ModelSettingsProps {
     mentions: Mention[];
     onMentionsChange: (mentions: Mention[]) => void;
     promptKnowledgeBases: ChatBootstrapKnowledgeBase[];
-    dreamContext?: { baziChartName?: string; dailyFortune?: string };
-    dreamContextLoading: boolean;
     knowledgeBaseEnabled: boolean;
 
     onAuthRequired?: () => void;
@@ -139,12 +134,10 @@ export function ChatLayout(props: ChatLayoutProps) {
         onEditMessage, onRegenerateResponse, onSwitchVersion, onArchiveMessage,
         onSend, onImageGenerate, onStop, onRetryConversationLoad,
         inputValue, onInputChange, disabled,
-        chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         imageModel, onImageModelChange,
         userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
-        dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
         onAuthRequired,
         children,
@@ -511,7 +504,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         title: !webAllowed ? '当前环境未配置联网搜索' : agent.active ? '下个独立任务使用此配置' : 'Agent 会在需要时搜索网络',
         onToggle: () => agent.setWebEnabled(!agent.webEnabled),
     } : undefined;
-    // 生图入口：有可用生图模型（平台的或自己的）、且不在解梦模式或任务运行中时才提供。
+    // 生图入口：有可用生图模型（平台的或自己的）、且任务未运行时才提供。
     const imageModels = useImageModels(userId, { enabled: !!userId });
     const own = useOwnModels(userId);
     const imageChoices = useMemo<ComposerImageModel[]>(() => [
@@ -526,7 +519,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         const next = currentImageModel?.id ?? null;
         if (next !== imageModel) onImageModelChange(next);
     }, [currentImageModel?.id, imageListsLoaded, imageModel, onImageModelChange]);
-    const imageGeneration = currentImageModel && chatMode !== 'dream' && !agent?.active ? {
+    const imageGeneration = currentImageModel && !agent?.active ? {
         sizes: imageModels.data?.sizes.length ? imageModels.data.sizes : [...GENERATED_IMAGE_SIZES],
         models: imageChoices,
         model: currentImageModel,
@@ -562,13 +555,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         onQueueMessage: props.onQueueMessage,
         inputValue, isLoading, isSendingToList,
         onInputChange, onSend, onStop, onAuthRequired, disabled,
-        chatMode, onChatModeChange,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
         quotes, onRemoveQuote: removeQuote,
         chartAsks: chartAskChips,
-        dreamContext, dreamContextLoading,
         knowledgeBaseEnabled,
         webControl,
         imageGeneration,

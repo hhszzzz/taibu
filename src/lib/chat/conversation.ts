@@ -61,7 +61,7 @@ const CONVERSATION_MAX_PAGES = 50;
 export const DEFAULT_CONVERSATION_TITLE = '新对话';
 
 const AI_PERSONALITY_VALUES: ReadonlySet<string> = new Set<AIPersonality>([
-    'bazi', 'ziwei', 'dream', 'mangpai', 'tarot', 'liuyao',
+    'bazi', 'ziwei', 'tarot', 'liuyao',
     'mbti', 'hepan', 'qimen', 'daliuren', 'general',
     'meihua', 'xiaoliuren',
 ]);

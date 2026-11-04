@@ -2,9 +2,8 @@
  * 消息发送、流式响应、中止、重试逻辑 hook
  */
 import { useCallback, useEffect, useMemo, useRef } from 'react';
-import type { AIReasoningEffort, ChatAttachment, ChatMessage, ConversationListItem, Mention, AIMessageMetadata, DreamInterpretationInfo } from '@/types';
+import type { AIReasoningEffort, ChatAttachment, ChatMessage, ConversationListItem, Mention, AIMessageMetadata } from '@/types';
 import { extractPlainAttachment } from '@/lib/chat/composer-files';
-import { ANONYMOUS_DISPLAY_NAME } from '@/types';
 import { createConversation, deleteConversation, DEFAULT_CONVERSATION_TITLE } from '@/lib/chat/conversation';
 import { buildDraftTitle } from '@/lib/chat/draft-title';
 import { isNearBottom } from '@/lib/chat/chat-scroll';
@@ -17,8 +16,6 @@ import type { ByokChatMessage } from '@/lib/byok/pi-model';
 import { requestByokKey } from '@/lib/byok/key-request';
 import type { ChatStateReturn } from '@/lib/chat/use-chat-state';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { useUserCharts } from '@/lib/hooks/useUserCharts';
-import { selectPrimarySavedBaziChart } from '@/lib/user/charts-client';
 import { filterMentionsByFeature, getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { readLocalVisualizationSettings } from '@/lib/visualization/settings';
 import { useAgentChat } from '@/lib/agent/use-agent-chat';
@@ -69,7 +66,6 @@ const unavailableReply = (content: string): ChatMessage => ({ id: (Date.now() + 
 interface UseChatMessagingParams {
     state: ChatStateReturn;
     userId: string | null;
-    user: { name?: string | null } | null;
     refreshViewerState: () => Promise<unknown>;
     markViewerBalanceExhausted: () => void;
     /** The known balance cannot pay for the chosen platform model; checked again when sending. */
@@ -82,7 +78,6 @@ interface UseChatMessagingParams {
 export function useChatMessaging({
     state,
     userId,
-    user,
     refreshViewerState,
     markViewerBalanceExhausted,
     balanceInsufficient,
@@ -100,13 +95,10 @@ export function useChatMessaging({
         activeConversationIdRef, conversationValidatedRef,
         hasLoadedConversationsRef,
         messageScrollContainerRef, shouldAutoScrollRef,
-        chatMode,
         selectedModel, reasoningEnabled,
         imageModel,
         attachmentState,
         mentions,
-        dreamContextLoading,
-        setDreamContext, setDreamContextLoading,
         setStreamingConversationIds,
         isLoading,
         setConversations,
@@ -119,10 +111,6 @@ export function useChatMessaging({
         cacheConversationMessages,
         removeConversationDetail,
     } = state;
-    const isDreamMode = chatMode === 'dream';
-    const chartsQuery = useUserCharts(userId, { enabled: isDreamMode });
-    const primaryChartName = useMemo(() => selectPrimarySavedBaziChart(chartsQuery.data)?.name, [chartsQuery.data]);
-    const isMangpaiMode = chatMode === 'mangpai';
     const { isFeatureEnabled, isLoading: featureToggleLoading } = useFeatureToggles({ enabled: !!userId });
     const knowledgeBaseEnabled = !featureToggleLoading && isFeatureEnabled('knowledge-base');
     const enabledDataSourceTypes = useMemo(
@@ -234,51 +222,12 @@ export function useChatMessaging({
         });
     }, [messageScrollContainerRef, shouldAutoScrollRef]);
 
-    // Only the badge follows the current saved-chart bundle; message metadata
-    // remains the immutable context actually used for that message.
-    useEffect(() => {
-        if (!isDreamMode || !userId) return;
-        setDreamContext(current => current?.baziChartName === primaryChartName
-            ? current
-            : { ...current, baziChartName: primaryChartName });
-    }, [isDreamMode, primaryChartName, state.dreamContext?.baziChartName, setDreamContext, userId]);
-
-    // Dream daily-fortune context fetch (the chart name comes from Query).
-    useEffect(() => {
-        let isActive = true;
-        const controller = new AbortController();
-        if (!isDreamMode || !userId) {
-            setDreamContext(undefined);
-            setDreamContextLoading(false);
-            return () => { isActive = false; controller.abort(); };
-        }
-        const fetchDreamContext = async () => {
-            setDreamContextLoading(true);
-            try {
-                const response = await fetch('/api/dream-context', { signal: controller.signal });
-                if (!response.ok) throw new Error('请求失败');
-                const data = await response.json() as { dreamContext?: { dailyFortune?: string } };
-                if (!isActive) return;
-                setDreamContext(current => ({ ...current, dailyFortune: data.dreamContext?.dailyFortune }));
-            } catch (error) {
-                if (!isActive) return;
-                console.error('获取解梦上下文失败:', error);
-                setDreamContext(current => ({ ...current, dailyFortune: undefined }));
-            } finally {
-                if (isActive) setDreamContextLoading(false);
-            }
-        };
-        void fetchDreamContext();
-        return () => { isActive = false; controller.abort(); };
-    }, [isDreamMode, userId, setDreamContext, setDreamContextLoading]);
-
     // Stream manager subscription
     useEffect(() => {
         const unsubscribe = chatStreamManager.subscribe((event) => {
             const convId = event.task.conversationId;
             const currentActiveConversationId = activeConversationIdRef.current;
             const isActiveConversationEvent = convId === currentActiveConversationId;
-            const taskDreamContext = (event.task.metadata as AIMessageMetadata | undefined)?.dreamContext;
             const isAuthRequired = event.errorCode === 'AUTH_REQUIRED'
                 || event.errorMessage?.includes('请先登录') === true;
 
@@ -315,7 +264,6 @@ export function useChatMessaging({
                 } else {
                     setMessages(event.task.messages);
                 }
-                if (taskDreamContext) setDreamContext(taskDreamContext);
             }
 
             const shouldCachePersistedMessages = event.type === 'task_completed'
@@ -345,7 +293,7 @@ export function useChatMessaging({
             }
         });
         return unsubscribe;
-    }, [cacheConversationMessages, markBalanceExhausted, debouncedRefreshViewerState, refreshConversationList, showToast, activeConversationIdRef, hasLoadedConversationsRef, setMessages, setStreamingConversationIds, setDreamContext]);
+    }, [cacheConversationMessages, markBalanceExhausted, debouncedRefreshViewerState, refreshConversationList, showToast, activeConversationIdRef, hasLoadedConversationsRef, setMessages, setStreamingConversationIds]);
 
     const handleArchiveMessage = useCallback((message: ChatMessage) => {
         if (!activeConversationId || !knowledgeBaseEnabled) return;
@@ -518,7 +466,6 @@ export function useChatMessaging({
         }
         if (!trimmedInput || isLoading || isSendingToList) return;
         if (attachmentState.uploaded?.length && agent.mode !== 'agent') { showToast('info', '私有图片和文本资料请使用 Agent 模式发送'); return; }
-        if (isDreamMode && dreamContextLoading) return;
         const modelRefs = usedModels();
         if (!ownModelsUsable(modelRefs)) return;
         if (!(await guardBalance())) return;
@@ -559,18 +506,11 @@ export function useChatMessaging({
             if (!conversationId) { showToast('error', '创建对话失败，请重试'); return; }
             if (chatStreamManager.isConversationRunning(conversationId)) { showToast('info', '当前会话正在生成中，请稍后再试'); return; }
 
-            const dreamInfo: DreamInterpretationInfo | undefined = isDreamMode ? {
-                userName: user?.name || ANONYMOUS_DISPLAY_NAME,
-                dreamDate: new Date().toISOString(),
-                dreamContent: trimmedInput.slice(0, 50),
-            } : undefined;
-
             const userMessage: ChatMessage = {
                 id: Date.now().toString(), role: 'user', content: trimmedInput, createdAt: new Date().toISOString(),
                 mentions: messageMentions.length ? [...messageMentions] : undefined,
                 quotes: messageQuotes.length ? messageQuotes : undefined,
                 attachments: (attachmentState.file || attachmentState.uploaded?.length || attachmentState.webSearchEnabled) ? { fileName: attachmentState.file?.name || attachmentState.uploaded?.map(item=>item.name).join('、') || '', ids: attachmentState.uploaded?.map(item=>item.id), webSearchEnabled: attachmentState.webSearchEnabled } : undefined,
-                dreamInfo,
             };
             const newMessages = [...messages, userMessage];
             if (agent.mode === 'agent') {
@@ -617,13 +557,11 @@ export function useChatMessaging({
                     conversationId,
                     stream: true,
                     model: selectedModel,
-                    mangpaiMode: isMangpaiMode || undefined,
                     reasoning: reasoningEnabled,
                     reasoningEffort: state.reasoningEffort,
                     attachment,
                     webSearch: attachmentState.webSearchEnabled || undefined,
                     mentions: messageMentions.map(m => ({ ...m })),
-                    dreamMode: isDreamMode || undefined,
                     visualizationSettings,
                     timezone: browserTimeZone(),
                 },
@@ -717,11 +655,9 @@ export function useChatMessaging({
                     conversationId: targetConversationId,
                     stream: true,
                     model: selectedModel,
-                    mangpaiMode: isMangpaiMode || undefined,
                     reasoning: reasoningEnabled,
                     reasoningEffort: state.reasoningEffort,
                     mentions: messageMentions,
-                    dreamMode: isDreamMode || undefined,
                     visualizationSettings: readLocalVisualizationSettings(localStorage),
                     timezone: browserTimeZone(),
                 },
@@ -827,11 +763,9 @@ export function useChatMessaging({
                     conversationId: targetConversationId,
                     stream: true,
                     model: selectedModel,
-                    mangpaiMode: isMangpaiMode || undefined,
                     reasoning: reasoningEnabled,
                     reasoningEffort: state.reasoningEffort,
                     mentions: messageMentions,
-                    dreamMode: isDreamMode || undefined,
                     visualizationSettings: readLocalVisualizationSettings(localStorage),
                     timezone: browserTimeZone(),
                 },

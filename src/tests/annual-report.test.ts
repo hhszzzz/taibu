@@ -89,7 +89,6 @@ test('annual report generation uses the scoped system database for queries', asy
     assert.equal(state.tables.includes('daily_checkins'), false);
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.qimen, '奇门遁甲');
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.daliuren, '大六壬');
-    assert.equal(ANNUAL_REPORT_FEATURE_NAMES.dream, '解梦分析');
     assert.equal(ANNUAL_REPORT_FEATURE_NAMES.chat, 'AI 对话');
     assert.ok(state.cachedReport);
 });

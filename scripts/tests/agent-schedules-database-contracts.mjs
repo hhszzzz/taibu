@@ -271,8 +271,8 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
         LEFT JOIN public.user_settings u ON u.user_id=s.user_id
         WHERE s.reminder_type='daily_briefing' AND s.enabled
       ), created AS (
-        INSERT INTO public.conversations(user_id,title,personality,messages)
-        SELECT c.user_id,'定时 · 每日早报','general','[]'::jsonb FROM candidates c
+        INSERT INTO public.conversations(user_id,title,messages)
+        SELECT c.user_id,'定时 · 每日早报','[]'::jsonb FROM candidates c
         RETURNING id,user_id
       )
       INSERT INTO public.agent_schedules(user_id,name,template,prompt,cadence,timezone,conversation_id,options,enabled,next_run_at)

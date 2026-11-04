@@ -9,7 +9,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
   const admin = statement => asActor(adminId, statement);
   const parsed = async statement => { const value=await admin(statement); return value ? JSON.parse(value) : null; };
   const ledger = () => asOwner(`SELECT count(*) FROM public.billing_ledger WHERE user_id=${quote(owner)};`);
-  const conversation = () => asActor(owner,`SELECT public.create_conversation_with_messages(${quote(owner)},'经验契约','general','chat','{}','[]');`);
+  const conversation = () => asActor(owner,`SELECT public.create_conversation_with_messages(${quote(owner)},'经验契约','chat','{}','[]');`);
   const message = (id, content='资料问题') => ({ id, role:'user', content, createdAt:new Date().toISOString() });
   const assistant = (id, content='') => ({ id:`agent:${id}`,role:'assistant',content,createdAt:new Date().toISOString(),agent:{version:1,runId:id,status:'queued',parts:[]} });
   const cp = {version:2,messages:[],parts:[],durable:{engine:'pi-durable/1.5.0',seeded:true}};
@@ -126,7 +126,7 @@ export async function agentExperienceDatabaseContracts(t, { sql, asActor, asOwne
     const source=[{...message('source'),attachments:{ids:[id]}},{id:'answer',role:'assistant',content:'回答',createdAt:'now'}];
     await asActor(owner,`SELECT public.replace_conversation_messages(${quote(cid)},${json(source)});`);
     assert.equal(await asActor(other,`SELECT count(*) FROM public.agent_attachments WHERE id=${quote(id)};`),'0');
-    const otherCid=await asActor(other,`SELECT public.create_conversation_with_messages(${quote(other)},'别人的对话','general','chat','{}','[]');`);
+    const otherCid=await asActor(other,`SELECT public.create_conversation_with_messages(${quote(other)},'别人的对话','chat','{}','[]');`);
     await assert.rejects(asActor(other,`SELECT public.replace_conversation_messages(${quote(otherCid)},${json(source)});`),/ATTACHMENT_NOT_AVAILABLE/);
     const fork=await asActor(owner,`SELECT public.fork_conversation_snapshot(${quote(cid)},'answer',${json(source)},${json(source.map(item=>({...item,id:randomUUID(),metadata:{forkHistory:true}})))});`);
     await assert.rejects(asActor(owner,`SELECT public.replace_conversation_messages(${quote(fork)},'[]');`),/FORK_HISTORY_READ_ONLY/);

@@ -19,7 +19,7 @@ export async function agentArchiveDatabaseContracts(t, { sql, asActor, asOwner, 
     ON CONFLICT(user_id) DO UPDATE SET chat_preferences=excluded.chat_preferences;`);
   const message = (id, content, role = 'user') => ({ id, role, content, createdAt: new Date().toISOString() });
   const conversation = (userId, title, messages = []) =>
-    asActor(userId, `SELECT public.create_conversation_with_messages(${quote(userId)},${quote(title)},'general','chat','{}',${json(messages)});`);
+    asActor(userId, `SELECT public.create_conversation_with_messages(${quote(userId)},${quote(title)},'chat','{}',${json(messages)});`);
   const cp = { version: 2, messages: [], parts: [], durable: { engine: 'pi-durable/1.5.0', seeded: true } };
   const assistant = id => ({ id: `agent:${id}`, role: 'assistant', content: '', createdAt: new Date().toISOString(), agent: { version: 1, runId: id, status: 'queued', parts: [] } });
   const said = '我2024年3月从老东家离职，换到了现在这家公司做产品经理';

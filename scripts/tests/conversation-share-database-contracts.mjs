@@ -10,7 +10,7 @@ export async function conversationShareDatabaseContracts(t, { sql, asActor }) {
   const owner = randomUUID(), other = randomUUID();
   await sql(`INSERT INTO identity.users(id) VALUES (${quote(owner)}),(${quote(other)});`);
   const createConversation = async () => (await asActor(owner,
-    `SELECT public.create_conversation_with_messages(${quote(owner)},'分享夹具','general','chat','{}',${json([{ id: 'u', role: 'user', content: '问题', createdAt: '2026-10-19T00:00:00Z' }])});`)).trim();
+    `SELECT public.create_conversation_with_messages(${quote(owner)},'分享夹具','chat','{}',${json([{ id: 'u', role: 'user', content: '问题', createdAt: '2026-10-19T00:00:00Z' }])});`)).trim();
   const version = conversation => `(SELECT updated_at FROM public.conversations WHERE id=${quote(conversation)})`;
   const upsert = (actor, conversation, candidate, snapshot = [{ role: 'user', content: '问题' }], includeCharts = false, sourceVersion = version(conversation)) => asActor(actor,
     `SELECT row_to_json(s) FROM public.upsert_conversation_share(${quote(conversation)},${quote(candidate)},'分享夹具',${json(snapshot)},${includeCharts},${sourceVersion}) s;`);

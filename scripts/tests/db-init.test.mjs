@@ -369,7 +369,7 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         const message = (runId, status) => ({ id: `agent:${runId}`, role: 'assistant', content: '', createdAt: '2026-10-01T00:00:00Z', agent: { version: 1, runId, status, parts: [] } });
         const legacyProvider = { apiUrl: 'https://relay.example/v1', modelId: 'gpt-4.1' };
         await native.query(`INSERT INTO identity.users (id, email, email_verified, name) VALUES ($1, 'legacy-provider@fixture.test', true, '旧直连用户')`, [userId]);
-        await native.query(`INSERT INTO public.conversations (id, user_id, personality, title, messages) VALUES ($1, $3, 'general', '旧直连', $4), ($2, $3, 'general', '平台', $5)`,
+        await native.query(`INSERT INTO public.conversations (id, user_id, title, messages) VALUES ($1, $3, '旧直连', $4), ($2, $3, '平台', $5)`,
           [staleConversation, platformConversation, userId, JSON.stringify([message(finishedRun, 'completed'), message(staleRun, 'running')]), JSON.stringify([message(platformRun, 'running')])]);
         const run = (id, conversationId, status, input) => native.query(`
           INSERT INTO public.agent_runs (id, user_id, conversation_id, request_id, request_hash, status, input, checkpoint, public_message, billing, worker_id, lease_until)

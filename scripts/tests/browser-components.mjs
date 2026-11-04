@@ -1211,7 +1211,7 @@ export async function run(existingPage, bundlePath) {
   let delayedRename = false;
   let releaseRename;
   const rows = Object.fromEntries(['alice', 'bob'].map(user => [user, Array.from({ length: user === 'alice' ? 9 : 2 }, (_, index) => ({
-    id: user + '-' + (index + 1), user_id: user, personality: 'general', title: user + ' conversation ' + (index + 1),
+    id: user + '-' + (index + 1), user_id: user, title: user + ' conversation ' + (index + 1),
     created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat',
     // 会话分类（视图列 has_agent_run）：夹具页面以 Agent 方式运行，列表里的会话按 Agent 会话提供。
     has_agent_run: true,
@@ -1532,7 +1532,7 @@ export async function run(existingPage, bundlePath) {
     if (conversation) {
       if (method === 'GET') {
         const user = await page.evaluate(() => window.fixtureAuth.cookieUser);
-        return ok({ conversation: { id: conversation[1], user_id: user, personality: 'general', title: 'Agent test', messages: [], created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' } });
+        return ok({ conversation: { id: conversation[1], user_id: user, title: 'Agent test', messages: [], created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' } });
       }
       if (control?.fail) return ok({ saved: false });
       if (method === 'DELETE') {
@@ -2398,7 +2398,7 @@ export async function run(existingPage, bundlePath) {
     await page.getByRole('link', { name: '返回太卜', exact: true }).click();
 
     // Controlled interleavings invoke real ConversationListProvider actions.
-    rows.alice = Array.from({ length: 12 }, (_, index) => ({ id: 'race-' + (index + 1), user_id: 'alice', title: 'Race ' + (index + 1), personality: 'general', created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' }));
+    rows.alice = Array.from({ length: 12 }, (_, index) => ({ id: 'race-' + (index + 1), user_id: 'alice', title: 'Race ' + (index + 1), created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat' }));
     await page.getByRole('button', { name: 'Fixture Bob', exact: true }).evaluate(button => button.click());
     await until(() => window.fixture.list()[0]?.id === 'bob-1');
     await page.getByRole('button', { name: 'Fixture Alice', exact: true }).evaluate(button => button.click());
@@ -3927,7 +3927,7 @@ export async function run(existingPage, bundlePath) {
     rows.alice = [['明年适合换工作吗？', 0], ['我的日主适合什么颜色', 0], ['和女朋友合盘，明年适合结婚吗', 1], ['梦见掉牙是什么意思', 40]].map(([title, days], index) => {
       const at = new Date(Date.now() - days * 86400000).toISOString();
       // has_agent_run：这三条都挂着 Agent 任务，列表在 Agent 方式下要能看见它们。
-      return { id: sidebarIds[index], user_id: 'alice', personality: 'general', title, created_at: at, updated_at: at, source_type: 'chat', has_agent_run: true, is_scheduled: index === 1 };
+      return { id: sidebarIds[index], user_id: 'alice', title, created_at: at, updated_at: at, source_type: 'chat', has_agent_run: true, is_scheduled: index === 1 };
     });
     await page.getByRole('button', { name: 'Refresh actual list' }).click();
     await until(id => window.fixture.list().length === 4 && window.fixture.list()[0].id === id, sidebarIds[0]);

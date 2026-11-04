@@ -23,7 +23,7 @@ export async function agentDatabaseContracts(
   const createConversation = () =>
     asActor(
       owner,
-      `SELECT public.create_conversation_with_messages(${quote(owner)},'Agent fixture','general','chat','{}','[]');`,
+      `SELECT public.create_conversation_with_messages(${quote(owner)},'Agent fixture','chat','{}','[]');`,
     );
   const input = (id) => ({
     model: "fixture",

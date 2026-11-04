@@ -173,19 +173,19 @@ SET LOCAL request.jwt.claims = ${quote(JSON.stringify({ role: claimedRole, ...(a
 ${statement}
 ROLLBACK;`), /42501/);
   const createConversation = (userId, messages = [], title = 'fixture') => asActor(userId,
-    `SELECT public.create_conversation_with_messages(${quote(userId)}, ${quote(title)}, 'general', 'chat', '{}'::jsonb, ${json(messages)});`);
+    `SELECT public.create_conversation_with_messages(${quote(userId)}, ${quote(title)}, 'chat', '{}'::jsonb, ${json(messages)});`);
   const historyCall = (userId, type, payload) => `SELECT public.create_analysis_conversation_with_history_as_service(
-    ${quote(userId)}, ${quote(type)}, '{}'::jsonb, 'history fixture', 'general',
+    ${quote(userId)}, ${quote(type)}, '{}'::jsonb, 'history fixture',
     ${json([{ id: 'analysis-1', role: 'assistant', content: 'analysis' }])}, ${quote(type)}, ${json(payload)});`;
   const tarotHistoryCall = (userId, payload, sourceData = tarotSourceData) => `SELECT public.create_analysis_conversation_with_history_as_service(
-    ${quote(userId)}, 'tarot', ${json(sourceData)}, 'Tarot pilot - 单牌', 'tarot',
+    ${quote(userId)}, 'tarot', ${json(sourceData)}, 'Tarot pilot - 单牌',
     ${json(tarotMessages)}, 'tarot', ${json(payload)});`;
   const assertTarotRelation = async (readingId, conversation, sourceData, metadata) => {
     const stored = JSON.parse(await asActor(ids.owner, `SELECT json_build_object(
       'reading', r.id, 'owner', r.user_id, 'conversation', r.conversation_id,
       'spread', r.spread_id, 'question', r.question, 'cards', r.cards, 'metadata', r.metadata,
       'conversationOwner', c.user_id, 'sourceType', c.source_type, 'sourceData', c.source_data,
-      'personality', c.personality, 'messages', c.messages,
+      'messages', c.messages,
       'messageRows', (SELECT json_agg(json_build_object('id', message_id, 'sequence', sequence,
         'role', role, 'content', content, 'metadata', metadata) ORDER BY sequence)
         FROM public.conversation_messages WHERE conversation_id = c.id))
@@ -194,7 +194,7 @@ ROLLBACK;`), /42501/);
     assert.deepEqual(stored, {
       reading: readingId, owner: ids.owner, conversation, spread: 'single', question: 'Tarot pilot',
       cards: tarotCards, metadata, conversationOwner: ids.owner, sourceType: 'tarot', sourceData,
-      personality: 'tarot', messages: tarotMessages,
+      messages: tarotMessages,
       messageRows: [{ id: 'tarot-analysis-1', sequence: 0, role: 'assistant', content: 'tarot analysis', metadata: { model: 'fixture-model' } }],
     });
   };
@@ -398,7 +398,7 @@ RESET ROLE;`);
     assert.equal(await sql(`SELECT content FROM public.conversation_messages WHERE conversation_id = ${quote(conversation)};`), 'first');
     const replacement = [{ id: 'm2', role: 'assistant', content: 'second', model: 'fixture-model', createdAt: '2026-01-02T00:00:00.000Z' }];
     assert.deepEqual(JSON.parse(await asActor(ids.owner, `SELECT public.update_conversation_with_messages(
-      ${quote(conversation)}, 'updated', true, NULL, false, ${json(replacement)}, true);`)), { status: 'ok' });
+      ${quote(conversation)}, 'updated', true, ${json(replacement)}, true);`)), { status: 'ok' });
     const stored = JSON.parse(await sql(`SELECT json_build_object('messages', c.messages, 'title', c.title,
       'rows', (SELECT json_agg(json_build_object('id', message_id, 'sequence', sequence, 'content', content, 'metadata', metadata))
       FROM public.conversation_messages WHERE conversation_id = c.id)) FROM public.conversations c WHERE id = ${quote(conversation)};`));
@@ -420,8 +420,8 @@ RESET ROLE;`);
     const initial = [{ id: 'm1', role: 'assistant', content: 'preserved' }];
     const conversation = await createConversation(ids.owner, initial, 'preserved');
     const beforeCount = await sql('SELECT count(*) FROM public.conversations;');
-    await assert.rejects(asActor(ids.owner, `SELECT public.create_conversation_with_messages(${quote(ids.owner)}, 'bad', 'general', 'chat', '{}', '{}');`), /22023/);
-    await assert.rejects(asActor(ids.owner, `SELECT public.update_conversation_with_messages(${quote(conversation)}, 'bad', true, NULL, false,
+    await assert.rejects(asActor(ids.owner, `SELECT public.create_conversation_with_messages(${quote(ids.owner)}, 'bad', 'chat', '{}', '{}');`), /22023/);
+    await assert.rejects(asActor(ids.owner, `SELECT public.update_conversation_with_messages(${quote(conversation)}, 'bad', true,
       ${json([{ id: 'bad', role: 'assistant', content: 'bad', createdAt: 'not-a-date' }])}, true);`), /22007/);
     assert.equal(await sql('SELECT count(*) FROM public.conversations;'), beforeCount);
     assert.equal(await sql(`SELECT title FROM public.conversations WHERE id = ${quote(conversation)};`), 'preserved');
@@ -490,7 +490,7 @@ RESET ROLE;`);
     assert.equal(await sql(`SELECT conversation_id FROM public.mbti_readings WHERE id = ${quote(ids.mbti)};`), conversation);
     assert.equal(await sql(`SELECT count(*) FROM public.conversation_messages WHERE conversation_id = ${quote(conversation)};`), '1');
     await assert.rejects(asActor(ids.admin, `SELECT public.create_analysis_conversation_with_history_legacy_as_service(
-      ${quote(ids.owner)}, 'mbti', '{}', 'bypass', 'general', '[]', 'mbti', '{}');`), /42501/);
+      ${quote(ids.owner)}, 'mbti', '{}', 'bypass', '[]', 'mbti', '{}');`), /42501/);
   });
 
   await t.test('July meihua/xiaoliuren bindings are owner-checked and atomic', async () => {

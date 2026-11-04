@@ -220,10 +220,14 @@
 .chat-mention-loading span:last-child { width: 8rem; }
 @keyframes chat-mention-pulse { 50% { opacity: .45; } }
 
-/* ---- Slash commands ---- */
-.composer-commands { position: absolute; z-index: 40; bottom: calc(100% + 8px); left: 0; min-width: 16rem; margin: 0; padding: 6px; list-style: none; border: 1px solid var(--border); border-radius: 14px; background: var(--background); box-shadow: var(--shadow-raised); }
-.composer-commands button { display: flex; width: 100%; min-height: 36px; align-items: center; justify-content: space-between; gap: 1rem; padding: 0 10px; border-radius: 9px; font-size: calc(13 / 16 * 1rem); }
-.composer-commands [data-selected] { background: var(--background-secondary); }
+/* ---- Slash commands（外壳与 @ 提及同形态；行内保持「命令左、说明右」） ---- */
+.composer-commands { position: absolute; z-index: 40; bottom: calc(100% + 8px); left: 8px; right: 8px; width: auto; min-width: 0; max-height: 15rem; overflow-y: auto; overscroll-behavior: contain; padding: 4px; border: var(--hairline) solid var(--border); border-radius: 12px; background: var(--chat-raised); box-shadow: var(--shadow-panel-popover); transform-origin: bottom left; animation: motion-pop-in var(--duration-snap) var(--ease-snap) backwards; }
+.composer-commands ul { margin: 0; padding: 0; list-style: none; }
+.composer-commands button { display: flex; width: 100%; min-height: 32px; align-items: center; justify-content: space-between; gap: 1rem; padding: 6px 10px; border-radius: 8px; font-size: calc(13 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; }
+.composer-commands button:hover, .composer-commands [data-selected] { background: var(--fill-ghost-hover); }
+.composer-commands code { font-family: var(--font-mono); font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
+.composer-commands span { color: var(--foreground-tertiary); }
+@media (min-width: 768px) { .composer-commands { left: 0; right: auto; width: min(576px, 100%); } }
 
 /* ---- Menus (portaled outside the chat column) ---- */
 :is(.chat-model-menu, .chat-plus-menu, .chat-context-panel) { border-radius: 12px; box-shadow: var(--shadow-panel-popover); }
@@ -281,8 +285,8 @@
 .chat-model-option-row { position: relative; align-items: center; }
 .chat-model-option-text { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 1px; }
 .chat-model-option-desc { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(11.5 / 16 * 1rem); line-height: 1.35; color: var(--foreground-tertiary); }
-.chat-model-info { position: absolute; right: 8px; top: 50%; display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; border-radius: 4px; color: var(--foreground-tertiary); translate: 0 -50%; transition: background-color var(--duration-fast) var(--ease-out), color var(--duration-fast) var(--ease-out); }
-.chat-model-info:hover, .chat-model-info[data-popup-open] { background: var(--fill-ghost-hover); color: var(--foreground); }
+.chat-model-info { position: absolute; right: 8px; top: 50%; display: inline-flex; width: 18px; height: 18px; align-items: center; justify-content: center; color: var(--foreground-tertiary); translate: 0 -50%; transition: color var(--duration-fast) var(--ease-out); }
+.chat-model-info:hover, .chat-model-info[data-popup-open] { color: var(--foreground); }
 /* 详情卡片：上下文、输出上限、能力与单价。 */
 .chat-model-details { display: flex; width: 15rem; flex-direction: column; gap: 10px; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .chat-model-details-head { display: flex; align-items: center; gap: 8px; }

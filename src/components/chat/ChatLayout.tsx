@@ -16,7 +16,6 @@ import { requestBrowserJson } from '@/lib/browser-api';
 import { useToast } from '@/components/ui/Toast';
 import { ConversationExportDialog } from './ConversationExportDialog';
 import { AgentQueue } from './agent/AgentQueue';
-import { AnalysisMethodPicker } from './agent/AnalysisMethodPicker';
 import { LayoutDashboard, UsersRound, X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
@@ -701,7 +700,6 @@ export function ChatLayout(props: ChatLayoutProps) {
 
             {children}
             <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-            <AnalysisMethodPicker onSelect={text => onInputChange(inputValue.trim() ? `${inputValue}\n${text}` : text)} />
         </div></ChatRecordViewContext.Provider></AgentResultContext.Provider>
     );
 }

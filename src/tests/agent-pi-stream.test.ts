@@ -19,12 +19,15 @@ import {
   AGENT_PUBLIC_STREAM_ERRORS,
   AGENT_REJECTED_KEY_MESSAGE,
   AGENT_SILENT_RESPONSE_MESSAGE,
+  AGENT_STREAM_IDLE_MS,
+  AGENT_STREAM_MAX_MS,
   AGENT_TIMEOUT_MESSAGE,
   AGENT_TRANSIENT_ERROR_MESSAGE,
   AGENT_UNKNOWN_MODEL_MESSAGE,
   AGENT_UNSUPPORTED_TOOLS_MESSAGE,
   PROGRESS_TURN_NUDGE,
   SILENT_TURN_NUDGE,
+  agentStreamGuard,
   createByokModelStream,
   createPiModelStream,
   isProgressOnlyTurn,
@@ -385,12 +388,9 @@ test('a stream that ends without a finish reason fails, keeping the partial text
   assert.equal((await createPiModelStream(config, { fetch: filtered.fetch })(piModel, context()).result()).stopReason, 'error');
 });
 
-test('the request time limit and a user stop both end the stream after partial output, without another request', async t => {
-  // One mock for both runs: a second mock of the same method would restore to the first, aborted one.
-  let timeout = new AbortController();
-  t.mock.method(AbortSignal, 'timeout', () => timeout.signal);
-  for (const scenario of ['timeout', 'user'] as const) {
-    timeout = new AbortController();
+test('a request dies only after five minutes without data, and a user stop still ends it at once', async t => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const scenario of ['idle', 'user'] as const) {
     const user = new AbortController();
     const encoder = new TextEncoder();
     const gw = gateway((_request, init) => new Response(new ReadableStream({
@@ -404,15 +404,40 @@ test('the request time limit and a user stop both end the stream after partial o
     for await (const event of stream) {
       events.push(event);
       if (event.type !== 'text_delta') continue;
-      if (scenario === 'timeout') timeout.abort(new DOMException('timed out', 'TimeoutError'));
+      // An answer that keeps arriving is not cut for running long; only silence is.
+      if (scenario === 'idle') t.mock.timers.tick(AGENT_STREAM_IDLE_MS + 1);
       else user.abort();
     }
     const message = await stream.result();
-    assert.equal(message.stopReason, scenario === 'timeout' ? 'error' : 'aborted');
-    assert.equal(message.errorMessage, scenario === 'timeout' ? AGENT_TIMEOUT_MESSAGE : '任务已停止');
+    assert.equal(message.stopReason, scenario === 'idle' ? 'error' : 'aborted');
+    assert.equal(message.errorMessage, scenario === 'idle' ? AGENT_TIMEOUT_MESSAGE : '任务已停止');
     assert.equal(events.some(event => event.type === 'done'), false, scenario);
     assert.equal(gw.requests.length, 1);
   }
+});
+
+test('the idle limit starts over with every piece of data, and the outer bound still ends the request', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const guard = agentStreamGuard();
+  t.mock.timers.tick(AGENT_STREAM_IDLE_MS - 1);
+  guard.touch();
+  assert.equal(guard.signal.aborted, false, 'data within the limit keeps the request alive');
+  t.mock.timers.tick(AGENT_STREAM_IDLE_MS - 1);
+  assert.equal(guard.signal.aborted, false);
+  t.mock.timers.tick(2);
+  assert.equal(guard.signal.aborted, true, 'silence past the limit ends it');
+  guard.dispose();
+});
+
+test('a stream that keeps sending is ended by the outer bound alone', (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const guard = agentStreamGuard();
+  for (let elapsed = 0; elapsed < AGENT_STREAM_MAX_MS; elapsed += AGENT_STREAM_IDLE_MS - 1) {
+    t.mock.timers.tick(AGENT_STREAM_IDLE_MS - 1);
+    if (!guard.signal.aborted) guard.touch();
+  }
+  assert.equal(guard.signal.aborted, true);
+  guard.dispose();
 });
 
 test('images reach a vision model as image parts, and a text model never loads them', async () => {

@@ -26,7 +26,7 @@ import {
 } from "@/lib/byok/agent.server";
 import { AgentStore, type AgentRunRow, type AgentCommandRow } from "./store.server";
 import { agentMessageContent, putAgentPart, type AgentCheckpoint, type AgentFeatureStateProvider, type DomainTool, type PiStreamFn } from "./types";
-import { AGENT_PUBLIC_STREAM_ERRORS, createByokModelStream, createPiModelStream } from "./pi-stream.server";
+import { AGENT_PUBLIC_STREAM_ERRORS, AGENT_STREAM_MAX_MS, createByokModelStream, createPiModelStream } from "./pi-stream.server";
 import { publishAgentTextDelta } from "./tail-bus.server";
 import { createAgentTools, assertAgentToolAccess } from "./tools.server";
 import { isCurrentAgentCheckpoint } from "./engine";
@@ -750,7 +750,8 @@ export async function executeAgentRun(
       models, registry, telemetry,
       ...(injected?.now ? { now: injected.now } : {}),
       settings: {
-        stream: { timeoutMs: 300_000 },
+        // The outer bound of one request; the transport also cuts a stream that stays idle for 5 minutes.
+        stream: { timeoutMs: AGENT_STREAM_MAX_MS },
         // The stream already falls back across sources within one request; a transient failure of them all sleeps
         // durably and retries the request, so a worker can stop or hand over during the backoff.
         retry: AGENT_RETRY_POLICY,

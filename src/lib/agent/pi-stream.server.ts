@@ -49,8 +49,8 @@ export const AGENT_OUTPUT_EXHAUSTED_MESSAGE = "模型的思考用完了单次输
 export const AGENT_SILENT_RESPONSE_MESSAGE = "模型连续两次没有给出回复也没有调用工具；可以重新发起，或换个问法";
 export const AGENT_REJECTED_KEY_MESSAGE = "模型服务拒绝了请求：密钥无效或没有这个模型的权限";
 export const AGENT_UNKNOWN_MODEL_MESSAGE = "模型服务找不到这个模型，请检查上游模型 ID";
-/** One request ran for the whole request time limit (agentModelRequestSignal) without finishing. */
-export const AGENT_TIMEOUT_MESSAGE = "模型超过 5 分钟没有完成这次回复，已中止";
+/** A request stopped sending data for the idle limit, or ran into the outer bound, without finishing. */
+export const AGENT_TIMEOUT_MESSAGE = "模型长时间没有返回数据，已中止；可以重新发起";
 /** A saved gateway key that no longer opens: sealed under another master key, or altered. */
 export const AGENT_GATEWAY_KEY_MESSAGE = "网关密钥无法读取，请管理员在设置中心「AI 服务 → 网关管理」重新填写";
 /** The member's balance ran out before another request of a platform model. */
@@ -94,10 +94,53 @@ const EMPTY_USAGE = {
   totalTokens: 0,
   cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
 };
+/**
+ * Pi cuts a model request only when its stream stays idle this long; an answer that keeps arriving slowly is not cut
+ * for running long. It matches Pi's own `httpIdleTimeoutMs`.
+ */
+export const AGENT_STREAM_IDLE_MS = 300_000;
+/**
+ * A whole model request's outer bound. Pi has none; a worker process runs two tasks at once, so a stream that dribbles a
+ * byte now and then must not hold a slot forever.
+ */
+export const AGENT_STREAM_MAX_MS = 1_800_000;
+/** The compaction summary is one short, non-streaming request; it keeps a plain wall-clock limit. */
+const AGENT_SUMMARY_TIMEOUT_MS = 300_000;
+
+/** One signal per model request: aborted after `idleMs` without data, or `maxMs` in any case. */
+export function agentStreamGuard(signal?: AbortSignal, limits: { idleMs?: number; maxMs?: number } = {}) {
+  const idleMs = limits.idleMs ?? AGENT_STREAM_IDLE_MS, maxMs = limits.maxMs ?? AGENT_STREAM_MAX_MS;
+  const controller = new AbortController();
+  const timedOut = () => controller.abort(new DOMException("Request timed out", "TimeoutError"));
+  let idle = setTimeout(timedOut, idleMs);
+  const total = setTimeout(timedOut, maxMs);
+  idle.unref?.();
+  total.unref?.();
+  const onAbort = () => controller.abort(signal?.reason);
+  if (signal?.aborted) onAbort();
+  else signal?.addEventListener("abort", onAbort, { once: true });
+  return {
+    signal: controller.signal,
+    /** Data arrived: the request is alive, and the idle limit starts over. */
+    touch() {
+      if (controller.signal.aborted) return;
+      clearTimeout(idle);
+      idle = setTimeout(timedOut, idleMs);
+      idle.unref?.();
+    },
+    dispose() {
+      clearTimeout(idle);
+      clearTimeout(total);
+      signal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+/** The plain wall-clock signal a non-streaming request runs under. */
 export function agentModelRequestSignal(signal?: AbortSignal) {
   return AbortSignal.any([
     ...(signal ? [signal] : []),
-    AbortSignal.timeout(300_000),
+    AbortSignal.timeout(AGENT_SUMMARY_TIMEOUT_MS),
   ]);
 }
 export function emptyPiAssistant(model: Model<Api>): AssistantMessage {
@@ -306,60 +349,66 @@ function streamAgentResponse(
           continue;
         }
         await route.admit?.();
-        const requestSignal = agentModelRequestSignal(options?.signal);
+        const guard = agentStreamGuard(options?.signal);
         const messages: Message[] = nudge ? [...transcript, { role: "system", content: nudge, timestamp: Date.now() }] : transcript;
-        const inner = send(messages, requestSignal);
+        const inner = send(messages, guard.signal);
         const base = message.content.length;
         let shown = false;
-        for await (const event of inner) {
-          if (event.type === "text_start") hooks.onAnswerStart?.();
-          else if (event.type === "text_delta") hooks.onAnswerDelta?.(event.delta);
-          if (event.type === "start" || event.type === "done" || event.type === "error") continue;
-          message.content.length = base;
-          message.content.push(...event.partial.content);
-          if (!started) {
-            started = true;
-            hooks.telemetry?.firstToken();
-            output.push({ type: "start", partial: message });
-          }
-          shown = true;
-          output.push({ ...event, contentIndex: base + event.contentIndex, partial: message } as AssistantMessageEvent);
-        }
-        const result = await inner.result();
-        // 每一轮的用量都计入运行指标：缓存读取单独记，重试与提醒后的再次请求各算一轮。
-        hooks.telemetry?.usage(result.usage);
-        message.usage = addUsage(message.usage, result.usage);
-        // 每轮按上游报的用量入账；中断或出错没报用量时，平台模型按提示词与已产出内容估算。
-        await route.record?.(messages, result);
-        if (result.stopReason === "error" || result.stopReason === "aborted") {
-          requestSignal.throwIfAborted();
-          const kind = failureKind(result);
-          // Never restart a provider after part of a response was shown, nor a recovery request.
-          hooks.onAnswerStart?.();
-          if (shown || nudge !== undefined || options?.signal?.aborted || ++failures >= 3) {
+        try {
+          for await (const event of inner) {
+            guard.touch();
+            if (event.type === "text_start") hooks.onAnswerStart?.();
+            else if (event.type === "text_delta") hooks.onAnswerDelta?.(event.delta);
+            if (event.type === "start" || event.type === "done" || event.type === "error") continue;
             message.content.length = base;
-            message.content.push(...result.content);
-            throw new StreamFailure(kind, kind === "transient" && !shown, result.errorMessage);
+            message.content.push(...event.partial.content);
+            if (!started) {
+              started = true;
+              hooks.telemetry?.firstToken();
+              output.push({ type: "start", partial: message });
+            }
+            shown = true;
+            output.push({ ...event, contentIndex: base + event.contentIndex, partial: message } as AssistantMessageEvent);
           }
-          if (kind !== "transient" && failures >= route.sources) throw new StreamFailure(kind, false, result.errorMessage);
-          continue;
-        }
-        message.content.length = base;
-        message.content.push(...result.content);
-        message.stopReason = result.stopReason;
-        if (callsTools(message) || hasVisibleText(message)) {
-          if (nudge === undefined && isProgressOnlyTurn(result)) {
-            nudge = PROGRESS_TURN_NUDGE;
+          const result = await inner.result();
+          guard.signal.throwIfAborted();
+          // 每一轮的用量都计入运行指标：缓存读取单独记，重试与提醒后的再次请求各算一轮。
+          hooks.telemetry?.usage(result.usage);
+          message.usage = addUsage(message.usage, result.usage);
+          // 每轮按上游报的用量入账；中断或出错没报用量时，平台模型按提示词与已产出内容估算。
+          await route.record?.(messages, result);
+          if (result.stopReason === "error" || result.stopReason === "aborted") {
+            const kind = failureKind(result);
+            // Never restart a provider after part of a response was shown, nor a recovery request.
             hooks.onAnswerStart?.();
+            if (shown || nudge !== undefined || options?.signal?.aborted || ++failures >= 3) {
+              message.content.length = base;
+              message.content.push(...result.content);
+              throw new StreamFailure(kind, kind === "transient" && !shown, result.errorMessage);
+            }
+            if (kind !== "transient" && failures >= route.sources) throw new StreamFailure(kind, false, result.errorMessage);
             continue;
           }
-          break;
+          message.content.length = base;
+          message.content.push(...result.content);
+          message.stopReason = result.stopReason;
+          if (callsTools(message) || hasVisibleText(message)) {
+            if (nudge === undefined && isProgressOnlyTurn(result)) {
+              nudge = PROGRESS_TURN_NUDGE;
+              hooks.onAnswerStart?.();
+              continue;
+            }
+            break;
+          }
+          // The same budget would most likely be spent the same way again, so this is not requested again.
+          if (result.stopReason === "length") throw new StreamFailure("exhausted");
+          if (nudge !== undefined) throw new StreamFailure("silent");
+          nudge = SILENT_TURN_NUDGE;
+        } finally {
+          guard.dispose();
         }
-        // The same budget would most likely be spent the same way again, so this is not requested again.
-        if (result.stopReason === "length") throw new StreamFailure("exhausted");
-        if (nudge !== undefined) throw new StreamFailure("silent");
-        nudge = SILENT_TURN_NUDGE;
       }
+
       if (!started) {
         started = true;
         output.push({ type: "start", partial: message });

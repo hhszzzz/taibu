@@ -7,6 +7,11 @@ BEGIN
     RETURN;
   END IF;
 
+  -- The pre-retirement archive view selected conversations.personality. Drop it
+  -- before the column removal; db:init recreates it from database/functions.sql
+  -- after all pending migrations have completed.
+  DROP VIEW IF EXISTS public.conversations_with_archive_status;
+
   ALTER TABLE public.conversations DROP COLUMN IF EXISTS personality;
 
   DROP FUNCTION IF EXISTS public.create_analysis_conversation_with_history_as_service(uuid, text, jsonb, text, text, jsonb, text, jsonb);

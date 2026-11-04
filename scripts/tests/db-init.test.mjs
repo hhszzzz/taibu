@@ -402,6 +402,37 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         await native.query('DELETE FROM public.conversations WHERE user_id = $1', [userId]);
         await native.query('DELETE FROM identity.users WHERE id = $1', [userId]);
       });
+      await t.test('migration 0006 removes the legacy archive view before dropping personality', async () => {
+        // Recreate the pre-retirement shape on an already initialized database.
+        // The old view depends on the column, so this exercises the upgrade path
+        // rather than the fresh-schema baseline path.
+        await native.query('ALTER TABLE public.conversations ADD COLUMN personality text DEFAULT \'general\'');
+        await native.query('DROP VIEW public.conversations_with_archive_status');
+        await native.query(`
+          CREATE VIEW public.conversations_with_archive_status AS
+          SELECT id, user_id, personality, title, messages, created_at, updated_at, source_type, source_data
+          FROM public.conversations;
+        `);
+        await native.query("DELETE FROM taibu_meta.schema_migrations WHERE version = '0006'");
+        try {
+          const log = await initialize();
+          assert.match(log, /Applying 0006 0006_retire_conversation_personality/);
+          assert.equal((await native.query(`
+            SELECT count(*)::int AS n FROM information_schema.columns
+            WHERE table_schema = 'public' AND table_name = 'conversations' AND column_name = 'personality'
+          `)).rows[0].n, 0);
+          assert.equal((await native.query(`
+            SELECT count(*)::int AS n FROM pg_views
+            WHERE schemaname = 'public' AND viewname = 'conversations_with_archive_status'
+          `)).rows[0].n, 1);
+        } finally {
+          // Keep the disposable database converged even when the assertion or
+          // migration fails, so later subtests do not inherit the legacy shape.
+          await native.query('DROP VIEW IF EXISTS public.conversations_with_archive_status');
+          await native.query('ALTER TABLE public.conversations DROP COLUMN IF EXISTS personality');
+          await initialize();
+        }
+      });
       await t.test('db:init --check lists pending migrations without touching the ledger or a legacy table', async () => {
         await native.query('DROP SCHEMA taibu_meta CASCADE');
         // Only a pending migration drops this column, so completion cannot be planned before it runs.

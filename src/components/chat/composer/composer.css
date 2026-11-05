@@ -35,13 +35,12 @@
 .chat-composer-quote > button:disabled { cursor: default; opacity: .4; }
 
 /* ---- Input shell ---- */
-/* 会话内白壳只有一行：+（最前）、编辑区、发送键（输入随内容长高，按钮贴末行）。
-   运行模式与模型在框外的 chin 行（见 .chat-composer-statusbar）。附件条等附属行占满整行置于主行上方。 */
+/* 白壳两行：输入区在上，工具行在下（+ 居左、发送贴右）。附件、引用等附属行占满整行置于输入区上方。 */
 /* claude 实测：白壳无 CSS 边框（border-width 0），靠 shadow ring 收边；环 = border-strong（20%），
    阴影 0 4px 20px 7.5%（本地克隆站源码实测：`shadow-[0_4px_20px_rgb(0_0_0/7.5%),0_0_0_1px_var(--cds-border-strong)]`）。 */
-.chat-composer-shell { position: relative; z-index: 1; display: flex; flex-direction: row; flex-wrap: wrap; align-items: flex-end; gap: 0 2px; padding: 8px; border: 0; border-radius: 14px; background: var(--chat-raised); box-shadow: 0 0 0 1px var(--border-hover), 0 4px 20px hsl(from var(--neutral-900) h s l / 7.5%); transition: box-shadow .15s; }
+.chat-composer-shell { position: relative; z-index: 1; display: flex; flex-direction: column; align-items: stretch; gap: 4px; padding: 6px; border: 0; border-radius: 14px; background: var(--chat-raised); box-shadow: 0 0 0 1px var(--border-hover), 0 4px 20px hsl(from var(--neutral-900) h s l / 7.5%); transition: box-shadow .15s; }
 .chat-composer-shell:focus-within { box-shadow: 0 0 0 1px var(--border-hover), 0 4px 20px hsl(from var(--neutral-900) h s l / 7.5%); }
-/* claude /new 实测（克隆站源码）：hero 壳 = `p-2` 换成 `14px 8px 8px`、gap 6px、编辑区 42px、工具行 32px
+/* claude /new 实测（克隆站源码）：hero 壳 = `p-2` 换成 `14px 8px 8px`、编辑区 42px、工具行 32px
    → 102 = 14+42+6+32+8。 */
 /* 首屏放大：高度由负 margin 抵消，底边留在原处、顶边向上长，盖住问候语；整体略下移贴近窗口底部。 */
 /* 放大时底边不动、顶边向上长：负 margin 抵消新增高度，输入框覆盖上方内容而不是挤压布局。 */
@@ -49,12 +48,10 @@
 .chat-composer-dock[data-expanded] { position: relative; }
 .chat-composer-dock.is-hero { transition: margin-top .24s cubic-bezier(.22,.7,.2,1), transform .24s cubic-bezier(.22,.7,.2,1); }
 .chat-composer-dock.is-hero[data-expanded] { transform: translateY(6vh); }
-.is-hero .chat-composer-shell { flex-direction: column; align-items: stretch; gap: 6px; padding: 14px 8px 8px; border-radius: 14px; }
-.is-hero .chat-composer-field { flex: 0 0 auto; }
-.is-hero .chat-composer-shell > :not(.chat-composer-field):not(.chat-composer-actions):not(.chat-composer-send-group) { flex: 0 0 auto; }
+.is-hero .chat-composer-shell { padding: 10px 8px 8px; border-radius: 14px; }
 .is-locked .chat-composer-shell { background: var(--background-secondary); box-shadow: none; }
-.chat-composer-shell > :not(.chat-composer-field):not(.chat-composer-actions):not(.chat-composer-send-group) { flex: 0 0 100%; order: -1; }
-.chat-composer-field { position: relative; flex: 1 1 120px; min-width: 0; }
+.chat-composer-shell > :not(.chat-composer-field):not(.chat-composer-actions):not(.chat-composer-send-group) { flex: 0 0 auto; width: 100%; }
+.chat-composer-field { position: relative; flex: 0 0 auto; width: 100%; min-width: 0; }
 /* The overlay draws mention tokens and the placeholder under a transparent textarea; both share metrics. */
 .chat-composer-input { display: block; box-sizing: border-box; width: 100%; margin: 0; padding: 5.5px 8px; border: 0; font: inherit; font-size: calc(15 / 16 * 1rem); line-height: 1.4; letter-spacing: normal; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; scrollbar-width: thin; }
 .chat-composer-overlay { position: absolute; inset: 0; pointer-events: none; color: var(--foreground); }
@@ -71,6 +68,9 @@
 .chat-composer-textarea::selection { background: color-mix(in srgb, var(--accent) 24%, transparent); color: transparent; }
 .chat-composer-textarea:disabled { cursor: not-allowed; }
 .chat-composer-placeholder { color: var(--foreground-tertiary); }
+/* 追问建议：输入框为空时以幽灵文本出现，Tab 填入、回车直接发送。 */
+.chat-composer-suggestion { color: var(--foreground-tertiary); }
+.chat-composer-suggestion-key { margin-left: 6px; padding: 1px 4px; border-radius: 4px; background: var(--fill-field); font-family: inherit; font-size: calc(11 / 16 * 1rem); line-height: inherit; color: var(--foreground-tertiary); }
 /* Box shadow pads the token without shifting text away from the textarea's caret. */
 .chat-mention-token { border-radius: 5px; background: var(--fill-field); color: var(--foreground-secondary); box-shadow: 0 0 0 2px var(--fill-field); }
 /* 提及去掉 @ 字符、以图标呈现：@ 保留原有字宽（透明）以维持镜像与 textarea 的逐字对齐，
@@ -82,7 +82,7 @@
 .chat-mention-chip > svg { flex-shrink: 0; color: var(--foreground-secondary); }
 
 /* ---- Toolbar ---- */
-/* 工具簇：hero 在壳内第二行（+ 居左、发送群贴右）；会话内在框外 chin 行左端（claude /chat 实测「+」为 24×24）。 */
+/* 工具簇：白壳第二行（+ 居左、发送群贴右），首屏与会话内一致。 */
 .chat-composer-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; min-width: 0; }
 /* 发送群：会话内单独占白壳行右侧 */
 .chat-composer-send-group { display: flex; flex-shrink: 0; align-items: center; gap: 6px; }

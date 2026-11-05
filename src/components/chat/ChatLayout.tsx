@@ -50,7 +50,7 @@ import { publishChatModeControl, clearChatModeControl, type ChatModeControl } fr
 import { composerNote, isRunningComposerNote, type ComposerNoteState } from '@/lib/chat/composer-copy';
 import { collectAgentArtifacts, getAgentCitedParagraph } from './agent/presentation';
 import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from '@/lib/agent/types';
-import { shouldPrefillFollowUp } from '@/lib/agent/follow-ups';
+import { shouldOfferFollowUp } from '@/lib/agent/follow-ups';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { orderAgentMessagesForDisplay } from '@/lib/agent/browser-client';
 import { JumpToLatest } from './JumpToLatest';
@@ -91,8 +91,8 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onRegenerateResponse: (messageId: string) => Promise<void>;
     onSwitchVersion: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
-    /** Sends the composer; the optional context is the rich chart quote attached above it. */
-    onSend: (context?: string, quotes?: MessageQuote[]) => Promise<void>;
+    /** Sends the composer; the optional context is the rich chart quote attached above it, and text overrides the draft. */
+    onSend: (context?: string, quotes?: MessageQuote[], text?: string) => Promise<void>;
     /** 输入框生图：直接调用生图接口，不经过对话模型。 */
     onImageGenerate?: (options: { prompt: string; size: string; count: number }) => void | Promise<void>;
     onStop: () => void;
@@ -353,18 +353,26 @@ export function ChatLayout(props: ChatLayoutProps) {
     const focusComposer = useCallback((scope = workspaceKey) => requestAnimationFrame(() => {
         if (draftScope.current === scope) contentRef.current?.querySelector<HTMLTextAreaElement>('[data-chat-composer] textarea')?.focus();
     }), [workspaceKey]);
-    // 任务在本页跑完时，把它建议的那一条追问直接写进输入框（可改可直接发）。
-    // 只在看到过它运行时生效：打开旧对话不会把当时的建议塞进输入框；已有草稿也不覆盖。
+    // 任务在本页跑完时，把它的那条追问作为输入框的幽灵占位给出：Tab 填入，回车直接发送。
+    // 只在看到过它运行时生效：打开旧对话不会出现当时的建议；已有草稿也不出现。
     const seenRunStatus = useRef(new Map<string, AgentRunStatus>());
+    const [followUpSuggestion, setFollowUpSuggestion] = useState<string | null>(null);
     useEffect(() => {
         if (!latestAgentData) return;
         const previousStatus = seenRunStatus.current.get(latestAgentData.runId);
         seenRunStatus.current.set(latestAgentData.runId, latestAgentData.status);
         const suggestion = latestAgentData.followUps?.[0];
-        if (!shouldPrefillFollowUp({ previousStatus, status: latestAgentData.status, suggestion, draft: inputValue, disabled })) return;
-        onInputChange(suggestion!);
+        if (!shouldOfferFollowUp({ previousStatus, status: latestAgentData.status, suggestion, draft: inputValue, disabled })) return;
+        setFollowUpSuggestion(suggestion!);
         focusComposer();
-    }, [latestAgentData, inputValue, disabled, onInputChange, focusComposer]);
+    }, [latestAgentData, inputValue, disabled, focusComposer]);
+    // 用户一动手写自己的内容，建议就让位；切换对话时也不带走。
+    const suggestionScope = useRef(workspaceKey);
+    useEffect(() => {
+        if (suggestionScope.current === workspaceKey) return;
+        suggestionScope.current = workspaceKey;
+        setFollowUpSuggestion(null);
+    }, [workspaceKey]);
     // 引用：选中助手回答中的文字或「引用整条」，进入输入框上方的引用条；发送后随用户消息一起保存。
     const [quotes, setQuotes] = useState<MessageQuote[]>([]);
     const quotesRef = useRef(quotes);
@@ -407,10 +415,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         if (!isDesktopLayout()) closeWorkspace();
         focusComposer();
     };
-    const sendWithContext = async () => {
+    const sendWithContext = async (text?: string) => {
         const context = activeChartAsks.length ? activeChartAsks.map(ask => chartQuestion(ask.reference, ask.targets)).join('\n\n') : undefined;
         const outgoing = quotes;
-        await onSend(context, outgoing.length ? outgoing : undefined);
+        setFollowUpSuggestion(null);
+        await onSend(context, outgoing.length ? outgoing : undefined, text);
         // 发送被余额提示拦下时保留引用与追问命盘，用户不必重新添加。
         setChartAsks([]);
         if (outgoing.length) setQuotes([]);
@@ -552,9 +561,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         onOpenContextResource: openResource,
         awaitingInput: props.agent?.run?.status === 'awaiting_input',
         allowDuringRun: props.agent?.active,
+        runningSendMode: preferences.runningSendMode ?? 'supplement',
         onQueueMessage: props.onQueueMessage,
         inputValue, isLoading, isSendingToList,
-        onInputChange, onSend, onStop, onAuthRequired, disabled,
+        onInputChange: (value: string) => { if (value.trim()) setFollowUpSuggestion(null); onInputChange(value); },
+        onSend, onStop, onAuthRequired, disabled,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
@@ -565,7 +576,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         imageGeneration,
         plainWebAvailable: !!agent?.capabilities.plainWebAvailable,
     };
-    const composer = <ChatComposer {...composerProps} onSend={sendWithContext} continuing note={note} noteOptional={isRunningComposerNote(noteState)}
+    const composer = <ChatComposer {...composerProps} onSend={sendWithContext} onSendSuggestion={text => void sendWithContext(text)} suggestion={followUpSuggestion} continuing note={note} noteOptional={isRunningComposerNote(noteState)}
         queue={currentRun && <AgentQueue key={`${workspaceKey}:${currentRun.id}`} run={currentRun} restoreDraft={message => void restoreDraft(message)} />} />;
     const toggleWorkspace = () => {
         if (workspaceOpen) { closeWorkspace(); return; }

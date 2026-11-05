@@ -27,7 +27,7 @@ import type { AgentChartKind } from '@/lib/agent/tool-catalog';
 import { getCurrentUserSettings } from '@/lib/user/settings';
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
-import { ComposerToolbar, ComposerSendCluster, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
+import { ComposerToolbar, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import { QuoteBar } from '@/components/chat/composer/QuoteBar';
 import type { MessageQuote } from '@/lib/chat/quotes';
@@ -79,12 +79,18 @@ interface ChatComposerProps extends ModelSettingsProps {
     continuing?: boolean;
     awaitingInput?: boolean;
     allowDuringRun?: boolean;
+    /** 任务进行中直接发送草稿时的默认方式（个性化设置）。 */
+    runningSendMode?: 'supplement' | 'follow_up';
     onQueueMessage?: () => Promise<void>;
     inputValue: string;
     isLoading: boolean;
     isSendingToList?: boolean;
     onInputChange: (value: string) => void;
     onSend: () => void;
+    /** 任务完成后的追问建议：输入框为空时作为幽灵占位显示。 */
+    suggestion?: string | null;
+    /** 直接发送建议文本（不先填进输入框）。 */
+    onSendSuggestion?: (text: string) => void;
     onStop?: () => void;
     onAuthRequired?: () => void;
     disabled?: boolean;
@@ -124,12 +130,15 @@ export function ChatComposer({
     continuing = false,
     awaitingInput = false,
     allowDuringRun = false,
+    runningSendMode = 'supplement',
     onQueueMessage,
     inputValue,
     isLoading,
     isSendingToList = false,
     onInputChange,
     onSend,
+    suggestion,
+    onSendSuggestion,
     onStop,
     onAuthRequired,
     disabled = false,
@@ -202,8 +211,11 @@ export function ChatComposer({
     } = state;
     const commands = useComposerCommands({ userId, draftKey, text: inputValue, change: onInputChange, textarea: textareaRef, mentionsOpen: mentionOpen, model: selectedModel, agentMode });
     const uploads = usePrivateAttachments({ scopeKey: draftKey ?? userId ?? 'anonymous', state: attachmentState ?? { webSearchEnabled: false }, change: value => onAttachmentChange?.(value), onError: message => showToast('error', message) });
+    const running = allowDuringRun && isLoading;
+    // 追问建议只在空输入框、可发送时出现；有草稿或正在忙时让位。
+    const suggestionText = !disabled && !isLoading && !imageMode && !inputValue.trim() ? suggestion?.trim() ?? '' : '';
     const submit = () => {
-        if (uploads.uploading || isLoading || isSendingToList) return;
+        if (uploads.uploading || (isLoading && !allowDuringRun) || isSendingToList) return;
         if (imageMode && imageGeneration) {
             if (!userId) { onAuthRequired?.(); return; }
             if (!inputValue.trim()) return;
@@ -213,6 +225,11 @@ export function ChatComposer({
         }
         commands.remember();
         onSend();
+    };
+    // 任务进行中按回车/发送键时跟随个性化设置；分工按钮仍各发各的。
+    const submitDefault = () => {
+        if (running && !awaitingInput && runningSendMode === 'follow_up' && onQueueMessage) { void onQueueMessage(); return; }
+        submit();
     };
     // 未登录时点到需要账号的条目：右下角提示先登录，并提供登录入口。
     const requireLogin = () => {
@@ -402,6 +419,22 @@ export function ChatComposer({
         if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
         if (commands.keyDown(e)) return;
         if (mentionOpen) return;
+        if (!inputValue.trim() && suggestionText) {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                onInputChange(suggestionText);
+                return;
+            }
+            if (e.key === 'Enter' && !e.shiftKey && !disabled && !uploads.uploading && (!isLoading || allowDuringRun) && !isSendingToList && onSendSuggestion) {
+                e.preventDefault();
+                if (!userId && onAuthRequired) {
+                    onAuthRequired();
+                    return;
+                }
+                onSendSuggestion(suggestionText);
+                return;
+            }
+        }
         if (e.key === 'Backspace' || e.key === 'Delete') {
             const textarea = textareaRef.current;
             if (textarea) {
@@ -450,7 +483,7 @@ export function ChatComposer({
                 onAuthRequired();
                 return;
             }
-            submit();
+            submitDefault();
         }
     };
 
@@ -550,8 +583,14 @@ export function ChatComposer({
 
     const handleButtonClick = () => {
         if (isSendingToList || mentionSettlingRef.current) return;
-        if (isLoading && onStop && !(allowDuringRun && inputValue.trim())) {
+        if (isLoading && onStop && !(allowDuringRun && (inputValue.trim() || suggestionText))) {
             onStop();
+        } else if (!inputValue.trim() && suggestionText && onSendSuggestion) {
+            if (!userId && onAuthRequired) {
+                onAuthRequired();
+                return;
+            }
+            onSendSuggestion(suggestionText);
         } else if (inputValue.trim()) {
             if (!userId && onAuthRequired) {
                 onAuthRequired();
@@ -564,8 +603,7 @@ export function ChatComposer({
     const hero = variant === 'hero';
     // 放大（首屏与已有对话一致）：输入区向上长高、底边留在原处并盖住上方内容；margin 与高度同速过渡。
     const dockStyle = composerExpanded ? { marginTop: -(composerHeight - COMPOSER_MAX_HEIGHT) } : undefined;
-    const running = allowDuringRun && isLoading;
-    const hasDraft = Boolean(inputValue.trim());
+    const hasDraft = Boolean(inputValue.trim() || suggestionText);
     let inputPlaceholder: string;
     let inputLabel: string;
     if (disabled) { inputPlaceholder = '暂时无法发送'; inputLabel = agentMode ? '描述你的问题' : '输入消息'; }
@@ -581,7 +619,7 @@ export function ChatComposer({
     } else { inputPlaceholder = '问问命盘、运势，或最近困惑的事…'; inputLabel = '输入消息'; }
 
     const send: ComposerSendState = isSendingToList || uploads.uploading ? { kind: 'sending' }
-        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
+        : running && hasDraft && !awaitingInput ? { kind: 'split', disabled: !!disabled, preferred: runningSendMode, onSupplement: submit, onFollowUp: onQueueMessage ? () => void onQueueMessage() : undefined, onStop }
         : isLoading && onStop ? { kind: 'stop' }
         : { kind: 'send', disabled: !hasDraft };
     const toolbarProps = {
@@ -659,8 +697,6 @@ export function ChatComposer({
                         disabled={disabled}
                     />
 
-                    {!hero && <ComposerToolbar {...toolbarProps} showSend={false} />}
-
                     <div className={`chat-composer-field${composerExpandable ? ' has-expand' : ''}`}>
                         {composerExpandable && (
                             <Button unstyled
@@ -683,7 +719,10 @@ export function ChatComposer({
                                     ? <span key={`chart-${part.start}`} className="chat-mention-token" data-type="chart">
                                         <span className="chat-mention-at">@<ChartAskIcon kind={part.chartKind} /></span>{part.value.slice(1)}
                                     </span>
-                                    : <span key={`text-${index}`}>{part.value}</span>) : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
+                                    : <span key={`text-${index}`}>{part.value}</span>)
+                                : suggestionText
+                                    ? <span className="chat-composer-suggestion">{suggestionText}<kbd className="chat-composer-suggestion-key">Tab</kbd></span>
+                                    : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
                         </div>
                         <Textarea
                             aria-label={inputLabel}
@@ -711,11 +750,8 @@ export function ChatComposer({
                         />
                     </div>
 
-                    {/* 会话内白壳只有一行：+（在最前）、编辑区、发送键同排。
-                       hero（首屏）仍是两行壳：工具与发送同排在第二行，见 .is-hero 覆盖。 */}
-                    {hero
-                        ? <ComposerToolbar {...toolbarProps} />
-                        : <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
+                    {/* 输入区独占一行，+ 与发送在下方工具行：左侧 +、右侧发送。 */}
+                    <ComposerToolbar {...toolbarProps} />
                 </div>
 
                 {imageMode && imageGeneration && <div className="chat-image-options" role="group" aria-label="生图设置">

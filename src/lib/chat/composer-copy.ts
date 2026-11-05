@@ -18,9 +18,8 @@ export function composerNote(state: ComposerNoteState): string {
     if (state.agentUnavailable) return '后台任务暂不可用，可切换到普通对话';
     if (state.reconnecting) return '正在重新连接任务 · 后台仍在执行';
     if (state.awaiting) return '也可以在对话里直接回答 · 等待期间不会超时，也不会再次扣费';
-    if (state.running) return state.collaborators
-        ? '协作配置在任务创建时冻结 · 修改将用于下一项任务'
-        : '后台执行中，关闭页面也会继续';
+    // 运行中的「后台执行中」由标题栏状态承担，输入框下不再重复。
+    if (state.running && state.collaborators) return '协作配置在任务创建时冻结 · 修改将用于下一项任务';
     return '';
 }
 

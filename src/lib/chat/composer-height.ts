@@ -1,17 +1,15 @@
 /**
  * Composer field sizing.
  *
- * One line keeps the compact row. As soon as the draft wraps, the field takes a
- * comfortable height so the text sits at the top with room to keep typing
- * below it. Past the normal cap the field stops growing and the expand key lets
- * the user grow it in place up to a share of the window.
+ * One line keeps the compact row. A wrapped draft grows with its content, line
+ * by line, so the field never jumps to a fixed height. Past the normal cap the
+ * field stops growing and the expand key lets the user grow it in place up to
+ * a share of the window.
  */
 
 export const COMPOSER_MIN_HEIGHT = 24;
 /** One line of text plus padding: 15px × 1.4 + 11px, rounded up for 16px mobile text. */
 export const COMPOSER_SINGLE_LINE_HEIGHT = 34;
-/** Empty space kept under a wrapped draft, about five lines. */
-export const COMPOSER_COMFORT_HEIGHT = 120;
 /** Height the field reaches before offering the expand key: about seven lines. */
 export const COMPOSER_MAX_HEIGHT = 160;
 /** Expanded editor: opens at this share of the window even when the draft is short. */
@@ -39,7 +37,7 @@ export interface ComposerHeight {
 
 export function resolveComposerHeight({ natural, hero, expanded, viewport }: ComposerHeightInput): ComposerHeight {
   const singleLine = hero ? COMPOSER_HERO_SINGLE_LINE_HEIGHT : COMPOSER_SINGLE_LINE_HEIGHT;
-  // 单行沿用内容自身高度（旧行为），只为换行后的草稿加舒适高度。
+  // 单行保持紧凑；换行后随内容逐行长高。
   if (natural <= singleLine) return { height: Math.min(Math.max(natural, COMPOSER_MIN_HEIGHT), singleLine), expandable: false };
   const expandable = natural > COMPOSER_MAX_HEIGHT;
   if (expanded) {
@@ -52,5 +50,5 @@ export function resolveComposerHeight({ natural, hero, expanded, viewport }: Com
       expandable,
     };
   }
-  return { height: Math.min(Math.max(natural, COMPOSER_COMFORT_HEIGHT), COMPOSER_MAX_HEIGHT), expandable };
+  return { height: Math.min(natural, COMPOSER_MAX_HEIGHT), expandable };
 }

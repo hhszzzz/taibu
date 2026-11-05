@@ -77,7 +77,7 @@ export type ComposerSendState =
     | { kind: 'send'; disabled: boolean }
     | { kind: 'sending' }
     | { kind: 'stop' }
-    | { kind: 'split'; disabled: boolean; onSupplement: () => void; onFollowUp?: () => void; onStop?: () => void };
+    | { kind: 'split'; disabled: boolean; preferred?: 'supplement' | 'follow_up'; onSupplement: () => void; onFollowUp?: () => void; onStop?: () => void };
 
 interface ComposerToolbarProps extends ModelSettingsProps {
     agentMode: boolean;
@@ -256,8 +256,8 @@ export function ComposerSendCluster({ send, agentMode, disabled, onSend, onStop 
     return (
         <div className="chat-composer-send-group">
             {send.kind === 'split' ? <>
-                {send.onFollowUp && <Button unstyled type="button" className="chat-run-secondary" disabled={send.disabled} onClick={send.onFollowUp}>结束后续问</Button>}
-                <Button unstyled type="button" className="chat-run-primary" disabled={send.disabled} onClick={send.onSupplement}>补充到当前任务</Button>
+                {send.onFollowUp && <Button unstyled type="button" className={send.preferred === 'follow_up' ? 'chat-run-primary' : 'chat-run-secondary'} disabled={send.disabled} onClick={send.onFollowUp}>结束后续问</Button>}
+                <Button unstyled type="button" className={send.preferred === 'follow_up' ? 'chat-run-secondary' : 'chat-run-primary'} disabled={send.disabled} onClick={send.onSupplement}>立即发送</Button>
                 {send.onStop && <Button unstyled type="button" className="chat-stop-button is-small" aria-label="停止任务" title="停止任务" onClick={send.onStop}>
                     <Square size={11} fill="currentColor" strokeWidth={0} aria-hidden="true" />
                 </Button>}

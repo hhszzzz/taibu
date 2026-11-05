@@ -1,13 +1,13 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk } from '@/lib/api-utils';
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, setAgentExtensionsPolicy } from '@/lib/app-settings';
 
-import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { isValidUUID } from '@/lib/validation';
-import { extensionAllowance, parseAgentExtensionsPolicy, type ExtensionAllowanceView } from './config';
+import { administratorOwner, memberOwner, readSettingsBody as readBody, type SettingsOwner as Owner } from '../settings-owner.server';
+import { extensionAllowance, parseAgentExtensionsPolicy, type ExtensionAllowanceView } from '../extensions/config';
 import { testMcpServer } from './endpoint.server';
 import { McpInputError, parseMcpServerInput, type McpServerFields } from './input.server';
 import { mcpPool } from './pool.server';
@@ -29,23 +29,7 @@ async function connectorsGate(): Promise<Response | null> {
  * users their own connectors through their own, so row security keeps each to its rows. Responses carry secret names
  * only; logs carry error codes only.
  */
-type Owner = { db: ScopedDb; owner: string | null; userId: string };
-
 const TEST_RATE_LIMIT = { endpoint: '/api/user/connectors/test', maxRequests: 10, windowMs: 60_000 } as const;
-
-async function administrator(request: NextRequest): Promise<Owner | Response> {
-  const auth = await requireAdminUser(request);
-  if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  return { db: systemDb(), owner: null, userId: auth.user.id };
-}
-
-async function member(request: NextRequest): Promise<Owner | Response> {
-  const auth = await requireUserContext(request);
-  if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  const expected = request.headers.get('X-Expected-User-Id');
-  if (expected !== null && expected !== auth.user.id) return jsonError('账号已切换', 409);
-  return { db: auth.db, owner: auth.user.id, userId: auth.user.id };
-}
 
 function failure(error: unknown, action: string): Response {
   if (error instanceof McpInputError) return jsonError(error.message, 400);
@@ -53,8 +37,6 @@ function failure(error: unknown, action: string): Response {
   console.error('[agent-mcp]', { action, code: toDbError(error).code });
   return jsonError(`${action}失败`, 500);
 }
-
-const readBody = (request: NextRequest) => request.json().catch(() => null) as Promise<unknown>;
 
 async function changed(owner: Owner) {
   if (owner.owner === null) await invalidatePlatformMcpServers();
@@ -149,59 +131,59 @@ async function test(owner: Owner, request: NextRequest, id: string) {
 }
 
 export async function listPlatformMcpServers(request: NextRequest) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : list(owner);
 }
 export async function createPlatformMcpServer(request: NextRequest) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : create(owner, request);
 }
 export async function updatePlatformMcpServer(request: NextRequest, id: string) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : update(owner, request, id);
 }
 export async function deletePlatformMcpServer(request: NextRequest, id: string) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : remove(owner, id);
 }
 export async function testPlatformMcpServer(request: NextRequest, id: string) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : test(owner, request, id);
 }
 
 export async function listUserConnectors(request: NextRequest) {
   const gate = await connectorsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : list(owner);
 }
 export async function createUserConnector(request: NextRequest) {
   const gate = await connectorsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : create(owner, request);
 }
 export async function updateUserConnector(request: NextRequest, id: string) {
   const gate = await connectorsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : update(owner, request, id);
 }
 export async function deleteUserConnector(request: NextRequest, id: string) {
   const gate = await connectorsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : remove(owner, id);
 }
 export async function testUserConnector(request: NextRequest, id: string) {
   const gate = await connectorsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : test(owner, request, id);
 }
 
 export async function readExtensionsPolicy(request: NextRequest) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   if (owner instanceof Response) return owner;
   try {
     return jsonOk({ policy: await getAgentExtensionsPolicy() });
@@ -211,7 +193,7 @@ export async function readExtensionsPolicy(request: NextRequest) {
 }
 
 export async function saveExtensionsPolicy(request: NextRequest) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   if (owner instanceof Response) return owner;
   let policy;
   try {

@@ -5,6 +5,7 @@
  * Key 默认只在用户浏览器里；连接打开「保存到本站」后才加密存库，该连接的调用改由本站服务器发起。
  */
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
+import { isPlainObject } from '@/lib/validation';
 
 export const BYOK_PROTOCOLS = ['openai', 'anthropic'] as const;
 export type ByokProtocol = (typeof BYOK_PROTOCOLS)[number];
@@ -222,6 +223,11 @@ export function byokKeyHint(key: string): string {
   return key.length >= 12 ? `${key.slice(0, 3)}…${key.slice(-4)}` : `…${key.slice(-2)}`;
 }
 
+/** Why a trimmed key cannot be saved, or null when it can. */
+export function byokKeyFormatError(key: string): string | null {
+  return key.length > BYOK_KEY_MAX || /\s/u.test(key) ? 'API Key 格式无效' : null;
+}
+
 // ─── Effort ───
 
 /** The levels the effort menu offers: the known ones, or all six when nothing is known. */
@@ -366,8 +372,6 @@ export interface ByokConnectionInput {
   models: ByokModelInput[];
 }
 
-const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-
 function text(value: unknown, field: string, max: number): string {
   if (typeof value !== 'string' || !value.trim()) throw new ByokInputError(`请填写${field}`);
   const trimmed = value.trim();
@@ -385,7 +389,7 @@ function capacity(value: unknown, field: string, range: { min: number; max: numb
 }
 
 function parseModel(value: unknown, protocol: ByokProtocol): ByokModelInput {
-  if (!isRecord(value)) throw new ByokInputError('模型配置无效');
+  if (!isPlainObject(value)) throw new ByokInputError('模型配置无效');
   const modelId = text(value.modelId, '模型 ID', BYOK_MODEL_ID_MAX);
   const usage = value.usage === undefined ? 'chat' : value.usage;
   if (!BYOK_USAGES.includes(usage as ByokUsage)) throw new ByokInputError(`「${modelId}」的用途无效`);
@@ -425,12 +429,13 @@ function parseModels(value: unknown, protocol: ByokProtocol, maxModels: number):
 }
 
 function parseKey(value: unknown): ByokKeyInput {
-  if (!isRecord(value) || typeof value.store !== 'boolean') throw new ByokInputError('Key 设置无效');
+  if (!isPlainObject(value) || typeof value.store !== 'boolean') throw new ByokInputError('Key 设置无效');
   if (!value.store) return { store: false };
   if (value.value === undefined || value.value === null) return { store: true };
   if (typeof value.value !== 'string' || !value.value.trim()) throw new ByokInputError('请填写 API Key');
   const key = value.value.trim();
-  if (key.length > BYOK_KEY_MAX || /\s/u.test(key)) throw new ByokInputError('API Key 格式无效');
+  const formatError = byokKeyFormatError(key);
+  if (formatError) throw new ByokInputError(formatError);
   return { store: true, value: key };
 }
 
@@ -441,7 +446,7 @@ function parseKey(value: unknown): ByokKeyInput {
 export function parseByokConnectionInput(value: unknown, options: { partial: true; maxModels: number; protocol?: ByokProtocol }): Partial<ByokConnectionInput>;
 export function parseByokConnectionInput(value: unknown, options: { partial: false; maxModels: number }): ByokConnectionInput;
 export function parseByokConnectionInput(value: unknown, options: { partial: boolean; maxModels: number; protocol?: ByokProtocol }): Partial<ByokConnectionInput> {
-  if (!isRecord(value)) throw new ByokInputError('连接配置无效');
+  if (!isPlainObject(value)) throw new ByokInputError('连接配置无效');
   const result: Partial<ByokConnectionInput> = {};
   if (!options.partial || value.name !== undefined) result.name = text(value.name, '连接名称', BYOK_NAME_MAX);
   if (!options.partial || value.protocol !== undefined) {

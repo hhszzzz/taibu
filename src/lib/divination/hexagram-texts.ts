@@ -257,7 +257,3 @@ export const HEXAGRAM_TEXTS: Record<string, HexagramText> = computedHexagramText
 export function getHexagramText(name: string): HexagramText | undefined {
     return HEXAGRAM_TEXTS[name];
 }
-
-export function getYaoText(hexagramName: string, position: number): YaoText | undefined {
-    return HEXAGRAM_TEXTS[hexagramName]?.yao.find((item) => item.position === position);
-}

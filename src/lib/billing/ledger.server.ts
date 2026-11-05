@@ -4,6 +4,7 @@ import {
     BILLING_LEDGER_TOTALS, billingLedgerWhere, billingReferenceCostsQuery, type BillingLedgerRow, type PaymentOrderRow,
 } from '@/lib/db/billing-queries';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
+import { isPlainObject } from '@/lib/validation';
 import type {
     AdminPaymentOrderView, AdminUsagePage, LedgerEntryView, LedgerFilters, LedgerKind, LedgerModelLabel, LedgerPage, LedgerPrices,
     LedgerUsage, PaymentOrderView, ReferenceCost, SubscriptionWindow, UsageByModel, UsageTotals,
@@ -12,10 +13,8 @@ import type {
 const USAGE_COUNTS = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning', 'images'] as const;
 const PRICE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite', 'image'] as const;
 
-const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-
 function ledgerPrices(value: unknown): LedgerPrices | null {
-    if (!isRecord(value)) return null;
+    if (!isPlainObject(value)) return null;
     const prices: LedgerPrices = {};
     for (const key of PRICE_KEYS) {
         const price = value[key];
@@ -26,7 +25,7 @@ function ledgerPrices(value: unknown): LedgerPrices | null {
 }
 
 function ledgerUsage(value: unknown): LedgerUsage | null {
-    if (!isRecord(value)) return null;
+    if (!isPlainObject(value)) return null;
     const usage: LedgerUsage = {};
     for (const key of USAGE_COUNTS) if (typeof value[key] === 'number') usage[key] = value[key];
     if (value.estimated === true) usage.estimated = true;
@@ -36,7 +35,7 @@ function ledgerUsage(value: unknown): LedgerUsage | null {
     return usage;
 }
 
-export function toLedgerEntryView(row: BillingLedgerRow): LedgerEntryView {
+function toLedgerEntryView(row: BillingLedgerRow): LedgerEntryView {
     const parts = Array.isArray(row.subscription_parts) ? row.subscription_parts as Array<Record<string, unknown>> : [];
     return {
         id: row.id, kind: row.kind as LedgerKind, amountMicros: Number(row.amount_micros), walletMicros: Number(row.wallet_micros),
@@ -54,7 +53,7 @@ function matching(filters: LedgerFilters, options: { userIds?: readonly string[]
     return billingLedgerWhere({ ...filters, ...options });
 }
 
-export function toPaymentOrderView(row: PaymentOrderRow & { plan_title: string | null }): PaymentOrderView {
+function toPaymentOrderView(row: PaymentOrderRow & { plan_title: string | null }): PaymentOrderView {
     return {
         id: row.id, tradeNo: row.trade_no, kind: row.kind as PaymentOrderView['kind'], planId: row.plan_id, planTitle: row.plan_title,
         creditMicros: row.credit_micros === null ? null : Number(row.credit_micros), payAmount: Number(row.pay_amount),
@@ -117,8 +116,6 @@ export async function listLedger(userId: string, db: ScopedDb = systemDb(), page
     };
 }
 
-const TOTALS = BILLING_LEDGER_TOTALS;
-
 type TotalsRow = { calls: unknown; input: unknown; output: unknown; cache_read: unknown; cache_write: unknown; reasoning: unknown; images: unknown; spent: unknown };
 
 function usageTotals(row: TotalsRow | undefined): UsageTotals {
@@ -137,8 +134,8 @@ function usageTotals(row: TotalsRow | undefined): UsageTotals {
 async function usageSums(db: ScopedDb, filters: LedgerFilters, userIds?: readonly string[]): Promise<{ totals: UsageTotals; byModel: UsageByModel[] }> {
     const where = matching({ ...filters, kind: undefined }, { userIds, kinds: ['usage', 'refund'] });
     const [totals, byModel] = await Promise.all([
-        db.tx((trx) => trx.selectFrom('billing_ledger').select(TOTALS).where(where).executeTakeFirst()),
-        db.tx((trx) => trx.selectFrom('billing_ledger').select(['model_key', ...TOTALS]).where(where)
+        db.tx((trx) => trx.selectFrom('billing_ledger').select(BILLING_LEDGER_TOTALS).where(where).executeTakeFirst()),
+        db.tx((trx) => trx.selectFrom('billing_ledger').select(['model_key', ...BILLING_LEDGER_TOTALS]).where(where)
             .where('model_key', 'is not', null).groupBy('model_key').orderBy('spent', 'desc').limit(50).execute()),
     ]);
     return {

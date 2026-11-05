@@ -5,6 +5,7 @@
  */
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
 import { elementTextClass, ganZhiTextClass, isFiveElement } from '@/components/bazi/element-classes';
+import { formatClockTime } from '@/lib/local-date';
 
 type Palace = DaliurenCanonicalJSON['天地盘'][number];
 
@@ -86,7 +87,7 @@ export function formatCastTime(params: DaliurenCastParams | null, fallback: stri
     const hour = params?.hour;
     const minute = params?.minute;
     if (typeof date !== 'string' || !date || !isWholeNumber(hour) || !isWholeNumber(minute)) return fallback;
-    return `${date} ${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    return `${date} ${formatClockTime(hour, minute)}`;
 }
 
 /** 「本命 1984 坤 · 行年庚寅」：出生年与乾坤取自起课参数，行年取自引擎；未填出生年时只保留行年。 */

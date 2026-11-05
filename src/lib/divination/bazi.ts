@@ -25,6 +25,7 @@ import {
 } from 'taibu-core/utils';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
+import { formatClockTime, formatDateParts } from '@/lib/local-date';
 import {
     HIDDEN_STEM_DETAILS,
     LIU_CHONG as CORE_LIU_CHONG,
@@ -76,8 +77,8 @@ function toCoreBaziInput(formData: BaziFormData) {
 function buildBaziMeta(formData: BaziFormData): BaziMeta {
     return {
         name: formData.name,
-        birthDate: `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`,
-        birthTime: formData.isUnknownTime ? '' : `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
+        birthDate: formatDateParts(formData.birthYear, formData.birthMonth, formData.birthDay),
+        birthTime: formData.isUnknownTime ? '' : formatClockTime(formData.birthHour, formData.birthMinute),
         birthPlace: formData.birthPlace,
         gender: formData.gender,
         calendarType: formData.calendarType,
@@ -242,20 +243,6 @@ export const SAN_HE_TABLE: { branches: [EarthlyBranch, EarthlyBranch, EarthlyBra
     result: item.element[0] as FiveElement,
     name: SAN_HE_NAMES[item.element],
 }));
-
-/** 半合表：两个地支可以形成半合 */
-export const BAN_HE_TABLE: { branches: [EarthlyBranch, EarthlyBranch]; result: FiveElement; type: 'sheng' | 'mu' }[] = [
-    // 生方半合（长生+帝旺）
-    { branches: ['申', '子'], result: '水', type: 'sheng' },
-    { branches: ['亥', '卯'], result: '木', type: 'sheng' },
-    { branches: ['寅', '午'], result: '火', type: 'sheng' },
-    { branches: ['巳', '酉'], result: '金', type: 'sheng' },
-    // 墓方半合（帝旺+墓）
-    { branches: ['子', '辰'], result: '水', type: 'mu' },
-    { branches: ['卯', '未'], result: '木', type: 'mu' },
-    { branches: ['午', '戌'], result: '火', type: 'mu' },
-    { branches: ['酉', '丑'], result: '金', type: 'mu' },
-];
 
 /** 六合表及合化结果 */
 export const LIU_HE_TABLE: Record<EarthlyBranch, { partner: EarthlyBranch; result: FiveElement }> = Object.fromEntries(

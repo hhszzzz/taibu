@@ -1,5 +1,5 @@
 import type { DataSourceType } from '@/lib/data-sources/types';
-import { countTokens, truncateToTokens } from '@/lib/token-utils';
+import { estimateTokens, truncateToTokens } from '@/lib/ai/token-estimate';
 
 export interface InjectedSource {
     type: 'knowledge_base' | 'data_source' | 'mention';
@@ -20,6 +20,13 @@ export class SourceTracker {
     private sources: InjectedSource[] = [];
     private injectedBlocks: Map<string, InjectedBlock> = new Map();
     private knowledgeBaseSignatures: Set<string> = new Set();
+
+    /** `model` picks the tokenizer family for the budget, as the prompt builder counts with the same model. */
+    constructor(private readonly model = '') {}
+
+    private tokensOf(text: string) {
+        return estimateTokens(this.model, text);
+    }
 
     // 注入一段提示词内容并记录来源，用于前端展示和调试
     trackAndInject(params: {
@@ -55,14 +62,14 @@ export class SourceTracker {
                 this.knowledgeBaseSignatures.add(signatureKey);
             }
         } else if (maxTokens) {
-            const tokens = countTokens(content);
+            const tokens = this.tokensOf(content);
             if (tokens > maxTokens) {
-                finalContent = truncateToTokens(content, maxTokens);
+                finalContent = truncateToTokens(this.model, content, maxTokens);
                 truncated = true;
             }
         }
 
-        const tokens = countTokens(finalContent);
+        const tokens = this.tokensOf(finalContent);
         if (dryRun) {
             return { content: finalContent, injected: true, tokens, truncated };
         }
@@ -119,8 +126,8 @@ export class SourceTracker {
         }
         const joined = deduped.join('\n\n');
         const limit = typeof maxTokens === 'number' && maxTokens > 0 ? maxTokens : Infinity;
-        if (countTokens(joined) > limit) {
-            return { content: truncateToTokens(joined, limit), truncated: true };
+        if (this.tokensOf(joined) > limit) {
+            return { content: truncateToTokens(this.model, joined, limit), truncated: true };
         }
         return { content: joined, truncated: false };
     }
@@ -131,6 +138,6 @@ export class SourceTracker {
     }
 }
 
-export function createSourceTracker(): SourceTracker {
-    return new SourceTracker();
+export function createSourceTracker(model = ''): SourceTracker {
+    return new SourceTracker(model);
 }

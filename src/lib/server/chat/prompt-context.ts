@@ -77,11 +77,13 @@ async function resolveMentionsForPrompt(
   userId: string,
   maxTokens: number,
   chartPromptDetailLevel: 'default' | 'more' | 'full',
+  model: string,
 ): Promise<ResolvedMention[]> {
   return await Promise.all(mentions.map(async (mention) => {
     const resolvedContent = await resolveMention(mention, userId, {
       db: systemDb(),
       maxTokens,
+      model,
       chartPromptDetailLevel,
     });
     return { ...mention, resolvedContent };
@@ -110,20 +112,42 @@ function applyUserSettingsOverrides(
   overrides: Pick<ResolvedChatRequest['body'], 'expressionStyle' | 'customInstructions' | 'userProfile' | 'visualizationSettings'>
 ): UserSettingsContext {
   return {
+    ...settings,
     expressionStyle: overrides.expressionStyle === 'gentle' ? 'gentle' : (
       overrides.expressionStyle === 'direct' ? 'direct' : settings.expressionStyle
     ),
-    chartPromptDetailLevel: settings.chartPromptDetailLevel,
-    memoryEnabled: settings.memoryEnabled,
     customInstructions: overrides.customInstructions === null
       ? ''
       : typeof overrides.customInstructions === 'string'
       ? overrides.customInstructions
       : settings.customInstructions,
     userProfile: overrides.userProfile !== undefined ? overrides.userProfile : settings.userProfile,
-    promptKbIds: settings.promptKbIds,
     visualizationSettings: overrides.visualizationSettings || settings.visualizationSettings,
   };
+}
+
+/** The user's prompt knowledge bases, in the order they set them; unreadable rows are left out. */
+async function promptKnowledgeBasesOf(
+  userId: string | null,
+  ids: readonly string[],
+): Promise<Array<{ id: string; name: string }>> {
+  if (!userId || !ids.length) return [];
+  try {
+    const rows = await systemDb().tx((trx) => trx
+      .selectFrom('knowledge_bases')
+      .select(['id', 'name'])
+      .where('user_id', '=', userId)
+      .where('id', 'in', ids)
+      .execute());
+    const byId = new Map(rows.map((row) => [row.id, row]));
+    return ids.flatMap((id) => {
+      const row = byId.get(id);
+      return row ? [row] : [];
+    });
+  } catch {
+    console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
+    return [];
+  }
 }
 
 export interface ChatPromptContextOptions {
@@ -175,7 +199,7 @@ export async function buildChatPromptContext(
   };
 
   const resolvedMentions = userId
-    ? await resolveMentionsForPrompt(effectiveMentions, userId, mentionBudget, userSettings.chartPromptDetailLevel)
+    ? await resolveMentionsForPrompt(effectiveMentions, userId, mentionBudget, userSettings.chartPromptDetailLevel, requestedModelId)
     : [];
 
   const effectiveUserSettings = applyUserSettingsOverrides(userSettings, {
@@ -185,26 +209,8 @@ export async function buildChatPromptContext(
     visualizationSettings: body.visualizationSettings,
   });
 
-  const promptKnowledgeBases = userId && canUsePromptKnowledgeBase && effectiveUserSettings.promptKbIds.length > 0
-    ? await (async () => {
-      const kbRows = await systemDb().tx((trx) => trx
-        .selectFrom('knowledge_bases')
-        .select(['id', 'name'])
-        .where('user_id', '=', userId)
-        .where('id', 'in', effectiveUserSettings.promptKbIds)
-        .execute());
-      const kbMap = new Map<string, { id: string; name: string }>();
-      kbRows.forEach((kb) => {
-        kbMap.set(kb.id, kb);
-      });
-
-      return effectiveUserSettings.promptKbIds
-        .map((kbId) => kbMap.get(kbId))
-        .filter((kb): kb is { id: string; name: string } => !!kb);
-    })().catch(() => {
-      console.warn('[knowledge-base] enrichment failed', { stage: 'prompt-names' });
-      return [];
-    })
+  const promptKnowledgeBases = canUsePromptKnowledgeBase
+    ? await promptKnowledgeBasesOf(userId, effectiveUserSettings.promptKbIds)
     : [];
 
   const knowledgeHits = userId && canUsePromptKnowledgeBase && !options?.deferKnowledgeSearch

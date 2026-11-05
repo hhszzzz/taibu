@@ -4,8 +4,8 @@
  */
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import {
-  BYOK_CONTEXT_RANGE, BYOK_KEY_MAX, BYOK_MODEL_ID_MAX, BYOK_NAME_MAX, BYOK_OUTPUT_RANGE,
-  byokAddressError, byokHost, clampByokLevel, defaultByokEffort, normalizeByokAddress,
+  BYOK_CONTEXT_RANGE, BYOK_MODEL_ID_MAX, BYOK_NAME_MAX, BYOK_OUTPUT_RANGE,
+  byokAddressError, byokHost, byokKeyFormatError, clampByokLevel, defaultByokEffort, normalizeByokAddress,
   type ByokCapability, type ByokConnectionView, type ByokDefaultEffort, type ByokModelView, type ByokPolicy, type ByokProtocol,
   type ByokUsage,
 } from './config';
@@ -136,7 +136,8 @@ export function connectionBody(draft: ByokConnectionDraft, saved: ByokConnection
   const addressError = byokAddressError(draft.baseUrl);
   if (addressError) throw new Error(addressError);
   const key = draft.key.trim();
-  if (key && (key.length > BYOK_KEY_MAX || /\s/u.test(key))) throw new Error('API Key 格式无效');
+  const keyError = key ? byokKeyFormatError(key) : null;
+  if (keyError) throw new Error(keyError);
   if (draft.storeOnSite) {
     if (!policy.allowServerKeys) throw new Error('管理员已关闭「保存到本站」，Key 只能保存在你的浏览器里');
     if (!key && !saved?.keyHint) throw new Error('打开「保存到本站」时需要填写 API Key');

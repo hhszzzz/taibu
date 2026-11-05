@@ -12,6 +12,16 @@
 	}
 }
 
+# One upstream definition for the maintenance allow-list and normal traffic.
+(taibu_app) {
+	reverse_proxy 127.0.0.1:3000 {
+		flush_interval -1
+		header_up X-Real-IP {client_ip}
+		lb_try_duration 30s
+		lb_try_interval 1s
+	}
+}
+
 example.com {
 	encode zstd gzip
 	request_body {
@@ -25,12 +35,7 @@ example.com {
 	@admin client_ip 203.0.113.7
 	handle @maintenance {
 		handle @admin {
-			reverse_proxy 127.0.0.1:3000 {
-				flush_interval -1
-				header_up X-Real-IP {client_ip}
-				lb_try_duration 30s
-				lb_try_interval 1s
-			}
+			import taibu_app
 		}
 		handle {
 			header Retry-After 300
@@ -41,12 +46,7 @@ example.com {
 	}
 
 	handle {
-		reverse_proxy 127.0.0.1:3000 {
-			flush_interval -1
-			header_up X-Real-IP {client_ip}
-			lb_try_duration 30s
-			lb_try_interval 1s
-		}
+		import taibu_app
 	}
 
 	# HSTS covers this host only: other subdomains (mail link tracking, say) may lack HTTPS.

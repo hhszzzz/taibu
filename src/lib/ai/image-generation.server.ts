@@ -64,6 +64,12 @@ type StoredImageTarget = Pick<ImageGenerationRequest, 'userId' | 'prompt' | 'siz
   modelId: string;
 };
 
+/** The billing reference a generated image set is recorded against. */
+function imageBillingReference(target: Pick<StoredImageTarget, 'runId' | 'conversationId'>) {
+  return target.runId ? { referenceType: 'agent_run', referenceId: target.runId }
+    : target.conversationId ? { referenceType: 'conversation', referenceId: target.conversationId } : {};
+}
+
 /** A member's own image model and its key (stored here, or staged for an Agent task). */
 export type ByokImageModel = { model: ResolvedByokModel; key: string };
 
@@ -199,8 +205,7 @@ export async function generateImages(
   if (!sources.length) throw new ImageGenerationError('生图模型还没有可用的网关来源', 'FAILED');
 
   const refund = deps.refund ?? refundImages;
-  const reference = request.runId ? { referenceType: 'agent_run', referenceId: request.runId }
-    : request.conversationId ? { referenceType: 'conversation', referenceId: request.conversationId } : {};
+  const reference = imageBillingReference(request);
   let prepayment: Awaited<ReturnType<typeof prepayImages>>;
   try {
     prepayment = await (deps.prepay ?? prepayImages)({ userId: request.userId, model: request.model, images: count, ...reference });
@@ -290,8 +295,7 @@ export async function storeByokImages(
 ): Promise<GeneratedImageDto[]> {
   const prompt = checkImageRequest({ prompt: target.prompt, size: target.size, count: files.length });
   const images = await storeImages(deps.db ?? systemDb(), deps.store ?? getObjectStore(), { ...target, prompt, modelId: target.model.ref }, files);
-  const reference = target.runId ? { referenceType: 'agent_run', referenceId: target.runId }
-    : target.conversationId ? { referenceType: 'conversation', referenceId: target.conversationId } : {};
+  const reference = imageBillingReference(target);
   await (deps.recordFree ?? recordFreeImages)({ userId: target.userId, model: { id: target.model.modelId }, images: images.length, byok: true, ...reference });
   return images;
 }
@@ -300,6 +304,13 @@ export async function storeByokImages(
 export async function findGeneratedImageForShare(db: ScopedDb, token: string, imageId: string) {
   const rows = await db.rpc('get_shared_generated_image', { p_token: token, p_image: imageId });
   return rows[0] ?? null;
+}
+
+/** Whether a conversation belongs to the member; the image routes check it before charging or storing. */
+export async function conversationOwnedBy(db: ScopedDb, userId: string, conversationId: string): Promise<boolean> {
+  const row = await db.tx(trx => trx.selectFrom('conversations').select('id')
+    .where('id', '=', conversationId).where('user_id', '=', userId).executeTakeFirst());
+  return !!row;
 }
 
 /** An object this old whose row is gone is a leftover; younger ones may still be mid-insert. */
@@ -322,12 +333,13 @@ export async function cleanupGeneratedImages(
   const objects = await store.list(GENERATED_IMAGE_BUCKET, { olderThan: new Date(Date.now() - GENERATED_IMAGE_ORPHAN_AGE_MS) });
   const paths = objects.slice(0, options.limit ?? GENERATED_IMAGE_CLEANUP_LIMIT).map(object => object.key);
   if (!paths.length) return 0;
-  const known = new Set<string>();
-  for (let index = 0; index < paths.length; index += CLEANUP_BATCH) {
-    const rows = await db.tx(trx => trx.selectFrom('generated_images').select('object_path')
-      .where('object_path', 'in', paths.slice(index, index + CLEANUP_BATCH)).execute());
-    for (const row of rows) known.add(row.object_path);
-  }
+  // The batches are independent reads; one round trip each, started together.
+  const batches = await Promise.all(Array.from(
+    { length: Math.ceil(paths.length / CLEANUP_BATCH) },
+    (_, batch) => db.tx(trx => trx.selectFrom('generated_images').select('object_path')
+      .where('object_path', 'in', paths.slice(batch * CLEANUP_BATCH, (batch + 1) * CLEANUP_BATCH)).execute()),
+  ));
+  const known = new Set(batches.flat().map(row => row.object_path));
   const orphans = paths.filter(path => !known.has(path));
   if (!orphans.length) return 0;
   await store.delete(GENERATED_IMAGE_BUCKET, orphans);

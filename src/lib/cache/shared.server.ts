@@ -56,11 +56,13 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
   // not publish its now-stale result into L1 or Redis afterwards.
   let generation = 0;
 
-  invalidateListeners.set(name, () => {
+  const dropLocal = () => {
     generation += 1;
     memory.remove(key);
     flight.clear(name);
-  });
+  };
+
+  invalidateListeners.set(name, dropLocal);
   ensureInvalidateSubscriber();
 
   return {
@@ -104,9 +106,7 @@ export function createSharedCache<T>(options: { name: string; ttlMs: number }): 
     },
 
     async invalidate() {
-      generation += 1;
-      memory.remove(key);
-      flight.clear(name);
+      dropLocal();
       try {
         const redis = getRedisClient();
         await withTimeout(redis.del(key), REDIS_TIMEOUT_MS);

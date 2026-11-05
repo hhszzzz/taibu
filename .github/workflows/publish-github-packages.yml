@@ -79,22 +79,18 @@ jobs:
         run: |
           set -euo pipefail
 
-          core_version="${{ steps.versions.outputs.core_version }}"
-          mcp_version="${{ steps.versions.outputs.mcp_version }}"
+          check_version() {
+            local key="$1" package="$2" version="$3"
+            echo "Checking @hhszzzz/$package@$version"
+            if npm view "@hhszzzz/$package@$version" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+              echo "${key}_exists=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "${key}_exists=false" >> "$GITHUB_OUTPUT"
+            fi
+          }
 
-          echo "Checking @hhszzzz/taibu-core@$core_version"
-          if npm view "@hhszzzz/taibu-core@${{ steps.versions.outputs.core_version }}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
-            echo "core_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "core_exists=false" >> "$GITHUB_OUTPUT"
-          fi
-
-          echo "Checking @hhszzzz/taibu-mcp@$mcp_version"
-          if npm view "@hhszzzz/taibu-mcp@${{ steps.versions.outputs.mcp_version }}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
-            echo "mcp_exists=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "mcp_exists=false" >> "$GITHUB_OUTPUT"
-          fi
+          check_version core taibu-core "${{ steps.versions.outputs.core_version }}"
+          check_version mcp taibu-mcp "${{ steps.versions.outputs.mcp_version }}"
 
       - name: Ensure core is available for mcp
         if: ${{ inputs.publish_mcp }}

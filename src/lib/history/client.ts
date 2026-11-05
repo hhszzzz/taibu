@@ -13,6 +13,10 @@ type HistoryPagination = {
 
 const HISTORY_PAGE_SIZE = 100;
 
+function historyItemQuery(type: HistoryType, id: string): URLSearchParams {
+  return new URLSearchParams({ type, id });
+}
+
 export async function loadHistorySummariesPage(
   type: HistoryType,
   options: { limit?: number; offset?: number; signal?: AbortSignal } = {},
@@ -43,10 +47,7 @@ export async function loadHistoryRestore(
   timezone?: string,
   options: { signal?: AbortSignal } = {},
 ): Promise<HistoryRestorePayload | null> {
-  const query = new URLSearchParams({
-    type,
-    id,
-  });
+  const query = historyItemQuery(type, id);
   if (timezone) {
     query.set('timezone', timezone);
   }
@@ -61,10 +62,7 @@ export async function loadHistoryRestore(
 }
 
 export async function deleteHistorySummary(type: HistoryType, id: string, options: { signal?: AbortSignal } = {}): Promise<void> {
-  const query = new URLSearchParams({
-    type,
-    id,
-  });
+  const query = historyItemQuery(type, id);
 
   const data = await requestBrowserData<{ success?: boolean }>(
     `/api/history-summaries?${query.toString()}`,

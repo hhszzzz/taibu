@@ -5,7 +5,7 @@
  */
 'use client';
 
-import { useCallback, useId, type ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import { Modal } from './Modal';
 
@@ -40,11 +40,6 @@ export function ConfirmDialog({
 }: ConfirmDialogProps) {
     const id = useId();
 
-    // 处理确认
-    const handleConfirm = useCallback(async () => {
-        await onConfirm();
-    }, [onConfirm]);
-
     return (
         <Modal open={isOpen} onClose={onClose} busy={loading} labelledBy={`${id}-title`} describedBy={`${id}-description`} className="max-w-sm"
             role={showActions ? 'alertdialog' : undefined}>
@@ -66,7 +61,7 @@ export function ConfirmDialog({
                         <Button
                             size="lg"
                             variant={variant === 'danger' ? 'danger' : 'primary'}
-                            onClick={handleConfirm}
+                            onClick={onConfirm}
                             loading={loading}
                         >
                             {confirmText}

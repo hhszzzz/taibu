@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import type { ScopedDb } from '@/lib/db/context.server';
+import type { ScopedDb, ScopedDbTransaction } from '@/lib/db/context.server';
 import { arrayValue, json, lockTransactionKey } from '@/lib/db/sql-helpers';
 import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 import {
@@ -45,7 +45,6 @@ export class ByokError extends Error {
 
 /** Namespace of the per-member connection quota lock (see lockTransactionKey). */
 const QUOTA_LOCK = 914;
-type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
 
 function modelView(row: ModelRow): ByokModelView {
   return {
@@ -89,7 +88,7 @@ function modelValues(userId: string, connectionId: string, model: ByokModelInput
  * Replaces a connection's models. A model keeps its row (and every reference to it) while its model ID and use stay the
  * same; one whose ID or use changed is a new model, so a swap of two IDs never collides on the unique pair.
  */
-async function replaceModels(trx: Trx, userId: string, connectionId: string, models: ByokModelInput[]) {
+async function replaceModels(trx: ScopedDbTransaction, userId: string, connectionId: string, models: ByokModelInput[]) {
   const existing = await trx.selectFrom('user_ai_models').select(['id', 'model_id', 'usage'])
     .where('connection_id', '=', connectionId).where('user_id', '=', userId).execute();
   const keep = new Map<string, string>();
@@ -129,11 +128,14 @@ export async function createByokConnection(db: ScopedDb, userId: string, input: 
   }
   await db.tx(async (trx) => {
     await lockTransactionKey(trx, userId, QUOTA_LOCK);
-    const { count } = await trx.selectFrom('user_ai_connections').select(eb => eb.fn.countAll<string>().as('count'))
-      .where('user_id', '=', userId).executeTakeFirstOrThrow();
+    const { count, max } = await trx.selectFrom('user_ai_connections')
+      .select([
+        (eb) => eb.fn.countAll<string>().as('count'),
+        (eb) => eb.fn.max('sort_order').as('max'),
+      ])
+      .where('user_id', '=', userId)
+      .executeTakeFirstOrThrow();
     if (Number(count) >= policy.maxConnections) throw new ByokError(`最多保存 ${policy.maxConnections} 个连接`, 409, 'BYOK_LIMIT');
-    const { max } = await trx.selectFrom('user_ai_connections').select(eb => eb.fn.max('sort_order').as('max'))
-      .where('user_id', '=', userId).executeTakeFirstOrThrow();
     await trx.insertInto('user_ai_connections').values({
       id, user_id: userId, name: input.name, protocol: input.protocol, base_url: input.baseUrl,
       api_key_secret: sealed ? json(sealed.secret) as never : null, api_key_hint: sealed?.hint ?? null,

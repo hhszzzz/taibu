@@ -4,7 +4,7 @@ import { getGlobalAIFeatureGuardResponse } from '@/lib/api/ai-feature-guard';
 import { getByokPolicy } from '@/lib/app-settings';
 import { isValidUUID } from '@/lib/validation';
 import { checkRateLimit } from '@/lib/rate-limit';
-import { IMAGE_GENERATION_RATE_LIMIT, ImageGenerationError, storeByokImages } from '@/lib/ai/image-generation.server';
+import { IMAGE_GENERATION_RATE_LIMIT, ImageGenerationError, conversationOwnedBy, storeByokImages } from '@/lib/ai/image-generation.server';
 import { byokGate } from '@/lib/byok/api.server';
 import { resolveByokModel } from '@/lib/byok/store.server';
 import { GENERATED_IMAGE_MAX_BYTES, GENERATED_IMAGE_MAX_COUNT, isGeneratedImageSize } from '@/lib/images/generated';
@@ -54,10 +54,8 @@ export async function POST(request: NextRequest) {
     files.push({ uint8Array: bytes, ...image });
   }
 
-  if (conversationId) {
-    const conversation = await auth.db.tx(trx => trx.selectFrom('conversations').select('id')
-      .where('id', '=', conversationId).where('user_id', '=', auth.user.id).executeTakeFirst());
-    if (!conversation) return jsonError('对话不存在', 404);
+  if (conversationId && !(await conversationOwnedBy(auth.db, auth.user.id, conversationId))) {
+    return jsonError('对话不存在', 404);
   }
 
   try {

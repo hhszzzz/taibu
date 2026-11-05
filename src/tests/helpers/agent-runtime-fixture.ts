@@ -8,7 +8,7 @@ import type { AgentRunMetricsRow } from "../../lib/agent/admin-metrics";
 import { getAgentDrilldownBase } from "../../lib/agent/tool-catalog";
 import { emptyPiAssistant } from "../../lib/agent/pi-stream.server";
 import type { AIModelConfig } from "../../types";
-import { countTokens } from "../../lib/token-utils";
+import { estimateTokens } from "../../lib/ai/token-estimate";
 import { AGENT_SUMMARY_PROMPT } from '../../lib/agent/summary-usage.server';
 import { sealedGateway } from './gateway-key';
 
@@ -157,7 +157,7 @@ export function scripted(
     const output = createAssistantMessageEventStream(),
       message = emptyPiAssistant(model);
     message.content = summary ? [{ type: 'text', text: '用户要求八字分析；计算记录、命盘引用和来源保留在最近回合。' }] : build(round++);
-    message.usage.input = countTokens(JSON.stringify(context.messages));
+    message.usage.input = estimateTokens(model.id, JSON.stringify(context.messages));
     message.usage.totalTokens = message.usage.input;
     message.stopReason = message.content.some((p) => p.type === "toolCall")
       ? "toolUse"

@@ -17,6 +17,31 @@ export function isAgentChartTool(name: string): name is AgentChartKind {
 }
 
 /**
+ * What a `focus_chart` caption points at, by chart kind, as the Agent instruction names each system. A chart kind
+ * added to `AGENT_CHART_NAMES` cannot be added without its hint, so the instruction never silently misses one.
+ */
+export const AGENT_CHART_FOCUS_HINTS: Readonly<Record<AgentChartKind, string>> = {
+  bazi: '八字的柱位、日支、生克刑害合冲',
+  ziwei: '紫微的宫位星曜',
+  qimen: '奇门的宫、门、星、神及天地盘干',
+  liuyao: '六爻的本变卦、爻位与伏神',
+  meihua: '梅花的本互变卦、体用与阶段',
+  daliuren: '大六壬的四课三传、天地盘及天将',
+  xiaoliuren: '小六壬的推演步骤及落宫',
+  tarot: '塔罗的具体牌位',
+  taiyi: '太乙的观测层、十六宫及星将',
+  astrology: '占星的星体、宫头与相位',
+  almanac: '黄历的宜忌、方位和时辰',
+};
+
+/** The systems and what to locate in each, as the Agent instruction lists them. */
+export function agentChartFocusHint(): string {
+  return (Object.keys(AGENT_CHART_FOCUS_HINTS) as AgentChartKind[])
+    .map(kind => AGENT_CHART_FOCUS_HINTS[kind])
+    .join('；');
+}
+
+/**
  * 详查工具及其所属盘种：对一张已排好的盘做局部深查，不产生新成果。
  * 与 Core 工具的 derivesFrom 一一对应（agent-tool-catalog 测试校验）。
  */
@@ -299,3 +324,8 @@ export function projectsAgentCanonicalText(name: string): boolean {
  * 可用 ID 的清单，不是规范文本，投影时不进公开步骤；按宫位查看只回这份目录。
  */
 export const CHART_TARGET_DIRECTORY_HEADING = '## 定位目标（focus_chart 的 targetIds）';
+
+/** The note after a chart result that tells the model how to point at the same chart again. */
+export function agentChartReferenceNote(reference: string): string {
+  return `命盘引用: ${reference}。查看、详查或定位这张盘时作为 reference 传入。`;
+}

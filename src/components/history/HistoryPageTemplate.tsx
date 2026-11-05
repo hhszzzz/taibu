@@ -46,7 +46,6 @@ import type { HistorySummaryItem, HistoryType } from '@/lib/history/registry';
 
 /* ---------- 类型定义 ---------- */
 export type HistoryLayout = 'list' | 'grid';
-export type { CardActions, HistoryDetailRenderer };
 
 export interface HistoryPageConfig {
     /** 历史类型 key */
@@ -71,16 +70,10 @@ export interface HistoryPageConfig {
     kbSourceType?: string;
     /** 布局模式 */
     layout?: HistoryLayout;
-    /** 骨架屏数量 */
-    skeletonCount?: number;
-    /** 自定义搜索过滤 */
-    filterFn?: (item: HistorySummaryItem, query: string) => boolean;
     /** 自定义 KB 标题 */
     kbTitleFn?: (item: HistorySummaryItem) => string;
     /** 覆盖默认卡片里的补充信息行（如塔罗的正逆位牌名） */
     renderDetail?: HistoryDetailRenderer;
-    /** 完全自定义卡片；一般只需 renderDetail */
-    renderCard?: (item: HistorySummaryItem, actions: CardActions) => ReactNode;
     /** loadHistoryRestore 的额外参数 (如 timezone) */
     restoreTimezone?: string;
     /** 数据变更时的 invalidate types */
@@ -107,8 +100,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
         searchPlaceholder = '搜索记录', emptyMessage = '还没有历史记录',
         emptyDescription = '完成一次占测后，结果会自动保存在这里。', actionLabel = '开始新的占测',
         actionHref, deleteMessage, kbSourceType, layout = 'grid',
-        skeletonCount = layout === 'grid' ? 6 : 4,
-        filterFn, kbTitleFn, renderDetail, renderCard, restoreTimezone, invalidateTypes,
+        kbTitleFn, renderDetail, restoreTimezone, invalidateTypes,
     } = config;
 
     const router = useRouter();
@@ -221,8 +213,8 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
     const trimmedQuery = searchQuery.trim();
     const filteredItems = useMemo(() => {
         if (!trimmedQuery) return items;
-        return items.filter(item => (filterFn || defaultHistoryFilter)(item, trimmedQuery));
-    }, [filterFn, items, trimmedQuery]);
+        return items.filter(item => defaultHistoryFilter(item, trimmedQuery));
+    }, [items, trimmedQuery]);
 
     useEffect(() => {
         if (
@@ -292,7 +284,6 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
 
     const renderItem = (item: HistorySummaryItem) => {
         const actions = makeActions(item);
-        if (renderCard) return renderCard(item, actions);
         const Card = layout === 'grid' ? HistoryGridCard : HistoryListRow;
         return <Card item={item} actions={actions} viewing={viewingId === item.id} renderDetail={renderDetail} />;
     };
@@ -343,7 +334,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
 
                 <div className="mt-4 md:mt-5">
                     {loading ? (
-                        layout === 'grid' ? <HistoryGridSkeleton count={skeletonCount} /> : <HistoryListSkeleton count={skeletonCount} />
+                        layout === 'grid' ? <HistoryGridSkeleton count={6} /> : <HistoryListSkeleton count={4} />
                     ) : errorMessage && filteredItems.length === 0 ? (
                         <StatePanel
                             tone="danger"
@@ -372,7 +363,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                             {filteredItems.map(item => <HistoryItem key={item.id} item={item} render={renderItem} />)}
                         </ul>
                     ) : (
-                        <ul className={renderCard ? 'flex flex-col gap-3' : 'divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface'}>
+                        <ul className="divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
                             {filteredItems.map(item => <HistoryItem key={item.id} item={item} render={renderItem} />)}
                         </ul>
                     )}

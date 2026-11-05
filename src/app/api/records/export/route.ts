@@ -18,15 +18,16 @@ export async function GET(request: NextRequest) {
             auth.db.tx((trx) => trx.selectFrom('ming_notes').selectAll().where('user_id', '=', user.id).execute()),
         ]);
 
+        const now = new Date();
         const exportData = {
             version: '1.0',
-            exportedAt: new Date().toISOString(),
+            exportedAt: now.toISOString(),
             records,
             notes,
         };
 
         const json = JSON.stringify(exportData, null, 2);
-        const filename = `mingai-records-${new Date().toISOString().split('T')[0]}.json`;
+        const filename = `mingai-records-${now.toISOString().split('T')[0]}.json`;
 
         return new NextResponse(json, {
             headers: {

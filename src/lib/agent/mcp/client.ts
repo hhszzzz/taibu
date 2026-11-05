@@ -3,7 +3,9 @@
  * connectors, through the same shapes.
  */
 import { requestBrowserData } from '@/lib/browser-api';
-import type { AgentExtensionsPolicy, ExtensionAllowanceView, McpServerInput, McpServerView } from './config';
+import { extensionSettingsCaller } from '../extensions/client';
+import type { ExtensionAllowanceView } from '../extensions/config';
+import type { McpServerInput, McpServerView } from './config';
 
 export type McpServerScope = McpServerView['scope'];
 export type McpServerListing = { servers: McpServerView[]; allowance?: ExtensionAllowanceView };
@@ -14,12 +16,7 @@ const BASE: Record<McpServerScope, string> = { platform: '/api/admin/agent-mcp',
 
 /** `userId` pins a member's requests to the account the page was opened with. */
 export function mcpServerClient(scope: McpServerScope, userId?: string) {
-  const call = <T>(path: string, method: string, fallbackMessage: string, body?: unknown, signal?: AbortSignal) =>
-    requestBrowserData<T>(`${BASE[scope]}${path}`, {
-      method, signal,
-      ...(userId ? { headers: { 'X-Expected-User-Id': userId } } : {}),
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }, { fallbackMessage });
+  const call = extensionSettingsCaller(BASE, scope, userId);
   const path = (id: string, suffix = '') => `/${encodeURIComponent(id)}${suffix}`;
   return {
     list: (signal?: AbortSignal) => call<McpServerListing>('', 'GET', '读取外部服务失败', undefined, signal),
@@ -38,14 +35,4 @@ export type AgentConnector = { id: string; name: string; scope: McpServerScope }
 /** The connectors an Agent task can call, for the composer's + menu. */
 export async function fetchAgentConnectors(signal?: AbortSignal) {
   return (await requestBrowserData<{ connectors: AgentConnector[] }>('/api/agent/connectors', { signal }, { fallbackMessage: '读取连接器失败' })).connectors;
-}
-
-export async function fetchAgentExtensionsPolicy(signal?: AbortSignal) {
-  return (await requestBrowserData<{ policy: AgentExtensionsPolicy }>('/api/admin/agent-extensions-policy', { signal }, { fallbackMessage: '读取扩展策略失败' })).policy;
-}
-
-export async function saveAgentExtensionsPolicy(policy: AgentExtensionsPolicy) {
-  return (await requestBrowserData<{ policy: AgentExtensionsPolicy }>('/api/admin/agent-extensions-policy', {
-    method: 'PUT', body: JSON.stringify({ policy }),
-  }, { fallbackMessage: '保存扩展策略失败' })).policy;
 }

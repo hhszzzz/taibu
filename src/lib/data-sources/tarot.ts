@@ -14,6 +14,10 @@ type TarotRow = {
     conversation_id: string | null;
 };
 
+/** 牌阵展示名；历史牌阵 id 找不到定义时退回 id 本身。 */
+const resolveSpreadName = (spreadId: string): string =>
+    TAROT_SPREADS.find(spread => spread.id === spreadId)?.name || spreadId || '塔罗占卜';
+
 export const tarotProvider: DataSourceProvider<TarotRow> = {
     type: 'tarot_reading',
     displayName: '塔罗记录',
@@ -30,7 +34,7 @@ export const tarotProvider: DataSourceProvider<TarotRow> = {
             return query.orderBy('created_at', 'desc').limit(limit).execute();
         });
         return (data || []).map((row) => {
-            const spreadName = TAROT_SPREADS.find(spread => spread.id === row.spread_id)?.name || row.spread_id || '塔罗占卜';
+            const spreadName = resolveSpreadName(row.spread_id);
             return {
                 id: row.id,
                 type: 'tarot_reading',
@@ -53,7 +57,7 @@ export const tarotProvider: DataSourceProvider<TarotRow> = {
     },
 
     formatForAI(reading: TarotRow, ctx?: DataSourceQueryContext): string {
-        const spreadName = TAROT_SPREADS.find(spread => spread.id === reading.spread_id)?.name || reading.spread_id || '塔罗占卜';
+        const spreadName = resolveSpreadName(reading.spread_id);
         const birthDate = typeof reading.metadata?.birthDate === 'string' ? reading.metadata.birthDate : undefined;
         const seed = typeof reading.metadata?.seed === 'string' ? reading.metadata.seed : undefined;
         return generateTarotReadingText({
@@ -69,7 +73,7 @@ export const tarotProvider: DataSourceProvider<TarotRow> = {
     },
 
     summarize(reading: TarotRow): string {
-        const spreadName = TAROT_SPREADS.find(spread => spread.id === reading.spread_id)?.name || reading.spread_id || '塔罗占卜';
+        const spreadName = resolveSpreadName(reading.spread_id);
         return reading.question ? `${spreadName} - ${reading.question}` : spreadName;
     }
 };

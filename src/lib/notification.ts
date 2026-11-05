@@ -118,6 +118,23 @@ interface NotificationPageResult {
   pagination: NotificationPagination;
 }
 
+async function runNotificationAction(
+  input: { url: string; method: 'PATCH' | 'DELETE'; body?: unknown },
+  failureMessage: string,
+): Promise<boolean> {
+  const result = await requestBrowserJson<{ success?: boolean }>(input.url, {
+    method: input.method,
+    ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
+  });
+
+  if (result.error) {
+    console.error(failureMessage, result.error.message);
+    return false;
+  }
+
+  return true;
+}
+
 export async function getUnreadCount(): Promise<number> {
   const result = await requestBrowserPayloadOrThrow<{ count?: number }>(
     '/api/notifications?count=1&unread=1',
@@ -156,68 +173,36 @@ export async function getNotificationsPage(
 }
 
 export async function markAsRead(notificationId: string): Promise<boolean> {
-  const result = await requestBrowserJson<{ success?: boolean }>('/api/notifications', {
+  return runNotificationAction({
+    url: '/api/notifications',
     method: 'PATCH',
-    body: JSON.stringify({
-      action: 'mark-one',
-      id: notificationId,
-    }),
-  });
-
-  if (result.error) {
-    console.error('标记已读失败:', result.error.message);
-    return false;
-  }
-
-  return true;
+    body: { action: 'mark-one', id: notificationId },
+  }, '标记已读失败:');
 }
 
 export async function markAllAsRead(): Promise<boolean> {
-  const result = await requestBrowserJson<{ success?: boolean }>('/api/notifications', {
+  return runNotificationAction({
+    url: '/api/notifications',
     method: 'PATCH',
-    body: JSON.stringify({
-      action: 'mark-all',
-    }),
-  });
-
-  if (result.error) {
-    console.error('标记全部已读失败:', result.error.message);
-    return false;
-  }
-
-  return true;
+    body: { action: 'mark-all' },
+  }, '标记全部已读失败:');
 }
 
 export async function markSelectedAsRead(notificationIds: string[]): Promise<boolean> {
   if (notificationIds.length === 0) return true;
 
-  const result = await requestBrowserJson<{ success?: boolean }>('/api/notifications', {
+  return runNotificationAction({
+    url: '/api/notifications',
     method: 'PATCH',
-    body: JSON.stringify({
-      action: 'mark-selected',
-      ids: notificationIds,
-    }),
-  });
-
-  if (result.error) {
-    console.error('批量标记已读失败:', result.error.message);
-    return false;
-  }
-
-  return true;
+    body: { action: 'mark-selected', ids: notificationIds },
+  }, '批量标记已读失败:');
 }
 
 export async function deleteNotification(notificationId: string): Promise<boolean> {
-  const result = await requestBrowserJson<{ success?: boolean }>(`/api/notifications?id=${notificationId}`, {
+  return runNotificationAction({
+    url: `/api/notifications?id=${notificationId}`,
     method: 'DELETE',
-  });
-
-  if (result.error) {
-    console.error('删除通知失败:', result.error.message);
-    return false;
-  }
-
-  return true;
+  }, '删除通知失败:');
 }
 
 export async function deleteNotifications(notificationIds: string[]): Promise<boolean> {
@@ -228,14 +213,8 @@ export async function deleteNotifications(notificationIds: string[]): Promise<bo
     query.append('id', id);
   }
 
-  const result = await requestBrowserJson<{ success?: boolean }>(`/api/notifications?${query.toString()}`, {
+  return runNotificationAction({
+    url: `/api/notifications?${query.toString()}`,
     method: 'DELETE',
-  });
-
-  if (result.error) {
-    console.error('批量删除通知失败:', result.error.message);
-    return false;
-  }
-
-  return true;
+  }, '批量删除通知失败:');
 }

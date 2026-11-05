@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button';
 import { downloadShareCard, shareCard } from '@/lib/share-card';
 import type { DailyFortune, FortuneLevels, FortuneChartScores } from '@/lib/divination/fortune';
 import { fortuneLevelToChartValue, isLevelFavorable } from '@/lib/divination/fortune';
+import { formatLocalDate } from '@/lib/local-date';
 import type { FortuneLevel } from '@/types';
 
 interface ShareCardProps {
@@ -71,23 +72,21 @@ const scoreItemsWithColors = [
     { key: 'social', label: '人际', icon: Users, iconColor: CARD_PALETTE.neutral },
 ];
 
+const CARD_DATE_FORMAT = new Intl.DateTimeFormat('zh-CN', {
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+    weekday: 'long',
+});
+
+function formatCardDate(date: Date) {
+    return CARD_DATE_FORMAT.format(date);
+}
+
 export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: ShareCardProps) {
     const cardRef = useRef<HTMLDivElement>(null);
     const [isGenerating, setIsGenerating] = useState(false);
     const [shareSuccess, setShareSuccess] = useState(false);
-
-    const formatDate = (d: Date) => {
-        return d.toLocaleDateString('zh-CN', {
-            year: 'numeric',
-            month: 'long',
-            day: 'numeric',
-            weekday: 'long',
-        });
-    };
-
-    const formatDateShort = (d: Date) => {
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    };
 
     const handleDownload = async () => {
         if (!cardRef.current) return;
@@ -96,7 +95,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
         try {
             await downloadShareCard(
                 { element: cardRef.current },
-                `taibu-fortune-${formatDateShort(date)}.png`
+                `taibu-fortune-${formatLocalDate(date)}.png`
             );
         } catch (error) {
             console.error('下载失败:', error);
@@ -113,7 +112,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
             const shared = await shareCard(
                 { element: cardRef.current },
                 {
-                    title: `太卜 ${formatDate(date)} 运势`,
+                    title: `太卜 ${formatCardDate(date)} 运势`,
                     text: `我的${isPersonalized ? '个性化' : '今日'}运势 - 综合运势：${fortune.overall}`,
                 }
             );
@@ -185,7 +184,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
                 <div style={{ textAlign: 'center', marginBottom: '24px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
                         <Calendar style={{ width: '18px', height: '18px', color: CARD_PALETTE.clay }} />
-                        <span style={{ color: CARD_PALETTE.text, fontFamily: DISPLAY_FONT, fontSize: '17px' }}>{formatDate(date)}</span>
+                        <span style={{ color: CARD_PALETTE.text, fontFamily: DISPLAY_FONT, fontSize: '17px' }}>{formatCardDate(date)}</span>
                     </div>
                     {isPersonalized && userName && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4px', fontSize: '14px', color: CARD_PALETTE.clay }}>

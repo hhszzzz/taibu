@@ -6,22 +6,19 @@ import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
+import { formatLocalDate, formatYearMonth } from '@/lib/local-date';
 
 type FortuneData = { id: string; name: string; content: string; createdAt: string };
 
-function formatYmd(date: Date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-}
-
 function formatYm(date: Date) {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+    return formatYearMonth(date.getFullYear(), date.getMonth() + 1);
 }
 
 /** 黄历细项：日运问答从黄历页移交对话后，@今日运势 需要同时带上这一天宜忌。 */
 function buildAlmanacSection(date: Date): string[] {
     const almanac = getCalendarAlmanac(date);
     return [
-        `## 黄历（${formatYmd(date)}）`,
+        `## 黄历（${formatLocalDate(date)}）`,
         `- 农历：${almanac.lunarDate}`,
         `- 干支：${almanac.ganZhi.year}年 ${almanac.ganZhi.month}月 ${almanac.ganZhi.day}日`,
         `- 生肖：年${almanac.shengXiao.year} 月${almanac.shengXiao.month} 日${almanac.shengXiao.day}`,
@@ -85,10 +82,8 @@ export const dailyFortuneProvider: DataSourceProvider<FortuneData> = {
     displayName: '今日运势',
 
     async list(_userId: string, _ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        void _userId;
-        void _ctx;
         const now = new Date();
-        const id = formatYmd(now);
+        const id = formatLocalDate(now);
         return [{
             id,
             type: 'daily_fortune',
@@ -109,7 +104,7 @@ export const dailyFortuneProvider: DataSourceProvider<FortuneData> = {
             const dt = new Date(y, m - 1, d);
             return Number.isNaN(dt.getTime()) ? new Date() : dt;
         })();
-        const ymd = formatYmd(normalized);
+        const ymd = formatLocalDate(normalized);
 
         const baziChart = await getDefaultBaziChartForUser(userId, ctx);
         if (!baziChart) {
@@ -177,8 +172,6 @@ export const monthlyFortuneProvider: DataSourceProvider<FortuneData> = {
     displayName: '本月运势',
 
     async list(_userId: string, _ctx?: DataSourceQueryContext): Promise<DataSourceSummary[]> {
-        void _userId;
-        void _ctx;
         const now = new Date();
         const ym = formatYm(now);
         const createdAt = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
@@ -198,12 +191,14 @@ export const monthlyFortuneProvider: DataSourceProvider<FortuneData> = {
         const year = match ? Number(match[1]) : now.getFullYear();
         const month = match ? Number(match[2]) : (now.getMonth() + 1);
         const createdAt = new Date(year, month - 1, 1).toISOString();
+        const ymLabel = formatYearMonth(year, month);
+        const name = `本月运势（${ymLabel}）`;
 
         const baziChart = await getDefaultBaziChartForUser(userId, ctx);
         if (!baziChart) {
             const generic = calculateGenericMonthlyFortune(year, month);
             const content = [
-                `## 本月运势（${String(year)}-${String(month).padStart(2, '0')}）`,
+                `## 本月运势（${ymLabel}）`,
                 `- 综合：${generic.overall}`,
                 `- 事业：${generic.career}`,
                 `- 感情：${generic.love}`,
@@ -212,12 +207,12 @@ export const monthlyFortuneProvider: DataSourceProvider<FortuneData> = {
                 `- 人际：${generic.social}`,
                 `- 总结：${generic.summary}`,
             ].join('\n');
-            return { id: `${String(year)}-${String(month).padStart(2, '0')}`, name: `本月运势（${String(year)}-${String(month).padStart(2, '0')}）`, content, createdAt };
+            return { id: ymLabel, name, content, createdAt };
         }
 
         const fortune = calculateMonthlyFortune(baziChart, year, month);
         const content = [
-            `## 本月运势（${String(year)}-${String(month).padStart(2, '0')}）`,
+            `## 本月运势（${ymLabel}）`,
             `- 十神：${fortune.tenGod}`,
             `- 综合：${fortune.overall}`,
             `- 事业：${fortune.career}`,
@@ -231,7 +226,7 @@ export const monthlyFortuneProvider: DataSourceProvider<FortuneData> = {
                 : '',
         ].filter(Boolean).join('\n');
 
-        return { id: `${String(year)}-${String(month).padStart(2, '0')}`, name: `本月运势（${String(year)}-${String(month).padStart(2, '0')}）`, content, createdAt };
+        return { id: ymLabel, name, content, createdAt };
     },
 
     formatForAI(data: FortuneData): string {

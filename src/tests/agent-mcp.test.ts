@@ -6,7 +6,7 @@ import type { ToolExecutionApi, ToolRegistration } from '@earendil-works/pi-dura
 import { McpConnectionClosedError, McpError, McpHttpError, McpTimeoutError } from '@earendil-works/pi-mcp';
 import {
   DEFAULT_AGENT_EXTENSIONS_POLICY, extensionAllowance, normalizeAgentExtensionsPolicy, parseAgentExtensionsPolicy,
-} from '../lib/agent/mcp/config';
+} from '../lib/agent/extensions/config';
 import { McpInputError, parseMcpServerInput } from '../lib/agent/mcp/input.server';
 import { applyMcpSecretChanges, openMcpSecrets } from '../lib/agent/mcp/secrets.server';
 import { describeMcpError, resolveMcpServer, secretScrubber, testMcpServer } from '../lib/agent/mcp/endpoint.server';

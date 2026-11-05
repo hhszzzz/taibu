@@ -35,7 +35,8 @@ export type GeneratedImageRef = {
 export type GeneratedImageDto = GeneratedImageRef & { url: string };
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
-const SIZE = /^[1-9][0-9]{2,3}x[1-9][0-9]{2,3}$/u;
+/** Stored sizes are `{width}x{height}` with 3–4 digit sides, as the table allows. */
+export const STORED_IMAGE_SIZE = /^([1-9][0-9]{2,3})x([1-9][0-9]{2,3})$/u;
 const MIME = /^image\/(?:png|jpeg|webp)$/u;
 
 export function isGeneratedImageSize(value: unknown): value is GeneratedImageSize {
@@ -46,7 +47,7 @@ export function isGeneratedImageRef(value: unknown): value is GeneratedImageRef 
   if (!value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
   return typeof row.id === 'string' && UUID.test(row.id)
-    && typeof row.size === 'string' && SIZE.test(row.size)
+    && typeof row.size === 'string' && STORED_IMAGE_SIZE.test(row.size)
     && typeof row.mimeType === 'string' && MIME.test(row.mimeType);
 }
 
@@ -63,6 +64,6 @@ export function generatedImageUrl(id: string, shareToken?: string | null): strin
 
 /** CSS aspect ratio for a stored size (a malformed size falls back to square). */
 export function generatedImageAspectRatio(size: string): string {
-  const match = /^([1-9][0-9]{2,3})x([1-9][0-9]{2,3})$/u.exec(size);
+  const match = STORED_IMAGE_SIZE.exec(size);
   return match ? `${match[1]} / ${match[2]}` : '1 / 1';
 }

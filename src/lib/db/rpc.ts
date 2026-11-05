@@ -1,10 +1,9 @@
 import { sql, type Kysely, type RawBuilder, type Transaction } from 'kysely';
 import type { DB } from './generated/schema';
-import { RPC_SPECS, type RpcArgs, type RpcName, type RpcResult } from './generated/rpc';
+import { RPC_SPECS, type RpcArgs, type RpcName, type RpcResult, type RpcReturnShape } from './generated/rpc';
 
 type Executor = Kysely<DB> | Transaction<DB>;
 type ArgSpec = readonly [name: string, cast: string, optional: boolean];
-type ReturnShape = 'void' | 'scalar' | 'row' | 'setof';
 
 /**
  * JSON arguments travel as text. `null` stays SQL NULL, as PostgREST passed
@@ -45,7 +44,7 @@ export async function executeRpc<N extends RpcName>(
   args: RpcArgs<N>,
 ): Promise<RpcResult<N>> {
   const result = await buildRpcStatement(name, args).execute(executor);
-  const shape = (RPC_SPECS[name] as { returns: ReturnShape }).returns;
+  const shape = (RPC_SPECS[name] as { returns: RpcReturnShape }).returns;
   const rows = result.rows as Record<string, unknown>[];
   if (shape === 'void') return null as RpcResult<N>;
   if (shape === 'setof') return rows as RpcResult<N>;

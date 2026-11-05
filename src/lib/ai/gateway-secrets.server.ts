@@ -1,7 +1,9 @@
 import 'server-only';
 import { agentCredentialKey } from '@/lib/agent/credentials.server';
+import { byokKeyHint } from '@/lib/byok/config';
 import { deriveSecretKey, isSealedSecret, openSecret, sealSecret } from '@/lib/crypto/secret-box.server';
-import type { AISealedSecret } from '@/types';
+import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
+import type { AIModelConfig, AISealedSecret } from '@/types';
 
 /**
  * A gateway's API key is sealed under its own key and bound to the gateway row: copied to another gateway, it does
@@ -18,12 +20,8 @@ function additionalData(gatewayId: string) {
 }
 
 /** What the admin sees of a saved key: enough to tell two keys apart, never enough to use one. */
-export function apiKeyHint(apiKey: string): string {
-    return apiKey.length >= 12 ? `${apiKey.slice(0, 3)}…${apiKey.slice(-4)}` : `…${apiKey.slice(-2)}`;
-}
-
 export function sealGatewayApiKey(gatewayId: string, apiKey: string): { secret: AISealedSecret; hint: string } {
-    return { secret: sealSecret(gatewaySecretKey(), apiKey, additionalData(gatewayId)), hint: apiKeyHint(apiKey) };
+    return { secret: sealSecret(gatewaySecretKey(), apiKey, additionalData(gatewayId)), hint: byokKeyHint(apiKey) };
 }
 
 /** Throws AI_GATEWAY_KEY_INVALID when the value was tampered with, sealed for another gateway or under another master key. */
@@ -50,4 +48,18 @@ export function sourceApiKeyOrNone(source: { gatewayId?: string; apiKeySecret?: 
         console.warn(`[ai] the saved key of gateway ${source.sourceKey ?? source.gatewayId} does not open`);
         return undefined;
     }
+}
+
+/**
+ * A model's callable sources in failover order, each applied to the model and with its key opened; a source whose key
+ * does not open is skipped.
+ */
+export function openModelSources(model: AIModelConfig): Array<{ config: AIModelConfig; apiKey: string }> {
+    const opened: Array<{ config: AIModelConfig; apiKey: string }> = [];
+    for (const source of getOrderedModelSources(model)) {
+        const config = applySourceToModel(model, source);
+        const apiKey = sourceApiKeyOrNone(config);
+        if (apiKey && config.apiUrl) opened.push({ config, apiKey });
+    }
+    return opened;
 }

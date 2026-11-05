@@ -18,6 +18,16 @@ import { AGENT_TOOL_SCOPE_DEFINITIONS, type AgentToolScopeId } from '@/lib/agent
 
 const MODULES = getFeatureModules();
 
+function postToggle(path: string, payload: Record<string, unknown>, fallbackMessage: string) {
+    return requestBrowserData(path, {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+    }, { fallbackMessage });
+}
+
 type PendingToggle = { featureId: string; enabled: boolean };
 type PendingScopeToggle = { scopeId: AgentToolScopeId; enabled: boolean };
 
@@ -56,18 +66,7 @@ export function FeatureTogglePanel() {
         setError("");
 
         try {
-            await requestBrowserData(
-                "/api/feature-toggles",
-                {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ featureId, disabled: currentlyEnabled }),
-                },
-                { fallbackMessage: "更新失败，请重试" },
-            );
-
+            await postToggle("/api/feature-toggles", { featureId, disabled: currentlyEnabled }, "更新失败，请重试");
             await refresh();
         } catch (err) {
             setError(err instanceof Error && err.message ? err.message : "更新失败，请重试");
@@ -81,15 +80,7 @@ export function FeatureTogglePanel() {
         setScopePending({ scopeId, enabled: !currentlyEnabled });
         setError("");
         try {
-            await requestBrowserData(
-                "/api/agent-tool-scopes",
-                {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ scopeId, disabled: currentlyEnabled }),
-                },
-                { fallbackMessage: "更新 Agent 工具范围失败" },
-            );
+            await postToggle("/api/agent-tool-scopes", { scopeId, disabled: currentlyEnabled }, "更新 Agent 工具范围失败");
             await loadScopes();
         } catch (err) {
             setError(err instanceof Error && err.message ? err.message : "更新 Agent 工具范围失败");

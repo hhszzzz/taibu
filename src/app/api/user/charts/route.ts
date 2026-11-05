@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, staleUserResponse, type AuthenticatedUserContext } from '@/lib/api-utils';
 import { deleteFromDynamic, selectFromDynamic } from '@/lib/db/sql-helpers';
 import { invalidateMentionCache } from '@/lib/mentions';
 import {
@@ -26,6 +26,12 @@ type ChartRecord = BirthTimeResolution & {
     created_at: string;
 };
 
+/** 与两张命盘表共用的列；客户端只读这些字段。 */
+const CHART_COLUMNS = [
+    'id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude',
+    'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'created_at',
+] as const;
+
 function isChartType(value: unknown): value is ChartType {
     return value === 'bazi' || value === 'ziwei';
 }
@@ -34,9 +40,7 @@ function getChartTable(type: ChartType) {
     return type === 'bazi' ? 'bazi_charts' : 'ziwei_charts';
 }
 
-async function loadDefaultChartIds(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
-) {
+async function loadDefaultChartIds(auth: AuthenticatedUserContext) {
     const { settings, error } = await getUserSettingsSnapshot(auth.db, auth.user.id);
     return {
         defaultChartIds: toDefaultChartIds(settings),
@@ -47,25 +51,19 @@ async function loadDefaultChartIds(
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-        return jsonError('账号已切换，请重新加载命盘', 409);
-    }
-    const chartColumns = [
-        'id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude',
-        'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'created_at',
-    ] as const;
+    const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+    if (stale) return stale;
 
     const [baziCharts, ziweiCharts, settingsResult] = await Promise.all([
         auth.db.tx((trx) => trx
             .selectFrom('bazi_charts')
-            .select(chartColumns)
+            .select(CHART_COLUMNS)
             .where('user_id', '=', auth.user.id)
             .orderBy('created_at', 'desc')
             .execute()) as Promise<ChartRecord[]>,
         auth.db.tx((trx) => trx
             .selectFrom('ziwei_charts')
-            .select(chartColumns)
+            .select(CHART_COLUMNS)
             .where('user_id', '=', auth.user.id)
             .orderBy('created_at', 'desc')
             .execute()) as Promise<ChartRecord[]>,
@@ -103,10 +101,8 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-        return jsonError('账号已切换，请重新加载命盘', 409);
-    }
+    const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+    if (stale) return stale;
     let body: { type?: unknown; id?: unknown };
     try {
         body = await request.json() as { type?: unknown; id?: unknown };
@@ -147,10 +143,8 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-        return jsonError('账号已切换，请重新加载命盘', 409);
-    }
+    const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+    if (stale) return stale;
     const type = request.nextUrl.searchParams.get('type');
     const id = request.nextUrl.searchParams.get('id');
 

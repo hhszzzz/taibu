@@ -10,11 +10,10 @@ export type SubscriptionWindow = (typeof SUBSCRIPTION_WINDOWS)[number];
 export const SUBSCRIPTION_WINDOW_LABELS: Record<SubscriptionWindow, string> = {
     five_hour: '每 5 小时', daily: '每天', weekly: '每周', monthly: '每月', total: '整个订阅期',
 };
-/** How long each window lasts; `total` never resets within the subscription. */
-export const SUBSCRIPTION_WINDOW_HOURS: Record<SubscriptionWindow, number | null> = {
-    five_hour: 5, daily: 24, weekly: 168, monthly: 720, total: null,
-};
-
+/** Shortest window first, as allowances are listed and charged. */
+export function compareWindows(a: { period: SubscriptionWindow }, b: { period: SubscriptionWindow }): number {
+    return SUBSCRIPTION_WINDOWS.indexOf(a.period) - SUBSCRIPTION_WINDOWS.indexOf(b.period);
+}
 /** One allowance of a plan or a subscription, in micro-dollars. */
 export type SubscriptionLimit = { period: SubscriptionWindow; allowanceMicros: number };
 
@@ -133,6 +132,9 @@ export type LedgerEntryView = {
     operatorEmail?: string | null;
 };
 
+/** A ledger entry with the account it belongs to; listings that span members fill these in. */
+export type LedgerEntryWithUser = LedgerEntryView & { userId?: string; userEmail?: string | null };
+
 /** Model calls in the usage log, summed: the calls, their tokens and images, and what they cost net of refunds. */
 export type UsageTotals = {
     calls: number;
@@ -184,6 +186,12 @@ export const PAYMENT_ORDER_STATUS_LABELS: Record<PaymentOrderView['status'], str
 
 export type AdminPaymentOrderView = PaymentOrderView & { userId: string; userEmail: string | null };
 
+/** What the browser posts to start an online payment, and the signed form it posts to the gateway. */
+export type EpayCheckoutInput =
+    | { kind: 'topup'; amountUsd: number; method: string }
+    | { kind: 'subscription'; planId: string; method: string };
+export type EpayCheckout = { url: string; params: Record<string, string> };
+
 /** Online payment as the member sees it: whether it is on, and the methods the gateway takes. */
 export type BillingPaymentView = { enabled: boolean; methods: Array<{ id: string; label: string }> };
 
@@ -230,7 +238,8 @@ export function describePlanDuration(plan: Pick<SubscriptionPlanView, 'durationU
     return `${plan.durationValue} ${DURATION_UNIT_LABELS[plan.durationUnit]}`;
 }
 
-const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
+/** Trim and cap a user-supplied string; non-strings become empty. */
+export const clampText = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const isIn = <T extends string>(values: readonly T[], value: unknown): value is T => typeof value === 'string' && (values as readonly string[]).includes(value);
 
 /** The plan's allowances: one per window, at most one per period, amounts in USD. */
@@ -248,13 +257,13 @@ function parsePlanLimits(raw: unknown): { value: SubscriptionLimit[] } | { error
         if (!Number.isFinite(allowanceUsd) || allowanceUsd <= 0 || allowanceUsd > 1_000_000) return { error: '额度需要是大于 0 的美元金额' };
         value.push({ period: entry.period, allowanceMicros: usdToMicros(allowanceUsd) });
     }
-    return { value: value.sort((a, b) => SUBSCRIPTION_WINDOWS.indexOf(a.period) - SUBSCRIPTION_WINDOWS.indexOf(b.period)) };
+    return { value: value.sort(compareWindows) };
 }
 
 /** A plan as the administrator submitted it, or what is wrong with it. Amounts arrive in USD. */
 export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } | { error: string } {
     const raw = (body && typeof body === 'object' ? body : {}) as Record<string, unknown>;
-    const title = text(raw.title, 60);
+    const title = clampText(raw.title, 60);
     if (!title) return { error: '请填写套餐名称（最多 60 字）' };
     const priceUsd = Number(raw.priceUsd);
     if (!Number.isFinite(priceUsd) || priceUsd < 0 || priceUsd > 100_000 || !isCentAmount(priceUsd)) {
@@ -267,12 +276,12 @@ export function parsePlanInput(body: unknown): { value: SubscriptionPlanInput } 
     if (!Number.isInteger(durationValue) || durationValue < 1 || durationValue > 3650) return { error: '时长需要是 1 到 3650 之间的整数' };
     const maxPerUser = raw.maxPerUser === null || raw.maxPerUser === undefined || raw.maxPerUser === '' ? null : Number(raw.maxPerUser);
     if (maxPerUser !== null && (!Number.isInteger(maxPerUser) || maxPerUser < 1 || maxPerUser > 1000)) return { error: '每人限购需要留空或填 1 到 1000 的整数' };
-    const features = Array.isArray(raw.features) ? raw.features.map(item => text(item, 80)).filter(Boolean) : [];
+    const features = Array.isArray(raw.features) ? raw.features.map(item => clampText(item, 80)).filter(Boolean) : [];
     if (features.length > 12) return { error: '套餐亮点最多 12 条' };
     const sortOrder = Number(raw.sortOrder ?? 0);
     return {
         value: {
-            title, subtitle: text(raw.subtitle, 200), features, priceUsd,
+            title, subtitle: clampText(raw.subtitle, 200), features, priceUsd,
             durationUnit: raw.durationUnit, durationValue, limits: limits.value,
             purchasable: raw.purchasable !== false, enabled: raw.enabled !== false, maxPerUser,
             sortOrder: Number.isInteger(sortOrder) ? Math.max(-1000, Math.min(1000, sortOrder)) : 0,
@@ -324,7 +333,8 @@ export type BillingSettings = { topupOptionsUsd: number[]; minTopupUsd: number; 
 
 export const DEFAULT_BILLING_SETTINGS: BillingSettings = { topupOptionsUsd: [5, 10, 20, 50, 100], minTopupUsd: 1, cnyPerUsd: 7.3 };
 
-const MAX_TOPUP_USD = 10_000;
+/** The largest single top-up, in USD, that a member may pay or enter. */
+export const MAX_TOPUP_USD = 10_000;
 const isUsd = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value) && value > 0
     && value <= MAX_TOPUP_USD && isCentAmount(value);
 

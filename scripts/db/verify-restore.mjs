@@ -26,16 +26,12 @@ import {
   compareTables, describeIndexes, describePolicies, describeRoutines, describeRowSecurity, describeTables,
   describeTriggers, describeViews,
 } from './catalog.mjs';
-import { QUALIFIED, qualifiedName } from './sql-text.mjs';
+import { QUALIFIED, qualifiedName, quoteIdentifier } from './sql-text.mjs';
+import { cliArgs } from './cli.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_RESTORE_BIN = process.env.PG_RESTORE_BIN || 'pg_restore';
-const args = process.argv.slice(2);
-const has = (flag) => args.includes(flag);
-const value = (flag, fallback) => {
-  const index = args.indexOf(flag);
-  return index === -1 ? fallback : args[index + 1];
-};
+const { has, value } = cliArgs();
 
 const backupPath = path.resolve(value('--backup', ''));
 const adminDsn = value('--admin-dsn', process.env.RESTORE_ADMIN_URL);
@@ -76,10 +72,6 @@ function withDatabase(dsn, name) {
   return url.toString();
 }
 
-function quoteIdent(name) {
-  return `"${String(name).replaceAll('"', '""')}"`;
-}
-
 async function withClient(dsn, work) {
   const client = new pg.Client({ connectionString: dsn });
   await client.connect();
@@ -115,7 +107,7 @@ async function tableCounts(dsn) {
     const counts = {};
     for (const row of rows) {
       const { rows: countRows } = await client.query(
-        `select count(*)::bigint as count from ${quoteIdent(row.schema)}.${quoteIdent(row.table)}`,
+        `select count(*)::bigint as count from ${quoteIdentifier(row.schema)}.${quoteIdentifier(row.table)}`,
       );
       counts[`${row.schema}.${row.table}`] = Number(countRows[0].count);
     }
@@ -179,10 +171,10 @@ async function orphanCheck(dsn) {
     const failures = [];
     for (const definition of definitions) {
       const notNull = definition.pairs
-        .map((pair) => `child.${quoteIdent(pair.child)} is not null`)
+        .map((pair) => `child.${quoteIdentifier(pair.child)} is not null`)
         .join(' and ');
       const match = definition.pairs
-        .map((pair) => `parent.${quoteIdent(pair.parent)} = child.${quoteIdent(pair.child)}`)
+        .map((pair) => `parent.${quoteIdentifier(pair.parent)} = child.${quoteIdentifier(pair.child)}`)
         .join(' and ');
       const { rows: result } = await client.query(`
         select count(*)::bigint as count from ${definition.child} child
@@ -206,7 +198,7 @@ async function main() {
 
   await withClient(adminUrl, async (client) => {
     // CREATE must fail if the name already exists. Never delete an unowned DB.
-    await client.query(`CREATE DATABASE ${quoteIdent(database)}`);
+    await client.query(`CREATE DATABASE ${quoteIdentifier(database)}`);
   });
   report.steps.push({ name: 'create database', durationMs: Date.now() - started });
 
@@ -258,7 +250,7 @@ async function main() {
   } finally {
     if (!keep) {
       await withClient(adminUrl, async (client) => {
-        await client.query(`DROP DATABASE ${quoteIdent(database)} WITH (FORCE)`);
+        await client.query(`DROP DATABASE ${quoteIdentifier(database)} WITH (FORCE)`);
       });
       report.databaseDropped = true;
     }

@@ -11,16 +11,12 @@ import {
   RELATION_SCHEMAS, ROUTINE_SCHEMAS, compareTables, describeIndexes, describePolicies, describeRoutines,
   describeRowSecurity, describeTables, describeTriggers, describeViews,
 } from './catalog.mjs';
-import { IDENTIFIER, normalizeStatement } from './sql-text.mjs';
+import { IDENTIFIER, normalizeStatement, quoteIdentifier } from './sql-text.mjs';
 
 /** Schemas whose USAGE/CREATE privileges access.sql declares. */
 const PRIVILEGE_SCHEMAS = ['public', 'auth', 'identity', 'extensions'];
 const RETRYABLE = new Set(['55P03', '40P01']); // lock_not_available, deadlock_detected
 const ATTEMPTS = 8;
-
-function quoteIdentifier(name) {
-  return `"${name.replaceAll('"', '""')}"`;
-}
 
 function quoteQualified(name) {
   const dot = name.indexOf('.');

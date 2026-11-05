@@ -1,16 +1,14 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { jsonError, jsonOk } from '@/lib/api-utils';
+import { requireFeatureUserContext } from '@/lib/feature-gate-utils';
 
 export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'records', '命理记录功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
 
         const { id } = await params;
@@ -48,11 +46,9 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'records', '命理记录功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
 
         const { id } = await params;

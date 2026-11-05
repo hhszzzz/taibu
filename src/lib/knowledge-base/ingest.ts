@@ -16,6 +16,7 @@ import type {
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { replaceKnowledgeSourceEntries } from '@/lib/knowledge-base/source-replacement';
 import { isConversationMessageInfraMissing, type StoredConversationMessageRow } from '@/lib/server/conversation-messages';
+import { isPlainObject } from '@/lib/validation';
 
 interface ChunkConfig {
     maxChunkSize: number;
@@ -35,16 +36,19 @@ export interface IngestOptions {
     persistence?: KnowledgeSourcePersistence;
 }
 
+function chunkSource(text: string, options?: IngestOptions): string[] {
+    return chunkText(text, {
+        ...DEFAULT_CHUNK_CONFIG,
+        ...(options?.chunkConfig || {}),
+    });
+}
+
 type KnowledgeBaseWriteMode = 'create' | 'update';
 
 interface VectorBackfillResult extends IngestResult {
     processed?: number;
     skipped?: number;
     alreadyExists?: number;
-}
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === 'object' && !Array.isArray(value);
 }
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
@@ -147,10 +151,7 @@ export async function ingestConversationAsService(
 
     for (const pair of messagePairs) {
         const content = formatMessagePair(pair);
-        const pairChunks = chunkText(content, {
-            ...DEFAULT_CHUNK_CONFIG,
-            ...(options?.chunkConfig || {})
-        });
+        const pairChunks = chunkSource(content, options);
         const baseIndex = chunks.length;
         chunks.push(...pairChunks.map((c, i) => ({
             content: c,
@@ -254,13 +255,10 @@ export async function ingestChatMessageAsService(
 
     const chunks: ChunkData[] = !target.content?.trim()
         ? []
-        : chunkText([
+        : chunkSource([
             previousUser ? `用户：${previousUser.content}` : '',
             `${target.role === 'assistant' ? 'AI' : '用户'}：${target.content}`
-        ].filter(Boolean).join('\n\n'), {
-            ...DEFAULT_CHUNK_CONFIG,
-            ...(options?.chunkConfig || {})
-        }).map((c, i) => ({
+        ].filter(Boolean).join('\n\n'), options).map((c, i) => ({
             content: c,
             sourceType: 'chat_message',
             sourceId: messageId,
@@ -304,10 +302,7 @@ export async function ingestRecordAsService(
         Array.isArray(record.tags) && record.tags.length ? `标签：${record.tags.join(', ')}` : ''
     ].filter(Boolean).join('\n\n');
 
-    const textChunks = chunkText(content, {
-        ...DEFAULT_CHUNK_CONFIG,
-        ...(options?.chunkConfig || {})
-    });
+    const textChunks = chunkSource(content, options);
 
     const chunks: ChunkData[] = textChunks.map((c, i) => ({
         content: c,
@@ -340,10 +335,7 @@ export async function ingestFileAsService(
         return { entriesCreated: 0, chunks: 0 };
     }
 
-    const textChunks = chunkText(text, {
-        ...DEFAULT_CHUNK_CONFIG,
-        ...(options?.chunkConfig || {})
-    });
+    const textChunks = chunkSource(text, options);
 
     const chunks: ChunkData[] = textChunks.map((c, i) => ({
         content: c,
@@ -376,10 +368,7 @@ export async function ingestDataSourceAsService(
     if (!data) throw new Error('Data source not found');
 
     const content = await provider.formatForAI(data);
-    const textChunks = chunkText(content, {
-        ...DEFAULT_CHUNK_CONFIG,
-        ...(options?.chunkConfig || {})
-    });
+    const textChunks = chunkSource(content, options);
 
     const chunks: ChunkData[] = textChunks.map((c, i) => ({
         content: c,

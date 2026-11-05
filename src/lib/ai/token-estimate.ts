@@ -3,8 +3,10 @@
  *
  * 移植自 new-api 的 tokenkit（https://github.com/QuantumNous/new-api/tree/main/tokenkit，AGPL-3.0），
  * 家族划分、版本解析与权重保持一致，同一段文本与网关本地估算的结果相同。权重用 Claude Code / Codex 的真实会话
- * 对照上游 usage 校准；未识别的模型（如 DeepSeek）沿用旧 OpenAI 权重，未校准。
- * 真实计数走网关的 count_tokens（见 token-count.server.ts），这里是它不可用时的退路，以及旧任务没有计数时的展示。
+ * 对照上游 usage 校准；未识别的模型（如 DeepSeek）沿用旧 OpenAI 权重，未校准。超过 64 字符的连续字母或数字按
+ * 子词计，避免把无分隔的长串算成一个词。
+ * 真实计数走网关的 count_tokens（见 src/lib/agent/token-count.server.ts），这里是它不可用时的退路，以及旧任务没有
+ * 计数时的展示。
  */
 
 export type TokenFamily = 'openai' | 'claude' | 'claude4.7' | 'gemini' | 'unknown';
@@ -64,32 +66,71 @@ const isCjk = (char: string, code: number) => HAN.test(char) || (code >= 0x3040 
 const isEmoji = (code: number) => (code >= 0x1f300 && code <= 0x1f9ff) || (code >= 0x2600 && code <= 0x26ff) || (code >= 0x2700 && code <= 0x27bf) || (code >= 0x1fa00 && code <= 0x1faff);
 const isMathSymbol = (char: string, code: number) => MATH_SYMBOLS.has(char) || (code >= 0x2200 && code <= 0x22ff) || (code >= 0x2a00 && code <= 0x2aff) || (code >= 0x1d400 && code <= 0x1d7ff);
 
-/** 估算一段文本在某个模型下的 token 数（向上取整）。 */
-export function estimateTokens(model: string, text: string): number {
-    if (!text) return 0;
-    const weight = WEIGHTS[tokenFamily(model)];
-    let count = 0;
+/** How much of the text fits the budget, and where it ends: a code-unit offset, never inside a surrogate pair. */
+type Scan = { tokens: number; end: number };
+
+/** A run longer than any word is prose or a key; real tokenizers split it into subwords, so it cannot stay one token. */
+const LONG_RUN_CHARS = 64;
+const WORD_CHAR_SHARE = 1 / 4;
+const NUMBER_CHAR_SHARE = 1 / 3;
+
+/** One pass over the text; stop before the character that would take the count past `maxTokens`. */
+function scanTokens(text: string, weight: Weights, maxTokens = Infinity): Scan {
+    let count = 0, end = 0;
     // 连续的字母算一个词、连续的数字算一串；字母与数字交替时各起一段。
     let run: 'none' | 'word' | 'number' = 'none';
+    let runChars = 0;
     for (const char of text) {
         const code = char.codePointAt(0)!;
+        let added: number;
         if (SPACE.test(char)) {
             run = 'none';
-            count += char === '\n' || char === '\t' ? weight.newline : weight.space;
+            added = char === '\n' || char === '\t' ? weight.newline : weight.space;
         } else if (isCjk(char, code)) {
             run = 'none';
-            count += weight.cjk;
+            added = weight.cjk;
         } else if (isEmoji(code)) {
             run = 'none';
-            count += weight.emoji;
+            added = weight.emoji;
         } else if (LETTER.test(char) || NUMBER.test(char)) {
             const next = NUMBER.test(char) ? 'number' : 'word';
-            if (run !== next) count += next === 'number' ? weight.number : weight.word;
-            run = next;
+            if (run === next) {
+                runChars += 1;
+                added = runChars > LONG_RUN_CHARS ? next === 'number' ? NUMBER_CHAR_SHARE : WORD_CHAR_SHARE : 0;
+            } else {
+                added = next === 'number' ? weight.number : weight.word;
+                run = next;
+                runChars = 1;
+            }
         } else {
             run = 'none';
-            count += isMathSymbol(char, code) ? weight.mathSymbol : char === '@' ? weight.atSign : URL_DELIMS.has(char) ? weight.urlDelim : weight.symbol;
+            added = isMathSymbol(char, code) ? weight.mathSymbol : char === '@' ? weight.atSign : URL_DELIMS.has(char) ? weight.urlDelim : weight.symbol;
         }
+        if (Math.ceil(count + added) > maxTokens) break;
+        count += added;
+        end += char.length;
     }
-    return Math.ceil(count);
+    return { tokens: Math.ceil(count), end };
+}
+
+/** 估算一段文本在某个模型下的 token 数（向上取整）。 */
+export function estimateTokens(model: string, text: string): number {
+    return text ? scanTokens(text, WEIGHTS[tokenFamily(model)]).tokens : 0;
+}
+
+const TRUNCATION_MARKER = '...（内容已截断）';
+
+/** The text cut to at most `maxTokens`, marked when something was removed. */
+export function truncateToTokens(model: string, text: string, maxTokens: number): string {
+    if (!text) return text;
+    if (maxTokens <= 0) return TRUNCATION_MARKER;
+    const scan = scanTokens(text, WEIGHTS[tokenFamily(model)], maxTokens);
+    return scan.end === text.length ? text : `${text.slice(0, scan.end)}${TRUNCATION_MARKER}`;
+}
+
+/** The text of each message, summed; a message without text adds nothing. */
+export function estimateMessageTokens(model: string, messages: readonly { content?: string }[]): number {
+    let total = 0;
+    for (const message of messages) if (message?.content) total += estimateTokens(model, String(message.content));
+    return total;
 }

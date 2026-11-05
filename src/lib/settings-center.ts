@@ -313,10 +313,6 @@ export function getCurrentSettingsCenterRouteTarget(
     search?: string | null;
   },
 ): string {
-  if (typeof window === 'undefined') {
-    return getSettingsCenterRouteTarget(tab, options);
-  }
-
   return getSettingsCenterRouteTarget(tab, options);
 }
 

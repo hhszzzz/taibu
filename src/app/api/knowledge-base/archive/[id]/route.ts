@@ -1,7 +1,21 @@
 import { NextRequest } from 'next/server';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
-import { systemDb } from '@/lib/db/context.server';
+import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { parseArchiveId } from '@/lib/knowledge-base/archive-ids';
+
+/** Runs the service-side unarchive; false when it failed, which the route reports the same way. */
+async function unarchiveSource(db: ScopedDb, userId: string, kbId: string, sourceType: string, sourceId: string): Promise<boolean> {
+    try {
+        return await db.rpc('kb_unarchive_source_as_service', {
+            p_user_id: userId,
+            p_kb_id: kbId,
+            p_source_type: sourceType,
+            p_source_id: sourceId,
+        }) === true;
+    } catch {
+        return false;
+    }
+}
 
 export async function DELETE(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
     const auth = await requireUserContext(_request);
@@ -22,19 +36,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
             .executeTakeFirst());
         if (!kb) return jsonError('取消归档失败', 403);
 
-        let data: unknown;
-        try {
-            data = await serviceDb.rpc('kb_unarchive_source_as_service', {
-                p_user_id: user.id,
-                p_kb_id: kbId,
-                p_source_type: sourceType,
-                p_source_id: sourceId,
-            });
-        } catch {
-            return jsonError('取消归档失败', 500);
-        }
-
-        if (data !== true) return jsonError('取消归档失败', 500);
+        if (!(await unarchiveSource(serviceDb, user.id, kbId, sourceType, sourceId))) return jsonError('取消归档失败', 500);
         return jsonOk({ success: true, kbId, sourceType, sourceId });
     }
 
@@ -52,19 +54,9 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
 
     if (!archived) return jsonError('归档记录不存在', 404);
 
-    let data: unknown;
-    try {
-        data = await serviceDb.rpc('kb_unarchive_source_as_service', {
-            p_user_id: user.id,
-            p_kb_id: archived.kb_id,
-            p_source_type: archived.source_type,
-            p_source_id: archived.source_id,
-        });
-    } catch {
+    if (!(await unarchiveSource(serviceDb, user.id, archived.kb_id, archived.source_type, archived.source_id))) {
         return jsonError('取消归档失败', 500);
     }
-
-    if (data !== true) return jsonError('取消归档失败', 500);
     return jsonOk({
         success: true,
         kbId: archived.kb_id,

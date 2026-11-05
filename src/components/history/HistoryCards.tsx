@@ -38,7 +38,7 @@ function HistoryMeta({ item, formatDate, className = '' }: { item: HistorySummar
     );
 }
 
-export function HistoryCardActionButtons({ actions }: { actions: CardActions }) {
+function HistoryCardActionButtons({ actions }: { actions: CardActions }) {
     return (
         <span className="flex shrink-0 gap-0.5">
             {actions.canAddToKnowledgeBase ? (
@@ -131,6 +131,15 @@ export function HistoryListRow({ item, actions, viewing, renderDetail }: History
 
 const SKELETON_BLOCK = 'animate-pulse rounded bg-foreground/5';
 
+function SkeletonActionButtons() {
+    return (
+        <div className="flex gap-0.5">
+            <div className={`${SKELETON_BLOCK} h-8 w-8 rounded-lg`} />
+            <div className={`${SKELETON_BLOCK} h-8 w-8 rounded-lg`} />
+        </div>
+    );
+}
+
 export function HistoryGridSkeleton({ count }: { count: number }) {
     return (
         <div aria-hidden="true" className="grid grid-cols-[repeat(auto-fill,minmax(17.5rem,1fr))] gap-4">
@@ -143,10 +152,7 @@ export function HistoryGridSkeleton({ count }: { count: number }) {
                     </div>
                     <div className="flex items-center justify-between border-t-[0.5px] border-border py-2 pr-2 pl-5">
                         <div className={`${SKELETON_BLOCK} h-3 w-28`} />
-                        <div className="flex gap-0.5">
-                            <div className={`${SKELETON_BLOCK} h-8 w-8 rounded-lg`} />
-                            <div className={`${SKELETON_BLOCK} h-8 w-8 rounded-lg`} />
-                        </div>
+                        <SkeletonActionButtons />
                     </div>
                 </div>
             ))}
@@ -162,10 +168,7 @@ export function HistoryListSkeleton({ count }: { count: number }) {
                     <div className={`${SKELETON_BLOCK} h-5 w-16 rounded-full bg-foreground/10`} />
                     <div className={`${SKELETON_BLOCK} h-4 w-40`} />
                     <div className={`${SKELETON_BLOCK} ml-auto hidden h-3 w-32 md:block`} />
-                    <div className="flex gap-0.5">
-                        <div className={`${SKELETON_BLOCK} h-8 w-8 rounded-lg`} />
-                        <div className={`${SKELETON_BLOCK} h-8 w-8 rounded-lg`} />
-                    </div>
+                    <SkeletonActionButtons />
                 </div>
             ))}
         </div>

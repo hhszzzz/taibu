@@ -1,6 +1,7 @@
 import { LunarYear } from 'lunar-javascript';
 import type { BaziFormData, CalendarType, Gender } from '@/types';
 import { DEFAULT_BAZI_FORM_DATA } from '@/components/bazi/form/options';
+import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { readBirthTimeOptions } from '@/lib/divination/birth-time';
 
@@ -10,14 +11,6 @@ type SearchParamsReader = {
 
 export const ZIWEI_LEGACY_UNKNOWN_TIME_SENTINEL = '-1';
 export const ZIWEI_BIRTH_TIME_REQUIRED_MESSAGE = '紫微斗数必须提供出生时辰，请先补全后再排盘';
-
-function parseNumber(value: string | null, fallback: number) {
-    if (value === null || value.trim() === '') {
-        return fallback;
-    }
-    const parsed = Number(value);
-    return Number.isNaN(parsed) ? fallback : parsed;
-}
 
 function hasPrefilledBirthInfo(searchParams: SearchParamsReader) {
     return ['name', 'gender', 'year', 'month', 'day', 'calendar', 'place', 'longitude', 'leap']
@@ -61,8 +54,8 @@ export function buildInitialZiweiFormState(searchParams: SearchParamsReader): {
         };
     }
 
-    const birthYear = parseNumber(year, DEFAULT_BAZI_FORM_DATA.birthYear);
-    const birthMonth = parseNumber(month, DEFAULT_BAZI_FORM_DATA.birthMonth);
+    const birthYear = parseNumberParam(year, DEFAULT_BAZI_FORM_DATA.birthYear);
+    const birthMonth = parseNumberParam(month, DEFAULT_BAZI_FORM_DATA.birthMonth);
     const isLeapRequested = calendar === 'lunar' && leap === '1';
     const leapMonthOfYear = calendar === 'lunar'
         ? LunarYear.fromYear(birthYear).getLeapMonth()
@@ -76,13 +69,13 @@ export function buildInitialZiweiFormState(searchParams: SearchParamsReader): {
             gender: gender === 'female' ? 'female' : 'male',
             birthYear,
             birthMonth,
-            birthDay: parseNumber(day, DEFAULT_BAZI_FORM_DATA.birthDay),
+            birthDay: parseNumberParam(day, DEFAULT_BAZI_FORM_DATA.birthDay),
             birthHour: requiresBirthTimeConfirmation
                 ? DEFAULT_BAZI_FORM_DATA.birthHour
-                : parseNumber(hour, DEFAULT_BAZI_FORM_DATA.birthHour),
+                : parseNumberParam(hour, DEFAULT_BAZI_FORM_DATA.birthHour),
             birthMinute: requiresBirthTimeConfirmation
                 ? DEFAULT_BAZI_FORM_DATA.birthMinute
-                : parseNumber(minute, DEFAULT_BAZI_FORM_DATA.birthMinute),
+                : parseNumberParam(minute, DEFAULT_BAZI_FORM_DATA.birthMinute),
             calendarType: calendar === 'lunar' ? 'lunar' : 'solar',
             isLeapMonth: isLeapRequested && leapMonthOfYear === birthMonth,
             birthPlace: place || '',

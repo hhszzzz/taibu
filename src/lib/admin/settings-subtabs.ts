@@ -34,7 +34,7 @@ export const ADMIN_SUBTABS = {
 } as const;
 
 export type AdminSubtabOwner = keyof typeof ADMIN_SUBTABS;
-export type AdminSubTabOption<T extends AdminSubtabOwner> = (typeof ADMIN_SUBTABS)[T][number];
+type AdminSubTabOption<T extends AdminSubtabOwner> = (typeof ADMIN_SUBTABS)[T][number];
 export type AdminSubTabId<T extends AdminSubtabOwner> = AdminSubTabOption<T>['id'];
 
 const ADMIN_SUBTAB_OWNERS = Object.keys(ADMIN_SUBTABS) as AdminSubtabOwner[];
@@ -47,15 +47,16 @@ export function getAdminSubTabs<T extends AdminSubtabOwner>(owner: T): typeof AD
   return ADMIN_SUBTABS[owner];
 }
 
+function hasSubTab(owner: AdminSubtabOwner, subpath: string | null | undefined): subpath is string {
+  return !!subpath && (ADMIN_SUBTABS[owner] as readonly { id: string }[]).some(item => item.id === subpath);
+}
+
 /** 该子路径是否属于这个管理分类；非管理分类一律 false。 */
 export function isAdminSubTab(tab: SettingsCenterTab | null | undefined, subpath: string | null | undefined): boolean {
-  if (!isAdminSubtabOwner(tab) || !subpath) return false;
-  return (ADMIN_SUBTABS[tab] as readonly { id: string }[]).some(item => item.id === subpath);
+  return isAdminSubtabOwner(tab) && hasSubTab(tab, subpath);
 }
 
 /** 路由里缺失或写错子页时回落到第一个子页。 */
 export function resolveAdminSubTab<T extends AdminSubtabOwner>(owner: T, subpath: string | null | undefined): AdminSubTabId<T> {
-  return ((ADMIN_SUBTABS[owner] as readonly { id: string }[]).some(item => item.id === subpath)
-    ? subpath
-    : ADMIN_SUBTABS[owner][0].id) as AdminSubTabId<T>;
+  return (hasSubTab(owner, subpath) ? subpath : ADMIN_SUBTABS[owner][0].id) as AdminSubTabId<T>;
 }

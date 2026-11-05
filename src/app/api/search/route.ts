@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, settlePromise } from '@/lib/api-utils';
 import { escapeLike } from '@/lib/db/sql-helpers';
 
 interface ChartRow { id: string; name: string; birth_date: string; birth_time: string | null }
@@ -29,26 +29,23 @@ export async function GET(request: NextRequest) {
     const db = auth.db;
     const pattern = `%${escapeLike(query)}%`;
     const [messages, bazi, ziwei] = await Promise.all([
-        db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 }).then(
-            (data) => ({ data, error: null }),
-            (error) => ({ data: null, error }),
-        ),
-        db.tx((trx) => trx
+        settlePromise(db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 })),
+        settlePromise(db.tx((trx) => trx
             .selectFrom('bazi_charts')
             .select(['id', 'name', 'birth_date', 'birth_time'])
             .where('user_id', '=', auth.user.id)
             .where('name', 'ilike', pattern)
             .orderBy('created_at', 'desc')
             .limit(5)
-            .execute()).then((data) => ({ data, error: null }), (error) => ({ data: null, error })),
-        db.tx((trx) => trx
+            .execute())),
+        settlePromise(db.tx((trx) => trx
             .selectFrom('ziwei_charts')
             .select(['id', 'name', 'birth_date', 'birth_time'])
             .where('user_id', '=', auth.user.id)
             .where('name', 'ilike', pattern)
             .orderBy('created_at', 'desc')
             .limit(5)
-            .execute()).then((data) => ({ data, error: null }), (error) => ({ data: null, error })),
+            .execute())),
     ]);
     if (messages.error) {
         const code = (messages.error as { code?: string }).code;

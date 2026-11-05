@@ -18,6 +18,8 @@ import {
   jsonOk,
   requireUserContext,
   SSE_HEADERS,
+  isRouteError,
+  type RouteError,
 } from '@/lib/api-utils';
 import { userDb, type ScopedDb } from '@/lib/db/context.server';
 import { insertIntoDynamic } from '@/lib/db/sql-helpers';
@@ -90,10 +92,23 @@ function scopedDbFor(result: { user: { id: string }; db?: ScopedDb }): ScopedDb 
   return result.db ?? userDb(result.user.id);
 }
 
-type RouteError = { error: string; status: number };
+const SUPPORTED_VISION_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
-function isRouteError(value: unknown): value is RouteError {
-  return Boolean(value && typeof value === 'object' && 'error' in value && 'status' in value);
+/** Vision routes take a data-URL image; the missing-image message differs per route. */
+export function parseVisionImageInput(
+  body: Record<string, unknown>,
+  missingMessage: string,
+): { imageBase64: string; imageMimeType: string } | RouteError {
+  const imageBase64 = body.imageBase64 as string | undefined;
+  if (!imageBase64) return { error: missingMessage, status: 400 };
+  const raw = typeof body.imageMimeType === 'string' ? body.imageMimeType.trim().toLowerCase() : '';
+  if (!raw || !SUPPORTED_VISION_IMAGE_MIME_TYPES.has(raw)) return { error: '图片格式不支持', status: 400 };
+  return { imageBase64, imageMimeType: raw };
+}
+
+/** buildVisionOptions for inputs that already carry the image fields. */
+export function visionOptions(input: { imageBase64: string; imageMimeType: string }) {
+  return { imageBase64: input.imageBase64, imageMimeType: input.imageMimeType };
 }
 
 type SaveUserOwnedRecordOptions<TInput, TResponseKey extends string> = {

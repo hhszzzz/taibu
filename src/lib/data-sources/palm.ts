@@ -1,6 +1,7 @@
-import { PALM_ANALYSIS_TYPES } from '@/lib/divination/palm';
+import { PALM_ANALYSIS_TYPES, getPalmHandLabel as getKnownPalmHandLabel } from '@/lib/divination/palm';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { extractConversationAnalysis, loadProviderConversation } from '@/lib/data-sources/conversation';
 import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type PalmRow = {
@@ -13,21 +14,9 @@ type PalmRow = {
     conversation?: { messages?: unknown; source_data?: Record<string, unknown> } | null;
 };
 
-const extractConversationAnalysis = (conversation?: { messages?: unknown } | null): string | null => {
-    const messages = Array.isArray(conversation?.messages) ? conversation?.messages : [];
-    const assistant = messages.find((m: { role?: string; content?: string }) => m?.role === 'assistant' && m?.content);
-    return assistant?.content || null;
-};
-
-const HAND_TYPE_LABELS: Record<string, string> = {
-    left: '左手',
-    right: '右手',
-    both: '双手',
-};
-
-function getPalmHandLabel(handType: string | null | undefined): string {
-    return handType ? (HAND_TYPE_LABELS[handType] || handType) : '';
-}
+/** 已知手型取中文名；历史记录里的任意字符串原样展示。 */
+const getPalmHandLabel = (handType: string | null | undefined): string =>
+    getKnownPalmHandLabel(handType) ?? handType ?? '';
 
 function getPalmAnalysisTypeLabel(type: string | null | undefined): string {
     return PALM_ANALYSIS_TYPES.find((item) => item.id === type)?.name || type || '综合分析';
@@ -75,13 +64,7 @@ export const palmProvider: DataSourceProvider<PalmRow> = {
             .where('user_id', '=', userId)
             .executeTakeFirst());
         if (!data) return null;
-        const conversation = data.conversation_id
-            ? await db.tx((trx) => trx
-                .selectFrom('conversations')
-                .select(['messages', 'source_data'])
-                .where('id', '=', data.conversation_id as string)
-                .executeTakeFirst()) ?? null
-            : null;
+        const conversation = await loadProviderConversation(db, data.conversation_id);
         return { ...data, conversation } as PalmRow;
     },
 

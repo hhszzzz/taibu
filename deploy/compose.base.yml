@@ -16,6 +16,10 @@ x-node: &node
   logging: *logging
   labels: *ownership
   networks: [backend]
+x-stack-ready: &stack-ready
+  db-init: { condition: service_completed_successfully }
+  files-init: { condition: service_completed_successfully }
+  redis: { condition: service_healthy }
 services:
   db:
     image: pgvector/pgvector:0.8.7-pg17-bookworm
@@ -85,10 +89,7 @@ services:
     volumes:
       - files:/data/files
       - ${TAIBU_RUN_DIR:-/run/taibu}:${TAIBU_RUN_DIR:-/run/taibu}
-    depends_on:
-      db-init: { condition: service_completed_successfully }
-      files-init: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
+    depends_on: *stack-ready
     healthcheck:
       test: [CMD, node, -e, "fetch('http://127.0.0.1:3000/api/health',{signal:AbortSignal.timeout(3000)}).then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 10s
@@ -99,10 +100,7 @@ services:
     command: [node, .agent/worker.mjs]
     volumes: [files:/data/files]
     stop_grace_period: 90s
-    depends_on:
-      db-init: { condition: service_completed_successfully }
-      files-init: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
+    depends_on: *stack-ready
     healthcheck:
       test: [CMD, node, .agent/worker.mjs, --health]
       interval: 30s

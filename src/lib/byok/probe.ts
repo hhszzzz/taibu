@@ -8,7 +8,7 @@ import {
   type ByokFailure, type ByokProtocol,
 } from './config';
 import { byokContext, collectByokStream, streamByok, type ByokRequestModel } from './pi-model';
-import { BYOK_RESPONSE_BODY_TOO_LARGE, readByokResponseText } from './response';
+import { BYOK_RESPONSE_BODY_TOO_LARGE, PROVIDER_ERROR_MAX_BYTES, readByokResponseText } from './response';
 
 export interface ByokProbeOptions {
   fetch: typeof globalThis.fetch;
@@ -22,7 +22,6 @@ export type ByokModelList = { ok: true; models: ByokListedModel[] } | { ok: fals
 
 const LIST_LIMIT = 2000;
 const MODEL_LIST_RESPONSE_MAX_BYTES = 2 * 1024 * 1024;
-const PROVIDER_ERROR_MAX_BYTES = 64 * 1024;
 const PROBE_TIMEOUT_MS = 30_000;
 
 function failureOf(error: unknown, signal?: AbortSignal): ByokFailure {

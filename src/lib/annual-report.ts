@@ -34,7 +34,7 @@ export async function generateAnnualReport(
 
         const convList = conversations as Array<{ id: string; source_type: string | null; created_at: string }>;
 
-        // 2. 计算功能使用分布
+        // 2. 统计功能使用分布、时段分布与首次/最后使用日期
         const featureUsage = {
             bazi: 0, ziwei: 0, liuyao: 0, tarot: 0,
             palm: 0, face: 0, mbti: 0, hepan: 0, fortune: 0,
@@ -44,10 +44,16 @@ export async function generateAnnualReport(
         const monthlyUsage: Record<number, number> = {};
         const weekdayDist: Record<number, number> = {};
         const hourDist: Record<number, number> = {};
+        let totalChats = 0;
+        let firstUseDate: string | null = null;
+        let lastUseDate: string | null = null;
+        let firstUseTime = Number.POSITIVE_INFINITY;
+        let lastUseTime = Number.NEGATIVE_INFINITY;
 
         for (const conv of convList) {
             const bucket = toFeatureUsageBucket(conv.source_type);
             featureUsage[bucket]++;
+            if (conv.source_type === 'chat') totalChats++;
 
             const date = new Date(conv.created_at);
             const month = date.getMonth() + 1;
@@ -57,6 +63,16 @@ export async function generateAnnualReport(
             monthlyUsage[month] = (monthlyUsage[month] || 0) + 1;
             weekdayDist[weekday] = (weekdayDist[weekday] || 0) + 1;
             hourDist[hour] = (hourDist[hour] || 0) + 1;
+
+            const time = date.getTime();
+            if (time < firstUseTime) {
+                firstUseTime = time;
+                firstUseDate = conv.created_at;
+            }
+            if (time > lastUseTime) {
+                lastUseTime = time;
+                lastUseDate = conv.created_at;
+            }
         }
 
         // 3. 计算活跃月份
@@ -66,13 +82,6 @@ export async function generateAnnualReport(
         const peakHour = Object.entries(hourDist)
             .sort((a, b) => b[1] - a[1])[0]?.[0] || '12';
 
-        // 5. 获取首次和最后使用日期
-        const sortedConvs = [...convList].sort(
-            (a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime()
-        );
-        const firstUseDate = sortedConvs[0]?.created_at || null;
-        const lastUseDate = sortedConvs[sortedConvs.length - 1]?.created_at || null;
-
         // 构建报告数据
         const report: AnnualReportData = {
             year,
@@ -80,7 +89,7 @@ export async function generateAnnualReport(
             generatedAt: new Date().toISOString(),
             usage: {
                 totalAnalyses: convList.length,
-                totalChats: convList.filter(c => c.source_type === 'chat').length,
+                totalChats,
                 activeMonths,
                 firstUseDate,
                 lastUseDate,

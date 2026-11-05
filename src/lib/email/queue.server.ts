@@ -1,26 +1,21 @@
 import 'server-only';
 
 import { Queue } from 'bullmq';
-import { JOB_QUEUE_PREFIX } from '@/lib/jobs/queues.server';
-import { createBullConnection } from '@/lib/redis.server';
+import { createQueue } from '@/lib/jobs/queues.server';
 import type { OutgoingMail } from '@/lib/email/mailer.server';
 
 export const EMAIL_QUEUE = 'taibu-email';
 
 let queue: Queue<OutgoingMail> | null = null;
 
-export function getEmailQueue(): Queue<OutgoingMail> {
-  queue ??= new Queue<OutgoingMail>(EMAIL_QUEUE, {
-    connection: createBullConnection(),
-    prefix: JOB_QUEUE_PREFIX,
+function getEmailQueue(): Queue<OutgoingMail> {
+  queue ??= createQueue<OutgoingMail>(EMAIL_QUEUE, {
     // The job payload is the mail body, OTP codes included: drop completed
     // jobs immediately and keep failures only long enough to debug a relay.
-    defaultJobOptions: {
-      attempts: 5,
-      backoff: { type: 'exponential', delay: 30_000 },
-      removeOnComplete: true,
-      removeOnFail: { age: 3600, count: 100 },
-    },
+    attempts: 5,
+    backoff: { type: 'exponential', delay: 30_000 },
+    removeOnComplete: true,
+    removeOnFail: { age: 3600, count: 100 },
   });
   return queue;
 }

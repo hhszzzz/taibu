@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { NextRequest } from 'next/server';
+import { mockAIFeatureState } from './helpers/route-mock';
 
 
 test('community reports returns auth error when admin check fails', async (t) => {
@@ -53,26 +54,23 @@ test('community admin post rejects invalid action', async (t) => {
 
 test('community report submission is rate limited before writing a report', async (t) => {
     const apiUtils = require('../lib/api-utils') as any;
-    const featureGate = require('../lib/feature-gate-utils') as any;
     const rateLimit = require('../lib/rate-limit') as any;
     const originalRequireUserContext = apiUtils.requireUserContext;
-    const originalEnsureFeatureEnabledFresh = featureGate.ensureFeatureEnabledFresh;
     const originalCheckRateLimit = rateLimit.checkRateLimit;
     let rpcCalls = 0;
     let limiterArgs: unknown[] = [];
 
+    mockAIFeatureState(t);
     apiUtils.requireUserContext = async () => ({
         db: { rpc: async () => { rpcCalls++; return { status: 'ok', report: {} }; } },
         user: { id: 'user-1' },
     });
-    featureGate.ensureFeatureEnabledFresh = async () => null;
     rateLimit.checkRateLimit = async (...args: unknown[]) => {
         limiterArgs = args;
         return { allowed: false, remaining: 0, resetAt: new Date() };
     };
     t.after(() => {
         apiUtils.requireUserContext = originalRequireUserContext;
-        featureGate.ensureFeatureEnabledFresh = originalEnsureFeatureEnabledFresh;
         rateLimit.checkRateLimit = originalCheckRateLimit;
     });
 

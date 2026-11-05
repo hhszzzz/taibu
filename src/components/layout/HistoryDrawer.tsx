@@ -18,16 +18,11 @@ import { useToast } from '@/components/ui/Toast';
 import { HISTORY_SUMMARY_DELETED_EVENT } from '@/lib/browser-api';
 import { applyHistoryRestorePayload, loadHistoryRestore } from '@/lib/history/client';
 import { useHistoryList } from '@/components/history/useHistoryList';
+import { formatHistoryDateShort } from '@/lib/history/summary-display';
 import {
     HISTORY_CONFIG,
     type HistoryType,
 } from '@/lib/history/registry';
-
-// 格式化日期（提取到组件外部，避免每次渲染重新创建）
-function formatDate(dateStr: string): string {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
-}
 
 interface HistoryDrawerProps {
     type: HistoryType;
@@ -35,6 +30,8 @@ interface HistoryDrawerProps {
 }
 
 const HISTORY_DRAWER_BATCH_SIZE = 10;
+/** 面板宽度 320px（20rem）。 */
+const PANEL_WIDTH = 320;
 
 export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
     const router = useRouter();
@@ -137,9 +134,6 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
     }, [captureScope, defaultTimeZone, router, setErrorMessage, showToast, type]);
 
     if (sessionLoading || !user?.id) return null;
-
-    // 面板宽度
-    const PANEL_WIDTH = 320; // 20rem
 
     return (
         <>
@@ -315,7 +309,7 @@ export function HistoryDrawer({ type, className = '' }: HistoryDrawerProps) {
                                                 <div className="flex items-center gap-2 mt-2">
                                                     <span className="text-[10px] text-foreground-secondary font-bold flex items-center gap-1">
                                                         <Calendar className="w-3 h-3" />
-                                                        {formatDate(item.createdAt)}
+                                                        {formatHistoryDateShort(item.createdAt)}
                                                     </span>
                                                     {item.modelName && (
                                                         <span className="text-[10px] text-foreground-secondary font-bold border-l border-border pl-2">

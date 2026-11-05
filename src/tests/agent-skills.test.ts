@@ -2,7 +2,7 @@ import test, { beforeEach, type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { getCurrentTools, type ToolResultMessage } from '@earendil-works/pi-ai';
 import { MockLanguageModelV3 } from 'ai/test';
-import { DEFAULT_AGENT_EXTENSIONS_POLICY, type AgentExtensionsPolicy } from '../lib/agent/mcp/config';
+import { DEFAULT_AGENT_EXTENSIONS_POLICY, type AgentExtensionsPolicy } from '../lib/agent/extensions/config';
 import {
   SKILL_CONTENT_MAX_BYTES, SKILL_FILE_MAX_BYTES, SKILL_FILES_MAX, formatSkillBytes, parseSkillCommand, skillPathProblem,
 } from '../lib/agent/skills/config';

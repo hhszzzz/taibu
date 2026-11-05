@@ -1,7 +1,7 @@
 import { systemDb } from '@/lib/db/context.server';
 import type { DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { getProvider } from '@/lib/data-sources';
-import { countTokens, truncateToTokens } from '@/lib/token-utils';
+import { estimateTokens, truncateToTokens } from '@/lib/ai/token-estimate';
 import type { Mention } from '@/types/mentions';
 
 export function parseMentions(content: string): Mention[] {
@@ -89,12 +89,8 @@ const mentionCache = new Map<string, { value: string; expires: number }>();
 function mentionCacheKey(mention: Mention, userId: string, ctx?: DataSourceQueryContext): string {
     return [
         userId, mention.type, mention.id ?? '',
-        ctx?.maxTokens ?? '', ctx?.maxChars ?? '', ctx?.chartPromptDetailLevel ?? '', ctx?.caseEventLimit ?? '',
+        ctx?.maxTokens ?? '', ctx?.maxChars ?? '', ctx?.model ?? '', ctx?.chartPromptDetailLevel ?? '', ctx?.caseEventLimit ?? '',
     ].join('|');
-}
-
-export function clearMentionCache(): void {
-    mentionCache.clear();
 }
 
 export function invalidateMentionCache(referenceId: string): void {
@@ -105,6 +101,7 @@ export function invalidateMentionCache(referenceId: string): void {
 
 async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSourceQueryContext): Promise<string> {
     const db = ctx?.db ?? systemDb();
+    const model = ctx?.model ?? '';
     const kb = await db.tx((trx) => trx
         .selectFrom('knowledge_bases')
         .select(['id', 'name', 'description', 'weight'])
@@ -128,7 +125,7 @@ async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSour
     const maxTokens = ctx?.maxTokens;
     const maxChars = ctx?.maxChars;
     let remainingTokens = typeof maxTokens === 'number' && maxTokens > 0
-        ? Math.max(0, maxTokens - countTokens(header))
+        ? Math.max(0, maxTokens - estimateTokens(model, header))
         : null;
     let remainingChars = typeof maxChars === 'number' && maxChars > 0
         ? Math.max(0, maxChars - header.length)
@@ -154,9 +151,9 @@ async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSour
             let next = raw;
             if (remainingTokens != null) {
                 if (remainingTokens <= 0) break;
-                const tokens = countTokens(next);
+                const tokens = estimateTokens(model, next);
                 if (tokens > remainingTokens) {
-                    next = truncateToTokens(next, remainingTokens);
+                    next = truncateToTokens(model, next, remainingTokens);
                 }
             }
             if (remainingChars != null) {
@@ -169,7 +166,7 @@ async function resolveKnowledgeBase(kbId: string, userId: string, ctx?: DataSour
             bodyParts.push(next);
             entriesUsed += 1;
             if (remainingTokens != null) {
-                remainingTokens -= countTokens(next);
+                remainingTokens -= estimateTokens(model, next);
             }
             if (remainingChars != null) {
                 remainingChars -= next.length;

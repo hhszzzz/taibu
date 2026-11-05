@@ -3,6 +3,11 @@
 #     -f deploy/compose.base.yml -f deploy/compose.prod.yml up -d
 # compose.env holds only non-secret interpolation: LOCAL_PROJECT,
 # LOCAL_INSTANCE_ID, APP_DOMAIN, TAIBU_IMAGE, TAIBU_TAG.
+x-logging: &logging
+  driver: json-file
+  options: { max-size: 10m, max-file: "3" }
+x-ownership: &ownership
+  io.taibu.local.instance: "${LOCAL_INSTANCE_ID:?}"
 services:
   caddy:
     # Pinned by digest so an upstream tag move cannot change the edge unseen.
@@ -22,10 +27,8 @@ services:
       - /opt/taibu/maintenance:/srv/maintenance:ro
     networks: [edge]
     mem_limit: 96m
-    logging:
-      driver: json-file
-      options: { max-size: 10m, max-file: "3" }
-    labels: { io.taibu.local.instance: "${LOCAL_INSTANCE_ID:?}" }
+    logging: *logging
+    labels: *ownership
   web:
     networks: [edge, backend]
     environment:
@@ -73,10 +76,8 @@ services:
     mem_limit: 128m
     depends_on:
       db: { condition: service_healthy }
-    logging:
-      driver: json-file
-      options: { max-size: 10m, max-file: "3" }
-    labels: { io.taibu.local.instance: "${LOCAL_INSTANCE_ID:?}" }
+    logging: *logging
+    labels: *ownership
 volumes:
   caddy_data: {}
   caddy_config: {}

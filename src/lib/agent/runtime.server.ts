@@ -35,18 +35,18 @@ import { agentToolCardId, modelCallEntry, projectDurableConversation, publicCano
 import {
   AGENT_CODEMODE_CALL_LIMIT, AGENT_SCRIPT_RESULT_SCHEMA, agentScriptCallNumber, agentScriptResult, createAgentCodemodeExtension,
 } from './codemode.server';
-import { AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, getAgentExtensionToolTitle, getAgentToolScopeLabel, isAgentChartTool, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
+import { AGENT_MODEL_ONLY_TOOLS, AGENT_PLAN_GATED_TOOLS, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, agentChartFocusHint, agentChartReferenceNote, getAgentExtensionToolTitle, getAgentToolScopeLabel, isAgentChartTool, isAgentDeferredTool, returnsAgentScriptResult } from './tool-catalog';
 import { createAgentToolSearchExtension } from './tool-search.server';
 import type { AgentAnswers, AgentQuestion } from './questions';
 import { agentInputContent } from './attachment-input';
 import { resolveAttachmentImages } from './attachments.server';
 import { countModelTokens } from './token-count.server';
-import { estimateTokens } from './token-estimate';
+import { estimateTokens } from '@/lib/ai/token-estimate';
 import { agentCompactionPolicy } from './compaction';
 import { prepareToolArguments, toolPolicyBlock } from './tool-arguments';
 import { commitSummary, generateSummary, readSummary } from './summary-usage.server';
 import { createGuardedAgentModels, type GuardedAgentModel } from './model-registry.server';
-import { parseAgentCollaborators } from '@/lib/chat/model-settings';
+import { parseAgentCollaborators, type AgentCollaborator } from '@/lib/chat/model-settings';
 import { createParallelExtension } from './parallel.server';
 import { backgroundConversations, createBackgroundAgents, pendingBackgroundReporters, projectBackgroundAgents, residentBackgroundAgents } from './background.server';
 import { BUILTIN_AGENT_PROFILES, DEFAULT_AGENT_PROFILE, type AgentProfileView } from './profiles/config';
@@ -59,7 +59,7 @@ import type { McpPool } from './mcp/pool.server';
 import { builtinSkillsSession, expandSkillMessages, openAgentSkills, type AgentSkillsSession } from './skills/catalog.server';
 import { parseSkillCommand } from './skills/config';
 import { projectAgentUsage } from './usage';
-import { splitAgentFollowUps } from './follow-ups';
+import { splitAgentFollowUps, AGENT_FOLLOW_UP_CLOSE, AGENT_FOLLOW_UP_OPEN } from './follow-ups';
 import { AgentRunTelemetry } from './telemetry.server';
 import { buildAgentVisualizationInstructions } from '@/lib/visualization/prompt';
 
@@ -75,12 +75,19 @@ export const AGENT_INSTRUCTIONS = `\n你是太卜智能体(Taibu Agent)，使用
 search_knowledge、web_search、web_fetch 的每条结果和 focus_chart 的结果带 cite 编号。回答中用到这些依据时，在对应句末标注 [编号]，多个写作 [1][2]；只使用本任务工具实际返回的编号，不编造、不改号，没有依据的推断不标注。
 排盘与计算结果留在当前对话中，分析与执行过程也保存在聊天里，不另建分析记录；是否把命盘存入命盘库由用户在盘面上决定，你无需也不能代为保存。
 ${buildAgentVisualizationInstructions()}
-分析所有占术时先用 inspect_chart 在右侧工作区查看原盘并取得真实定位目标。计算成果引用 artifact:成果ID，已存资料使用 read_user_data 返回的命盘引用。进入新的分析主题前，用 focus_chart 展示当前分析位置并写简短主题：八字的柱位、日支、生克刑害合冲；紫微的宫位星曜；奇门的宫、门、星、神及天地盘干；六爻的本变卦、爻位与伏神；梅花的本互变卦、体用与阶段；大六壬的四课三传、天地盘及天将；小六壬的推演步骤及落宫；塔罗的具体牌位；太乙的观测层、十六宫及星将；占星的星体、宫头与相位；黄历的宜忌、方位和时辰。紫微星曜先按宫名再次 inspect_chart 获取该宫目标，三方四正及其他关联位置用 includeRelated 控制。只引用该盘实际返回的目标 ID，不猜坐标、不修改排盘数据；旧盘缺少字段时说明边界。工具定位与读取不产生新计算成果。
+分析所有占术时先用 inspect_chart 在右侧工作区查看原盘并取得真实定位目标。计算成果引用 artifact:成果ID，已存资料使用 read_user_data 返回的命盘引用。进入新的分析主题前，用 focus_chart 展示当前分析位置并写简短主题：${agentChartFocusHint()}。紫微星曜先按宫名再次 inspect_chart 获取该宫目标，三方四正及其他关联位置用 includeRelated 控制。只引用该盘实际返回的目标 ID，不猜坐标、不修改排盘数据；旧盘缺少字段时说明边界。工具定位与读取不产生新计算成果。
 排盘后需要局部细节时优先用详查工具（如 bazi_relations 查岁运叠加后的刑冲合害，原局关系看命盘的干支关系），传同一个命盘引用与查询参数，不重复传出生信息；详查只给命盘之外的事实，不重复命盘已有内容。只问某柱、某类关系或某几组事实时用该工具的筛选参数（如 pillars、types、sections、focus）只取所需。筛选结果中的同字牵连须与所列关系一并解读；未列出表示另有事实未展开，确需时去掉筛选再查；默认不附判定口径，要向用户说明规则时再传 detailLevel=full。详查返回的事实可作为解读依据，所查位置会在工作区自动标出，无需再 focus_chart。详查也不产生新成果。
 工具执行失败时如实处理，可调整参数或追问。当前用户身份由服务端确定，不能指定其他用户。
 默认由你自己完成任务。只有存在相互独立、能分头处理的子问题时，才用 parallel_analysis 交给成员同时完成，由你核对与汇总：按子问题为每位成员选合适的角色，给出简短 title，并用 topics 列出需要每位成员表态的关键议题，判断类议题提供 2–4 个互斥 options，便于对照分歧。不要让成员互相辩论或反复复核，复核最多一轮；成员之间不传话，需要时由你转述。可与你并行推进、或要在之后的提问中持续跟进的专项任务，可用 background_agent 交给常驻后台子分析，回报自动送达，不必等待。长期记忆仅在用户已开启时可用，按需读取；只有用户明确表达值得跨任务保留的偏好或事实才可写回，必须附用户原话依据，不能保存推断、敏感凭据或短期任务结果。
 需要参考用户以往的资料时，用 list_user_data 按类别、关键词或日期检索，read_user_data 读取时附带八字断事笔记与关联的命理记录。用户讲到自己或命主已经发生的具体经历时，长期记忆已开启则用 record_user_event 按原话记入档案；旺衰、格局、喜用神、分析结论与待验证的预测是你的判断，只能用 propose_archive_entry 生成保存卡片，由用户决定是否保存。
-最终答复的最后另起一行写 <followups>，其后只写一个用户最可能接着问的问题（不超过 20 字，用用户的口吻），最后一行写 </followups>；向用户提问或任务未完成时不写。`;
+最终答复的最后另起一行写 ${AGENT_FOLLOW_UP_OPEN}，其后只写一个用户最可能接着问的问题（不超过 20 字，用用户的口吻），最后一行写 ${AGENT_FOLLOW_UP_CLOSE}；向用户提问或任务未完成时不写。`;
+
+/** What a task with configured members adds: who they are, and that the main agent dispatches and reconciles them. */
+function collaboratorInstructions(collaborators: readonly AgentCollaborator[]): string {
+  if (!collaborators.length) return '';
+  return `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}`;
+}
+
 export const AGENT_COMPACTION_FAILED_MESSAGE = "上下文过长且压缩失败，可开启新对话或重新发起任务";
 export const AGENT_MANUAL_COMPACTION_FAILED_MESSAGE = "上下文压缩失败，原上下文仍保留，可稍后再试";
 /**
@@ -660,7 +667,7 @@ export async function executeAgentRun(
             if (call.parent) return settleScriptCall(call, call.parent, result, api.taskId, hookContext);
             const details = result.details as { artifactId?: unknown } | undefined;
             if (typeof details?.artifactId !== 'string' || result.isError || !isAgentChartTool(call.name)) return;
-            return { ...result, output: [...(result.output ?? []), { type: 'text' as const, text: `命盘引用: artifact:${details.artifactId}。查看、详查或定位这张盘时作为 reference 传入。` }] };
+            return { ...result, output: [...(result.output ?? []), { type: 'text' as const, text: agentChartReferenceNote(`artifact:${details.artifactId}`) }] };
           },
         }),
         hook(GenerationTask, {
@@ -776,7 +783,7 @@ export async function executeAgentRun(
       model: { provider: "taibu", modelId: config.id },
       thinkingLevel: ownMain ? byokAgentThinkingLevel(config, run.input.reasoning, run.input.reasoningEffort)
         : run.input.reasoning ? resolveThinkingLevel(config, run.input.reasoningEffort) : 'off',
-      instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + (collaborators.length ? `\n本任务启用多模型协作。信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}` : ''),
+      instructions: run.input.systemPrompt + AGENT_INSTRUCTIONS + collaboratorInstructions(collaborators),
       ...(reloaded.length ? { modelTools: { add: reloaded } } : {}),
     } });
     const enqueued = new Set<number>();

@@ -9,6 +9,7 @@
 
 import { Solar } from 'lunar-javascript';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
+import { formatLocalDate } from '@/lib/local-date';
 import {
     STEM_ELEMENTS,
     ZHI_WUXING,
@@ -269,7 +270,7 @@ function getLuckyElement(userElement: FiveElement): FiveElement {
  * 5. 权重 → FortuneLevel
  */
 export function calculateDailyFortune(baziOutput: CoreBaziOutput, date: Date): DailyFortune {
-    const dateStr = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    const dateStr = formatLocalDate(date);
     const cacheKey = `${baziOutput.dayMaster}-${baziOutput.fourPillars.day.stem}-${baziOutput.fourPillars.day.branch}-${dateStr}`;
     const cached = dailyFortuneCache.get(cacheKey);
     if (cached) return cached;

@@ -21,7 +21,7 @@ import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { buyPlan, fetchBillingOrders, fetchBillingOverview, redeemCode, saveDeductOrder, startCheckout, submitCheckout } from '@/lib/billing/client';
 import {
-    DEDUCT_ORDERS, DEDUCT_ORDER_LABELS, PAYMENT_ORDER_STATUS_LABELS, cnyForUsd, describePlanDuration,
+    DEDUCT_ORDERS, DEDUCT_ORDER_LABELS, MAX_TOPUP_USD, PAYMENT_ORDER_STATUS_LABELS, cnyForUsd, describePlanDuration,
     type BillingOverview, type BillingSummary, type DeductOrder, type PaymentOrderView, type SubscriptionPlanView,
 } from '@/lib/billing/config';
 import { formatBillingDay, formatBillingTime, windowLabel } from '@/lib/billing/format';
@@ -29,7 +29,6 @@ import { formatUsd, isCentAmount, usdToMicros } from '@/lib/billing/money';
 
 const SECTION_HEADING = 'text-[13px] font-medium text-foreground-tertiary';
 const CARD = 'rounded-2xl border border-border bg-surface';
-const MAX_TOPUP_USD = 10_000;
 
 const PAYMENT_RESULT: Record<string, { tone: 'success' | 'info' | 'error'; message: string }> = {
     success: { tone: 'success', message: '支付成功，已到账' },

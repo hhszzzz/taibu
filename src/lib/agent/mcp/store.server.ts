@@ -2,8 +2,9 @@ import 'server-only';
 import { randomUUID } from 'node:crypto';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { isUniqueViolation } from '@/lib/db/errors';
-import { json, lockTransactionKey } from '@/lib/db/sql-helpers';
+import { json } from '@/lib/db/sql-helpers';
 import { createSharedCache } from '@/lib/cache/shared.server';
+import { retireOverAllowance } from '../extension-quota.server';
 import {
   MCP_RESULT_CHARS_RANGE, MCP_TIMEOUT_RANGE,
   type McpExposure, type McpServerSnapshot, type McpServerView, type McpToolPolicy,
@@ -40,7 +41,7 @@ export interface McpServerRow {
 /** Thrown when a user already has as many connectors as the policy allows. */
 export class McpLimitError extends Error {}
 
-/** Namespace of the per-owner quota lock (see lockTransactionKey). */
+/** Namespace of the per-owner quota lock (see extension-quota.server.ts). */
 const QUOTA_LOCK = 912;
 
 const platformCache = createSharedCache<McpServerRow[]>({ name: 'agent-mcp-servers', ttlMs: 60_000 });
@@ -111,15 +112,7 @@ export async function insertMcpServer(
   try {
     return (await db.tx(async (trx) => {
       if (owner !== null && options.limit !== undefined) {
-        await lockTransactionKey(trx, owner, QUOTA_LOCK);
-        // 额度按启用中的连接器计算；新增超出时停用最早添加的连接器。
-        const enabled = await trx.selectFrom('agent_mcp_servers').select('id')
-          .where('owner_id', '=', owner).where('is_enabled', '=', true)
-          .orderBy('created_at', 'asc').limit(options.limit).execute();
-        if (enabled.length >= options.limit) {
-          const retire = enabled.slice(0, enabled.length - options.limit + 1).map((row) => row.id);
-          await trx.updateTable('agent_mcp_servers').set({ is_enabled: false }).where('id', 'in', retire).execute();
-        }
+        await retireOverAllowance(trx, { table: 'agent_mcp_servers', owner, limit: options.limit, lock: QUOTA_LOCK });
       }
       return trx.insertInto('agent_mcp_servers').values({
         id, owner_id: owner, name: fields.name, display_name: fields.displayName, description: fields.description ?? '',

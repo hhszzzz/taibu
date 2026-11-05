@@ -3,15 +3,12 @@ import { requestBrowserData } from '@/lib/browser-api';
 import { openSettingsCenter } from '@/lib/settings-center';
 import type {
     AdminBillingUserView, AdminPaymentOrderView, AdminUsagePage, BillingOverview, BillingPaymentView, BillingSettings, BillingSummary,
-    DeductOrder, LedgerPage, PaymentOrderView, RedeemResult, RedemptionCodeView, SubscriptionPlanView,
+    DeductOrder, EpayCheckout, EpayCheckoutInput, LedgerPage, PaymentOrderView, RedeemResult, RedemptionCodeView, SubscriptionPlanView,
 } from './config';
-
-export type { LedgerPage };
 
 export type OrdersPage = { orders: PaymentOrderView[]; nextOffset: number | null };
 export type AdminOrdersPage = { orders: AdminPaymentOrderView[]; nextOffset: number | null };
 export type AdminBillingUserDetail = { user: AdminBillingUserView; summary: BillingSummary; ledger: LedgerPage; orders: PaymentOrderView[] };
-export type EpayCheckout = { url: string; params: Record<string, string> };
 
 const json = (method: string, body?: unknown) => ({ method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 
@@ -26,7 +23,7 @@ export const redeemCode = (code: string) => requestBrowserData<{ result: RedeemR
     '/api/billing/redeem', json('POST', { code }), { fallbackMessage: '兑换失败' });
 export const buyPlan = (planId: string) => requestBrowserData<{ summary: BillingSummary | null }>(
     `/api/billing/plans/${encodeURIComponent(planId)}/buy`, json('POST', {}), { fallbackMessage: '购买失败' });
-export const startCheckout = (input: { kind: 'topup'; amountUsd: number; method: string } | { kind: 'subscription'; planId: string; method: string }) =>
+export const startCheckout = (input: EpayCheckoutInput) =>
     requestBrowserData<EpayCheckout>('/api/billing/epay/checkout', json('POST', input), { fallbackMessage: '创建支付订单失败' });
 
 /** Which purse a charge spends first, saved from the wallet page. */

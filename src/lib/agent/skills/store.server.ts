@@ -1,8 +1,8 @@
 import 'server-only';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { isUniqueViolation } from '@/lib/db/errors';
-import { lockTransactionKey } from '@/lib/db/sql-helpers';
 import { createSharedCache } from '@/lib/cache/shared.server';
+import { retireOverAllowance } from '../extension-quota.server';
 import { SKILL_FILES_TOTAL_MAX_BYTES, type SkillDetail, type SkillFileView, type SkillView } from './config';
 import { SkillInputError, type SkillFields } from './input.server';
 
@@ -126,15 +126,7 @@ export async function insertSkill(
   try {
     return await db.tx(async (trx) => {
       if (owner !== null && options.limit !== undefined) {
-        await lockTransactionKey(trx, owner, QUOTA_LOCK);
-        // 额度按启用中的技能计算；新增超出时停用最早添加的技能，让最新的技能生效。
-        const enabled = await trx.selectFrom('agent_skills').select('id')
-          .where('owner_id', '=', owner).where('is_enabled', '=', true)
-          .orderBy('created_at', 'asc').limit(options.limit).execute();
-        if (enabled.length >= options.limit) {
-          const retire = enabled.slice(0, enabled.length - options.limit + 1).map((row) => row.id);
-          await trx.updateTable('agent_skills').set({ is_enabled: false }).where('id', 'in', retire).execute();
-        }
+        await retireOverAllowance(trx, { table: 'agent_skills', owner, limit: options.limit, lock: QUOTA_LOCK });
       }
       const { id } = await trx.insertInto('agent_skills').values({
         owner_id: owner, name: fields.document.name, description: fields.document.description, content: fields.document.content,

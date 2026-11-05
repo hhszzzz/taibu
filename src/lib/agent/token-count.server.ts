@@ -4,7 +4,7 @@ import type { AIModelConfig } from '@/types';
 import { isModelAvailable, MODEL_REQUEST_USER_AGENT } from '@/lib/ai/providers/ai-sdk-provider';
 import { sourceApiKeyOrNone } from '@/lib/ai/gateway-secrets.server';
 import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
-import { estimateTokens } from './token-estimate';
+import { estimateTokens } from '@/lib/ai/token-estimate';
 
 /**
  * 按模型真实计数一段进入上下文的文本：调用模型所在网关的 `POST /v1/messages/count_tokens`。

@@ -15,22 +15,24 @@ const USERINFO_URLS = [
   'https://connect.linuxdo.org/api/user',
 ] as const;
 
+function requireEnv(name: string): string {
+  const value = process.env[name];
+  if (!value) throw new Error(`${name} is not set`);
+  return value;
+}
+
 function getClientId(): string {
-  const v = process.env.LINUXDO_CLIENT_ID;
-  if (!v) throw new Error('LINUXDO_CLIENT_ID is not set');
-  return v;
+  return requireEnv('LINUXDO_CLIENT_ID');
 }
 
 function getClientSecret(): string {
-  const v = process.env.LINUXDO_CLIENT_SECRET;
-  if (!v) throw new Error('LINUXDO_CLIENT_SECRET is not set');
-  return v;
+  return requireEnv('LINUXDO_CLIENT_SECRET');
 }
 
 // --- PKCE helpers ---
 
 function base64url(buf: Buffer): string {
-  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  return buf.toString('base64url');
 }
 
 export function generatePKCE(): { codeVerifier: string; codeChallenge: string } {

@@ -4,7 +4,8 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import { systemDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { parseConfiguredOrigin } from '@/lib/runtime-env';
-import { cnyForUsd } from './config';
+import { MAX_TOPUP_USD, cnyForUsd, type EpayCheckout, type EpayCheckoutInput } from './config';
+import { BillingError } from './errors';
 import { isCentAmount, usdToMicros } from './money';
 import { getBillingSettings } from './settings.server';
 
@@ -50,19 +51,7 @@ export function verifyEpaySign(params: Record<string, string>, key: string): boo
     return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-export class EpayError extends Error {
-    constructor(message: string, readonly status: number, readonly code: string) {
-        super(message);
-        this.name = 'EpayError';
-    }
-}
-
-export type EpayCheckoutInput =
-    | { kind: 'topup'; amountUsd: number; method: string }
-    | { kind: 'subscription'; planId: string; method: string };
-
-/** Where the browser posts to pay: the gateway's submit address and the signed form fields. */
-export type EpayCheckout = { url: string; params: Record<string, string> };
+export class EpayError extends BillingError {}
 
 /** A pending order, and the signed form that takes the member to the gateway. */
 export async function createEpayCheckout(userId: string, input: EpayCheckoutInput): Promise<EpayCheckout> {
@@ -75,8 +64,8 @@ export async function createEpayCheckout(userId: string, input: EpayCheckoutInpu
     let planId: string | null = null;
     if (input.kind === 'topup') {
         usd = input.amountUsd;
-        if (!isCentAmount(usd) || usd < settings.minTopupUsd || usd > 10_000) {
-            throw new EpayError(`充值金额需要在 $${settings.minTopupUsd} 到 $10000 之间，最多两位小数`, 400, 'AMOUNT_INVALID');
+        if (!isCentAmount(usd) || usd < settings.minTopupUsd || usd > MAX_TOPUP_USD) {
+            throw new EpayError(`充值金额需要在 $${settings.minTopupUsd} 到 $${MAX_TOPUP_USD} 之间，最多两位小数`, 400, 'AMOUNT_INVALID');
         }
         creditMicros = usdToMicros(usd);
     } else {

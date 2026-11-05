@@ -5,6 +5,7 @@
  */
 
 import { Solar } from 'lunar-javascript';
+import { formatDateParts } from '@/lib/local-date';
 
 // ===== 节气定义 =====
 
@@ -59,39 +60,30 @@ export const SOLAR_TERM_INFO: Record<string, { meaning: string; tips: string }> 
 export function getYearSolarTerms(year: number): SolarTerm[] {
     const terms: SolarTerm[] = [];
 
-    // lunar-javascript 提供了节气计算
-    for (let month = 1; month <= 12; month++) {
-        const solar = Solar.fromYmd(year, month, 1);
-        const lunar = solar.getLunar();
-
-        // 获取当月的两个节气
-        const jieQi = lunar.getJieQiTable();
-        for (const [name, jq] of Object.entries(jieQi)) {
-            if (SOLAR_TERM_NAMES.includes(name)) {
-                // jq is a Solar object in lunar-javascript
-                const jqSolar = jq as unknown as { getYear: () => number; getMonth: () => number; getDay: () => number };
-                const jqYear = jqSolar.getYear();
-                const jqMonth = jqSolar.getMonth();
-                const jqDay = jqSolar.getDay();
-                const dateStr = `${jqYear}-${String(jqMonth).padStart(2, '0')}-${String(jqDay).padStart(2, '0')}`;
-
-                // 只取当年的节气
-                if (jqYear === year) {
-                    const info = SOLAR_TERM_INFO[name] || { meaning: '', tips: '' };
-                    terms.push({
-                        name,
-                        date: dateStr,
-                        meaning: info.meaning,
-                        tips: info.tips,
-                    });
-                }
-            }
+    // One lookup returns the whole year's 24 terms (plus adjacent years'), so the month loop was redundant.
+    const jieQi = Solar.fromYmd(year, 7, 1).getLunar().getJieQiTable();
+    for (const [name, jq] of Object.entries(jieQi)) {
+        if (!SOLAR_TERM_NAMES.includes(name)) {
+            continue;
         }
+        const jqSolar = jq as unknown as { getYear: () => number; getMonth: () => number; getDay: () => number };
+        const jqYear = jqSolar.getYear();
+        if (jqYear !== year) {
+            continue;
+        }
+        const jqMonth = jqSolar.getMonth();
+        const jqDay = jqSolar.getDay();
+        const dateStr = formatDateParts(jqYear, jqMonth, jqDay);
+        const info = SOLAR_TERM_INFO[name] || { meaning: '', tips: '' };
+        terms.push({
+            name,
+            date: dateStr,
+            meaning: info.meaning,
+            tips: info.tips,
+        });
     }
 
-    // 去重并排序
-    const unique = Array.from(new Map(terms.map(t => [t.date, t])).values());
-    return unique.sort((a, b) => a.date.localeCompare(b.date));
+    return terms.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**

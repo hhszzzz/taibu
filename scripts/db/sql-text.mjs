@@ -129,6 +129,10 @@ export function closingParenthesis(text, open) {
 export const IDENTIFIER = String.raw`(?:"(?:[^"]|"")+"|[a-z_][a-z0-9_$]*)`;
 export const QUALIFIED = String.raw`${IDENTIFIER}\.${IDENTIFIER}`;
 
+export function quoteIdentifier(identifier) {
+  return `"${String(identifier).replaceAll('"', '""')}"`;
+}
+
 export function unquoteIdentifier(identifier) {
   return identifier.startsWith('"') ? identifier.slice(1, -1).replaceAll('""', '"') : identifier;
 }

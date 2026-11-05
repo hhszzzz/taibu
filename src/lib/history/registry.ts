@@ -1,4 +1,6 @@
 import { PERSONALITY_BASICS, type MBTIType } from '@/lib/divination/mbti';
+import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
+import { PALM_ANALYSIS_TYPES } from '@/lib/divination/palm';
 
 export const HISTORY_TYPES = [
   'tarot',
@@ -82,7 +84,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/mbti/history',
     detailPath: '/mbti/result',
     sessionKey: 'mbti_result',
-    summaryColumns: ['id', 'mbti_type', 'scores', 'percentages', 'conversation_id', 'created_at'],
+    summaryColumns: ['id', 'mbti_type', 'percentages', 'conversation_id', 'created_at'],
   },
   hepan: {
     replay: { mode: 'saved-result', legacyFallback: 'input-recompute' },
@@ -137,7 +139,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/meihua/history',
     detailPath: '/meihua/result',
     sessionKey: 'meihua_result',
-    summaryColumns: ['id', 'question', 'method', 'cast_datetime', 'main_hexagram', 'changed_hexagram', 'input_data', 'result_data', 'conversation_id', 'created_at'],
+    summaryColumns: ['id', 'question', 'method', 'main_hexagram', 'changed_hexagram', 'conversation_id', 'created_at'],
   },
   xiaoliuren: {
     replay: { mode: 'saved-result', legacyFallback: 'unavailable' },
@@ -146,7 +148,7 @@ export const HISTORY_CONFIG: Record<HistoryType, HistoryConfig> = {
     historyPath: '/xiaoliuren/history',
     detailPath: '/xiaoliuren/result',
     sessionKey: 'xiaoliuren_result',
-    summaryColumns: ['id', 'question', 'solar_datetime', 'lunar_month', 'lunar_day', 'is_leap_month', 'shichen', 'final_status', 'input_data', 'result_data', 'conversation_id', 'created_at'],
+    summaryColumns: ['id', 'question', 'lunar_month', 'lunar_day', 'is_leap_month', 'shichen', 'final_status', 'conversation_id', 'created_at'],
   },
 };
 
@@ -186,30 +188,48 @@ function truncateTitle(title: string) {
   return title.length > 18 ? `${title.slice(0, 18)}...` : title;
 }
 
+function trimmedText(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
+}
+
+const HEPAN_TITLES: Record<string, string> = {
+  love: '情侣合盘',
+  business: '商业合盘',
+  family: '亲子合盘',
+};
+
+const TAROT_SPREAD_NAMES: Record<string, string> = {
+  single: '单牌',
+  'three-card': '三牌阵',
+  love: '爱情牌阵',
+  'celtic-cross': '凯尔特十字',
+};
+
+const PALM_HAND_NAMES: Record<string, string> = { left: '左手', right: '右手' };
+
+/** A registered analysis type's display name, shared by the palm and face history rows. */
+const analysisName = (types: readonly { id: string; name: string }[], id: string) =>
+  types.find(item => item.id === id)?.name;
+
 export async function buildHistorySummary(
   type: HistoryType,
   row: Record<string, unknown>,
 ): Promise<HistorySummaryItem> {
-  const modelName = getModelNameFromConversation(row);
+  const base = {
+    id: String(row.id),
+    createdAt: String(row.created_at || ''),
+    modelName: getModelNameFromConversation(row),
+    conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
+  };
 
   if (type === 'hepan') {
     const hepanType = row.type as string;
-    const title = hepanType === 'love'
-      ? '情侣合盘'
-      : hepanType === 'business'
-        ? '商业合盘'
-        : hepanType === 'family'
-          ? '亲子合盘'
-          : '合盘分析';
     return {
-      id: String(row.id),
-      title,
+      ...base,
+      title: HEPAN_TITLES[hepanType] || '合盘分析',
       question: `${row.person1_name || ''} & ${row.person2_name || ''}`,
-      createdAt: String(row.created_at || ''),
       subType: hepanType,
-      modelName,
       metric: typeof row.compatibility_score === 'number' ? `${row.compatibility_score}%` : undefined,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
     };
   }
 
@@ -223,35 +243,24 @@ export async function buildHistorySummary(
       JP?: { J?: number; P?: number };
     } | null | undefined;
     return {
-      id: String(row.id),
+      ...base,
       title: mbtiType,
       question: personalityTitle,
-      createdAt: String(row.created_at || ''),
-      modelName,
       badges: percentages ? [
         `E${percentages.EI?.E ?? 50}% / I${percentages.EI?.I ?? 50}%`,
         `S${percentages.SN?.S ?? 50}% / N${percentages.SN?.N ?? 50}%`,
         `T${percentages.TF?.T ?? 50}% / F${percentages.TF?.F ?? 50}%`,
         `J${percentages.JP?.J ?? 50}% / P${percentages.JP?.P ?? 50}%`,
       ] : undefined,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
     };
   }
 
   if (type === 'tarot') {
-    const spreadNames: Record<string, string> = {
-      single: '单牌',
-      'three-card': '三牌阵',
-      love: '爱情牌阵',
-      'celtic-cross': '凯尔特十字',
-    };
     const spreadId = row.spread_id as string;
     return {
-      id: String(row.id),
-      title: spreadNames[spreadId] || spreadId || '塔罗占卜',
-      question: typeof row.question === 'string' && row.question.trim() ? row.question.trim() : undefined,
-      createdAt: String(row.created_at || ''),
-      modelName,
+      ...base,
+      title: TAROT_SPREAD_NAMES[spreadId] || spreadId || '塔罗占卜',
+      question: trimmedText(row.question),
       badges: Array.isArray(row.cards)
         ? row.cards
           .slice(0, 3)
@@ -263,7 +272,6 @@ export async function buildHistorySummary(
           })
           .filter((value): value is string => value.length > 0)
         : undefined,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
     };
   }
 
@@ -274,73 +282,41 @@ export async function buildHistorySummary(
       ? findHexagram(String(row.changed_hexagram_code))
       : undefined;
     return {
-      id: String(row.id),
+      ...base,
       title: hexagram?.name || '未知卦',
       changedTitle: changedHexagram?.name,
-      question: typeof row.question === 'string' && row.question.trim() ? row.question.trim() : undefined,
-      createdAt: String(row.created_at || ''),
-      modelName,
+      question: trimmedText(row.question),
       metric: Array.isArray(row.changed_lines) && row.changed_lines.length > 0
         ? `变爻：${(row.changed_lines as number[]).map((line) => `第${line}爻`).join('、')}`
         : undefined,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
     };
   }
 
   if (type === 'palm') {
-    const analysisNames: Record<string, string> = {
-      full: '综合分析',
-      lifeline: '生命线',
-      headline: '智慧线',
-      heartline: '感情线',
-      fateline: '事业线',
-      marriage: '婚姻线',
-    };
-    const handNames: Record<string, string> = { left: '左手', right: '右手' };
-    const title = `${handNames[String(row.hand_type || '')] || ''}${analysisNames[String(row.analysis_type || '')] || '手相分析'}`;
+    const hand = PALM_HAND_NAMES[String(row.hand_type || '')] || '';
+    const analysis = analysisName(PALM_ANALYSIS_TYPES, String(row.analysis_type || '')) || '手相分析';
     return {
-      id: String(row.id),
-      title: truncateTitle(title),
-      createdAt: String(row.created_at || ''),
-      modelName,
-      badges: [
-        handNames[String(row.hand_type || '')] || '',
-        analysisNames[String(row.analysis_type || '')] || '手相分析',
-      ].filter((value): value is string => value.length > 0),
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
+      ...base,
+      title: truncateTitle(`${hand}${analysis}`),
+      badges: [hand, analysis].filter((value): value is string => value.length > 0),
     };
   }
 
   if (type === 'face') {
-    const analysisNames: Record<string, string> = {
-      full: '综合分析',
-      forehead: '天庭分析',
-      eyes: '眼相分析',
-      nose: '鼻相分析',
-      mouth: '口相分析',
-      career: '事业运势',
-      love: '感情运势',
-      wealth: '财运分析',
-    };
+    const analysis = analysisName(FACE_ANALYSIS_TYPES, String(row.analysis_type || '')) || '面相分析';
     return {
-      id: String(row.id),
-      title: truncateTitle(analysisNames[String(row.analysis_type || '')] || '面相分析'),
-      createdAt: String(row.created_at || ''),
-      modelName,
-      badges: [analysisNames[String(row.analysis_type || '')] || '面相分析'],
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
+      ...base,
+      title: truncateTitle(analysis),
+      badges: [analysis],
     };
   }
 
   if (type === 'qimen') {
     const dunText = row.dun_type === 'yang' ? '阳遁' : '阴遁';
     return {
-      id: String(row.id),
+      ...base,
       title: `${dunText}${row.ju_number}局`,
-      question: typeof row.question === 'string' && row.question.trim() ? row.question.trim() : undefined,
-      createdAt: String(row.created_at || ''),
-      modelName,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
+      question: trimmedText(row.question),
     };
   }
 
@@ -348,52 +324,39 @@ export async function buildHistorySummary(
     const resultData = row.result_data as Record<string, unknown> | null;
     const keName = typeof resultData?.keName === 'string' ? resultData.keName : `${row.day_ganzhi as string}日`;
     return {
-      id: String(row.id),
+      ...base,
       title: truncateTitle(keName),
-      question: typeof row.question === 'string' && row.question.trim() ? row.question.trim() : undefined,
-      createdAt: String(row.created_at || ''),
-      modelName,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
+      question: trimmedText(row.question),
     };
   }
 
   if (type === 'meihua') {
-    const changedHexagram = typeof row.changed_hexagram === 'string' && row.changed_hexagram.trim()
-      ? row.changed_hexagram.trim()
-      : undefined;
+    const changedHexagram = trimmedText(row.changed_hexagram);
     return {
-      id: String(row.id),
+      ...base,
       title: truncateTitle(String(row.main_hexagram || '梅花易数')),
       changedTitle: changedHexagram,
-      question: typeof row.question === 'string' && row.question.trim() ? row.question.trim() : undefined,
-      createdAt: String(row.created_at || ''),
-      modelName,
+      question: trimmedText(row.question),
       badges: typeof row.method === 'string' ? [row.method] : undefined,
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
     };
   }
 
   if (type === 'xiaoliuren') {
     return {
-      id: String(row.id),
+      ...base,
       title: truncateTitle(String(row.final_status || '小六壬')),
-      question: typeof row.question === 'string' && row.question.trim() ? row.question.trim() : undefined,
-      createdAt: String(row.created_at || ''),
-      modelName,
+      question: trimmedText(row.question),
       badges: [
         row.is_leap_month ? `闰${row.lunar_month}月` : `${row.lunar_month}月`,
         `${row.lunar_day}日`,
         typeof row.shichen === 'string' ? row.shichen : '',
       ].filter((value): value is string => Boolean(value)),
-      conversationId: typeof row.conversation_id === 'string' ? row.conversation_id : null,
     };
   }
 
   return {
-    id: String(row.id),
+    ...base,
     title: '未知记录',
-    createdAt: String(row.created_at || ''),
-    modelName,
   };
 }
 
@@ -403,6 +366,8 @@ export async function buildHistoryRestorePayload(
   defaultTimeZone: string,
 ): Promise<HistoryRestorePayload> {
   const config = HISTORY_CONFIG[type];
+  const base = { sessionKey: config.sessionKey, detailPath: config.detailPath };
+  const conversationId = row.conversation_id || null;
 
   if (type === 'liuyao') {
     const { findHexagram } = await import('@/lib/divination/liuyao');
@@ -415,8 +380,7 @@ export async function buildHistoryRestorePayload(
     }));
 
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         question: row.question,
         yaos,
@@ -429,15 +393,14 @@ export async function buildHistoryRestorePayload(
           : [],
         divinationId: row.id,
         createdAt: row.created_at,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
 
   if (type === 'mbti') {
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         type: row.mbti_type,
         scores: row.scores || { E: 0, I: 0, S: 0, N: 0, T: 0, F: 0, J: 0, P: 0 },
@@ -448,7 +411,7 @@ export async function buildHistoryRestorePayload(
           JP: { J: 50, P: 50 },
         },
         readingId: row.id,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
@@ -460,8 +423,7 @@ export async function buildHistoryRestorePayload(
       ? row.metadata as Record<string, unknown>
       : {};
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       useTimestamp: config.useTimestamp,
       sessionData: {
         spread: TAROT_SPREADS.find((item) => item.id === spreadId),
@@ -473,7 +435,7 @@ export async function buildHistoryRestorePayload(
         seed: typeof metadata.seed === 'string' ? metadata.seed : null,
         readingId: row.id,
         createdAt: row.created_at,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
@@ -481,12 +443,11 @@ export async function buildHistoryRestorePayload(
   if (type === 'hepan') {
     if (row.result_data && typeof row.result_data === 'object') {
       return {
-        sessionKey: config.sessionKey,
-        detailPath: config.detailPath,
+        ...base,
         sessionData: {
           ...(row.result_data as Record<string, unknown>),
           chartId: row.id,
-          conversationId: row.conversation_id || null,
+          conversationId,
         },
       };
     }
@@ -500,39 +461,36 @@ export async function buildHistoryRestorePayload(
       row.type as 'love' | 'business' | 'family',
     );
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         ...result,
         chartId: row.id,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
 
   if (type === 'palm') {
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         readingId: row.id,
         analysisType: row.analysis_type,
         handType: row.hand_type,
         createdAt: row.created_at,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
 
   if (type === 'face') {
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         readingId: row.id,
         analysisType: row.analysis_type,
         createdAt: row.created_at,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
@@ -540,8 +498,7 @@ export async function buildHistoryRestorePayload(
   if (type === 'qimen') {
     const { fromStoredQimenZhiFuJiGong } = await import('@/lib/divination/qimen');
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         year: row.year,
         month: row.month,
@@ -557,40 +514,37 @@ export async function buildHistoryRestorePayload(
         ),
         createdAt: row.created_at,
         chartId: row.id,
-        conversationId: row.conversation_id || null,
+        conversationId,
       },
     };
   }
 
   if (type === 'meihua') {
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         input: row.input_data && typeof row.input_data === 'object' ? row.input_data : undefined,
         resultData: row.result_data && typeof row.result_data === 'object' ? row.result_data : undefined,
         divinationId: row.id,
-        conversationId: row.conversation_id || undefined,
+        conversationId: conversationId || undefined,
       },
     };
   }
 
   if (type === 'xiaoliuren') {
     return {
-      sessionKey: config.sessionKey,
-      detailPath: config.detailPath,
+      ...base,
       sessionData: {
         resultData: row.result_data && typeof row.result_data === 'object' ? row.result_data : undefined,
         divinationId: row.id,
-        conversationId: row.conversation_id || undefined,
+        conversationId: conversationId || undefined,
       },
     };
   }
 
   const settings = (row.settings as Record<string, unknown>) || {};
   return {
-    sessionKey: config.sessionKey,
-    detailPath: config.detailPath,
+    ...base,
     useTimestamp: config.useTimestamp,
     sessionData: {
       date: row.solar_date,
@@ -599,7 +553,7 @@ export async function buildHistoryRestorePayload(
       timezone: settings.timezone ?? defaultTimeZone,
       question: row.question || undefined,
       divinationId: row.id,
-      conversationId: row.conversation_id || undefined,
+      conversationId: conversationId || undefined,
     },
   };
 }

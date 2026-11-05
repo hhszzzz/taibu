@@ -8,6 +8,8 @@ export type DataSourceQueryContext = {
     limit?: number;
     maxTokens?: number;
     maxChars?: number;
+    /** The model the text is for: its tokenizer family prices the budget. */
+    model?: string;
     chartPromptDetailLevel?: ChartTextDetailLevel;
     /** List conditions (list-filters.ts): a keyword in the source's own text, and a saved-date range in China time. */
     keyword?: string;

@@ -6,19 +6,15 @@
 import { NextRequest } from 'next/server';
 import { COMMUNITY_LIMITS } from '@/lib/community';
 import { loadSingleCommunityAuthorProfile } from '@/lib/community-server';
-import { jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
 import { hasNonEmptyStrings, isValidUUID } from '@/lib/validation';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { requireFeatureUserContext } from '@/lib/feature-gate-utils';
 
 export async function POST(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'community', '社区功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) {
-            return jsonError(auth.error.message, auth.error.status);
-        }
         const { user } = auth;
 
         const parsed = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);
@@ -38,10 +34,8 @@ export async function POST(request: NextRequest) {
             return jsonError(`评论不能超过 ${COMMUNITY_LIMITS.comment} 个字符`, 400);
         }
 
-        const authorProfile = await loadSingleCommunityAuthorProfile(auth.db, user.id);
-
-        // 帖子必须存在且未删除；回复的父评论必须属于同一帖子，两件都在插入事务里核对。
-        const outcome = await withRetry(() => auth.db.tx(async (trx) => {
+        // 作者资料与帖子/父评论校验互不依赖，可并行。
+        const outcomePromise = withRetry(() => auth.db.tx(async (trx) => {
             const post = await trx.selectFrom('community_posts').select('id')
                 .where('id', '=', postId).where('is_deleted', '=', false).executeTakeFirst();
             if (!post) return { ok: false as const, error: '帖子不存在或已删除', status: 404 };
@@ -57,6 +51,10 @@ export async function POST(request: NextRequest) {
                 .executeTakeFirstOrThrow();
             return { ok: true as const, data };
         }));
+        const [authorProfile, outcome] = await Promise.all([
+            loadSingleCommunityAuthorProfile(auth.db, user.id),
+            outcomePromise,
+        ]);
         if (!outcome.ok) return jsonError(outcome.error, outcome.status);
         const data = outcome.data;
 

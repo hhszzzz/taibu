@@ -24,9 +24,9 @@ export function isCentAmount(usd: number): boolean {
     return Math.abs(cents - Math.round(cents)) < 1e-6;
 }
 
-function trimmed(value: number, minDigits: number, maxDigits: number) {
-    return value.toLocaleString('en-US', { minimumFractionDigits: minDigits, maximumFractionDigits: maxDigits, useGrouping: false });
-}
+const BALANCE = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
+const PRECISE = new Intl.NumberFormat('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 6, useGrouping: false });
+const PRICE = new Intl.NumberFormat('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 4, useGrouping: false });
 
 /**
  * `$12.30` for balances; `precise` keeps what a single call costs (`$0.000123`) and never shows a non-zero amount as
@@ -35,10 +35,10 @@ function trimmed(value: number, minDigits: number, maxDigits: number) {
 export function formatUsd(micros: number, options?: { precise?: boolean; signed?: boolean }): string {
     const sign = micros < 0 ? '-' : options?.signed && micros > 0 ? '+' : '';
     const usd = Math.abs(micros) / MICROS_PER_USD;
-    return `${sign}$${options?.precise ? trimmed(usd, 2, 6) : trimmed(usd, 2, 2)}`;
+    return `${sign}$${(options?.precise ? PRECISE : BALANCE).format(usd)}`;
 }
 
 /** A configured price, as the administrator wrote it: `$3`, `$0.15`, `$1.2345`. */
 export function formatPrice(usd: number): string {
-    return `$${trimmed(usd, 0, 4)}`;
+    return `$${PRICE.format(usd)}`;
 }

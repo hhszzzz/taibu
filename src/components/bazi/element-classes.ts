@@ -41,6 +41,11 @@ export function elementTextClass(element: FiveElement | null | undefined): strin
     return element ? ELEMENT_TEXT_CLASS[element] : 'text-foreground';
 }
 
+/** 五行浅底标签类名；未知五行回退为中性底色。 */
+export function elementSoftClass(element: FiveElement | null | undefined): string {
+    return element ? ELEMENT_SOFT_CLASS[element] : 'bg-background-secondary text-foreground';
+}
+
 /** 单个天干/地支的文字色类名。 */
 export function ganZhiTextClass(char: string): string {
     return elementTextClass(getGanZhiElement(char));
@@ -48,6 +53,5 @@ export function ganZhiTextClass(char: string): string {
 
 /** 单个天干/地支的柔和底色 + 文字色类名（用于选择按钮、徽标）。 */
 export function ganZhiSoftClass(char: string): string {
-    const element = getGanZhiElement(char);
-    return element ? ELEMENT_SOFT_CLASS[element] : 'bg-background-secondary text-foreground';
+    return elementSoftClass(getGanZhiElement(char));
 }

@@ -1,28 +1,13 @@
 import { getSession } from '@/lib/auth';
 import { getCurrentUserProfileBundle } from '@/lib/user/profile';
 
-export type AdminClientAccessState = {
-  loading: boolean;
-  isAuthed: boolean;
-  isAdmin: boolean;
-};
-
-export const UNAUTHED_ADMIN_ACCESS_STATE: AdminClientAccessState = {
-  loading: false,
-  isAuthed: false,
-  isAdmin: false,
-};
-
-export async function loadAdminClientAccessState(): Promise<AdminClientAccessState> {
+/** Whether the viewer is an administrator; signed-out visitors are not. */
+export async function loadAdminClientAccessState(): Promise<{ isAdmin: boolean }> {
   const session = await getSession();
   if (!session) {
-    return UNAUTHED_ADMIN_ACCESS_STATE;
+    return { isAdmin: false };
   }
 
   const bundle = await getCurrentUserProfileBundle();
-  return {
-    loading: false,
-    isAuthed: true,
-    isAdmin: !!bundle.profile?.is_admin,
-  };
+  return { isAdmin: !!bundle.profile?.is_admin };
 }

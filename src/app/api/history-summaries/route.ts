@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, settlePromise, type AuthenticatedUserContext } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { selectFromDynamic } from '@/lib/db/sql-helpers';
 import {
@@ -11,8 +11,6 @@ import {
 } from '@/lib/history/registry';
 
 type HistoryRow = Record<string, unknown>;
-
-type AuthenticatedContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
 
 function toHistoryRow(value: unknown): HistoryRow | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -41,19 +39,19 @@ async function attachConversations(db: ScopedDb, rows: HistoryRow[]): Promise<Hi
 }
 
 async function loadHistoryItems(
-    auth: AuthenticatedContext,
+    auth: AuthenticatedUserContext,
     type: HistoryType,
     limit: number,
     offset: number,
 ) {
     const config = HISTORY_CONFIG[type];
-    const result = await auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
+    const result = await settlePromise(auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
         .select(config.summaryColumns)
         .where('user_id', '=', auth.user.id)
         .orderBy('created_at', 'desc')
         .offset(offset)
         .limit(limit + 1)
-        .execute()).then((data) => ({ data, error: null }), (error) => ({ data: null, error }));
+        .execute()));
 
     if (result.error || !result.data) {
         return { items: null, pagination: null, error: result.error ?? new Error('missing rows') };
@@ -83,7 +81,7 @@ async function loadHistoryItems(
 }
 
 async function loadHistoryRow(
-    auth: AuthenticatedContext,
+    auth: AuthenticatedUserContext,
     type: HistoryType,
     id: string,
 ) {
@@ -126,7 +124,7 @@ export async function GET(request: NextRequest) {
             return jsonError('未找到历史记录', 404);
         }
         const item = await buildHistoryRestorePayload(type, row, timezone);
-        if (item) item.sessionData.recordOwnerId = auth.user.id;
+        item.sessionData.recordOwnerId = auth.user.id;
         return jsonOk({ item });
     }
 
@@ -158,10 +156,10 @@ export async function DELETE(request: NextRequest) {
     }
     const conversationId = typeof row?.conversation_id === 'string' ? row.conversation_id : null;
 
-    const { data, error } = await auth.db.rpc('delete_history_item_and_conversation', {
+    const { data, error } = await settlePromise(auth.db.rpc('delete_history_item_and_conversation', {
         p_history_type: type,
         p_history_id: id,
-    }).then((data) => ({ data, error: null }), (error) => ({ data: null, error }));
+    }));
 
     if (error) {
         console.error('[history-summaries] failed to delete history transaction:', error);

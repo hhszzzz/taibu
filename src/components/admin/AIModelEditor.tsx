@@ -222,11 +222,6 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
         return () => clearTimeout(timer);
     }, [chat, draft.modelKey, lookupModelsDev]);
 
-    // 「填入」先确认，再按目录值更新上下文、输出上限、思考等级与图片能力。
-    const applyCatalog = (suggestion: ModelsDevSuggestion) => {
-        setCatalogConfirm(suggestion);
-    };
-
     const setSource = (index: number, change: Partial<AdminModelSource>) =>
         patch({ sources: draft.sources.map((source, position) => (position === index ? { ...source, ...change } : source)) });
     const moveSource = (index: number, offset: number) => {
@@ -346,7 +341,7 @@ export function AIModelEditor({ model, gateways, onClose, onSaved }: {
                                 {suggestion.vision ? ' · 图片' : ''}
                                 {suggestion.pricing && <span className="ai-catalog-lookup-price" title="美元/百万 token：输入 / 输出">{catalogPriceLabel(suggestion.pricing)}</span>}
                             </span>
-                            <Button variant="secondary" size="xs" onClick={() => applyCatalog(suggestion)}>填入</Button>
+                            <Button variant="secondary" size="xs" onClick={() => setCatalogConfirm(suggestion)}>填入</Button>
                         </li>)}
                     </ul>}
                     {!lookup.busy && !lookup.error && lookup.searched && lookup.models.length === 0 && <span className="ai-catalog-hint">models.dev 没有匹配；可以手填。</span>}

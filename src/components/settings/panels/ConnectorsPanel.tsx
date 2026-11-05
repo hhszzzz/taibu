@@ -12,7 +12,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { McpServerManager } from '@/components/settings/mcp/McpServerManager';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import type { ExtensionAllowanceView } from '@/lib/agent/mcp/config';
+import type { ExtensionAllowanceView } from '@/lib/agent/extensions/config';
 import type { McpServerListing } from '@/lib/agent/mcp/client';
 
 function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) {

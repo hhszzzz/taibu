@@ -1,8 +1,9 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, type AuthenticatedUserContext } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { ensureUserRecordRow } from '@/lib/user/profile-record';
 import { getUserSettingsSnapshot } from '@/lib/user/settings';
+import { isPlainObject } from '@/lib/validation';
 
 type UserProfilePatchBody = {
     profile?: {
@@ -24,18 +25,24 @@ async function loadProfileRow(db: ScopedDb, userId: string): Promise<Record<stri
     return (row ?? null) as Record<string, unknown> | null;
 }
 
-async function loadProfileWithRecovery(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
+async function tryLoadProfileRow(
+    db: ScopedDb,
+    userId: string,
 ): Promise<{ row: Record<string, unknown> | null; error: { message: string } | null }> {
-    let row: Record<string, unknown> | null;
     try {
-        row = await loadProfileRow(auth.db, auth.user.id);
+        return { row: await loadProfileRow(db, userId), error: null };
     } catch (error) {
         console.error('加载用户资料失败:', error);
         return { row: null, error: { message: '加载用户资料失败' } };
     }
-    if (row) {
-        return { row, error: null };
+}
+
+async function loadProfileWithRecovery(
+    auth: AuthenticatedUserContext,
+): Promise<{ row: Record<string, unknown> | null; error: { message: string } | null }> {
+    const initial = await tryLoadProfileRow(auth.db, auth.user.id);
+    if (initial.row || initial.error) {
+        return initial;
     }
 
     const ensured = await ensureUserRecordRow(auth.db, auth.user);
@@ -44,24 +51,15 @@ async function loadProfileWithRecovery(
         return { row: null, error: { message: '创建用户资料失败' } };
     }
 
-    try {
-        return { row: await loadProfileRow(auth.db, auth.user.id), error: null };
-    } catch (error) {
-        console.error('加载用户资料失败:', error);
-        return { row: null, error: { message: '加载用户资料失败' } };
-    }
+    return await tryLoadProfileRow(auth.db, auth.user.id);
 }
 
 function normalizeProfileRow(row: Record<string, unknown> | null) {
     return row ? { ...row, is_admin: row.is_admin === true } : null;
 }
 
-async function loadSettings(auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>) {
-    return getUserSettingsSnapshot(auth.db, auth.user.id);
-}
-
 async function loadLinuxDoBinding(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
+    auth: AuthenticatedUserContext,
 ): Promise<{ sub: string | null; trustLevel: number | null }> {
     try {
         const row = await auth.db.tx((trx) => trx
@@ -72,9 +70,8 @@ async function loadLinuxDoBinding(
             .executeTakeFirst());
         if (!row) return { sub: null, trustLevel: null };
         const metadata = row.provider_metadata;
-        const trustLevel = metadata && typeof metadata === 'object' && !Array.isArray(metadata)
-            && typeof (metadata as { trust_level?: unknown }).trust_level === 'number'
-            ? (metadata as { trust_level: number }).trust_level
+        const trustLevel = isPlainObject(metadata) && typeof metadata.trust_level === 'number'
+            ? metadata.trust_level
             : null;
         return { sub: row.provider_user_id, trustLevel };
     } catch (error) {
@@ -89,7 +86,10 @@ export async function GET(request: NextRequest) {
     const profileOnly = new URL(request.url).searchParams.get('scope') === 'profile';
 
     if (profileOnly) {
-        const profileResult = await loadProfileWithRecovery(auth);
+        const [profileResult, linuxdo] = await Promise.all([
+            loadProfileWithRecovery(auth),
+            loadLinuxDoBinding(auth),
+        ]);
         if (profileResult.error) {
             return jsonError('获取用户资料失败', 500);
         }
@@ -97,13 +97,13 @@ export async function GET(request: NextRequest) {
         return jsonOk({
             profile: normalizeProfileRow(profileResult.row),
             settings: null,
-            linuxdo: await loadLinuxDoBinding(auth),
+            linuxdo,
         });
     }
 
     const [profileResult, settingsResult, linuxdo] = await Promise.all([
         loadProfileWithRecovery(auth),
-        loadSettings(auth),
+        getUserSettingsSnapshot(auth.db, auth.user.id),
         loadLinuxDoBinding(auth),
     ]);
     if (profileResult.error || settingsResult.error) {
@@ -141,6 +141,24 @@ export async function POST(request: NextRequest) {
     return jsonOk({ success: true }, 201);
 }
 
+async function updateProfileRow(
+    auth: AuthenticatedUserContext,
+    payload: Record<string, unknown>,
+): Promise<{ row: Record<string, unknown> | null; error: { message: string } | null }> {
+    try {
+        const row = await auth.db.tx((trx) => trx
+            .updateTable('users')
+            .set(payload as never)
+            .where('id', '=', auth.user.id)
+            .returning(PROFILE_COLUMNS)
+            .executeTakeFirst());
+        return { row: (row ?? null) as Record<string, unknown> | null, error: null };
+    } catch (error) {
+        console.error('更新用户资料失败:', error);
+        return { row: null, error: { message: '更新用户资料失败' } };
+    }
+}
+
 export async function PATCH(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
@@ -175,21 +193,8 @@ export async function PATCH(request: NextRequest) {
     }
 
     const [updateResult, settingsResult] = await Promise.all([
-        (async () => {
-            try {
-                const row = await auth.db.tx((trx) => trx
-                    .updateTable('users')
-                    .set(updatePayload as never)
-                    .where('id', '=', auth.user.id)
-                    .returning(PROFILE_COLUMNS)
-                    .executeTakeFirst());
-                return { row: (row ?? null) as Record<string, unknown> | null, error: null };
-            } catch (error) {
-                console.error('更新用户资料失败:', error);
-                return { row: null, error: { message: '更新用户资料失败' } };
-            }
-        })(),
-        loadSettings(auth),
+        updateProfileRow(auth, updatePayload),
+        getUserSettingsSnapshot(auth.db, auth.user.id),
     ]);
 
     if (updateResult.error || settingsResult.error) {

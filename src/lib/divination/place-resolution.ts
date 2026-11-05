@@ -29,19 +29,19 @@ export function parseLongitude(value: string | number | null | undefined): numbe
     return Number.isFinite(parsed) && parsed >= -180 && parsed <= 180 ? parsed : undefined;
 }
 
+/** 只到省级/国家级的解析结果不用于真太阳时。 */
+const INSUFFICIENT_LEVELS = new Set([
+    'province',
+    '省',
+    '自治区',
+    '特别行政区',
+    '国家',
+]);
+
 export function isAmapPrecisionSufficient(level?: string): boolean {
     const normalized = level?.trim().toLowerCase();
     if (!normalized) return false;
-
-    const insufficientLevels = new Set([
-        'province',
-        '省',
-        '自治区',
-        '特别行政区',
-        '国家',
-    ]);
-
-    return !insufficientLevels.has(normalized);
+    return !INSUFFICIENT_LEVELS.has(normalized);
 }
 
 export function buildPlaceResolutionFallbackMessage(reason?: PlaceResolutionReason): string {

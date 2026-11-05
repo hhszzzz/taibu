@@ -13,11 +13,28 @@ const HISTORY_DATE_FORMAT = new Intl.DateTimeFormat('zh-CN', {
   minute: '2-digit',
 });
 
+const HISTORY_DATE_SHORT_FORMAT = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+function parseHistoryDate(dateStr: string): Date | null {
+  const date = dateStr ? new Date(dateStr) : null;
+  return date && !Number.isNaN(date.getTime()) ? date : null;
+}
+
 /** 空值或无法解析的时间返回空字符串，避免显示 Invalid Date。 */
 export function formatHistoryDate(dateStr: string): string {
-  const date = dateStr ? new Date(dateStr) : null;
-  if (!date || Number.isNaN(date.getTime())) return '';
-  return HISTORY_DATE_FORMAT.format(date);
+  const date = parseHistoryDate(dateStr);
+  return date ? HISTORY_DATE_FORMAT.format(date) : '';
+}
+
+/** 抽屉里的紧凑时间：月日与时分，不带年份。 */
+export function formatHistoryDateShort(dateStr: string): string {
+  const date = parseHistoryDate(dateStr);
+  return date ? HISTORY_DATE_SHORT_FORMAT.format(date) : '';
 }
 
 /**

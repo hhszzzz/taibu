@@ -138,6 +138,11 @@ export function getFeatureLabel(featureId: string): string | null {
   return NAV_REGISTRY.find(item => (item.featureId ?? item.id) === featureId)?.label ?? null;
 }
 
+/** A nav href is active on its own route or any child route. */
+export function isNavHrefActive(pathname: string | null, href: string): boolean {
+  return pathname === href || !!pathname?.startsWith(`${href}/`);
+}
+
 // ---------------------------------------------------------------------------
 // Consumer-specific projections
 // ---------------------------------------------------------------------------
@@ -174,8 +179,6 @@ export function filterNavItems(items: readonly NavItemDef[], query: string): rea
 export function getSidebarToolItems() {
   return NAV_REGISTRY.filter((n) => n.category === 'tool');
 }
-
-/** Nav rows a guest may see: personal-data entries disappear until sign-in. */
 
 /** FeatureTogglePanel — modules list with admin-specific labels. */
 export function getFeatureModules(): { id: string; label: string }[] {

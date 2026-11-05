@@ -156,7 +156,8 @@ export async function POST(request: NextRequest): Promise<NextResponse<TarotResp
                     input: body,
                     ...tarotSaveConfig,
                 });
-            }            default:
+            }
+            default:
                 return jsonError('未知的操作类型', 400, { success: false });
         }
     } catch (error) {

@@ -59,26 +59,35 @@ function shouldHandleApiWrite(pathname: string, method: string) {
   return method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE';
 }
 
+/** Writes that change a member's data index; knowledge-base and charts add their own cache scopes. */
+const DATA_INDEX_WRITE_PREFIXES = [
+  '/api/knowledge-base',
+  '/api/data-sources',
+  '/api/records',
+  '/api/bazi',
+  '/api/hepan',
+  '/api/liuyao',
+  '/api/tarot',
+  '/api/face',
+  '/api/palm',
+  '/api/mbti',
+  '/api/ziwei',
+  '/api/qimen',
+  '/api/daliuren',
+  '/api/meihua',
+  '/api/xiaoliuren',
+] as const;
+
+function writesDataIndex(pathname: string): boolean {
+  return DATA_INDEX_WRITE_PREFIXES.some(prefix => pathname.startsWith(prefix));
+}
+
 function resolveCacheScopesByPath(pathname: string): LocalCacheScope[] {
   if (pathname.startsWith('/api/knowledge-base')) return ['knowledge_bases', 'data_sources'];
   if (pathname.startsWith('/api/data-sources')) return ['data_sources', 'knowledge_bases'];
   if (pathname.startsWith('/api/records')) return ['data_sources'];
   if (pathname.startsWith('/api/bazi')) return ['data_sources', 'default_bazi_chart'];
-  if (
-    pathname.startsWith('/api/hepan')
-    || pathname.startsWith('/api/liuyao')
-    || pathname.startsWith('/api/tarot')
-    || pathname.startsWith('/api/face')
-    || pathname.startsWith('/api/palm')
-    || pathname.startsWith('/api/mbti')
-    || pathname.startsWith('/api/ziwei')
-    || pathname.startsWith('/api/qimen')
-    || pathname.startsWith('/api/daliuren')
-    || pathname.startsWith('/api/meihua')
-    || pathname.startsWith('/api/xiaoliuren')
-  ) {
-    return ['data_sources'];
-  }
+  if (writesDataIndex(pathname)) return ['data_sources'];
   if (pathname.startsWith('/api/user/charts')) return ['data_sources', 'default_bazi_chart'];
   if (pathname.startsWith('/api/user/settings')) return ['default_bazi_chart'];
   return [];
@@ -140,23 +149,9 @@ export function dispatchApiWriteEvents(
   };
 
   if (
-    pathname.startsWith('/api/knowledge-base')
-    || pathname.startsWith('/api/data-sources')
-    || pathname.startsWith('/api/records')
+    pathname.startsWith('/api/community')
     || pathname.startsWith('/api/user/charts')
-    || pathname.startsWith('/api/community')
-    || pathname.startsWith('/api/bazi')
-    || pathname.startsWith('/api/hepan')
-    || pathname.startsWith('/api/liuyao')
-    || pathname.startsWith('/api/tarot')
-    || pathname.startsWith('/api/face')
-    || pathname.startsWith('/api/palm')
-    || pathname.startsWith('/api/mbti')
-    || pathname.startsWith('/api/ziwei')
-    || pathname.startsWith('/api/qimen')
-    || pathname.startsWith('/api/daliuren')
-    || pathname.startsWith('/api/meihua')
-    || pathname.startsWith('/api/xiaoliuren')
+    || writesDataIndex(pathname)
   ) {
     window.dispatchEvent(new CustomEvent(DATA_INDEX_INVALIDATED_EVENT, { detail }));
   }

@@ -17,7 +17,7 @@ import {
   hashAgentRequest,
 } from "../lib/agent/api.server";
 import type { AIModelConfig } from "../types";
-import { DEFAULT_AGENT_EXTENSIONS_POLICY } from "../lib/agent/mcp/config";
+import { DEFAULT_AGENT_EXTENSIONS_POLICY } from "../lib/agent/extensions/config";
 import { DEFAULT_BYOK_POLICY } from "../lib/byok/config";
 import type { ResolvedByokModel } from "../lib/byok/store.server";
 import type { FeatureModuleState } from "../lib/app-settings";

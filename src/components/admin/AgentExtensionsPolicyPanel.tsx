@@ -12,8 +12,8 @@ import { Button } from '@/components/ui/Button';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
-import { fetchAgentExtensionsPolicy, saveAgentExtensionsPolicy } from '@/lib/agent/mcp/client';
-import { EXTENSION_LIMIT_MAX, type AgentExtensionsPolicy } from '@/lib/agent/mcp/config';
+import { fetchAgentExtensionsPolicy, saveAgentExtensionsPolicy } from '@/lib/agent/extensions/client';
+import { EXTENSION_LIMIT_MAX, type AgentExtensionsPolicy } from '@/lib/agent/extensions/config';
 import { Input } from '@/components/ui/Input';
 
 type Kind = keyof AgentExtensionsPolicy;

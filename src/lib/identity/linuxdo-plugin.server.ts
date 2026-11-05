@@ -54,6 +54,10 @@ function resultUrl(origin: string, returnTo: string, params: Record<string, stri
   return url;
 }
 
+function callbackUrl(origin: string): string {
+  return new URL('/api/auth/linuxdo/callback', origin).toString();
+}
+
 async function rememberProvider(userId: string, user: LinuxDoUser, nickname: string): Promise<void> {
   const metadata = {
     linuxdo_sub: user.sub,
@@ -61,7 +65,8 @@ async function rememberProvider(userId: string, user: LinuxDoUser, nickname: str
     linuxdo_trust_level: user.trust_level ?? null,
     linuxdo_groups: user.groups ?? [],
   };
-  await systemDb().tx((trx) => trx
+  const db = systemDb();
+  await db.tx((trx) => trx
     .insertInto('user_oauth_providers')
     .values({
       user_id: userId,
@@ -79,11 +84,11 @@ async function rememberProvider(userId: string, user: LinuxDoUser, nickname: str
       provider_metadata: metadata,
     }))
     .execute());
-  const ensured = await ensureUserRecordRow(systemDb(), { id: userId, name: nickname, image: user.picture ?? null });
+  const ensured = await ensureUserRecordRow(db, { id: userId, name: nickname, image: user.picture ?? null });
   if (!ensured.ok) throw ensured.error;
   // Only fill the mirrored avatar when the user has not chosen one yet.
   if (user.picture) {
-    await systemDb().tx((trx) => trx
+    await db.tx((trx) => trx
       .updateTable('users')
       .set({ avatar_url: user.picture ?? null })
       .where('id', '=', userId)
@@ -152,7 +157,7 @@ export function linuxdoPlugin() {
           secure: ctx.context.options.advanced?.useSecureCookies ?? true,
         });
 
-        const redirectUri = new URL('/api/auth/linuxdo/callback', origin).toString();
+        const redirectUri = callbackUrl(origin);
         throw ctx.redirect(buildAuthUrl(state, codeChallenge, redirectUri));
       }),
 
@@ -191,7 +196,7 @@ export function linuxdoPlugin() {
 
         if (returnedState !== stateCookie.state) return redirectCurrentError('state_mismatch');
 
-        const redirectUri = new URL('/api/auth/linuxdo/callback', origin).toString();
+        const redirectUri = callbackUrl(origin);
         let accessToken: string;
         try {
           const token = await exchangeCode(code, stateCookie.codeVerifier, redirectUri);

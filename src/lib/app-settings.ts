@@ -12,7 +12,7 @@ import {
   AGENT_EXTENSIONS_POLICY_KEY,
   normalizeAgentExtensionsPolicy,
   type AgentExtensionsPolicy,
-} from "@/lib/agent/mcp/config";
+} from "@/lib/agent/extensions/config";
 import {
   AGENT_SCHEDULE_LIMITS_KEY,
   normalizeAgentScheduleLimits,
@@ -62,7 +62,6 @@ const agentToolScopesCache = createSharedCache<Record<string, boolean>>({
   ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
 });
 
-export type AgentToolScopeDefinition = (typeof AGENT_TOOL_SCOPE_DEFINITIONS)[number];
 export { AGENT_TOOL_SCOPE_DEFINITIONS, AGENT_TOOL_SCOPE_IDS };
 export type { AgentToolScopeId };
 
@@ -98,14 +97,15 @@ function normalizePrefixedRows(
   return states;
 }
 
-async function readFeatureToggleRows(
-  db: ScopedDb
+async function readSettingsByPrefix(
+  db: ScopedDb,
+  prefix: string,
 ): Promise<{ data: FeatureToggleRow[]; error: { message?: string } | null }> {
   try {
     const data = await db.tx((trx) => trx
       .selectFrom('app_settings')
       .select(['setting_key', 'setting_value'])
-      .where('setting_key', 'like', `${FEATURE_PREFIX}%`)
+      .where('setting_key', 'like', `${prefix}%`)
       .execute());
     return { data, error: null };
   } catch (error) {
@@ -114,39 +114,55 @@ async function readFeatureToggleRows(
 }
 
 async function loadAllFeatureToggles(db: ScopedDb): Promise<Record<string, boolean>> {
-  const { data, error } = await readFeatureToggleRows(db);
+  const { data, error } = await readSettingsByPrefix(db, FEATURE_PREFIX);
   if (error) throw new Error(error.message ?? '读取功能开关失败');
   return normalizeFeatureToggleRows(data);
 }
 
 async function loadAllAgentToolScopes(db: ScopedDb): Promise<Record<string, boolean>> {
-  try {
-    const data = await db.tx((trx) => trx
-      .selectFrom('app_settings')
-      .select(['setting_key', 'setting_value'])
-      .where('setting_key', 'like', `${AGENT_TOOL_SCOPE_PREFIX}%`)
-      .execute());
-    return normalizePrefixedRows(data, AGENT_TOOL_SCOPE_PREFIX);
-  } catch (error) {
-    throw new Error(toDbError(error).message ?? '读取 Agent 工具范围失败');
-  }
+  const { data, error } = await readSettingsByPrefix(db, AGENT_TOOL_SCOPE_PREFIX);
+  if (error) throw new Error(error.message ?? '读取 Agent 工具范围失败');
+  return normalizePrefixedRows(data, AGENT_TOOL_SCOPE_PREFIX);
+}
+
+function readSettingRow(key: string) {
+  return systemDb().tx((trx) => trx
+    .selectFrom('app_settings')
+    .select('setting_value')
+    .where('setting_key', '=', key)
+    .executeTakeFirst());
+}
+
+async function readSettingValue(key: string): Promise<unknown> {
+  const row = await readSettingRow(key);
+  return row?.setting_value;
+}
+
+async function writeSettingValue(key: string, value: unknown): Promise<void> {
+  const updatedAt = new Date().toISOString();
+  await systemDb().tx((trx) => trx
+    .insertInto('app_settings')
+    .values({ setting_key: key, setting_value: value as never, updated_at: updatedAt })
+    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({
+      setting_value: value as never,
+      updated_at: updatedAt,
+    }))
+    .execute());
+}
+
+const agentToolScopeKey = (scopeId: AgentToolScopeId) => `${AGENT_TOOL_SCOPE_PREFIX}${scopeId}`;
+
+function featureSettingKey(featureId: FeatureModuleId | AgentToolScopeFeatureId): string {
+  return featureId.startsWith('agent-tool:')
+    ? agentToolScopeKey(featureId.slice('agent-tool:'.length) as AgentToolScopeId)
+    : `${FEATURE_PREFIX}${featureId}`;
 }
 
 async function readFeatureToggleValue(
-  db: ScopedDb,
   featureId: FeatureModuleId | AgentToolScopeFeatureId
 ): Promise<{ data: { setting_value?: unknown } | null; error: { message?: string } | null }> {
   try {
-    const isAgentScope = featureId.startsWith('agent-tool:');
-    const settingKey = isAgentScope
-      ? `${AGENT_TOOL_SCOPE_PREFIX}${featureId.slice('agent-tool:'.length)}`
-      : `${FEATURE_PREFIX}${featureId}`;
-    const data = await db.tx((trx) => trx
-      .selectFrom('app_settings')
-      .select('setting_value')
-      .where('setting_key', '=', settingKey)
-      .executeTakeFirst());
-    return { data: data ?? null, error: null };
+    return { data: (await readSettingRow(featureSettingKey(featureId))) ?? null, error: null };
   } catch (error) {
     return { data: null, error: toDbError(error) };
   }
@@ -156,7 +172,7 @@ async function readFeatureToggleValue(
 export async function readFeatureTogglesState(): Promise<FeatureTogglesReadResult> {
   try {
     const db = systemDb();
-    const { data, error } = await readFeatureToggleRows(db);
+    const { data, error } = await readSettingsByPrefix(db, FEATURE_PREFIX);
 
     if (error) {
       if (!IS_NODE_TEST_RUNTIME) {
@@ -189,19 +205,7 @@ export async function setFeatureToggle(
   disabled: boolean
 ): Promise<boolean> {
   try {
-    const updatedAt = new Date().toISOString();
-    await systemDb().tx((trx) => trx
-      .insertInto('app_settings')
-      .values({
-        setting_key: `${FEATURE_PREFIX}${featureId}`,
-        setting_value: disabled,
-        updated_at: updatedAt,
-      })
-      .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({
-        setting_value: disabled,
-        updated_at: updatedAt,
-      }))
-      .execute());
+    await writeSettingValue(`${FEATURE_PREFIX}${featureId}`, disabled);
     await featureTogglesCache.invalidate();
     return true;
   } catch (error) {
@@ -222,19 +226,7 @@ export async function readAgentToolScopeStateFresh(scopeId: AgentToolScopeId): P
 
 export async function setAgentToolScope(scopeId: AgentToolScopeId, disabled: boolean): Promise<boolean> {
   try {
-    const updatedAt = new Date().toISOString();
-    await systemDb().tx((trx) => trx
-      .insertInto('app_settings')
-      .values({
-        setting_key: `${AGENT_TOOL_SCOPE_PREFIX}${scopeId}`,
-        setting_value: disabled,
-        updated_at: updatedAt,
-      })
-      .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({
-        setting_value: disabled,
-        updated_at: updatedAt,
-      }))
-      .execute());
+    await writeSettingValue(agentToolScopeKey(scopeId), disabled);
     await agentToolScopesCache.invalidate();
     return true;
   } catch (error) {
@@ -262,8 +254,7 @@ export async function isFeatureModuleEnabled(featureId: FeatureModuleId): Promis
  */
 export async function readFeatureModuleStateFresh(featureId: FeatureModuleId | AgentToolScopeFeatureId): Promise<FeatureModuleState> {
   try {
-    const db = systemDb();
-    const { data, error } = await readFeatureToggleValue(db, featureId);
+    const { data, error } = await readFeatureToggleValue(featureId);
     if (error) {
       return { status: 'unavailable', error: error.message };
     }
@@ -281,90 +272,55 @@ export async function readFeatureModuleStateFresh(featureId: FeatureModuleId | A
   }
 }
 
+// ─── 以对象形式保存的设置 ───
+
+/** Cached reads and cache-invalidating writes for one object setting; reads throw when the database cannot be read. */
+function createObjectSetting<T>(name: string, key: string, normalize: (value: unknown) => T) {
+  const cache = createSharedCache<T>({ name, ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS });
+  return {
+    get: () => cache.load(async () => normalize(await readSettingValue(key))),
+    set: async (value: T) => {
+      await writeSettingValue(key, json(value) as never);
+      await cache.invalidate();
+    },
+  };
+}
+
 // ─── Agent 扩展策略 ───
 
 /** Whether users may add their own connectors and skills; administrators edit it, runtime checks read it. */
-const agentExtensionsPolicyCache = createSharedCache<AgentExtensionsPolicy>({
-  name: 'agent-extensions-policy',
-  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
-});
+const agentExtensionsPolicy = createObjectSetting('agent-extensions-policy', AGENT_EXTENSIONS_POLICY_KEY, normalizeAgentExtensionsPolicy);
 
-/** The stored policy, or the defaults when none was saved. Throws when the database cannot be read. */
 export async function getAgentExtensionsPolicy(): Promise<AgentExtensionsPolicy> {
-  return agentExtensionsPolicyCache.load(async () => {
-    const row = await systemDb().tx((trx) => trx
-      .selectFrom('app_settings')
-      .select('setting_value')
-      .where('setting_key', '=', AGENT_EXTENSIONS_POLICY_KEY)
-      .executeTakeFirst());
-    return normalizeAgentExtensionsPolicy(row?.setting_value);
-  });
+  return agentExtensionsPolicy.get();
 }
 
 export async function setAgentExtensionsPolicy(policy: AgentExtensionsPolicy): Promise<void> {
-  const updatedAt = new Date().toISOString();
-  await systemDb().tx((trx) => trx
-    .insertInto('app_settings')
-    .values({ setting_key: AGENT_EXTENSIONS_POLICY_KEY, setting_value: json(policy) as never, updated_at: updatedAt })
-    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(policy) as never, updated_at: updatedAt }))
-    .execute());
-  await agentExtensionsPolicyCache.invalidate();
+  await agentExtensionsPolicy.set(policy);
 }
 
 // ─── 定时任务额度 ───
 
 /** How many schedules each user may keep; the scheduler pauses the excess after the limit is lowered. */
-const agentScheduleLimitsCache = createSharedCache<AgentScheduleLimits>({
-  name: 'agent-schedule-limits',
-  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
-});
+const agentScheduleLimits = createObjectSetting('agent-schedule-limits', AGENT_SCHEDULE_LIMITS_KEY, normalizeAgentScheduleLimits);
 
 export async function getAgentScheduleLimits(): Promise<AgentScheduleLimits> {
-  return agentScheduleLimitsCache.load(async () => {
-    const row = await systemDb().tx((trx) => trx
-      .selectFrom('app_settings')
-      .select('setting_value')
-      .where('setting_key', '=', AGENT_SCHEDULE_LIMITS_KEY)
-      .executeTakeFirst());
-    return normalizeAgentScheduleLimits(row?.setting_value);
-  });
+  return agentScheduleLimits.get();
 }
 
 export async function setAgentScheduleLimits(limits: AgentScheduleLimits): Promise<void> {
-  const updatedAt = new Date().toISOString();
-  await systemDb().tx((trx) => trx
-    .insertInto('app_settings')
-    .values({ setting_key: AGENT_SCHEDULE_LIMITS_KEY, setting_value: json(limits) as never, updated_at: updatedAt })
-    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(limits) as never, updated_at: updatedAt }))
-    .execute());
-  await agentScheduleLimitsCache.invalidate();
+  await agentScheduleLimits.set(limits);
 }
 
 // ─── 自定义模型策略 ───
 
 /** Whether members may store keys here, and how many connections and models each may keep. */
-const byokPolicyCache = createSharedCache<ByokPolicy>({
-  name: 'byok-policy',
-  ttlMs: FEATURE_TOGGLE_CACHE_TTL_MS,
-});
+const byokPolicy = createObjectSetting('byok-policy', BYOK_POLICY_KEY, normalizeByokPolicy);
 
 export async function getByokPolicy(): Promise<ByokPolicy> {
-  return byokPolicyCache.load(async () => {
-    const row = await systemDb().tx((trx) => trx
-      .selectFrom('app_settings')
-      .select('setting_value')
-      .where('setting_key', '=', BYOK_POLICY_KEY)
-      .executeTakeFirst());
-    return normalizeByokPolicy(row?.setting_value);
-  });
+  return byokPolicy.get();
 }
 
 export async function setByokPolicy(policy: ByokPolicy): Promise<void> {
-  const updatedAt = new Date().toISOString();
-  await systemDb().tx((trx) => trx
-    .insertInto('app_settings')
-    .values({ setting_key: BYOK_POLICY_KEY, setting_value: json(policy) as never, updated_at: updatedAt })
-    .onConflict((conflict) => conflict.column('setting_key').doUpdateSet({ setting_value: json(policy) as never, updated_at: updatedAt }))
-    .execute());
-  await byokPolicyCache.invalidate();
+  await byokPolicy.set(policy);
 }

@@ -50,6 +50,16 @@ const capabilityCache = new Map<string, ByokCapability>();
 const listedKey = (userId: string, connectionId: string | null, protocol: string, address: string) =>
   `${userId}:${connectionId ?? 'new'}:${protocol}:${address}`;
 
+/** Keeps a module cache small: reopening cards reuses recent answers, not every address ever entered. */
+function remember<T>(cache: Map<string, T>, key: string, value: T, limit: number) {
+  cache.set(key, value);
+  while (cache.size > limit) {
+    const oldest = cache.keys().next().value;
+    if (oldest === undefined) break;
+    cache.delete(oldest);
+  }
+}
+
 type ConnectionTest =
   | { status: 'idle' }
   | { status: 'testing' }
@@ -122,13 +132,16 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
   /** Null when a test can run; otherwise why not. */
   const testBlocked = (): string | null => byokAddressError(draft.baseUrl) ?? (testKey || canUseStoredKey ? null : '请先填写 API Key');
 
+  /** Lists the provider's models where the calls would run. */
+  const probeModels = async () => onSite
+    ? probeOnServer(userId, { connectionId: saved?.id ?? null, protocol: draft.protocol, baseUrl: address, apiKey: testKey || null, action: 'models' })
+    : probeByokConnection(draft.protocol, address, testKey, { fetch: byokBrowserFetch });
+
   const testConnection = async () => {
     const blocked = byokAddressError(draft.baseUrl);
     if (blocked) { setConnectionTest({ status: 'error', message: blocked }); return; }
     setConnectionTest({ status: 'testing' });
-    const result = onSite
-      ? await probeOnServer(userId, { connectionId: saved?.id ?? null, protocol: draft.protocol, baseUrl: address, apiKey: testKey || null, action: 'models' })
-      : await probeByokConnection(draft.protocol, address, testKey, { fetch: byokBrowserFetch });
+    const result = await probeModels();
     // The key is checked by the model list and model tests; here a 401 means the service answered, so the address works.
     if (result.ok || result.failure.status === 401 || result.failure.status === 403) {
       setConnectionTest({ status: 'idle' });
@@ -175,20 +188,18 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
     if (blocked) { setModelListError(blocked); return; }
     setFetchingModels(true);
     setModelListError('');
-    const result = onSite
-      ? await probeOnServer(userId, { connectionId: saved?.id ?? null, protocol: draft.protocol, baseUrl: address, apiKey: testKey || null, action: 'models' })
-      : await probeByokConnection(draft.protocol, address, testKey, { fetch: byokBrowserFetch });
+    const result = await probeModels();
     setFetchingModels(false);
     if (!result.ok) {
       setModelListError(formatByokError(result.failure, { browser: !onSite }));
       return;
     }
     setListed(result.models);
-    listedCache.set(listedKey(userId, saved?.id ?? null, draft.protocol, address), result.models);
+    remember(listedCache, listedKey(userId, saved?.id ?? null, draft.protocol, address), result.models, 20);
     showToast('success', `已获取 ${result.models.length} 个模型`);
     const ids = result.models.slice(0, 200).map(item => item.id);
     if (ids.length) void fetchByokCapabilities(userId, ids).then(models => {
-      for (const [id, capability] of Object.entries(models)) capabilityCache.set(id, capability);
+      for (const [id, capability] of Object.entries(models)) remember(capabilityCache, id, capability, 500);
       setCapabilities(current => ({ ...current, ...models }));
     });
     if (!draft.models.length && modelRoom > 0) {

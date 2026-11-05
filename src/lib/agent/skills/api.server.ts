@@ -1,11 +1,11 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireAdminUser, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk } from '@/lib/api-utils';
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh } from '@/lib/app-settings';
-import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { isValidUUID } from '@/lib/validation';
-import { extensionAllowance, type ExtensionAllowanceView } from '../mcp/config';
+import { extensionAllowance, type ExtensionAllowanceView } from '../extensions/config';
+import { administratorOwner, memberOwner, readSettingsBody as readBody, type SettingsOwner as Owner } from '../settings-owner.server';
 import { BUILTIN_SKILL_NAMES } from './builtin.server';
 import { skillCommands } from './catalog.server';
 import { SkillInputError, parseSkillInput, type SkillFields } from './input.server';
@@ -26,21 +26,6 @@ async function skillsGate(): Promise<Response | null> {
  * Settings endpoints for skills, shaped like the connectors': administrators manage the platform's (owner null)
  * through the system identity, users their own through theirs, so row security keeps each to its rows.
  */
-type Owner = { db: ScopedDb; owner: string | null; userId: string };
-
-async function administrator(request: NextRequest): Promise<Owner | Response> {
-  const auth = await requireAdminUser(request);
-  if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  return { db: systemDb(), owner: null, userId: auth.user.id };
-}
-
-async function member(request: NextRequest): Promise<Owner | Response> {
-  const auth = await requireUserContext(request);
-  if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  const expected = request.headers.get('X-Expected-User-Id');
-  if (expected !== null && expected !== auth.user.id) return jsonError('账号已切换', 409);
-  return { db: auth.db, owner: auth.user.id, userId: auth.user.id };
-}
 
 function failure(error: unknown, action: string): Response {
   if (error instanceof SkillInputError) return jsonError(error.message, 400);
@@ -48,8 +33,6 @@ function failure(error: unknown, action: string): Response {
   console.error('[agent-skills]', { action, code: toDbError(error).code });
   return jsonError(`${action}失败`, 500);
 }
-
-const readBody = (request: NextRequest) => request.json().catch(() => null) as Promise<unknown>;
 
 async function changed(owner: Owner) {
   if (owner.owner === null) await invalidatePlatformSkills();
@@ -141,60 +124,60 @@ async function remove(owner: Owner, id: string) {
 }
 
 export async function listPlatformSkills(request: NextRequest) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : list(owner);
 }
 export async function readPlatformSkill(request: NextRequest, id: string) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : detail(owner, id);
 }
 export async function createPlatformSkill(request: NextRequest) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : create(owner, request);
 }
 export async function updatePlatformSkill(request: NextRequest, id: string) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : update(owner, request, id);
 }
 export async function deletePlatformSkill(request: NextRequest, id: string) {
-  const owner = await administrator(request);
+  const owner = await administratorOwner(request);
   return owner instanceof Response ? owner : remove(owner, id);
 }
 
 export async function listUserSkills(request: NextRequest) {
   const gate = await skillsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : list(owner);
 }
 export async function readUserSkill(request: NextRequest, id: string) {
   const gate = await skillsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : detail(owner, id);
 }
 export async function createUserSkill(request: NextRequest) {
   const gate = await skillsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : create(owner, request);
 }
 export async function updateUserSkill(request: NextRequest, id: string) {
   const gate = await skillsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : update(owner, request, id);
 }
 export async function deleteUserSkill(request: NextRequest, id: string) {
   const gate = await skillsGate();
   if (gate) return gate;
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   return owner instanceof Response ? owner : remove(owner, id);
 }
 
 /** The skills the composer's `/skill:` menu offers this user: none while the Agent is off. */
 export async function listSkillCommands(request: NextRequest) {
-  const owner = await member(request);
+  const owner = await memberOwner(request);
   if (owner instanceof Response) return owner;
   try {
     if ((await readFeatureModuleStateFresh('agent')).status !== 'enabled') return jsonOk({ skills: [] });

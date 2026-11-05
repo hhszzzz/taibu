@@ -27,13 +27,14 @@ export function FeatureGate({ featureId, children }: FeatureGateProps) {
         () => false
     );
     const { isFeatureEnabled, isLoading, loaded, error, refresh } = useFeatureToggles({ enabled: hydrated });
+    const loadingState = (
+        <div className="flex items-center justify-center min-h-[60vh] bg-background">
+            <SoundWaveLoader variant="block" />
+        </div>
+    );
 
     if (!hydrated || isLoading) {
-        return (
-            <div className="flex items-center justify-center min-h-[60vh] bg-background">
-                <SoundWaveLoader variant="block" />
-            </div>
-        );
+        return loadingState;
     }
 
     if (!loaded && error) {
@@ -60,11 +61,7 @@ export function FeatureGate({ featureId, children }: FeatureGateProps) {
     }
 
     if (!loaded) {
-        return (
-            <div className="flex items-center justify-center min-h-[60vh] bg-background">
-                <SoundWaveLoader variant="block" />
-            </div>
-        );
+        return loadingState;
     }
 
     if (!isFeatureEnabled(featureId)) {

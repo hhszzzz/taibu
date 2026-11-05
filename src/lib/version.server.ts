@@ -11,8 +11,15 @@ const CACHE_KEY = 'taibu:system:version-info';
 
 export type { VersionInfo };
 
-/** The version this build runs; next.config injects the same value for the client. */
-export async function getLocalVersion(): Promise<string> {
+let localVersion: Promise<string> | null = null;
+
+/** The version this build runs; next.config injects the same value for the client. Read once. */
+export function getLocalVersion(): Promise<string> {
+  localVersion ??= readLocalVersion();
+  return localVersion;
+}
+
+async function readLocalVersion(): Promise<string> {
   try {
     const content = await fs.readFile(path.join(process.cwd(), 'package.json'), 'utf-8');
     return (JSON.parse(content) as { version?: string }).version ?? '0.0.0';

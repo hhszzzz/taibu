@@ -6,9 +6,9 @@ import { Checkbox } from '@/components/ui/Checkbox';
 import { RadioGroup } from '@/components/ui/RadioGroup';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
-import { CircleHelp, LoaderCircle, Paperclip } from 'lucide-react';
-import { normalizeQuestions, validateAnswers, formatQuestionAnswers, questionLabel, type AgentAnswers, type AgentQuestion } from '@/lib/agent/questions';
-import { describeQuestionAnswer, getDraftAnswers, questionDraftKey } from '@/lib/agent/question-drafts';
+import { CircleHelp, LoaderCircle, Paperclip, X } from 'lucide-react';
+import { normalizeQuestions, validateAnswers, formatQuestionAnswers, type AgentAnswers, type AgentQuestion } from '@/lib/agent/questions';
+import { getDraftAnswers, questionDraftKey } from '@/lib/agent/question-drafts';
 import { useQuestionDraft } from '@/lib/agent/use-question-draft';
 import type { AttachmentState } from '@/types';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
@@ -35,28 +35,38 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
     const questions = useMemo(() => normalizeQuestions(supplied, question), [supplied, question]);
     // The workspace's question view reads the same draft while it is typed.
     const { draft, update, clear } = useQuestionDraft(questionDraftKey(scopeKey, questionId), questions);
-    // Reopening a saved draft lands on the first unanswered question, or the review when all are answered.
+    // Reopening a saved draft lands on the first unanswered question; everything answered opens the last one for submit.
     const [step, setStep] = useState(() => {
         const first = questions.findIndex(q => draft.answers[q.id] !== null && !draft.answers[q.id]?.length && !draft.custom[q.id]?.trim());
-        return first < 0 ? questions.length : first;
+        return first < 0 ? Math.max(0, questions.length - 1) : first;
     });
     const [sending, setSending] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    // 有选项时「自行填写」默认收起，需要时再展开；已填过的草稿自动展开。
+    const [customOpen, setCustomOpen] = useState<string | null>(null);
     const uploads = usePrivateAttachments({ scopeKey, state: attachmentState, change: onAttachmentChange, onError: setError });
     const effective = getDraftAnswers(questions, draft);
     const answered = (q: AgentQuestion) => effective[q.id] === null || !!effective[q.id]?.length;
     const current = questions[step];
-    const summary = step === questions.length;
+    const last = step === questions.length - 1;
     let ready = false; try { validateAnswers(questions, effective); ready = true; } catch { /* incomplete */ }
-    const answerText = (q: AgentQuestion) => describeQuestionAnswer(q, effective[q.id]) ?? '尚未回答';
     const submit = async (event: FormEvent) => {
         event.preventDefault();
-        if (!summary) { setStep(Math.min(step + 1, questions.length)); return; }
+        if (!last) { if (answered(current)) setStep(step + 1); return; }
         if (sending || uploads.uploading || disabled || !ready) return;
         setSending(true); setError(null);
         try { await onAnswer(formatQuestionAnswers(questions, effective), effective); clear(); }
         catch (cause) { setError(cause instanceof Error ? cause.message : '回答发送失败，请重试'); }
         finally { setSending(false); }
+    };
+    const skip = () => {
+        update({ answers: { ...draft.answers, [current.id]: null }, custom: { ...draft.custom, [current.id]: '' } });
+        if (!last) setStep(step + 1);
+    };
+    // 单选选中即进入下一题（pi 式单卡逐步）；多选题留在原地继续勾选。
+    const choose = (optionId: string) => {
+        update({ answers: { ...draft.answers, [current.id]: [optionId] }, custom: { ...draft.custom, [current.id]: '' } });
+        if (!last) setStep(step + 1);
     };
     const collapse = () => { if (sending) return; onCollapsedChange(true); requestAnimationFrame(() => expandRef.current?.focus()); };
     const expand = () => { onCollapsedChange(false); requestAnimationFrame(() => laterRef.current?.focus()); };
@@ -70,7 +80,8 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
 
     const [title, ...hintLines] = current?.question.split('\n') ?? [];
     const hint = hintLines.join(' ').trim();
-    const custom = current && <>
+    const showCustom = !current?.options?.length || customOpen === current.id || !!draft.custom[current.id]?.trim();
+    const custom = current && showCustom && <>
         {current.allowCustom && <div className="agent-question-custom">
             {!!current.options?.length && <label htmlFor={`${id}-answer`}>自行填写</label>}
             <Textarea id={`${id}-answer`} rows={1} value={draft.custom[current.id] ?? ''} maxLength={8000} disabled={sending || disabled}
@@ -79,30 +90,20 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                 onChange={event => update({ answers: { ...draft.answers, [current.id]: current.multiple ? draft.answers[current.id] ?? [] : [] }, custom: { ...draft.custom, [current.id]: event.target.value } })} />
         </div>}
     </>;
+    const customToggle = current?.options?.length && current.allowCustom && !showCustom && (
+        <Button unstyled type="button" className="agent-question-custom-toggle" onClick={() => setCustomOpen(current.id)}>其他情况，可直接写</Button>
+    );
 
     return <section className="agent-question-dock" aria-labelledby={`${id}-title`}>
         <div className="agent-question-dock-header">
-            <span className="agent-question-dock-icon" aria-hidden="true"><CircleHelp size={15} /></span>
-            <div>
-                <h2 id={`${id}-title`}>太卜需要补充 {questions.length} 项信息</h2>
-                <p>回答后继续同一任务 · 关闭页面也会保留问题和草稿</p>
-            </div>
-            <Button unstyled ref={laterRef} type="button" className="agent-question-later" disabled={sending} onClick={collapse}>稍后回答</Button>
+            <span className="agent-question-dock-icon" aria-hidden="true"><CircleHelp size={14} /></span>
+            <h2 id={`${id}-title`}>{questions.length > 1 ? `问题 ${step + 1} / ${questions.length}` : '太卜需要补充信息'}</h2>
+            <Button unstyled ref={laterRef} type="button" className="agent-question-later" disabled={sending} onClick={collapse}
+                aria-label="稍后回答" title="稍后回答"><X size={16} aria-hidden="true" /></Button>
         </div>
-        <nav className="agent-question-steps" aria-label="问题导航">
-            {questions.map((q, index) => <Button unstyled key={q.id} type="button" aria-current={step === index ? 'step' : undefined} data-answered={answered(q)} onClick={() => setStep(index)}>
-                <span aria-hidden="true">{effective[q.id] === null ? '–' : answered(q) ? '✓' : index + 1}</span>{questionLabel(q)}
-            </Button>)}
-            <Button unstyled type="button" aria-current={summary ? 'step' : undefined} data-answered={ready} onClick={() => setStep(questions.length)}>
-                <span aria-hidden="true">✓</span>检查
-            </Button>
-        </nav>
         <form onSubmit={submit}>
             <div className="agent-question-body">
-                {summary ? <div className="agent-question-review">
-                    <div className="agent-question-title">提交前检查</div>
-                    <dl>{questions.map(q => <div key={q.id}><dt>{questionLabel(q)}</dt><dd data-empty={!answered(q)}>{answerText(q)}</dd></div>)}</dl>
-                </div> : current.options?.length ? <fieldset>
+                {current.options?.length ? <fieldset>
                     <legend className="agent-question-title">{title}{(current.multiple || current.allowSkip) && <small>{[current.multiple && '可多选', current.allowSkip && '可跳过'].filter(Boolean).join(' · ')}</small>}</legend>
                     {hint && <p className="agent-question-hint">{hint}</p>}
                     {current.multiple ? <div className={`agent-question-options${gridOptions(current) ? ' is-grid' : ''}`}>
@@ -117,11 +118,12 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                     </div> : <RadioGroup
                         aria-label={title}
                         value={draft.answers[current.id]?.[0] ?? ''}
-                        onChange={optionId => update({ answers: { ...draft.answers, [current.id]: [optionId] }, custom: { ...draft.custom, [current.id]: '' } })}
+                        onChange={choose}
                         options={current.options.map(option => ({ value: option.id, label: option.label }))}
                         className={`agent-question-options${gridOptions(current) ? ' is-grid' : ''}`}
                         optionClassName="agent-question-option"
                     />}
+                    {customToggle}
                     {custom}
                 </fieldset> : <div className="agent-question-field">
                     <label htmlFor={`${id}-answer`} className="agent-question-title">{title}{current.allowSkip && <small>可跳过</small>}</label>
@@ -137,13 +139,12 @@ export function AgentQuestionDock({ question, questions: supplied, questionId, s
                 {error && <p className="agent-error" role="alert">{error}</p>}
             </div>
             <div className="agent-question-footer">
-                <span>{summary ? ready ? '已全部回答，可以提交' : '还有问题未回答' : `第 ${step + 1} / ${questions.length} 题`}</span>
-                {!summary && current.allowSkip && <Button unstyled type="button" className="agent-question-skip" disabled={sending || disabled}
-                    onClick={() => { update({ answers: { ...draft.answers, [current.id]: null }, custom: { ...draft.custom, [current.id]: '' } }); setStep(step + 1); }}>跳过此题</Button>}
                 <Button unstyled type="button" className="agent-question-previous" disabled={sending || step === 0} onClick={() => setStep(step - 1)}>上一题</Button>
-                <Button unstyled type="submit" className="agent-question-next" disabled={sending || disabled || (summary && !ready)}>
+                {current.allowSkip && <Button unstyled type="button" className="agent-question-skip" disabled={sending || disabled} onClick={skip}>跳过此题</Button>}
+                <span className="chat-toolbar-spacer" />
+                <Button unstyled type="submit" className="agent-question-next" disabled={sending || disabled || (last ? !ready : !answered(current))}>
                     {sending && <LoaderCircle size={15} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />}
-                    {sending ? '正在发送' : summary ? '提交并继续' : step === questions.length - 1 ? '检查回答' : '下一题'}
+                    {sending ? '正在发送' : last ? '提交并继续' : '下一题'}
                 </Button>
             </div>
         </form>

@@ -156,18 +156,17 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     const pinnedSet = useMemo(() => new Set(pinnedIds), [pinnedIds]);
     // 会话按类别分栏（claude 的 Claude|Code 两个列表）：跑过 Agent 任务的归「Agent」，其余归「对话」；
     // 当前打开的会话一律保留，避免新建或跨类会话在列表里凭空消失。
-    // 列表跟随当前对话方式：/chat 内取页内控件，其它页面取本地偏好。
+    // 全站都按当前对话方式过滤（/chat 内取页内控件，其它页面取本地偏好），换页或从设置返回不会把两类记录混在一起。
     const chatMode = useCurrentChatMode(userId);
     const visibleConversations = useMemo(() => {
         const wantsAgent = chatMode === 'agent';
         return conversations.filter(conv => {
-            // 只在聊天页按当前方式过滤；其它页面展示全部会话（任务标记不因换页消失）。
-            if (wantsDate && conv.hasAgentRun !== undefined && conv.hasAgentRun !== wantsAgent) return false;
+            if (conv.hasAgentRun !== undefined && conv.hasAgentRun !== wantsAgent) return false;
             if (listPreferences.display === 'pinned') return pinnedSet.has(conv.id) || conv.id === activeId;
             if (listPreferences.display === 'running') return markers?.get(conv.id) === 'running' || markers?.get(conv.id) === 'awaiting' || conv.id === activeId;
             return true;
         });
-    }, [conversations, chatMode, wantsDate, activeId, listPreferences.display, pinnedSet, markers]);
+    }, [conversations, chatMode, activeId, listPreferences.display, pinnedSet, markers]);
     // 正在跑或等你回答的会话：列表里本来就有标记，这里让它永远在列，并排到最近使用的最上面。
     const needsAttention = useCallback((id: string) => markers?.get(id) === 'running' || markers?.get(id) === 'awaiting', [markers]);
     const shownConversations = useMemo(() => {
@@ -182,8 +181,11 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         return kept;
     }, [recentsLimit, visibleConversations, pinnedSet, activeId, needsAttention]);
     const hasHiddenRecents = shownConversations.length < visibleConversations.length;
+    // 前端过滤（对话方式、置顶、运行中）会藏掉已加载的会话：此时服务端「还有下一页」不代表
+    // 还有能显示出来的会话，先不给「查看更多」，免得点开只翻出被过滤掉的条目。
+    const filtersDropped = visibleConversations.length < conversations.length;
     // 还有没列出来的（本地或服务端）就只给「查看更多」；全都列完了才给「收起」。
-    const hasMoreToShow = visibleConversations.length > 0 && (hasHiddenRecents || hasMoreConversations);
+    const hasMoreToShow = visibleConversations.length > 0 && (hasHiddenRecents || (hasMoreConversations && !filtersDropped));
     // 置顶会话从最近列表里抽出，单独组成最上面的「已置顶」组。
     const unpinnedConversations = useMemo(() => {
         const recents = shownConversations.filter(conv => !pinnedSet.has(conv.id));

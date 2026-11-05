@@ -236,7 +236,7 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
   );
   assert.match(
     sidebarSource,
-    /const hasMoreToShow = visibleConversations\.length > 0 && \(hasHiddenRecents \|\| hasMoreConversations\);/u,
+    /const hasMoreToShow = visibleConversations\.length > 0 && \(hasHiddenRecents \|\| \(hasMoreConversations && !filtersDropped\)\);/u,
   );
   assert.equal(sidebarSource.includes('IntersectionObserver'), false);
   // The phone drawer shows the sidebar's own panel, so the same top-up rules apply there.

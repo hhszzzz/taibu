@@ -230,6 +230,13 @@ export function useAgentChat(
     },
     [userId],
   );
+  // 页面当前方式随时落到本地偏好：去设置或其他页面后，侧栏只列同一类会话，不会把两类记录混在一起。
+  useEffect(() => {
+    if (!userId) return;
+    try {
+      localStorage.setItem(`taibu:agent-mode:${userId}`, mode);
+    } catch {}
+  }, [mode, userId]);
   const start = async (
     conversationId: string,
     message: ChatMessage,

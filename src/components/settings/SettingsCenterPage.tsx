@@ -49,24 +49,19 @@ const LazySkillsContent = lazy(() => import('@/components/settings/panels/Skills
 const LazyProfileContent = lazy(() => import('@/components/settings/panels/ProfilePanel'));
 const LazyHelpContent = lazy(() => import('@/components/settings/panels/HelpPanel'));
 const LazySharedLinksContent = lazy(() => import('@/components/settings/panels/SharedLinksPanel'));
-const LazyAdminAnnouncementsContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminAnnouncementsContent,
+
+type AccountAdminPanelName = keyof typeof import('@/components/settings/AccountAdminPanels');
+
+const lazyAccountAdminPanel = (name: AccountAdminPanelName) => lazy(async () => ({
+  default: (await import('@/components/settings/AccountAdminPanels'))[name],
 }));
-const LazyAdminFeaturesContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminFeaturesContent,
-}));
-const LazyAdminBillingContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminBillingContent,
-}));
-const LazyAdminAIServicesContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminAIServicesContent,
-}));
-const LazyAdminAgentExtensionsContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminAgentExtensionsContent,
-}));
-const LazyAdminLogsContent = lazy(async () => ({
-  default: (await import('@/components/settings/AccountAdminPanels')).AdminLogsContent,
-}));
+
+const LazyAdminAnnouncementsContent = lazyAccountAdminPanel('AdminAnnouncementsContent');
+const LazyAdminFeaturesContent = lazyAccountAdminPanel('AdminFeaturesContent');
+const LazyAdminBillingContent = lazyAccountAdminPanel('AdminBillingContent');
+const LazyAdminAIServicesContent = lazyAccountAdminPanel('AdminAIServicesContent');
+const LazyAdminAgentExtensionsContent = lazyAccountAdminPanel('AdminAgentExtensionsContent');
+const LazyAdminLogsContent = lazyAccountAdminPanel('AdminLogsContent');
 
 function SettingsPanelFallback() {
   return (
@@ -120,10 +115,6 @@ function AdminStateErrorState() {
   );
 }
 
-function isAdminTab(tab: SettingsCenterTab) {
-  return isAdminSettingsCenterTab(tab);
-}
-
 function renderLazyPanel(node: ReactElement) {
   return (
     <Suspense fallback={<SettingsPanelFallback />}>
@@ -142,7 +133,7 @@ function renderSettingsCenterPanel(
     profileError: boolean;
   },
 ): ReactElement {
-  if (isAdminTab(tab)) {
+  if (isAdminSettingsCenterTab(tab)) {
     if (options.profileLoading) {
       return <SettingsPanelFallback />;
     }

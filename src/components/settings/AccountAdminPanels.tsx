@@ -91,22 +91,10 @@ function PanelFallback() {
   );
 }
 
-const resolveAdminBillingTab = (value: string | null | undefined): AdminBillingTab =>
-  resolveAdminSubTab('admin-billing', value);
-const resolveAdminAITab = (value: string | null | undefined): AdminAITab =>
-  resolveAdminSubTab('admin-ai-services', value);
-const resolveAdminExtensionsTab = (value: string | null | undefined): AdminExtensionsTab =>
-  resolveAdminSubTab('admin-agent-extensions', value);
-const resolveAdminLogsTab = (value: string | null | undefined): AdminLogsTab =>
-  resolveAdminSubTab('admin-logs', value);
-
-function useResolvedSettingsCenterSubtab<T extends string>(
-  owner: AdminSubtabOwner,
-  resolveTab: (value: string | null | undefined) => T,
-) {
+function useResolvedSettingsCenterSubtab<T extends AdminSubtabOwner>(owner: T): AdminSubTabId<T> {
   const subpath = useSettingsCenterSubpath();
   const active = useActiveSettingsCenterTab() === owner;
-  const resolved = resolveTab(subpath);
+  const resolved = resolveAdminSubTab(owner, subpath);
   const [retained, setRetained] = useState(resolved);
   useEffect(() => {
     let current = true;
@@ -127,17 +115,15 @@ function useVisitedSubtabs<T extends string>(active: T) {
 }
 
 /** 子页跟随路由切换；访问过的子页保持挂载，切回时不丢失列表与草稿。 */
-function AdminSubtabs<T extends string>({
+function AdminSubtabs<T extends AdminSubtabOwner>({
   owner,
-  resolveTab,
   renderPanel,
 }: {
-  owner: AdminSubtabOwner;
-  resolveTab: (value: string | null | undefined) => T;
+  owner: T;
   /** `active` is false for a visited tab kept mounted behind the current one. */
-  renderPanel: (tab: T, active: boolean) => ReactNode;
+  renderPanel: (tab: AdminSubTabId<T>, active: boolean) => ReactNode;
 }) {
-  const activeTab = useResolvedSettingsCenterSubtab(owner, resolveTab);
+  const activeTab = useResolvedSettingsCenterSubtab(owner);
   const visited = useVisitedSubtabs(activeTab);
 
   return (
@@ -192,40 +178,24 @@ export function AdminFeaturesContent() {
 
 export function AdminBillingContent() {
   return (
-    <AdminSubtabs
-      owner="admin-billing"
-      resolveTab={resolveAdminBillingTab}
-      renderPanel={renderBillingPanel}
-    />
+    <AdminSubtabs owner="admin-billing" renderPanel={renderBillingPanel} />
   );
 }
 
 export function AdminAIServicesContent() {
   return (
-    <AdminSubtabs
-      owner="admin-ai-services"
-      resolveTab={resolveAdminAITab}
-      renderPanel={renderAIPanel}
-    />
+    <AdminSubtabs owner="admin-ai-services" renderPanel={renderAIPanel} />
   );
 }
 
 export function AdminAgentExtensionsContent() {
   return (
-    <AdminSubtabs
-      owner="admin-agent-extensions"
-      resolveTab={resolveAdminExtensionsTab}
-      renderPanel={renderExtensionsPanel}
-    />
+    <AdminSubtabs owner="admin-agent-extensions" renderPanel={renderExtensionsPanel} />
   );
 }
 
 export function AdminLogsContent() {
   return (
-    <AdminSubtabs
-      owner="admin-logs"
-      resolveTab={resolveAdminLogsTab}
-      renderPanel={renderLogsPanel}
-    />
+    <AdminSubtabs owner="admin-logs" renderPanel={renderLogsPanel} />
   );
 }

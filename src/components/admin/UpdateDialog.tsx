@@ -5,6 +5,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { requestBrowserData } from '@/lib/browser-api';
 import { Button } from '@/components/ui/Button';
 import { Dialog } from '@/components/ui/Dialog';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -20,9 +21,11 @@ type Tab = 'info' | 'upgrade' | 'tasks';
 
 async function fetchActiveTaskCount(): Promise<number | null> {
   try {
-    const response = await fetch('/api/admin/agent-runs?scope=active');
-    if (!response.ok) return null;
-    const data = await response.json() as { runs?: unknown[] };
+    const data = await requestBrowserData<{ runs?: unknown[] }>(
+      '/api/admin/agent-runs?scope=active',
+      undefined,
+      { fallbackMessage: '读取运行中的任务失败' },
+    );
     return Array.isArray(data.runs) ? data.runs.length : 0;
   } catch {
     return null;

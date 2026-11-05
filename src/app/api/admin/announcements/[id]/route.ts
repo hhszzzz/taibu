@@ -1,4 +1,4 @@
-import { NextRequest } from 'next/server';
+import { NextRequest, type NextResponse } from 'next/server';
 import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
 import { systemDb } from '@/lib/db/context.server';
 import { parseAnnouncementInput, serializeAnnouncement, type AnnouncementRow } from '@/lib/announcement';
@@ -21,6 +21,19 @@ async function getAnnouncementRow(id: string) {
     }
 }
 
+/** Loads a row or the response to return for a missing row / failed read. */
+async function loadAnnouncement(id: string, label: 'GET' | 'PATCH' | 'DELETE'): Promise<{ row: AnnouncementRow } | { response: NextResponse }> {
+    const { row, error } = await getAnnouncementRow(id);
+    if (error) {
+        console.error(`[announcements][admin][${label}] load failed:`, error);
+        return { response: jsonError('获取公告失败', 500) };
+    }
+    if (!row) {
+        return { response: jsonError('公告不存在', 404) };
+    }
+    return { row };
+}
+
 export async function GET(request: NextRequest, context: RouteContext) {
     const auth = await requireAdminContext(request);
     if ('error' in auth) {
@@ -28,18 +41,12 @@ export async function GET(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const { row, error } = await getAnnouncementRow(id);
-
-    if (error) {
-        console.error('[announcements][admin][GET] load failed:', error);
-        return jsonError('获取公告失败', 500);
+    const loaded = await loadAnnouncement(id, 'GET');
+    if ('response' in loaded) {
+        return loaded.response;
     }
 
-    if (!row) {
-        return jsonError('公告不存在', 404);
-    }
-
-    return jsonOk({ announcement: serializeAnnouncement(row) });
+    return jsonOk({ announcement: serializeAnnouncement(loaded.row) });
 }
 
 export async function PATCH(request: NextRequest, context: RouteContext) {
@@ -49,13 +56,9 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const { row: existing, error: loadError } = await getAnnouncementRow(id);
-    if (loadError) {
-        console.error('[announcements][admin][PATCH] load failed:', loadError);
-        return jsonError('获取公告失败', 500);
-    }
-    if (!existing) {
-        return jsonError('公告不存在', 404);
+    const loaded = await loadAnnouncement(id, 'PATCH');
+    if ('response' in loaded) {
+        return loaded.response;
     }
 
     let body: unknown;
@@ -103,13 +106,9 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     }
 
     const { id } = await context.params;
-    const { row: existing, error: loadError } = await getAnnouncementRow(id);
-    if (loadError) {
-        console.error('[announcements][admin][DELETE] load failed:', loadError);
-        return jsonError('获取公告失败', 500);
-    }
-    if (!existing) {
-        return jsonError('公告不存在', 404);
+    const loaded = await loadAnnouncement(id, 'DELETE');
+    if ('response' in loaded) {
+        return loaded.response;
     }
     try {
         await systemDb().tx((trx) => trx

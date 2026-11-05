@@ -82,12 +82,11 @@ export function AnnouncementManagementPanel() {
     setError(null);
 
     try {
-      const payload = await requestBrowserData<{ announcements?: Announcement[] }>(
+      const { announcements: nextAnnouncements = [] } = await requestBrowserData<{ announcements?: Announcement[] }>(
         '/api/admin/announcements',
         { method: 'GET' },
         { fallbackMessage: '获取公告列表失败' },
       );
-      const nextAnnouncements = (payload.announcements || []) as Announcement[];
       setAnnouncements(nextAnnouncements);
 
       const nextSelectedId = preferredSelectedId ?? selectedIdRef.current;
@@ -144,7 +143,7 @@ export function AnnouncementManagementPanel() {
 
     setSaving(true);
     try {
-      const payload = await requestBrowserData<{ announcement?: Announcement }>(
+      const { announcement: saved } = await requestBrowserData<{ announcement: Announcement }>(
         form.id ? `/api/admin/announcements/${form.id}` : '/api/admin/announcements',
         {
           method: form.id ? 'PATCH' : 'POST',
@@ -158,7 +157,6 @@ export function AnnouncementManagementPanel() {
         { fallbackMessage: '保存公告失败' },
       );
 
-      const saved = payload.announcement as Announcement;
       setView('editor');
       setMode('edit');
       setSelectedId(saved.id);

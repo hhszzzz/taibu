@@ -56,7 +56,6 @@ export function DeploymentLogsPanel() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<DeploymentLog | null>(null);
-  const pageNumber = useRef(1);
   const request = useRef(0);
 
   const load = useCallback(async (target: number) => {
@@ -66,7 +65,6 @@ export function DeploymentLogsPanel() {
       const data = await requestBrowserData<DeploymentLogPage>(
         `/api/admin/system/deployment-logs?page=${target}`, { method: 'GET' }, { fallbackMessage: '读取部署日志失败' });
       if (current !== request.current) return;
-      pageNumber.current = target;
       setPage(data);
       setError(null);
     } catch (failure) {
@@ -82,7 +80,7 @@ export function DeploymentLogsPanel() {
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm text-foreground-secondary">管理员在侧栏版本号中触发的更新，及其在主机上的执行结果。</p>
-        <Button variant="secondary" size="sm" onClick={() => { void load(pageNumber.current); }} loading={loading}>
+        <Button variant="secondary" size="sm" onClick={() => { void load(page?.page ?? 1); }} loading={loading}>
           <RefreshCw aria-hidden="true" className="size-4" />刷新
         </Button>
       </div>

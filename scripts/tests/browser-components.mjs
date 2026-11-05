@@ -2909,7 +2909,6 @@ export async function run(existingPage, bundlePath) {
     const structuredDock = page.locator('.agent-question-dock');
     await structuredDock.getByLabel('工作', { exact: true }).check();
     await structuredDock.getByLabel('生活', { exact: true }).check();
-    await structuredDock.getByRole('button', { name: '其他情况，可直接写', exact: true }).click();
     await structuredDock.getByLabel('自行填写', { exact: true }).fill('具体项目');
     await structuredDock.getByRole('button', { name: '下一题', exact: true }).click();
     check('The last question submits directly instead of opening a review page',
@@ -2921,13 +2920,20 @@ export async function run(existingPage, bundlePath) {
     check('Question navigation returns to stable choices and custom input', await structuredDock.getByLabel('工作', { exact: true }).isChecked() && await structuredDock.getByLabel('生活', { exact: true }).isChecked() && await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
     await structuredDock.getByRole('button', { name: '稍后回答', exact: true }).click();
     const questionStrip = page.getByRole('group', { name: '等待回答', exact: true });
-    const answerLater = questionStrip.getByRole('button', { name: '回答问题', exact: true });
-    await until(() => document.activeElement?.textContent === '回答问题');
-    check('Answering later folds the questions into a strip that keeps stop and answer', await structuredDock.count() === 0 &&
-      await questionStrip.getByRole('button', { name: '停止任务', exact: true }).isEnabled() && await questionStrip.innerText().then(text => text.includes('回答 2 个问题后继续任务')));
+    const answerLater = questionStrip.getByRole('button', { name: '继续回答', exact: true });
+    await until(() => document.activeElement?.textContent === '继续回答');
+    check('Answering later folds the questions into a strip that keeps stop, answer and progress', await structuredDock.count() === 0 &&
+      await questionStrip.getByRole('button', { name: '停止任务', exact: true }).isEnabled() && await questionStrip.innerText().then(text => text.includes('已答 2/2')));
     await answerLater.click();
     await until(() => document.activeElement?.getAttribute('aria-label') === '稍后回答');
     check('Reopening the strip restores the same question and its draft', await structuredDock.getByLabel('自行填写', { exact: true }).inputValue() === '具体项目');
+    await page.keyboard.press('2');
+    check('Number keys toggle the matching choice', !(await structuredDock.getByLabel('生活', { exact: true }).isChecked()));
+    await page.keyboard.press('2');
+    await page.keyboard.press('Escape');
+    await until(() => document.activeElement?.textContent === '继续回答');
+    check('Escape folds the questions into the strip and keeps the choices', await structuredDock.count() === 0 && await questionStrip.innerText().then(text => text.includes('已答 2/2')));
+    await answerLater.click();
     await page.evaluate(() => window.fixture.mount.question(false));
     await structuredDock.waitFor({ state: 'hidden' });
     await page.evaluate(() => window.fixture.mount.question(true));
@@ -3539,19 +3545,18 @@ export async function run(existingPage, bundlePath) {
     await results.getByRole('button', { name: /任务过程/ }).waitFor();
     check('History remount keeps chart results out of the transcript without new API operations', resultOperations() === callsBeforeResults &&
       await results.locator('.agent-result-card').count() === 0);
-    // Phones fold a running task's process to two lines, the count and what runs now; wider screens open its steps.
+    // Phones fold a running task's process to its count; what runs now sits beside 太卜, and wider screens open the steps.
     await page.setViewportSize({ width: 390, height: 844 });
     await page.evaluate(() => window.fixture.agentRunStatus('running'));
-    await results.locator('.agent-process-now').waitFor();
-    check('On a phone a running task folds its process to its count and what runs now', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
-      /^· \d+ \/ \d+ 完成$/.test(await results.locator('.agent-process-heading.is-live .agent-process-count').innerText()) &&
-      await results.locator('.agent-process-now').innerText() === await results.locator('.agent-live-activity').innerText());
+    await results.locator('.agent-heading-live').waitFor();
+    check('On a phone a running task folds its process to its count while the live line sits beside the name', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'false' &&
+      /^· \d+ \/ \d+ 完成$/.test(await results.locator('.agent-process-count').innerText()) &&
+      !!(await results.locator('.agent-heading-live').innerText()).trim());
     await page.setViewportSize({ width: 1200, height: 1000 });
     await results.locator('.agent-process-steps').waitFor();
-    check('Beside the workspace the running process opens its step card', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'true' &&
-      await results.locator('.agent-process-now').count() === 0);
+    check('Beside the workspace the running process opens its step card', await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') === 'true');
     await page.evaluate(() => window.fixture.collaborationResults(false));
-    check('The live line names the member still analysing', await results.locator('.agent-live-activity').innerText() === '等待协作成员 · 独立复核 正在分析');
+    check('The live line names the member still analysing', await results.locator('.agent-heading-live').innerText() === '等待协作成员 · 独立复核 正在分析');
     const teamStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '协作分析' }) });
     await teamStep.locator('.agent-step-row').click();
     // 展开的协作步骤列出成员，点成员直接打开它的独立页面。
@@ -3600,7 +3605,7 @@ export async function run(existingPage, bundlePath) {
     // A background subagent: the task waits for its report, and its step opens its page with the message it was sent.
     await page.evaluate(() => { window.fixture.agentRunStatus('running'); window.fixture.backgroundResults(false); });
     await renderBarrier();
-    check('While only a background subagent works, the live line says what the task waits for', await results.locator('.agent-live-activity').innerText() === '等待后台子分析回报 · 八字复核 正在分析');
+    check('While only a background subagent works, the live line says what the task waits for', await results.locator('.agent-heading-live').innerText() === '等待后台子分析回报 · 八字复核 正在分析');
     const processToggle = results.getByRole('button', { name: /任务过程/ });
     if (await processToggle.getAttribute('aria-expanded') !== 'true') await processToggle.click();
     const backgroundStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '后台子分析' }) });

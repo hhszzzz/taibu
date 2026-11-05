@@ -683,7 +683,6 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onAnswer={async (answer, answers) => { await agent.sendCommand(answer, false, { questionId: waitingQuestion.id, answers }); onAttachmentChange({ ...attachmentState, uploaded: undefined }); }}
                                     onStop={agent.stop} disabled={agent.restoring || agent.syncing}
                                     collapsed={questionLater} onCollapsedChange={later => { setLaterQuestion(later ? questionKey : null); if (later) focusComposer(); }} />
-                                {!questionLater && <p className="chat-composer-note">{note}</p>}
                             </div>
                             {questionLater && composer}
                         </> : composer}

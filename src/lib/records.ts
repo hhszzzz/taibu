@@ -4,8 +4,8 @@
  * 浏览器侧统一通过 records/notes API 访问数据。
  */
 
-import { requestBrowserData } from '@/lib/browser-api';
-import { isValidUUID } from '@/lib/validation';
+import { requestBrowserData, type BrowserRequestInit } from '@/lib/browser-api';
+import { isPlainObject, isValidUUID } from '@/lib/validation';
 
 // =====================================================
 // 类型定义
@@ -79,10 +79,6 @@ export interface ExportData {
 }
 
 type RecordWriteMode = 'create' | 'update';
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === 'object' && !Array.isArray(value);
-}
 
 function isRecordCategory(value: string): value is RecordCategory {
     return RECORD_CATEGORIES.some((item) => item.value === value);
@@ -315,6 +311,17 @@ function toMingNote(data: unknown): MingNote | null {
     return isValidMingNote(data) ? data : null;
 }
 
+async function requestRecord(
+    url: string,
+    init: BrowserRequestInit,
+    fallbackMessage = '请求失败',
+): Promise<MingRecord> {
+    const payload = await requestBrowserData<unknown>(url, init, { fallbackMessage });
+    const record = toMingRecord(payload);
+    if (!record) throw new Error('Invalid record data');
+    return record;
+}
+
 // =====================================================
 // 记录分类配置
 // =====================================================
@@ -374,38 +381,29 @@ export async function getRecords(
  * 获取单条记录
  */
 export async function getRecord(recordId: string, options: { signal?: AbortSignal } = {}): Promise<MingRecord> {
-    const payload = await requestBrowserData<unknown>(`/api/records/${encodeURIComponent(recordId)}`, { signal: options.signal }, { fallbackMessage: '获取记录失败' });
-    const record = toMingRecord(payload);
-    if (!record) throw new Error('Invalid record data');
-    return record;
+    return requestRecord(
+        `/api/records/${encodeURIComponent(recordId)}`,
+        { signal: options.signal },
+        '获取记录失败',
+    );
 }
 
 /** 创建记录 */
 export async function createRecord(input: RecordInput): Promise<MingRecord> {
-    const payload = await requestBrowserData<unknown>('/api/records', {
+    return requestRecord('/api/records', {
         method: 'POST',
         body: JSON.stringify(input),
-    }, {
-        fallbackMessage: '请求失败',
     });
-    const record = toMingRecord(payload);
-    if (!record) throw new Error('Invalid record data');
-    return record;
 }
 
 /**
  * 更新记录
  */
 export async function updateRecord(recordId: string, input: Partial<RecordInput>): Promise<MingRecord> {
-    const payload = await requestBrowserData<unknown>(`/api/records/${recordId}`, {
+    return requestRecord(`/api/records/${recordId}`, {
         method: 'PUT',
         body: JSON.stringify(input),
-    }, {
-        fallbackMessage: '请求失败',
     });
-    const record = toMingRecord(payload);
-    if (!record) throw new Error('Invalid record data');
-    return record;
 }
 
 /**
@@ -424,16 +422,11 @@ export async function deleteRecord(recordId: string, options: { signal?: AbortSi
  * 切换记录置顶状态
  */
 export async function toggleRecordPin(recordId: string, options: { signal?: AbortSignal } = {}): Promise<MingRecord> {
-    const payload = await requestBrowserData<unknown>(`/api/records/${recordId}`, {
+    return requestRecord(`/api/records/${recordId}`, {
         method: 'PUT',
         signal: options.signal,
         body: JSON.stringify({ togglePin: true }),
-    }, {
-        fallbackMessage: '请求失败',
     });
-    const record = toMingRecord(payload);
-    if (!record) throw new Error('Invalid record data');
-    return record;
 }
 
 // =====================================================

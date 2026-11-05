@@ -7,7 +7,19 @@
 
 import { NextRequest } from 'next/server';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
+import type { ScopedDb } from '@/lib/db/context.server';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+
+type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
+
+/** The note list and its total share these date filters; both run in their own transaction. */
+function notesQuery(trx: Trx, userId: string, date: string | null, startDate: string | null, endDate: string | null) {
+    let query = trx.selectFrom('ming_notes').where('user_id', '=', userId);
+    if (date) query = query.where('note_date', '=', date);
+    if (startDate) query = query.where('note_date', '>=', startDate);
+    if (endDate) query = query.where('note_date', '<=', endDate);
+    return query;
+}
 
 export async function GET(request: NextRequest) {
     const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
@@ -27,30 +39,15 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * pageSize;
 
         const [notes, totalRow] = await Promise.all([
-            auth.db.tx((trx) => {
-                let query = trx
-                    .selectFrom('ming_notes')
-                    .selectAll()
-                    .where('user_id', '=', user.id);
-                if (date) query = query.where('note_date', '=', date);
-                if (startDate) query = query.where('note_date', '>=', startDate);
-                if (endDate) query = query.where('note_date', '<=', endDate);
-                return query
-                    .orderBy('created_at', 'desc')
-                    .offset(from)
-                    .limit(pageSize)
-                    .execute();
-            }),
-            auth.db.tx((trx) => {
-                let query = trx
-                    .selectFrom('ming_notes')
-                    .select((eb) => eb.fn.countAll<number>().as('count'))
-                    .where('user_id', '=', user.id);
-                if (date) query = query.where('note_date', '=', date);
-                if (startDate) query = query.where('note_date', '>=', startDate);
-                if (endDate) query = query.where('note_date', '<=', endDate);
-                return query.executeTakeFirst();
-            }),
+            auth.db.tx((trx) => notesQuery(trx, user.id, date, startDate, endDate)
+                .selectAll()
+                .orderBy('created_at', 'desc')
+                .offset(from)
+                .limit(pageSize)
+                .execute()),
+            auth.db.tx((trx) => notesQuery(trx, user.id, date, startDate, endDate)
+                .select((eb) => eb.fn.countAll<number>().as('count'))
+                .executeTakeFirst()),
         ]);
 
         return jsonOk({ notes, total: Number(totalRow?.count ?? 0) });

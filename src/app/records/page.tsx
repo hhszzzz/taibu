@@ -45,6 +45,21 @@ type ReadScope = {
     request: AbortController | null;
 };
 
+/** A refresh supersedes every earlier request for this account/filter/page. */
+function beginScopeRequest(
+    lifecycle: { current: ReadScope | null },
+    scope: ReadScope,
+) {
+    scope.request?.abort();
+    const request = new AbortController();
+    scope.request = request;
+    const isCurrent = () => lifecycle.current === scope
+        && !scope.controller.signal.aborted
+        && scope.request === request
+        && !request.signal.aborted;
+    return { request, isCurrent };
+}
+
 function SectionError({
     message,
     onRetry,
@@ -107,24 +122,15 @@ function RecordsContent() {
     const notesLifecycle = useRef<ReadScope | null>(null);
     const reloadRecordsRef = useRef<(() => Promise<void>) | null>(null);
 
-    const openAddToKb = useCallback((record: MingRecord) => {
-        setKbTargetRecord(record);
-    }, []);
-
     const closeKbModal = useCallback(() => {
         setKbTargetRecord(null);
     }, []);
 
-    // A refresh supersedes every earlier request for this account/filter/page.
     // quiet：增删改之后的刷新保留当前列表，不换成加载占位，变化由列表动效呈现。
     const loadRecords = useCallback(async ({ quiet = false }: { quiet?: boolean } = {}) => {
         const scope = recordsLifecycle.current;
         if (!scope || scope.identity !== recordsIdentity || scope.controller.signal.aborted || sessionLoading) return;
-        scope.request?.abort();
-        const request = new AbortController();
-        scope.request = request;
-        const isCurrent = () => recordsLifecycle.current === scope && !scope.controller.signal.aborted
-            && scope.request === request && !request.signal.aborted;
+        const { request, isCurrent } = beginScopeRequest(recordsLifecycle, scope);
         if (!userId) {
             setRecords([]);
             setTotal(0);
@@ -164,11 +170,7 @@ function RecordsContent() {
     const loadNotes = useCallback(async () => {
         const scope = notesLifecycle.current;
         if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted || sessionLoading) return;
-        scope.request?.abort();
-        const request = new AbortController();
-        scope.request = request;
-        const isCurrent = () => notesLifecycle.current === scope && !scope.controller.signal.aborted
-            && scope.request === request && !request.signal.aborted;
+        const { request, isCurrent } = beginScopeRequest(notesLifecycle, scope);
         if (!userId) {
             setNotes([]);
             setNotesError('请先登录后查看今日小记');
@@ -193,6 +195,16 @@ function RecordsContent() {
             if (isCurrent()) setNotesLoading(false);
         }
     }, [accountIdentity, sessionLoading, showToast, userId]);
+
+    // 写操作沿用账号级生命周期，账号切换或卸载后不再更新状态。
+    const captureMutationScope = useCallback(() => {
+        const scope = notesLifecycle.current;
+        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted) return null;
+        return {
+            controller: scope.controller,
+            isCurrent: () => notesLifecycle.current === scope && !scope.controller.signal.aborted,
+        };
+    }, [accountIdentity]);
 
     const handleKnowledgeBaseSuccess = useCallback((payload: {
         sourceId: string;
@@ -290,12 +302,11 @@ function RecordsContent() {
     }, [loadRecords]);
 
     const handleDelete = async (id: string) => {
-        const scope = notesLifecycle.current;
-        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted || !userId) return;
-        const isCurrent = () => notesLifecycle.current === scope && !scope.controller.signal.aborted;
+        const scope = captureMutationScope();
+        if (!scope || !userId) return;
         try {
             await deleteRecord(id, { signal: scope.controller.signal });
-            if (!isCurrent()) return;
+            if (!scope.isCurrent()) return;
             setDeleteRecordId(null);
             // Drop the row now so it folds away while the list refreshes.
             setRecords(current => current.filter(record => record.id !== id));
@@ -303,33 +314,30 @@ function RecordsContent() {
             // The returned total, not a captured total-minus-one, determines the last page.
             await reloadRecordsRef.current?.();
         } catch (error) {
-            if (isCurrent()) showToast('error', error instanceof Error ? error.message : '删除记录失败');
+            if (scope.isCurrent()) showToast('error', error instanceof Error ? error.message : '删除记录失败');
         }
     };
 
     const handleTogglePin = async (id: string) => {
-        const scope = notesLifecycle.current;
-        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted || !userId) return;
-        const isCurrent = () => notesLifecycle.current === scope && !scope.controller.signal.aborted;
+        const scope = captureMutationScope();
+        if (!scope || !userId) return;
         try {
             await toggleRecordPin(id, { signal: scope.controller.signal });
-            if (isCurrent()) await reloadRecordsRef.current?.();
+            if (scope.isCurrent()) await reloadRecordsRef.current?.();
         } catch (error) {
-            if (isCurrent()) showToast('error', error instanceof Error ? error.message : '更新记录失败');
+            if (scope.isCurrent()) showToast('error', error instanceof Error ? error.message : '更新记录失败');
         }
     };
 
     const handleRecordSaved = () => {
-        const scope = notesLifecycle.current;
-        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted) return;
+        if (!captureMutationScope()) return;
         setShowRecordForm(false);
         setEditingRecord(null);
         void reloadRecordsRef.current?.();
     };
 
     const handleImported = () => {
-        const scope = notesLifecycle.current;
-        if (!scope || scope.identity !== accountIdentity || scope.controller.signal.aborted) return;
+        if (!captureMutationScope()) return;
         void reloadRecordsRef.current?.();
         void loadNotes();
     };
@@ -399,7 +407,7 @@ function RecordsContent() {
                                 onEdit={(record) => { setEditingRecord(record); setShowRecordForm(true); }}
                                 onDelete={(id) => setDeleteRecordId(id)}
                                 onTogglePin={handleTogglePin}
-                                onAddToKnowledgeBase={openAddToKb}
+                                onAddToKnowledgeBase={setKbTargetRecord}
                                 onCreateNew={() => setShowRecordForm(true)}
                                 filtered={!!search.trim() || !!category}
                                 onClearFilters={() => { setSearch(''); setCategory(''); setPage(1); }}

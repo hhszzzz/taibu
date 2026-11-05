@@ -15,6 +15,8 @@ import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-recor
 
 export type ReminderType = 'solar_term' | 'fortune' | 'key_date';
 
+export const REMINDER_TYPES: readonly ReminderType[] = ['solar_term', 'fortune', 'key_date'];
+
 export interface ReminderSubscription {
     id: string;
     userId: string;
@@ -156,17 +158,21 @@ export async function scheduleSolarTermReminder(
     termDate: string,
     termName: string
 ): Promise<boolean> {
-    const meaning = getSolarTermMeaning(termName);
     return scheduleReminderIfAbsent(
         userId,
         'solar_term',
         `${termDate}T08:00:00+08:00`,
-        {
-            term_name: termName,
-            meaning: meaning.meaning,
-            tips: meaning.tips,
-        },
+        buildSolarTermReminderContent(termName),
     );
+}
+
+function buildSolarTermReminderContent(termName: string): Record<string, unknown> {
+    const meaning = getSolarTermMeaning(termName);
+    return {
+        term_name: termName,
+        meaning: meaning.meaning,
+        tips: meaning.tips,
+    };
 }
 
 /**
@@ -326,16 +332,11 @@ export async function scheduleUpcomingSolarTermReminders(userId: string): Promis
     const nextTerm = getNextSolarTerm();
     if (!nextTerm) return 0;
 
-    const meaning = getSolarTermMeaning(nextTerm.name);
     const success = await scheduleReminderIfAbsent(
         userId,
         'solar_term',
         `${nextTerm.date}T08:00:00+08:00`,
-        {
-            term_name: nextTerm.name,
-            meaning: meaning.meaning,
-            tips: meaning.tips,
-        },
+        buildSolarTermReminderContent(nextTerm.name),
     );
     return success ? 1 : 0;
 }
@@ -349,7 +350,7 @@ export async function scheduleUpcomingFortuneReminders(
     baziOutput: CoreBaziOutput
 ): Promise<number> {
     const now = new Date();
-    let scheduled = 0;
+    const reminders: Array<{ scheduledFor: string; content: Record<string, unknown> }> = [];
 
     // 计算未来7天的运势
     for (let i = 1; i <= 7; i++) {
@@ -363,30 +364,27 @@ export async function scheduleUpcomingFortuneReminders(
         const isSignificant = fortune.overall === '大吉' || compareLevels(fortune.overall, '小凶') <= 0;
         if (!isSignificant) continue;
 
-        const summaryType = isLevelFavorable(fortune.overall) ? '大吉日' : '低谷日';
-        const summary = isLevelFavorable(fortune.overall)
-            ? `今日运势极佳（${fortune.overall}），适合把握机会！`
-            : `今日运势较低（${fortune.overall}），建议谨慎行事。`;
-
-        const success = await scheduleReminderIfAbsent(
-            userId,
-            'fortune',
-            `${dateStr}T07:00:00+08:00`,
-            {
-            summary,
-            overall: fortune.overall,
-            career: fortune.career,
-            wealth: fortune.wealth,
-            love: fortune.love,
-            health: fortune.health,
-            type: summaryType,
+        const favorable = isLevelFavorable(fortune.overall);
+        reminders.push({
+            scheduledFor: `${dateStr}T07:00:00+08:00`,
+            content: {
+                summary: favorable
+                    ? `今日运势极佳（${fortune.overall}），适合把握机会！`
+                    : `今日运势较低（${fortune.overall}），建议谨慎行事。`,
+                overall: fortune.overall,
+                career: fortune.career,
+                wealth: fortune.wealth,
+                love: fortune.love,
+                health: fortune.health,
+                type: favorable ? '大吉日' : '低谷日',
             },
-        );
-
-        if (success) scheduled++;
+        });
     }
 
-    return scheduled;
+    // 各日期互不依赖；RPC 自身按 (user, type, time) 去重。
+    const results = await Promise.all(reminders.map(({ scheduledFor, content }) =>
+        scheduleReminderIfAbsent(userId, 'fortune', scheduledFor, content)));
+    return results.filter(Boolean).length;
 }
 
 /**
@@ -399,17 +397,18 @@ export async function scheduleKeyDateReminders(
     const now = new Date();
     const year = now.getFullYear();
     const month = now.getMonth() + 1;
-    let scheduled = 0;
+    const today = now.toISOString().split('T')[0];
 
     // 获取当月关键日
     const keyDates = generateEnhancedKeyDates(baziOutput, year, month);
 
-    for (const keyDate of keyDates) {
+    // 各日期互不依赖；RPC 自身按 (user, type, time) 去重。
+    const results = await Promise.all(keyDates.map((keyDate) => {
         // 只安排未来的日期
         const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(keyDate.date).padStart(2, '0')}`;
-        if (dateStr <= now.toISOString().split('T')[0]) continue;
+        if (dateStr <= today) return false;
 
-        const inserted = await scheduleReminderIfAbsent(
+        return scheduleReminderIfAbsent(
             userId,
             'key_date',
             `${dateStr}T07:00:00+08:00`,
@@ -422,18 +421,19 @@ export async function scheduleKeyDateReminders(
                 description: `${month}月${keyDate.date}日：${keyDate.summary}`,
             },
         );
+    }));
 
-        if (inserted) scheduled++;
-    }
-
-    return scheduled;
+    return results.filter(Boolean).length;
 }
 
 /**
  * 获取用户的主要八字命盘（用于运势计算）
  */
-async function getUserPrimaryBaziChart(userId: string): Promise<CoreBaziOutput | null> {
-    const data = await systemDb().tx((trx) => trx
+export async function loadUserPrimaryBaziChart(
+    userId: string,
+    options?: ReminderOptions,
+): Promise<CoreBaziOutput | null> {
+    const data = await resolveReminderDb(options).tx((trx) => trx
         .selectFrom('bazi_charts')
         .select(['gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation'])
         .where('user_id', '=', userId)
@@ -462,7 +462,7 @@ export async function scheduleAllUsersReminders(): Promise<number> {
                 .select(['user_id', 'reminder_type', 'enabled', 'notify_site'])
                 .where('enabled', '=', true)
                 .where('notify_site', '=', true)
-                .where('reminder_type', 'in', ['solar_term', 'fortune', 'key_date'])
+                .where('reminder_type', 'in', REMINDER_TYPES)
                 .orderBy('user_id', 'asc')
                 .limit(300);
             if (reminderSchedulingCursor) query = query.where('user_id', '>', reminderSchedulingCursor);
@@ -520,7 +520,7 @@ export async function scheduleAllUsersReminders(): Promise<number> {
 
             // 运势和关键日提醒需要八字数据
             if (types.has('fortune') || types.has('key_date')) {
-                const baziChart = await getUserPrimaryBaziChart(userId);
+                const baziChart = await loadUserPrimaryBaziChart(userId);
                 if (baziChart) {
                     if (types.has('fortune')) {
                         const count = await scheduleUpcomingFortuneReminders(userId, baziChart);

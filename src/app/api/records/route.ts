@@ -49,40 +49,35 @@ export async function GET(request: NextRequest) {
         const from = (page - 1) * pageSize;
         const pattern = filters.search ? `%${escapeLike(filters.search)}%` : null;
 
-        try {
-            const { rows, totalRow } = await auth.db.tx(async (trx) => {
-                let query = trx
-                    .selectFrom('ming_records_with_archive_status')
-                    .where('user_id', '=', user.id);
-                if (filters.category) query = query.where('category', '=', filters.category);
-                if (filters.isPinned !== undefined) query = query.where('is_pinned', '=', filters.isPinned);
-                if (filters.startDate) query = query.where('event_date', '>=', filters.startDate);
-                if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
-                if (filters.tags && filters.tags.length > 0) query = query.where('tags', '&&', arrayValue(filters.tags));
-                if (pattern) {
-                    query = query.where((eb) => eb.or([
-                        eb('title', 'ilike', pattern),
-                        eb('content', 'ilike', pattern),
-                    ]));
-                }
-                const rows = await query.selectAll()
-                    .orderBy('is_pinned', 'desc')
-                    .orderBy('created_at', 'desc')
-                    .offset(from)
-                    .limit(pageSize)
-                    .execute();
-                const totalRow = await query.select((eb) => eb.fn.countAll<number>().as('count')).executeTakeFirst();
-                return { rows, totalRow };
-            }, { isolationLevel: 'repeatable read' });
+        const { rows, totalRow } = await auth.db.tx(async (trx) => {
+            let query = trx
+                .selectFrom('ming_records_with_archive_status')
+                .where('user_id', '=', user.id);
+            if (filters.category) query = query.where('category', '=', filters.category);
+            if (filters.isPinned !== undefined) query = query.where('is_pinned', '=', filters.isPinned);
+            if (filters.startDate) query = query.where('event_date', '>=', filters.startDate);
+            if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
+            if (filters.tags && filters.tags.length > 0) query = query.where('tags', '&&', arrayValue(filters.tags));
+            if (pattern) {
+                query = query.where((eb) => eb.or([
+                    eb('title', 'ilike', pattern),
+                    eb('content', 'ilike', pattern),
+                ]));
+            }
+            const rows = await query.selectAll()
+                .orderBy('is_pinned', 'desc')
+                .orderBy('created_at', 'desc')
+                .offset(from)
+                .limit(pageSize)
+                .execute();
+            const totalRow = await query.select((eb) => eb.fn.countAll<number>().as('count')).executeTakeFirst();
+            return { rows, totalRow };
+        }, { isolationLevel: 'repeatable read' });
 
-            return jsonOk({
-                records: rows,
-                total: Number(totalRow?.count ?? 0),
-            });
-        } catch (error) {
-            console.error('获取记录失败:', error);
-            return jsonError('获取记录失败', 500);
-        }
+        return jsonOk({
+            records: rows,
+            total: Number(totalRow?.count ?? 0),
+        });
     } catch (error) {
         console.error('获取记录失败:', error);
         return jsonError('获取记录失败', 500);
@@ -106,20 +101,14 @@ export async function POST(request: NextRequest) {
             return jsonError(normalized.error, 400);
         }
 
-        let data;
-        try {
-            data = await auth.db.tx((trx) => trx
-                .insertInto('ming_records')
-                .values({
-                    user_id: user.id,
-                    ...normalized.data,
-                } as never)
-                .returningAll()
-                .executeTakeFirstOrThrow());
-        } catch (error) {
-            console.error('创建记录失败:', error);
-            return jsonError('创建记录失败', 500);
-        }
+        const data = await auth.db.tx((trx) => trx
+            .insertInto('ming_records')
+            .values({
+                user_id: user.id,
+                ...normalized.data,
+            } as never)
+            .returningAll()
+            .executeTakeFirstOrThrow());
 
         return jsonOk(data as unknown as Record<string, unknown>);
     } catch (error) {

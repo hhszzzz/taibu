@@ -4,6 +4,8 @@
 import { NextRequest } from 'next/server';
 import {
     getReminderSubscriptions,
+    loadUserPrimaryBaziChart,
+    REMINDER_TYPES,
     ReminderReadError,
     updateReminderSubscription,
     scheduleUpcomingSolarTermReminders,
@@ -12,7 +14,12 @@ import {
     type ReminderType
 } from '@/lib/reminders';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
-import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
+
+function expectedUserMismatch(request: NextRequest, userId: string) {
+    const expectedUserId = request.headers.get('X-Expected-User-Id');
+    if (expectedUserId === null || expectedUserId === userId) return null;
+    return jsonError('账号已切换，请重新加载设置', 409, { success: false });
+}
 
 // GET - 获取提醒订阅设置
 export async function GET(request: NextRequest) {
@@ -21,17 +28,15 @@ export async function GET(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
-        const expectedUserId = request.headers.get('X-Expected-User-Id');
-        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-            return jsonError('账号已切换，请重新加载设置', 409, { success: false });
-        }
+        const mismatch = expectedUserMismatch(request, auth.user.id);
+        if (mismatch) return mismatch;
         const { user } = auth;
         const db = auth.db;
 
         const subscriptions = await getReminderSubscriptions(user.id, { db });
 
         // 确保所有类型都有记录
-        const allTypes: ReminderType[] = ['solar_term', 'fortune', 'key_date'];
+        const allTypes = REMINDER_TYPES;
         const result = allTypes.map(type => {
             const existing = subscriptions.find(s => s.reminderType === type);
             return {
@@ -62,17 +67,15 @@ export async function POST(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
-        const expectedUserId = request.headers.get('X-Expected-User-Id');
-        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-            return jsonError('账号已切换，请重新加载设置', 409, { success: false });
-        }
+        const mismatch = expectedUserMismatch(request, auth.user.id);
+        if (mismatch) return mismatch;
         const { user } = auth;
         const db = auth.db;
 
         const body = await request.json();
         const { reminderType, enabled, notifyEmail, notifySite } = body;
 
-        if (!reminderType || !['solar_term', 'fortune', 'key_date'].includes(reminderType)) {
+        if (!reminderType || !REMINDER_TYPES.includes(reminderType)) {
             return jsonError('无效的提醒类型', 400, { success: false });
         }
 
@@ -93,24 +96,11 @@ export async function POST(request: NextRequest) {
             if (reminderType === 'solar_term') {
                 scheduled = await scheduleUpcomingSolarTermReminders(user.id);
             } else if (reminderType === 'fortune' || reminderType === 'key_date') {
-                // 获取用户的八字命盘
-                const chartData = await db.tx((trx) => trx
-                    .selectFrom('bazi_charts')
-                    .select(['gender', 'birth_date', 'birth_time', 'birth_place', 'longitude', 'calendar_type', 'is_leap_month', 'timezone', 'disambiguation'])
-                    .where('user_id', '=', user.id)
-                    .orderBy('created_at', 'desc')
-                    .limit(1)
-                    .executeTakeFirst());
-
-                if (chartData) {
-                    const baziOutput = calculateBaziOutputFromStoredFields(chartData);
-                    if (baziOutput) {
-                        if (reminderType === 'fortune') {
-                            scheduled = await scheduleUpcomingFortuneReminders(user.id, baziOutput);
-                        } else {
-                            scheduled = await scheduleKeyDateReminders(user.id, baziOutput);
-                        }
-                    }
+                const baziOutput = await loadUserPrimaryBaziChart(user.id, { db });
+                if (baziOutput) {
+                    scheduled = reminderType === 'fortune'
+                        ? await scheduleUpcomingFortuneReminders(user.id, baziOutput)
+                        : await scheduleKeyDateReminders(user.id, baziOutput);
                 }
             }
         }

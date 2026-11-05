@@ -140,12 +140,20 @@ function ModelsCard({ data, run, grip }: { data?: AgentMessageData; run?: Worksp
             <span className="agent-ws-status-count">{members.length}</span>
         </div>
         {open && <div className="agent-rail-body">
-            <div className="agent-rail-row"><ModelAvatar member={{ model: data?.runtime?.model.id, icon: data?.runtime?.model.icon }} size={15} /><span>{main}</span><span className="agent-rail-meta">主模型</span></div>
-            {members.map(member => <div key={member.id} className="agent-rail-row">
-                <ModelAvatar member={{ model: member.model }} size={15} />
-                <span>{member.name || '未命名成员'}</span>
-                <span className="agent-rail-meta">{resolveClientModelName(member.model)}</span>
-            </div>)}
+            <div className="agent-rail-tree">
+                <div className="agent-rail-row agent-rail-main">
+                    <ModelAvatar member={{ model: data?.runtime?.model.id, icon: data?.runtime?.model.icon }} size={15} />
+                    <span className="agent-rail-name">{main}</span>
+                    <span className="agent-rail-meta">主模型</span>
+                </div>
+                {members.length > 0 && <ul className="agent-rail-children" aria-label="协作成员">
+                    {members.map(member => <li key={member.id} className="agent-rail-row agent-rail-child">
+                        <ModelAvatar member={{ model: member.model }} size={15} />
+                        <span className="agent-rail-name">{member.name || '未命名成员'}</span>
+                        <span className="agent-rail-meta">{resolveClientModelName(member.model)}</span>
+                    </li>)}
+                </ul>}
+            </div>
         </div>}
     </section>;
 }

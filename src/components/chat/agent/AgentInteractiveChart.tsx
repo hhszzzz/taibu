@@ -1,9 +1,9 @@
 'use client';
 // 需要盘面选择状态、跟随定位滚动与全屏弹窗
 
-import { useEffect, useId, useMemo, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
-import { LocateFixed, MessageCircleQuestion } from 'lucide-react';
+import { ChevronDown, LocateFixed, MessageCircleQuestion } from 'lucide-react';
 import type { BaziWuxingCanonicalJSON } from 'taibu-core/bazi';
 import type { AgentChart, AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolText } from '@/lib/agent/tool-presentation';
@@ -48,6 +48,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   // 一个位置与它的某一层（六壬的地盘丑与其天盘子）可能同名，同名的位置只列一次。
   const chips = [...new Map(selected.map(target => [target.label, target.id])).entries()];
   const viewportRef = useRef<HTMLDivElement>(null);
+  const [chipsOpen, setChipsOpen] = useState(false);
   const first = selected[0];
   const scrollTarget = first?.kind === 'bazi_relation'
     ? targets.find(target => target.kind === 'bazi_cell' && first.relation.位置.some(cell => target.cell.柱 === cell.柱 && target.cell.部位 === cell.部位))?.id
@@ -114,21 +115,25 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
       <h3 id={titleId} className="sr-only">{value.title}</h3>
       {subject && <p className="agent-board-subject">{subject}</p>}
       <div className="agent-board-tools">
-        {model && <span className="agent-board-tool is-viewing" role="img" title={live && followModel ? '太卜正在查看这里' : '太卜查看的位置'}
-          aria-label={live && followModel ? '太卜正在查看这里' : '太卜查看的位置'}><LocateFixed size={14} aria-hidden="true" /></span>}
-        {reference && onAsk && <Button unstyled type="button" className="agent-board-tool" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
-          title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /></Button>}
+        {reference && onAsk && <Button unstyled type="button" className="agent-board-tool has-label" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
+          title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /><span>追问</span></Button>}
         {text && <CopyButton text={text} label="复制规范文本" iconOnly className="agent-board-tool" />}
         {actions}
       </div>
     </header>
     <div className={`agent-board-focus${hasFocus ? '' : ' is-empty'}`} aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')} data-source={model ? 'model' : undefined} data-live={(model && live && followModel) || undefined}>
-      {label && <span className="agent-board-focus-label">
-        <LocateFixed size={13} aria-hidden="true" /><span>{label}</span>
-        {live && <span className="agent-board-follow-state">{followModel ? '跟随中' : '已暂停跟随'}</span>}
-      </span>}
-      {caption && <span className="agent-board-caption">{caption}</span>}
-      {chips.length > 0 && <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>}
+      <div className="agent-board-focus-line">
+        {label && <span className="agent-board-focus-label">
+          <LocateFixed size={13} aria-hidden="true" /><span>{label}</span>
+          {live && <span className="agent-board-follow-state">{followModel ? '跟随中' : '已暂停跟随'}</span>}
+        </span>}
+        {caption && <span className="agent-board-caption">{caption}</span>}
+        {chips.length > 0 && <Button unstyled type="button" className="agent-board-chips-toggle" aria-expanded={chipsOpen}
+          aria-label={chipsOpen ? '收起查看的位置' : '展开查看的位置'} onClick={() => setChipsOpen(open => !open)}>
+          {chipsOpen ? '收起' : `${chips.length} 处`}<ChevronDown size={12} className={chipsOpen ? 'is-open' : undefined} aria-hidden="true" />
+        </Button>}
+      </div>
+      {chipsOpen && chips.length > 0 && <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>}
     </div>
     <div ref={viewportRef} className="agent-chart-scroll" tabIndex={0} aria-label={value.title + '内容'}>
       <ChartErrorBoundary resetKey={value.chart} fallback={<pre className="agent-board-fallback">{text ?? '命盘数据暂时无法显示'}</pre>}>

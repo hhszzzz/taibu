@@ -3,7 +3,7 @@
 import { useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { requestBrowserJson } from '@/lib/browser-api';
-import { registerClientModelNames } from '@/lib/ai/model-name-cache';
+import { registerClientModelIcons, registerClientModelNames } from '@/lib/ai/model-name-cache';
 import { useAppBootstrap } from '@/lib/hooks/useAppBootstrap';
 import { queryKeys } from '@/lib/query/keys';
 import type { AIReasoningEffort, AIVendor } from '@/types';
@@ -75,6 +75,7 @@ export function useAvailableModels(userId?: string | null, options?: { vision?: 
   useEffect(() => {
     if (query.data && query.data.length > 0) {
       registerClientModelNames(query.data);
+      registerClientModelIcons(query.data);
     }
   }, [query.data]);
 

@@ -512,15 +512,18 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .chat-message-model { margin-left: 8px; padding-left: 10px; border-left: 1px solid var(--border); font-size: calc(12 / 16 * 1rem); color: var(--foreground-secondary); white-space: nowrap; }
 /* 工作区 = 停靠分栏里的悬浮卡片（claude /code 讨论串面板实测：白卡 r12 + 0.5px 发丝描边）。
    上留白 4px：40px 头部的标签行中线落在 24px，与左侧 48px 标题栏同一水平线；下留白 8px。
-   列为 in-flow、挤压对话列而不盖住内容；任务态默认 320，含原生盘面时与对话列平分，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。
+   列为 in-flow、挤压对话列而不盖住内容；默认占约 42% 并封顶 560px，比对话列窄但盘面仍能舒展，拖拽可在 280–780 间调宽，始终给阅读列留 ≥360px。
    max-width 的保留值必须与 AgentWorkspacePanel 的拖拽上限一致（100% − 360px 阅读列 − 10px 右外边距），否则指针到了面板却停住。
-   打开时从右侧滑入；默认宽在 320 与平分之间切换（出现盘面、恢复默认宽、最大化）时宽度平滑过渡，拖动中不过渡。 */
-.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: 320px; min-width: 280px; max-width: min(780px, calc(100% - 364px)); margin: 4px 4px 4px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; transition: width var(--duration-sheet) var(--ease-snap); }
+   打开时从右侧滑入；恢复默认宽、最大化时宽度平滑过渡，拖动中不过渡。 */
+.agent-workspace-panel { position: relative; display: flex; flex-shrink: 0; flex-direction: column; width: min(560px, calc((100% - 4px) * .42)); min-width: 280px; max-width: min(780px, calc(100% - 364px)); margin: 4px 4px 4px 0; border: var(--hairline) solid var(--hairline-color); border-radius: 12px; background: var(--chat-raised); box-shadow: none; transition: width var(--duration-sheet) var(--ease-snap); }
 /* 读者或模型刚打开时滑入（data-entering）；随会话恢复的面板直接出现。关闭时滑出（data-leaving），播完由 ChatLayout 卸载。 */
 @keyframes agent-panel-in { from { opacity: 0; translate: 16px 0; } }
 @keyframes agent-panel-out { to { opacity: 0; translate: 16px 0; } }
 .agent-workspace-panel[data-entering] { animation: agent-panel-in var(--duration-sheet) var(--ease-out) backwards; }
-.agent-workspace-panel[data-leaving] { animation: agent-panel-out var(--duration-base) var(--ease-out) forwards; pointer-events: none; }
+.agent-workspace-panel[data-leaving] { width: 0 !important; min-width: 0 !important; max-width: 0 !important; margin-right: 0; border-width: 0; overflow: hidden; pointer-events: none;
+    /* 收起时宽度一起收，对话列随之外扩；否则面板淡出后宽度一次性消失，会顿一下。 */
+    transition: width var(--duration-base) var(--ease-out), margin-right var(--duration-base) var(--ease-out), border-width var(--duration-base) var(--ease-out);
+    animation: agent-panel-out var(--duration-base) var(--ease-out) forwards; }
 /* 从聊天里的步骤、引用或成果打开某一页时，描边闪一下（保留入场动画的名字，已播完的不会重播）。 */
 @keyframes agent-panel-flash { from { box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 50%, transparent); } to { box-shadow: 0 0 0 6px transparent; } }
 .agent-workspace-panel[data-flash]:not([data-leaving]) { animation: agent-panel-flash .7s var(--ease-out); }
@@ -532,9 +535,8 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .agent-session-rail::-webkit-scrollbar { display: none; }
 .agent-session-rail .agent-ws-status-cards { display: flex; flex-direction: column; gap: 8px; }
 .agent-session-rail .agent-rail-card { position: relative; transition: transform .18s ease; }
-/* 拖动中：被拖的卡整张跟着指针走（不加过渡），浮在其余卡片之上并带阴影；其余卡片带过渡让位。 */
+/* 拖动中：被拖的卡整张跟着指针走（不加过渡），浮在其余卡片之上；不再投阴影。 */
 .agent-session-rail .agent-rail-card[data-dragged] { z-index: 2; transition: none; cursor: grabbing; }
-.agent-session-rail .agent-rail-card[data-dragged] > .agent-ws-status-card { box-shadow: var(--shadow-lg, 0 12px 32px rgb(0 0 0 / .12)); }
 .agent-session-rail .agent-ws-status-cards[data-dragging] { user-select: none; }
 /* 拖动 = claude tile 头行的「移动」钮：紧跟标题，悬停/聚焦显形，拖动排序。 */
 .agent-session-rail .agent-rail-card-grip { touch-action: none; display: inline-flex; flex-shrink: 0; width: 16px; height: 18px; align-items: center; justify-content: center; padding: 0; border: 0; background: transparent; color: var(--foreground-tertiary); opacity: 0; cursor: grab; transition: opacity .12s; }
@@ -549,9 +551,16 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 .agent-session-rail .agent-ws-status-value { margin-left: auto; font-size: calc(12 / 16 * 1rem); }
 .agent-session-rail .agent-ws-status-count { margin-left: auto; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
 .agent-session-rail .agent-rail-body { display: flex; flex-direction: column; }
-.agent-session-rail .agent-rail-row { display: flex; height: 26px; align-items: center; gap: 12px; font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
+.agent-session-rail .agent-rail-tree { display: flex; flex-direction: column; }
+.agent-session-rail .agent-rail-row { display: flex; height: 26px; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground); }
 .agent-session-rail .agent-rail-row > svg { flex-shrink: 0; color: var(--foreground-secondary); }
-.agent-session-rail .agent-rail-row > span:first-of-type { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.agent-session-rail .agent-rail-name { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 主模型在上，子模型在下方以竖线和横线挂接，像目录树一样读。 */
+.agent-session-rail .agent-rail-children { position: relative; margin: 0; padding: 0 0 0 18px; list-style: none; }
+.agent-session-rail .agent-rail-child { position: relative; }
+.agent-session-rail .agent-rail-child::before { content: ''; position: absolute; top: 0; bottom: 0; left: -10px; width: 1px; background: var(--border); }
+.agent-session-rail .agent-rail-child:last-child::before { bottom: 50%; }
+.agent-session-rail .agent-rail-child::after { content: ''; position: absolute; top: 50%; left: -10px; width: 10px; height: 1px; background: var(--border); }
 .agent-session-rail .agent-rail-more { display: inline-flex; height: 26px; align-items: center; gap: 4px; padding: 0; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-session-rail .agent-rail-more:hover { color: var(--foreground); }
 .agent-session-rail .agent-rail-more svg { transition: transform .15s; }

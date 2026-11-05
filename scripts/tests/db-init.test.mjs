@@ -402,6 +402,16 @@ ALTER ROLE taibu_schema PASSWORD '${schemaPassword}';`);
         await native.query('DELETE FROM public.conversations WHERE user_id = $1', [userId]);
         await native.query('DELETE FROM identity.users WHERE id = $1', [userId]);
       });
+      await t.test('migration 0005 tolerates a database where personality is already absent', async () => {
+        await native.query("DELETE FROM taibu_meta.schema_migrations WHERE version = '0005'");
+        const log = await initialize();
+        assert.match(log, /Applying 0005 0005_retire_dream_analysis_mode/);
+        assert.equal((await native.query(`
+          SELECT count(*)::int AS n
+          FROM information_schema.columns
+          WHERE table_schema = 'public' AND table_name = 'conversations' AND column_name = 'personality'
+        `)).rows[0].n, 0);
+      });
       await t.test('migration 0006 removes the legacy archive view before dropping personality', async () => {
         // Recreate the pre-retirement shape on an already initialized database.
         // The old view depends on the column, so this exercises the upgrade path

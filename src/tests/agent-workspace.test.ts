@@ -106,7 +106,7 @@ test('searches share the evidence view; records, attachments, methods and memori
   assert.deepEqual([by('attachment:' + attachment)?.title, by('attachment:' + attachment)?.toolIds], ['手相说明.txt', ['attachment']]);
   assert.equal(model.resources.filter(resource => resource.id.startsWith('attachment:')).length, 1);
   assert.deepEqual([by('method:bazi')?.title, by('method:bazi')?.toolIds], ['子平八字', ['method-1', 'method-2']]);
-  assert.deepEqual(by('memory')?.toolIds, ['memory-read', 'memory-write']);
+  assert.deepEqual(by('memory')?.toolIds, ['memory-read'], 'failed calls stay in the task process, not the workspace');
 });
 
 test('each collaboration member gets its own workspace page beside the collaboration', () => {

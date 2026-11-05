@@ -6,7 +6,7 @@
 
 import { useEffect, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { requestBrowserJson } from '@/lib/browser-api';
+import { requestBrowserData, requestBrowserJson } from '@/lib/browser-api';
 import { matchModelIcon } from '@/lib/ai/lobe-icons';
 import { registerClientModelIcons, registerClientModelNames } from '@/lib/ai/model-name-cache';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
@@ -50,9 +50,11 @@ export function ownModels(catalog: ByokCatalog | null | undefined, keys: Record<
 const member = (userId: string) => ({ 'Content-Type': 'application/json', 'X-Expected-User-Id': userId });
 
 async function fetchCatalog(userId: string, signal?: AbortSignal): Promise<ByokCatalog> {
-  const result = await requestBrowserJson<ByokCatalog>('/api/byok/connections', { method: 'GET', signal, headers: member(userId) });
-  if (result.error || !result.data) throw new Error(result.error?.message || '自定义模型加载失败');
-  return result.data;
+  return requestBrowserData<ByokCatalog>(
+    '/api/byok/connections',
+    { method: 'GET', signal, headers: member(userId) },
+    { fallbackMessage: '自定义模型加载失败' },
+  );
 }
 
 /** The account's connections; idle while signed out or with the feature closed. */
@@ -112,16 +114,21 @@ export function ownModelChoice(model: OwnModel) {
 // ─── Settings page requests ───
 
 export async function saveByokConnection(userId: string, id: string | null, body: ByokConnectionBody): Promise<ByokConnectionView> {
-  const result = await requestBrowserJson<{ connection: ByokConnectionView }>(id ? `/api/byok/connections/${id}` : '/api/byok/connections', {
-    method: id ? 'PATCH' : 'POST', headers: member(userId), body: JSON.stringify(body),
-  });
-  if (result.error || !result.data?.connection) throw new Error(result.error?.message || '保存连接失败');
-  return result.data.connection;
+  const data = await requestBrowserData<{ connection: ByokConnectionView }>(
+    id ? `/api/byok/connections/${id}` : '/api/byok/connections',
+    { method: id ? 'PATCH' : 'POST', headers: member(userId), body: JSON.stringify(body) },
+    { fallbackMessage: '保存连接失败' },
+  );
+  if (!data.connection) throw new Error('保存连接失败');
+  return data.connection;
 }
 
 export async function deleteByokConnection(userId: string, id: string): Promise<void> {
-  const result = await requestBrowserJson<{ deleted: boolean }>(`/api/byok/connections/${id}`, { method: 'DELETE', headers: member(userId) });
-  if (result.error) throw new Error(result.error.message || '删除连接失败');
+  await requestBrowserData<{ deleted: boolean }>(
+    `/api/byok/connections/${id}`,
+    { method: 'DELETE', headers: member(userId) },
+    { fallbackMessage: '删除连接失败' },
+  );
 }
 
 export type ByokServerProbe = {

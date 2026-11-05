@@ -129,11 +129,14 @@ export async function createByokConnection(db: ScopedDb, userId: string, input: 
   }
   await db.tx(async (trx) => {
     await lockTransactionKey(trx, userId, QUOTA_LOCK);
-    const { count } = await trx.selectFrom('user_ai_connections').select(eb => eb.fn.countAll<string>().as('count'))
-      .where('user_id', '=', userId).executeTakeFirstOrThrow();
+    const { count, max } = await trx.selectFrom('user_ai_connections')
+      .select([
+        (eb) => eb.fn.countAll<string>().as('count'),
+        (eb) => eb.fn.max('sort_order').as('max'),
+      ])
+      .where('user_id', '=', userId)
+      .executeTakeFirstOrThrow();
     if (Number(count) >= policy.maxConnections) throw new ByokError(`最多保存 ${policy.maxConnections} 个连接`, 409, 'BYOK_LIMIT');
-    const { max } = await trx.selectFrom('user_ai_connections').select(eb => eb.fn.max('sort_order').as('max'))
-      .where('user_id', '=', userId).executeTakeFirstOrThrow();
     await trx.insertInto('user_ai_connections').values({
       id, user_id: userId, name: input.name, protocol: input.protocol, base_url: input.baseUrl,
       api_key_secret: sealed ? json(sealed.secret) as never : null, api_key_hint: sealed?.hint ?? null,

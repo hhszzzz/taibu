@@ -11,8 +11,8 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import { isValidUUID } from '@/lib/validation';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import {
-  BYOK_KEY_MAX, BYOK_MODEL_ID_MAX, BYOK_PROTOCOLS, ByokInputError, byokAddressError, normalizeByokAddress, parseByokConnectionInput,
-  parseByokPolicy, type ByokConnectionInput, type ByokPolicy, type ByokProtocol,
+  BYOK_MODEL_ID_MAX, BYOK_PROTOCOLS, ByokInputError, byokAddressError, byokKeyFormatError, normalizeByokAddress,
+  parseByokConnectionInput, parseByokPolicy, type ByokConnectionInput, type ByokPolicy, type ByokProtocol,
 } from './config';
 import { probeByokConnection, testByokModel } from './probe';
 import { ByokKeyError } from './secrets.server';
@@ -94,8 +94,11 @@ export async function updateConnection(request: NextRequest, id: string) {
   const auth = await member(request);
   if (auth instanceof Response) return auth;
   try {
-    const policy = await getByokPolicy();
-    const current = (await listByokConnections(auth.db, auth.user.id)).find(connection => connection.id === id);
+    const [policy, connections] = await Promise.all([
+      getByokPolicy(),
+      listByokConnections(auth.db, auth.user.id),
+    ]);
+    const current = connections.find(connection => connection.id === id);
     if (!current) return jsonError('连接不存在', 404);
     const input = parseByokConnectionInput(await readBody(request), { partial: true, maxModels: policy.maxModelsPerConnection, protocol: current.protocol });
     const storing = input.key ? input.key.store : !!current.keyHint;
@@ -140,7 +143,8 @@ function parseProbe(value: unknown): ProbeRequest {
   const addressError = byokAddressError(address);
   if (addressError) throw new ByokInputError(addressError);
   const apiKey = typeof input.apiKey === 'string' && input.apiKey.trim() ? input.apiKey.trim() : null;
-  if (apiKey && (apiKey.length > BYOK_KEY_MAX || /\s/u.test(apiKey))) throw new ByokInputError('API Key 格式无效');
+  const keyError = apiKey ? byokKeyFormatError(apiKey) : null;
+  if (keyError) throw new ByokInputError(keyError);
   const action = input.action === 'chat' ? 'chat' : input.action === 'models' ? 'models' : null;
   if (!action) throw new ByokInputError('测试类型无效');
   const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : '';

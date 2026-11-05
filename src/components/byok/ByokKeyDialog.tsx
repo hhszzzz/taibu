@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/Button';
 import { Field } from '@/components/ui/Field';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
-import { BYOK_KEY_MAX } from '@/lib/byok/config';
+import { byokKeyFormatError } from '@/lib/byok/config';
 import { setDeviceKey } from '@/lib/byok/device-keys';
 import type { OwnModel } from '@/lib/byok/client';
 import { openSettingsCenter } from '@/lib/settings-center';
@@ -17,8 +17,7 @@ import { openSettingsCenter } from '@/lib/settings-center';
 export function deviceKeyError(value: string): string | null {
     const key = value.trim();
     if (!key) return '请填写 API Key';
-    if (key.length > BYOK_KEY_MAX || /\s/u.test(key)) return 'API Key 格式无效';
-    return null;
+    return byokKeyFormatError(key);
 }
 
 /** Fills in the key of a connection whose key lives only in browsers, for this device. */

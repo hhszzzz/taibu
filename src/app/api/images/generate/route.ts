@@ -6,6 +6,7 @@ import { checkRateLimit } from '@/lib/rate-limit';
 import {
   IMAGE_GENERATION_RATE_LIMIT,
   ImageGenerationError,
+  conversationOwnedBy,
   generateByokImageSet,
   generateImages,
   imagePriceMicros,
@@ -77,10 +78,8 @@ export async function POST(request: NextRequest) {
     generate = () => generateImages({ ...target, model: platform });
   }
 
-  if (conversationId) {
-    const conversation = await auth.db.tx(trx => trx.selectFrom('conversations').select('id')
-      .where('id', '=', conversationId as string).where('user_id', '=', auth.user.id).executeTakeFirst());
-    if (!conversation) return jsonError('对话不存在', 404);
+  if (conversationId && !(await conversationOwnedBy(auth.db, auth.user.id, conversationId as string))) {
+    return jsonError('对话不存在', 404);
   }
 
   try {

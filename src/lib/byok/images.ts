@@ -4,7 +4,7 @@
  */
 import { ByokRequestError, byokEndpoint, byokFailureFromMessage, type ByokFailure } from './config';
 import { GENERATED_IMAGE_MAX_BYTES } from '@/lib/images/generated';
-import { BYOK_RESPONSE_BODY_TOO_LARGE, readByokResponse, readByokResponseText } from './response';
+import { BYOK_RESPONSE_BODY_TOO_LARGE, PROVIDER_ERROR_MAX_BYTES, readByokResponse, readByokResponseText } from './response';
 
 /** OpenAI's GPT image models always answer in base64 and reject `response_format`. */
 const BASE64_ONLY_PREFIXES = ['chatgpt-image-', 'gpt-image-'];
@@ -28,8 +28,8 @@ export interface ByokImageRequest {
 }
 
 type ImagesResponse = { data?: Array<{ b64_json?: unknown; url?: unknown }> };
-const IMAGE_RESPONSE_MAX_BYTES = Math.ceil(GENERATED_IMAGE_MAX_BYTES / 3) * 4 + 1024 * 1024;
-const PROVIDER_ERROR_MAX_BYTES = 64 * 1024;
+const MAX_BASE64_LENGTH = Math.ceil(GENERATED_IMAGE_MAX_BYTES / 3) * 4;
+const IMAGE_RESPONSE_MAX_BYTES = MAX_BASE64_LENGTH + 1024 * 1024;
 
 export function sniffImageType(bytes: Uint8Array): string | null {
   if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) return 'image/png';
@@ -39,7 +39,7 @@ export function sniffImageType(bytes: Uint8Array): string | null {
 }
 
 function base64Bytes(value: string): Uint8Array<ArrayBuffer> {
-  if (value.length > Math.ceil(GENERATED_IMAGE_MAX_BYTES / 3) * 4) throw new RangeError(BYOK_RESPONSE_BODY_TOO_LARGE);
+  if (value.length > MAX_BASE64_LENGTH) throw new RangeError(BYOK_RESPONSE_BODY_TOO_LARGE);
   const binary = atob(value);
   if (binary.length > GENERATED_IMAGE_MAX_BYTES) throw new RangeError(BYOK_RESPONSE_BODY_TOO_LARGE);
   const bytes = new Uint8Array(binary.length);

@@ -1,8 +1,7 @@
 import type { ScopedDb } from '@/lib/db/context.server';
 import { DEFAULT_EMBEDDING_MODEL_ID } from '@/lib/ai/ai-config';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
-import { applySourceToModel, getOrderedModelSources } from '@/lib/ai/source-runtime';
-import { sourceApiKeyOrNone } from '@/lib/ai/gateway-secrets.server';
+import { openModelSources } from '@/lib/ai/gateway-secrets.server';
 import type { AIModelConfig } from '@/types';
 
 export const EMBEDDING_MODELS = {
@@ -66,15 +65,7 @@ export async function checkVectorIndexExists(dim: number, db: ScopedDb): Promise
 }
 
 async function callGatewayEmbedding(text: string, modelConfig: AIModelConfig): Promise<number[] | null> {
-    const sources = getOrderedModelSources(modelConfig);
-
-    for (const source of sources) {
-        const runtimeConfig = applySourceToModel(modelConfig, source);
-        const apiKey = sourceApiKeyOrNone(runtimeConfig);
-        if (!apiKey || !runtimeConfig.apiUrl) {
-            continue;
-        }
-
+    for (const { config: runtimeConfig, apiKey } of openModelSources(modelConfig)) {
         const response = await fetch(runtimeConfig.apiUrl, {
             method: 'POST',
             headers: {
@@ -101,9 +92,7 @@ async function callGatewayEmbedding(text: string, modelConfig: AIModelConfig): P
     return null;
 }
 
-export async function generateEmbedding(text: string): Promise<number[] | null> {
-    const config = await getEmbeddingConfig();
-
+async function embedWithConfig(config: EmbeddingConfig, text: string): Promise<number[] | null> {
     try {
         switch (config.provider) {
             case 'gateway':
@@ -119,6 +108,10 @@ export async function generateEmbedding(text: string): Promise<number[] | null> 
     }
 }
 
+export async function generateEmbedding(text: string): Promise<number[] | null> {
+    return embedWithConfig(await getEmbeddingConfig(), text);
+}
+
 export async function generateEmbeddings(texts: string[]): Promise<{
     vectors: Array<number[] | null>;
     model: string;
@@ -130,7 +123,7 @@ export async function generateEmbeddings(texts: string[]): Promise<{
     const batchSize = 100;
     for (let i = 0; i < texts.length; i += batchSize) {
         const batch = texts.slice(i, i + batchSize);
-        const batchVectors = await Promise.all(batch.map((text) => generateEmbedding(text)));
+        const batchVectors = await Promise.all(batch.map((text) => embedWithConfig(config, text)));
         vectors.push(...batchVectors);
     }
 

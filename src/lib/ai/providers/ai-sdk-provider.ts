@@ -37,6 +37,18 @@ export interface AIProviderOptions {
     onUsage?: (usage: TokenUsage, estimated: boolean) => void | Promise<void>;
 }
 
+/** An OpenAI-compatible client for the model's gateway: the caller's key, or the one saved for its source. */
+function gatewayProvider(
+    config: AIModelConfig,
+    options: { apiKey?: string; fetch: typeof globalThis.fetch },
+) {
+    const apiKey = options.apiKey ?? resolveSourceApiKey(config);
+    if (!apiKey) {
+        throw new Error(`${config.name || config.id} 的网关没有保存密钥`);
+    }
+    return createOpenAI({ apiKey, baseURL: normalizeGatewayBaseUrl(config.apiUrl), fetch: options.fetch });
+}
+
 /**
  * 根据 AIModelConfig 动态创建 AI SDK provider 实例和模型
  *
@@ -46,18 +58,11 @@ export function createModelFromConfig(
     config: AIModelConfig,
     options?: { reasoning?: boolean; reasoningEffort?: AIReasoningEffort; apiKey?: string; fetch?: typeof globalThis.fetch },
 ): LanguageModel {
-    const apiKey = options?.apiKey ?? resolveSourceApiKey(config);
-    if (!apiKey) {
-        throw new Error(`${config.name || config.id} 的网关没有保存密钥`);
-    }
-
-    const baseURL = normalizeBaseUrl(config.apiUrl);
     const requestParameters = buildModelRequestParameters(config, options);
     // 平台网关与用户自己的模型服务都收到同一个 User-Agent。
     const baseFetch = withModelUserAgent(options?.fetch ?? gatewayFetch);
-    const provider = createOpenAI({
-        apiKey,
-        baseURL,
+    const provider = gatewayProvider(config, {
+        apiKey: options?.apiKey,
         fetch: Object.keys(requestParameters).length ? async (input, init) => {
             if (typeof init?.body !== 'string') return baseFetch(input, init);
             const body = JSON.parse(init.body) as Record<string, unknown>;
@@ -77,13 +82,8 @@ export function createImageModelFromConfig(
     config: AIModelConfig,
     options?: { apiKey?: string; fetch?: typeof globalThis.fetch },
 ): ImageModel {
-    const apiKey = options?.apiKey ?? resolveSourceApiKey(config);
-    if (!apiKey) {
-        throw new Error(`${config.name || config.id} 的网关没有保存密钥`);
-    }
-    const provider = createOpenAI({
-        apiKey,
-        baseURL: normalizeBaseUrl(config.apiUrl),
+    const provider = gatewayProvider(config, {
+        apiKey: options?.apiKey,
         fetch: withModelUserAgent(options?.fetch ?? gatewayFetch),
     });
     return provider.image(config.modelId);
@@ -371,14 +371,4 @@ async function fetchWithGatewayHeaders(
 /** 平台网关的请求：自报身份、按是否流式声明 Accept。 */
 export function gatewayFetch(url: string | URL | Request, init?: RequestInit): Promise<Response> {
     return fetchWithGatewayHeaders(url, init);
-}
-
-/**
- * 标准化 baseURL：
- * - AI SDK createOpenAI 内部会拼 /chat/completions
- * - 如果用户配置的 URL 包含完整路径，截掉
- * - 如果 URL 不含 /v1，补上（NewAPI 等网关需要 /v1 前缀）
- */
-function normalizeBaseUrl(apiUrl: string): string {
-    return normalizeGatewayBaseUrl(apiUrl);
 }

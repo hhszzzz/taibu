@@ -222,6 +222,11 @@ export function byokKeyHint(key: string): string {
   return key.length >= 12 ? `${key.slice(0, 3)}…${key.slice(-4)}` : `…${key.slice(-2)}`;
 }
 
+/** Why a trimmed key cannot be saved, or null when it can. */
+export function byokKeyFormatError(key: string): string | null {
+  return key.length > BYOK_KEY_MAX || /\s/u.test(key) ? 'API Key 格式无效' : null;
+}
+
 // ─── Effort ───
 
 /** The levels the effort menu offers: the known ones, or all six when nothing is known. */
@@ -430,7 +435,8 @@ function parseKey(value: unknown): ByokKeyInput {
   if (value.value === undefined || value.value === null) return { store: true };
   if (typeof value.value !== 'string' || !value.value.trim()) throw new ByokInputError('请填写 API Key');
   const key = value.value.trim();
-  if (key.length > BYOK_KEY_MAX || /\s/u.test(key)) throw new ByokInputError('API Key 格式无效');
+  const formatError = byokKeyFormatError(key);
+  if (formatError) throw new ByokInputError(formatError);
   return { store: true, value: key };
 }
 

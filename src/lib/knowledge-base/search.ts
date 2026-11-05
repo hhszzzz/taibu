@@ -3,7 +3,7 @@ import 'server-only';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { callReranker } from '@/lib/knowledge-base/reranker';
 import { checkVectorIndexExists, generateEmbedding, getEmbeddingDimensionAsync } from '@/lib/knowledge-base/embedding-config';
-import type { KnowledgeSearchPersistence, RankedResult, SearchCandidate, SearchOptions } from '@/lib/knowledge-base/types';
+import type { KnowledgeSearchPersistence, KnowledgeSearchRow, RankedResult, SearchCandidate, SearchOptions } from '@/lib/knowledge-base/types';
 import { createKnowledgeBasePersistence } from '@/lib/knowledge-base/persistence.server';
 import { KNOWLEDGE_QUERY_MAX_LENGTH } from './types';
 
@@ -47,6 +47,11 @@ function normalizeScore(method: 'fts' | 'trigram' | 'vector', rawScore: number):
         case 'vector':
             return 1 - rawScore / 2;
     }
+}
+
+/** A stage's rows as candidates, scored by the stage's own normalization. */
+function toCandidates(rows: KnowledgeSearchRow[], method: SearchCandidate['method']): SearchCandidate[] {
+    return rows.map(({ rawScore, ...row }) => ({ ...row, method, score: normalizeScore(method, rawScore) }));
 }
 
 function deduplicateResults(results: SearchCandidate[]): SearchCandidate[] {
@@ -110,40 +115,19 @@ async function applyKnowledgeBaseWeights(
     const kbIds = Array.from(new Set(candidates.map(c => c.kbId).filter(Boolean)));
     if (kbIds.length === 0) return { candidates, highKbIds: [] };
 
-    // 检查缓存
     const cacheKey = effectiveUserId;
+    const now = Date.now();
     const cached = kbWeightCache.get(cacheKey);
-    let weightMap: Map<string, string>;
-
-    // 检查缓存是否有效且包含所有需要的 kbIds
-    const cacheValid = cached && Date.now() - cached.timestamp < KB_WEIGHT_CACHE_TTL;
-    const missingKbIds = cacheValid
-        ? kbIds.filter(id => !cached.weights.has(id))
-        : kbIds;
-
-    if (cacheValid && missingKbIds.length === 0) {
-        // 缓存完全命中
-        weightMap = cached.weights;
-    } else if (cacheValid && missingKbIds.length > 0) {
-        // 缓存部分命中，补充查询缺失的 kbIds
+    const fresh = cached !== undefined && now - cached.timestamp < KB_WEIGHT_CACHE_TTL;
+    const weightMap = new Map<string, string>(fresh && cached ? cached.weights : []);
+    const missingKbIds = kbIds.filter(id => !weightMap.has(id));
+    if (missingKbIds.length > 0) {
         const kbRows = await persistence.loadWeights(effectiveUserId, missingKbIds);
-
-        // 合并到现有缓存
-        weightMap = new Map(cached.weights);
-        (kbRows || []).forEach((kb: { id: string; weight: string }) => {
+        for (const kb of kbRows || []) {
             weightMap.set(kb.id, kb.weight);
-        });
-        kbWeightCache.set(cacheKey, { weights: weightMap, timestamp: cached.timestamp });
-        pruneKbWeightCache();
-    } else {
-        // 缓存未命中，完整查询
-        const kbRows = await persistence.loadWeights(effectiveUserId, kbIds);
-
-        weightMap = new Map<string, string>();
-        (kbRows || []).forEach((kb: { id: string; weight: string }) => {
-            weightMap.set(kb.id, kb.weight);
-        });
-        kbWeightCache.set(cacheKey, { weights: weightMap, timestamp: Date.now() });
+        }
+        // A partial hit keeps the entry's original expiry; a full miss starts a new one.
+        kbWeightCache.set(cacheKey, { weights: weightMap, timestamp: fresh && cached ? cached.timestamp : now });
         pruneKbWeightCache();
     }
 
@@ -203,11 +187,7 @@ async function searchByFTS(
     config: SearchConfigInternal
 ): Promise<SearchCandidate[]> {
     const rows = await persistence.searchFts(query, kbIds, limit, config.ftsConfig);
-    return rows.map(({ rawScore, ...row }) => ({
-        ...row,
-        method: 'fts',
-        score: normalizeScore('fts', rawScore),
-    }));
+    return toCandidates(rows, 'fts');
 }
 
 // Trigram 近似检索：在 FTS 结果不足时补充模糊匹配
@@ -219,11 +199,7 @@ async function searchByTrigram(
     config: SearchConfigInternal
 ): Promise<SearchCandidate[]> {
     const rows = await persistence.searchTrigram(query, kbIds, limit, config.trigramThreshold);
-    return rows.map(({ rawScore, ...row }) => ({
-        ...row,
-        method: 'trigram',
-        score: normalizeScore('trigram', rawScore),
-    }));
+    return toCandidates(rows, 'trigram');
 }
 
 async function searchByVector(
@@ -242,19 +218,7 @@ async function searchByVector(
     if (!queryVector) throw new Error('Query embedding unavailable');
 
     const rows = await persistence.searchVector(queryVector, kbIds, limit, dim);
-    return rows.map(({ rawScore, ...row }) => ({
-        ...row,
-        method: 'vector',
-        score: normalizeScore('vector', rawScore),
-    }));
-}
-
-export async function rerankCandidates(
-    query: string,
-    candidates: SearchCandidate[],
-    topK: number = 5
-): Promise<RankedResult[]> {
-    return await callReranker(query, candidates, topK);
+    return toCandidates(rows, 'vector');
 }
 
 export async function searchKnowledge(query: string, options: SearchOptions = {}): Promise<SearchCandidate[] | RankedResult[]> {
@@ -304,7 +268,7 @@ export async function searchKnowledgeWithPersistence(query: string, userId: stri
 
     if (weightedCandidates.length > Math.max(5, topK)) {
         try {
-            return await rerankCandidates(query, weightedCandidates, topK);
+            return await callReranker(query, weightedCandidates, topK);
         } catch {
             console.warn('[knowledge-base] enrichment failed', { stage: 'rerank' });
             return weightedCandidates;

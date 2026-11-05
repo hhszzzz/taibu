@@ -1,34 +1,25 @@
 /**
- * 顶部 Header 组件
- * 
- * 设计说明：
- * - 移动端：根据当前路由动态显示功能图标和名称
- * - 桌面端：显示用户信息和操作按钮
+ * 顶部 Header 组件（仅移动端；桌面端导航由 Sidebar 承担）
+ *
+ * - 根据当前路由动态显示功能图标和名称
  * - 集成认证状态显示
  */
 'use client';
 
-import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import {
-    User,
-    LogIn,
     ChevronLeft,
     MoreHorizontal,
     Moon,
     Sun,
     Megaphone,
 } from 'lucide-react';
-import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
-import { ThemeToggle } from '@/components/ui/ThemeToggle';
 import { useTheme } from '@/components/ui/ThemeProvider';
-import { AuthModal } from '@/components/auth/AuthModal';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useHeaderMenuSafe } from '@/components/layout/HeaderMenuContext';
 import { useAnnouncementCenterSafe } from '@/components/providers/AnnouncementPopupHost';
-import { SettingsCenterLink } from '@/components/settings/SettingsCenterLink';
 import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
 import { getSettingsCenterRouteTarget, isAdminSettingsCenterTab } from '@/lib/settings-center';
 
@@ -92,6 +83,9 @@ const SUB_PAGE_FALLBACKS: Record<string, string> = {
     '/terms': getSettingsCenterRouteTarget('help'),
 };
 
+/** Longest prefix first, so sub-pages win over their parent routes. */
+const ROUTE_LABEL_KEYS = Object.keys(ROUTE_LABELS).sort((a, b) => b.length - a.length);
+
 // 需要显示返回按钮的子页面路径模式
 const SUB_PAGE_PATTERNS = [
     '/user/notifications',
@@ -131,7 +125,6 @@ export function Header() {
     const pathname = usePathname();
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
-    const [showAuthModal, setShowAuthModal] = useState(false);
     const { user } = useSessionSafe();
     const { openAnnouncementCenter } = useAnnouncementCenterSafe();
     const headerMenuContext = useHeaderMenuSafe();
@@ -143,9 +136,7 @@ export function Header() {
     // 获取当前页面标题
     const getPageTitle = () => {
         if (!pathname) return '太卜';
-        // 优先匹配更长的路径
-        const sortedKeys = Object.keys(ROUTE_LABELS).sort((a, b) => b.length - a.length);
-        for (const key of sortedKeys) {
+        for (const key of ROUTE_LABEL_KEYS) {
             if (pathname.startsWith(key)) {
                 return ROUTE_LABELS[key];
             }
@@ -192,19 +183,19 @@ export function Header() {
                     <IconButton
                         label="返回上一页"
                         onClick={handleBack}
-                        className="h-11 w-11 rounded-full text-foreground lg:hidden"
+                        className="h-11 w-11 rounded-full text-foreground"
                     >
                         <ChevronLeft className="h-[22px] w-[22px]" strokeWidth={1.8} aria-hidden="true" />
                     </IconButton>
                 ) : (
-                    <div className="w-11 lg:hidden" />
+                    <div className="w-11" />
                 )}
 
-                <h1 className="max-w-[calc(100%-7rem)] truncate font-display text-[17px] font-medium text-foreground lg:hidden">
+                <h1 className="max-w-[calc(100%-7rem)] truncate font-display text-[17px] font-medium text-foreground">
                     {pageTitle}
                 </h1>
 
-                <div className="lg:hidden">
+                <div>
                     <Menu>
                         <MenuTrigger className="inline-flex h-11 w-11 items-center justify-center rounded-full text-foreground" aria-label="打开菜单">
                             <MoreHorizontal className="h-[22px] w-[22px]" strokeWidth={1.8} aria-hidden="true" />
@@ -231,45 +222,7 @@ export function Header() {
                         </MenuContent>
                     </Menu>
                 </div>
-
-                {/* 桌面端占位 */}
-                <div className="hidden lg:block" />
-
-                {/* 右侧操作区 - 移动端隐藏 */}
-                <div className="hidden lg:flex items-center gap-2">
-                    {/* 主题切换按钮 */}
-                    <ThemeToggle />
-
-                    {/* 用户状态 */}
-                    {user ? (
-                        // 已登录：显示用户头像链接
-                        <SettingsCenterLink
-                            tab="profile"
-                            className="
-                                p-2 rounded-lg
-                                text-foreground-secondary
-                                hover:bg-background-secondary hover:text-foreground
-                                transition-all duration-200
-                            "
-                            title="账户"
-                        >
-                            <User className="w-5 h-5" />
-                        </SettingsCenterLink>
-                    ) : (
-                        // 未登录：显示登录按钮
-                        <Button size="sm" onClick={() => setShowAuthModal(true)}>
-                            <LogIn className="w-4 h-4" aria-hidden="true" />
-                            <span className="hidden sm:inline">登录</span>
-                        </Button>
-                    )}
-                </div>
             </header>
-
-            {/* 登录弹窗 */}
-            <AuthModal
-                isOpen={showAuthModal}
-                onClose={() => setShowAuthModal(false)}
-            />
         </>
     );
 }

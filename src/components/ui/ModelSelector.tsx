@@ -161,14 +161,14 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         onModelChange(fallback.id);
     }, [listsSettled, models, onModelChange, platformModels, selectedModel, showToast]);
     const current = models.find(model => model.id === selectedModel) ?? models[0];
-    const reasoningAllowed = !!current?.supportsReasoning;
+    const reasoningSupported = !!current?.supportsReasoning;
     useEffect(() => {
         if (!current || !onReasoningChange) return;
-        if (!reasoningAllowed) {
+        if (!reasoningSupported) {
             if (reasoningEnabled) onReasoningChange(false);
             if (reasoningEffort) onReasoningEffortChange?.(null);
         } else if (current.isReasoningDefault && !reasoningEnabled) onReasoningChange(true);
-    }, [current, reasoningAllowed, reasoningEnabled, reasoningEffort, onReasoningChange, onReasoningEffortChange]);
+    }, [current, reasoningSupported, reasoningEnabled, reasoningEffort, onReasoningChange, onReasoningEffortChange]);
     // 主模型只负责汇总，不作为协作成员：切换主模型时把旧主模型从成员里剔除；已删除的自定义模型也一并去掉。
     const subCollaborators = useMemo(() => collaborators.filter(member => member.model !== current?.id
         && (!listsSettled || !isByokRef(member.model) || ownChoices.some(model => model.id === member.model))), [collaborators, current?.id, listsSettled, ownChoices]);
@@ -215,7 +215,6 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         if (model.own && !model.own.ready) { setKeyModel(model.own); return; }
         applyModel(model);
     };
-    const reasoningSupported = !!current?.supportsReasoning;
     const effortSupported = reasoningSupported && !!current.thinkingLevels?.length && !!onReasoningEffortChange;
     const effectiveEffort = modelEffort(current, reasoningEffort);
     const effortOptions = EFFORT_OPTIONS.filter(option => current?.thinkingLevels?.includes(option.value));

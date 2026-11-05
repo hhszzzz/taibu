@@ -125,7 +125,6 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     const [deleteLoading, setDeleteLoading] = useState(false);
     const [sidebarTargetCount, setSidebarTargetCount] = useState<number | null>(null);
     const listViewportRef = useRef<HTMLDivElement | null>(null);
-    const pinnedBlockRef = useRef<HTMLDivElement | null>(null);
 
     // Determine active conversation from URL search params
     const activeId = useMemo(() => {
@@ -373,7 +372,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
             {/* 对话区域 — 紧凑内嵌在 Chat 项下方；只有「最近使用」这一段滚动，「已置顶」停在上面。 */}
             <div className={`${wantsDate ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
                 {wantsDate && pinnedConversations.length > 0 ? (
-                    <div className="chat-nav-pinned-block" ref={pinnedBlockRef}>
+                    <div className="chat-nav-pinned-block">
                         <section className="chat-nav-group" aria-label="已置顶">
                             <div className="chat-recents-head chat-pinned-head">
                                 <Button unstyled type="button" className="chat-recents-toggle" aria-expanded={pinnedOpen}

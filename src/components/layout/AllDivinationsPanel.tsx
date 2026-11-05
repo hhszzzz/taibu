@@ -2,13 +2,46 @@
 // 需要 useState（搜索词）+ 点击事件（固定/取消固定）
 
 import Link from 'next/link';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Pin, Search } from 'lucide-react';
-import { filterNavItems, groupDivinationItems, type NavItemDef } from '@/lib/navigation/registry';
+import { filterNavItems, groupDivinationItems, isNavHrefActive, type NavItemDef } from '@/lib/navigation/registry';
 import { IconButton } from '@/components/ui/IconButton';
 import { Input } from '@/components/ui/Input';
 
-const isActiveHref = (pathname: string | null, href: string) => pathname === href || !!pathname?.startsWith(`${href}/`);
+/** Row body shared by the grouped list and the fortune footer. */
+function DivinationRowContent({ item, active, pinned, onTogglePin, onNavigate, label }: {
+    item: NavItemDef;
+    active: boolean;
+    pinned: boolean;
+    onTogglePin: (id: string) => void;
+    onNavigate: () => void;
+    label: ReactNode;
+}) {
+    const Icon = item.icon;
+    return (
+        <>
+            <Link
+                href={item.href}
+                onClick={onNavigate}
+                aria-current={active ? 'page' : undefined}
+                className="all-divinations-item"
+            >
+                <span className="all-divinations-icon"><Icon size={18} aria-hidden="true" /></span>
+                {label}
+            </Link>
+            <IconButton
+                onClick={() => onTogglePin(item.id)}
+                aria-pressed={pinned}
+                label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
+                className="all-divinations-pin"
+                expand="none"
+                data-pinned={pinned || undefined}
+            >
+                <Pin size={13} fill={pinned ? 'currentColor' : 'none'} aria-hidden />
+            </IconButton>
+        </>
+    );
+}
 
 /**
  * "全部占术" flyout body：claude 菜单形态的分组列表（32px 行、28px 前导槽、悬停图钉）。
@@ -55,29 +88,16 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
                         <ul>
                             {group.items.map(item => {
                                 const pinned = pins.includes(item.id);
-                                const active = isActiveHref(pathname, item.href);
-                                const Icon = item.icon;
                                 return (
                                     <li key={item.id} className="all-divinations-row">
-                                        <Link
-                                            href={item.href}
-                                            onClick={onNavigate}
-                                            aria-current={active ? 'page' : undefined}
-                                            className="all-divinations-item"
-                                        >
-                                            <span className="all-divinations-icon"><Icon size={18} aria-hidden="true" /></span>
-                                            <span className="truncate">{item.label}</span>
-                                        </Link>
-                                        <IconButton
-                                            onClick={() => onTogglePin(item.id)}
-                                            aria-pressed={pinned}
-                                            label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
-                                            className="all-divinations-pin"
-                                            expand="none"
-                                            data-pinned={pinned || undefined}
-                                        >
-                                            <Pin size={13} fill={pinned ? 'currentColor' : 'none'} aria-hidden />
-                                        </IconButton>
+                                        <DivinationRowContent
+                                            item={item}
+                                            active={isNavHrefActive(pathname, item.href)}
+                                            pinned={pinned}
+                                            onTogglePin={onTogglePin}
+                                            onNavigate={onNavigate}
+                                            label={<span className="truncate">{item.label}</span>}
+                                        />
                                     </li>
                                 );
                             })}
@@ -89,30 +109,17 @@ export function AllDivinationsPanel({ items, pins, pathname, onTogglePin, onNavi
             {fortuneItems.length > 0 ? (
                 <div className="all-divinations-fortune">
                     {fortuneItems.map(item => {
-                        const Icon = item.icon;
-                        const active = isActiveHref(pathname, item.href);
                         const pinned = pins.includes(item.id);
                         return (
                             <div key={item.id} className="all-divinations-row">
-                                <Link
-                                    href={item.href}
-                                    onClick={onNavigate}
-                                    aria-current={active ? 'page' : undefined}
-                                    className="all-divinations-item"
-                                >
-                                    <span className="all-divinations-icon"><Icon size={18} aria-hidden="true" /></span>
-                                    <span>{item.description ?? item.label}</span>
-                                </Link>
-                                <IconButton
-                                    onClick={() => onTogglePin(item.id)}
-                                    aria-pressed={pinned}
-                                    label={pinned ? `取消固定${item.label}` : `固定${item.label}到侧栏`}
-                                    className="all-divinations-pin"
-                                    expand="none"
-                                    data-pinned={pinned || undefined}
-                                >
-                                    <Pin size={13} fill={pinned ? 'currentColor' : 'none'} aria-hidden />
-                                </IconButton>
+                                <DivinationRowContent
+                                    item={item}
+                                    active={isNavHrefActive(pathname, item.href)}
+                                    pinned={pinned}
+                                    onTogglePin={onTogglePin}
+                                    onNavigate={onNavigate}
+                                    label={<span>{item.description ?? item.label}</span>}
+                                />
                             </div>
                         );
                     })}

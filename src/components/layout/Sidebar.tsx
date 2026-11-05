@@ -25,7 +25,7 @@ import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButt
 import { VersionChip } from '@/components/layout/VersionChip';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
-import { getSidebarNavItems, getSidebarToolItems, toFeatureId, type NavItemDef } from '@/lib/navigation/registry';
+import { getSidebarNavItems, getSidebarToolItems, isNavHrefActive, toFeatureId, type NavItemDef } from '@/lib/navigation/registry';
 import { resolveSidebarPinnedIds, useSidebarPins } from '@/lib/navigation/sidebar-pins';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { AllDivinationsPanel } from '@/components/layout/AllDivinationsPanel';
@@ -49,8 +49,6 @@ const ITEM_ACTIVE = 'bg-[var(--df-selected)] text-foreground';
 const SECTION_LABEL = 'px-1.5 pt-2 pb-1.5 text-[13px] font-normal text-foreground-tertiary';
 /** Opens the global conversation search (ConversationSearchHost listens for this event; ⌘K also works). */
 const openConversationSearch = () => window.dispatchEvent(new Event('taibu:search'));
-
-const isActivePath = (pathname: string | null, href: string) => pathname === href || !!pathname?.startsWith(href + '/');
 
 // 侧栏宽度拖拽 = 克隆站 shell/sidebar 的 separator：240–440、双击复位 288、键盘 ←/→ 每次 16。
 const SIDEBAR_WIDTH_KEY = 'taibu:sidebar-width';
@@ -205,7 +203,7 @@ function SidebarInner() {
         .filter((item): item is NavItemDef => !!item), [filteredNavItems, pinnedIds]);
     const pinnedIdSet = useMemo(() => new Set(pinnedNavItems.map((item) => item.id)), [pinnedNavItems]);
     const transientNavItem = useMemo(() => filteredNavItems
-        .find((item) => !pinnedIdSet.has(item.id) && isActivePath(pathname, item.href)) ?? null, [filteredNavItems, pathname, pinnedIdSet]);
+        .find((item) => !pinnedIdSet.has(item.id) && isNavHrefActive(pathname, item.href)) ?? null, [filteredNavItems, pathname, pinnedIdSet]);
     const allActive = !!transientNavItem;
     const closeAll = useCallback(() => setAllOpen(false), []);
 
@@ -286,7 +284,7 @@ function SidebarInner() {
                     <ul className="space-y-0.5">
                         {pinnedNavItems.map((item) => (
                             <li key={item.id}>
-                                <SidebarNavLink item={item} active={isActivePath(pathname, item.href)} />
+                                <SidebarNavLink item={item} active={isNavHrefActive(pathname, item.href)} />
                             </li>
                         ))}
                         {transientNavItem ? (

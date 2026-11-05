@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useRouter } from 'next/navigation';
 import {
     Bell,
@@ -63,6 +63,25 @@ function formatAnnouncementDate(dateStr: string) {
     const date = new Date(dateStr);
     const pad = (value: number) => String(value).padStart(2, '0');
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+/** Infinite-scroll sentinel shared by the notification and announcement lists. */
+function LoadMoreSentinel({ sentinelRef, loading, label }: {
+    sentinelRef: RefObject<HTMLDivElement | null>;
+    loading: boolean;
+    label: string;
+}) {
+    return (
+        <div ref={sentinelRef} className="py-3 flex justify-center">
+            {loading ? (
+                <div className="flex items-center gap-2 text-xs text-foreground-secondary">
+                    <SoundWaveLoader variant="inline" />
+                </div>
+            ) : (
+                <div className="text-xs text-foreground-secondary">{label}</div>
+            )}
+        </div>
+    );
 }
 
 export function SidebarAnnouncementCenter({
@@ -455,15 +474,7 @@ export function SidebarAnnouncementCenter({
                                         </Button>
                                     ))}
                                     {notificationHasMore && (
-                                        <div ref={notificationSentinelRef} className="py-3 flex justify-center">
-                                            {notificationLoadingMore ? (
-                                                <div className="flex items-center gap-2 text-xs text-foreground-secondary">
-                                                    <SoundWaveLoader variant="inline" />
-                                                </div>
-                                            ) : (
-                                                <div className="text-xs text-foreground-secondary">继续下滑加载更多通知</div>
-                                            )}
-                                        </div>
+                                        <LoadMoreSentinel sentinelRef={notificationSentinelRef} loading={notificationLoadingMore} label="继续下滑加载更多通知" />
                                     )}
                                 </div>
                             </div>
@@ -498,15 +509,7 @@ export function SidebarAnnouncementCenter({
                                     </div>
                                 ))}
                                 {announcementHasMore && (
-                                    <div ref={announcementSentinelRef} className="py-3 flex justify-center">
-                                        {announcementLoadingMore ? (
-                                            <div className="flex items-center gap-2 text-xs text-foreground-secondary">
-                                                <SoundWaveLoader variant="inline" />
-                                            </div>
-                                        ) : (
-                                            <div className="text-xs text-foreground-secondary">继续下滑加载更多公告</div>
-                                        )}
-                                    </div>
+                                    <LoadMoreSentinel sentinelRef={announcementSentinelRef} loading={announcementLoadingMore} label="继续下滑加载更多公告" />
                                 )}
                             </div>
                         </div>

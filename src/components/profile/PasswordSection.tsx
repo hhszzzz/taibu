@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useUnsavedSettingsGuard } from '@/lib/hooks/useUnsavedSettingsGuard';
 import { Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
@@ -12,6 +12,47 @@ import { VerificationCodeInput } from '@/components/auth/VerificationCodeInput';
 import { SettingsRow } from '@/components/settings/SettingsControls';
 
 type PasswordChangeStep = 'idle' | 'verify' | 'set-password';
+
+/** Label + masked input + visibility toggle shared by the new and confirm fields. */
+function PasswordInput({ id, label, value, onChange, show, onToggleShow, placeholder, invalid, error, hint }: {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    show: boolean;
+    onToggleShow: () => void;
+    placeholder: string;
+    invalid?: boolean;
+    error?: string;
+    hint?: ReactNode;
+}) {
+    return (
+        <div className="space-y-2">
+            <label htmlFor={id} className="text-[13px] text-foreground-secondary">{label}</label>
+            <div className="relative">
+                <Input
+                    id={id}
+                    type={show ? 'text' : 'password'}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={placeholder}
+                    aria-invalid={invalid}
+                    className="pr-11"
+                />
+                <IconButton
+                    label={show ? '隐藏密码' : '显示密码'}
+                    size="sm"
+                    className="absolute right-2 top-1/2 -translate-y-1/2"
+                    onClick={onToggleShow}
+                >
+                    {show ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
+                </IconButton>
+            </div>
+            {hint}
+            {error ? <p className="text-xs text-danger">{error}</p> : null}
+        </div>
+    );
+}
 
 export function PasswordSection({
     email,
@@ -196,54 +237,28 @@ export function PasswordSection({
                 <div className="settings-card mt-1 space-y-4">
                     <p className="text-sm text-foreground-secondary">身份验证成功，请设置新密码</p>
 
-                    <div className="space-y-2">
-                        <label htmlFor="settings-new-password" className="text-[13px] text-foreground-secondary">新密码</label>
-                        <div className="relative">
-                            <Input
-                                id="settings-new-password"
-                                type={showNewPassword ? 'text' : 'password'}
-                                value={newPassword}
-                                onChange={(e) => setNewPassword(e.target.value)}
-                                placeholder="设置新密码"
-                                className="pr-11"
-                            />
-                            <IconButton
-                                label={showNewPassword ? '隐藏密码' : '显示密码'}
-                                size="sm"
-                                className="absolute right-2 top-1/2 -translate-y-1/2"
-                                onClick={() => setShowNewPassword(!showNewPassword)}
-                            >
-                                {showNewPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                            </IconButton>
-                        </div>
-                        <PasswordStrengthIndicator password={newPassword} />
-                    </div>
+                    <PasswordInput
+                        id="settings-new-password"
+                        label="新密码"
+                        value={newPassword}
+                        onChange={setNewPassword}
+                        show={showNewPassword}
+                        onToggleShow={() => setShowNewPassword(!showNewPassword)}
+                        placeholder="设置新密码"
+                        hint={<PasswordStrengthIndicator password={newPassword} />}
+                    />
 
-                    <div className="space-y-2">
-                        <label htmlFor="settings-confirm-password" className="text-[13px] text-foreground-secondary">确认新密码</label>
-                        <div className="relative">
-                            <Input
-                                id="settings-confirm-password"
-                                type={showConfirmPassword ? 'text' : 'password'}
-                                value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
-                                placeholder="再次输入新密码"
-                                aria-invalid={!!confirmPassword && newPassword !== confirmPassword}
-                                className="pr-11"
-                            />
-                            <IconButton
-                                label={showConfirmPassword ? '隐藏密码' : '显示密码'}
-                                size="sm"
-                                className="absolute right-2 top-1/2 -translate-y-1/2"
-                                onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                            >
-                                {showConfirmPassword ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
-                            </IconButton>
-                        </div>
-                        {confirmPassword && newPassword !== confirmPassword && (
-                            <p className="text-xs text-danger">两次输入的密码不一致</p>
-                        )}
-                    </div>
+                    <PasswordInput
+                        id="settings-confirm-password"
+                        label="确认新密码"
+                        value={confirmPassword}
+                        onChange={setConfirmPassword}
+                        show={showConfirmPassword}
+                        onToggleShow={() => setShowConfirmPassword(!showConfirmPassword)}
+                        placeholder="再次输入新密码"
+                        invalid={Boolean(confirmPassword) && newPassword !== confirmPassword}
+                        error={confirmPassword && newPassword !== confirmPassword ? '两次输入的密码不一致' : undefined}
+                    />
 
                     {message}
 

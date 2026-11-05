@@ -68,6 +68,27 @@ const MENU_ICON_CLASS = 'h-[18px] w-[18px] shrink-0 text-foreground-secondary';
 const PROJECT_REPO_URL = 'https://github.com/hhszzzz/taibu';
 const PROJECT_ISSUES_URL = 'https://docs.qq.com/smartsheet/DS3JSQ0dHTUdrVWFh';
 
+/** Name, optional balance and the menu chevron shared by both trigger appearances. */
+function AccountSummary({ displayName, billingEnabled, balanceLabel, chevronSize }: {
+  displayName: string;
+  billingEnabled: boolean;
+  balanceLabel: string;
+  chevronSize: number;
+}) {
+  return (
+    <>
+      <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
+        <span className="truncate font-medium text-foreground">{displayName}</span>
+        {billingEnabled ? <>
+          <span aria-hidden="true" className="text-foreground-tertiary">·</span>
+          <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
+        </> : null}
+      </span>
+      <ChevronsUpDown size={chevronSize} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
+    </>
+  );
+}
+
 type UserMenuShortcut = {
   tab: Extract<SettingsCenterTab, 'general' | 'usage-log' | 'personalization' | 'charts' | 'help'>;
   label: string;
@@ -153,17 +174,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
           >
             <Avatar src={avatarUrl} alt={displayName} size={collapsed ? 34 : 24} round />
             {!collapsed ? (
-              <>
-                {/* claude 侧栏底账户行实测：头像 24、单行「名 · 计划」+ 12px chevron；整行留出 40px 呼吸。 */}
-                <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
-                  <span className="truncate font-medium text-foreground">{displayName}</span>
-                  {billingEnabled ? <>
-                    <span aria-hidden="true" className="text-foreground-tertiary">·</span>
-                    <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
-                  </> : null}
-                </span>
-                <ChevronsUpDown size={12} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
-              </>
+              <AccountSummary displayName={displayName} billingEnabled={billingEnabled} balanceLabel={balanceLabel} chevronSize={12} />
             ) : null}
           </MenuTrigger>
         ) : (
@@ -174,16 +185,7 @@ export function SidebarUserCard({ user, collapsed = false, appearance = 'card' }
           >
             <Avatar src={avatarUrl} alt={displayName} size={24} />
             {!collapsed ? (
-              <>
-                <span className="flex min-w-0 flex-1 items-baseline gap-1 text-[14px]">
-                  <span className="truncate font-medium text-foreground">{displayName}</span>
-                  {billingEnabled ? <>
-                    <span aria-hidden="true" className="text-foreground-tertiary">·</span>
-                    <span className="truncate tabular-nums text-foreground-secondary">{balanceLabel}</span>
-                  </> : null}
-                </span>
-                <ChevronsUpDown size={13} aria-hidden="true" className="flex-shrink-0 text-foreground-secondary" />
-              </>
+              <AccountSummary displayName={displayName} billingEnabled={billingEnabled} balanceLabel={balanceLabel} chevronSize={13} />
             ) : null}
           </MenuTrigger>
         )}

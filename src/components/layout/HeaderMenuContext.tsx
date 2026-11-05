@@ -30,16 +30,12 @@ export function HeaderMenuProvider({ children }: { children: ReactNode }) {
     const [menuItems, setMenuItemsState] = useState<HeaderMenuItem[]>([]);
     const [pageTitle, setPageTitle] = useState<string | null>(null);
 
-    const setMenuItems = useCallback((items: HeaderMenuItem[]) => {
-        setMenuItemsState(items);
-    }, []);
-
     const clearMenuItems = useCallback(() => {
         setMenuItemsState([]);
     }, []);
 
     return (
-        <HeaderMenuContext.Provider value={{ menuItems, setMenuItems, clearMenuItems, pageTitle, setPageTitle }}>
+        <HeaderMenuContext.Provider value={{ menuItems, setMenuItems: setMenuItemsState, clearMenuItems, pageTitle, setPageTitle }}>
             {children}
         </HeaderMenuContext.Provider>
     );

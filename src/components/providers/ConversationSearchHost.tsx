@@ -32,6 +32,8 @@ const FILTERS: Array<{ value: Filter; label: string }> = [
 ];
 const categoryLabel = (category: RecordCategory) => RECORD_CATEGORIES.find(item => item.value === category)?.label ?? '记录';
 const recordPreview = (content: string) => content.replace(/\s+/g, ' ').trim().slice(0, 90);
+/** Every search request gets its own 8s budget on top of the panel's abort signal. */
+const withSearchTimeout = (signal: AbortSignal) => AbortSignal.any([signal, AbortSignal.timeout(8000)]);
 
 type Entry =
     | { kind: 'conversation'; key: string; title: string; preview: string; item: Result }
@@ -61,7 +63,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
     useEffect(() => {
         if (!open || !userId) return;
         const controller = new AbortController();
-        void requestBrowserJson<{ results: Result[]; charts?: ChartResult[] }>('/api/search?q=', { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) })
+        void requestBrowserJson<{ results: Result[]; charts?: ChartResult[] }>('/api/search?q=', { signal: withSearchTimeout(controller.signal) })
             .then(response => {
                 if (controller.signal.aborted) return;
                 setResult(previous => previous?.query === '' && previous.results.length ? previous : { owner: userId, query: '', results: response.data?.results ?? [] });
@@ -73,7 +75,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
         if (!open || !query.trim() || !userId) return;
         const controller = new AbortController();
         const timeout = setTimeout(() => {
-            const signal = AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]);
+            const signal = withSearchTimeout(controller.signal);
             void requestBrowserJson<{ results: Result[]; charts?: ChartResult[] }>(`/api/search?q=${encodeURIComponent(query.trim())}`, { signal }).then(response => {
                 if (controller.signal.aborted) return;
                 setFailure({ owner: userId, query, message: response.error?.message ?? '' });
@@ -83,7 +85,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
             // 记录搜索是补充结果：失败时不遮蔽对话结果。
             void requestBrowserJson<{ records?: RecordResult[] }>(
                 `/api/records?search=${encodeURIComponent(query.trim())}&pageSize=8`,
-                { signal: AbortSignal.any([controller.signal, AbortSignal.timeout(8000)]) },
+                { signal: withSearchTimeout(controller.signal) },
             ).then(response => {
                 if (controller.signal.aborted) return;
                 setRecords({ owner: userId, query, results: response.data?.records ?? [] });

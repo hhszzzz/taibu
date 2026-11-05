@@ -32,15 +32,7 @@ export function useAppBootstrap(options?: { enabled?: boolean }) {
     ...(cachedData ? { initialData: cachedData } : {}),
   });
 
-  const data = useMemo<AppBootstrapData | null>(() => {
-    if (query.data) {
-      return query.data;
-    }
-    if (cachedData) {
-      return cachedData;
-    }
-    return null;
-  }, [cachedData, query.data]);
+  const data = query.data ?? cachedData ?? null;
 
   const hasBootstrapData = data !== null;
   const rawViewerState = useMemo(() => deriveAppBootstrapViewerState({

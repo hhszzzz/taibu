@@ -33,20 +33,12 @@ const nextConfig: NextConfig = {
   images: {
     // Local avatars are same-origin (`/api/files/avatars/...`); only external
     // avatar providers need remote patterns.
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'connect.linux.do',
-        port: '',
-        pathname: '/**',
-      },
-      {
-        protocol: 'https',
-        hostname: 'linux.do',
-        port: '',
-        pathname: '/**',
-      },
-    ],
+    remotePatterns: ['connect.linux.do', 'linux.do'].map((hostname) => ({
+      protocol: 'https' as const,
+      hostname,
+      port: '',
+      pathname: '/**',
+    })),
   },
   async headers() {
     return [

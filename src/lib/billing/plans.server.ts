@@ -1,7 +1,7 @@
 import 'server-only';
 
 import type { SubscriptionPlanRow } from '@/lib/db/billing-queries';
-import { systemDb, type ScopedDb } from '@/lib/db/context.server';
+import { systemDb, type ScopedDb, type ScopedDbTransaction } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { isInsufficientBalance } from './account.server';
 import {
@@ -35,9 +35,7 @@ function planColumns(input: SubscriptionPlanInput) {
 }
 
 /** Writes a plan's allowances; an update replaces the whole set. */
-type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
-
-function insertLimits(trx: Trx, planId: string, limits: readonly SubscriptionLimit[]) {
+function insertLimits(trx: ScopedDbTransaction, planId: string, limits: readonly SubscriptionLimit[]) {
     return trx.insertInto('subscription_plan_limits')
         .values(limits.map(limit => ({ plan_id: planId, period: limit.period, allowance_micros: limit.allowanceMicros })))
         .execute();

@@ -7,13 +7,11 @@
 
 import { NextRequest } from 'next/server';
 import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
-import type { ScopedDb } from '@/lib/db/context.server';
+import type { ScopedDbTransaction } from '@/lib/db/context.server';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
 
-type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
-
 /** The note list and its total share these date filters; both run in their own transaction. */
-function notesQuery(trx: Trx, userId: string, date: string | null, startDate: string | null, endDate: string | null) {
+function notesQuery(trx: ScopedDbTransaction, userId: string, date: string | null, startDate: string | null, endDate: string | null) {
     let query = trx.selectFrom('ming_notes').where('user_id', '=', userId);
     if (date) query = query.where('note_date', '=', date);
     if (startDate) query = query.where('note_date', '>=', startDate);

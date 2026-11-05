@@ -154,6 +154,14 @@ export function jsonOk<TPayload>(payload: TPayload, status = 200, headers?: Reco
     return NextResponse.json(payload, { status, headers });
 }
 
+/** Wraps a promise as `{ data, error }`, so callers can inspect failures without try/catch. */
+export function settlePromise<T>(promise: Promise<T>): Promise<{ data: T; error: null } | { data: null; error: unknown }> {
+    return promise.then(
+        (data) => ({ data, error: null }),
+        (error: unknown) => ({ data: null, error }),
+    );
+}
+
 export const SSE_HEADERS = {
     'Content-Type': 'text/event-stream',
     'Cache-Control': 'no-cache, no-transform',

@@ -1,6 +1,6 @@
 import 'server-only';
 import { randomUUID } from 'node:crypto';
-import type { ScopedDb } from '@/lib/db/context.server';
+import type { ScopedDb, ScopedDbTransaction } from '@/lib/db/context.server';
 import { arrayValue, json, lockTransactionKey } from '@/lib/db/sql-helpers';
 import { normalizeThinkingLevels } from '@/lib/ai/thinking';
 import {
@@ -45,7 +45,6 @@ export class ByokError extends Error {
 
 /** Namespace of the per-member connection quota lock (see lockTransactionKey). */
 const QUOTA_LOCK = 914;
-type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
 
 function modelView(row: ModelRow): ByokModelView {
   return {
@@ -89,7 +88,7 @@ function modelValues(userId: string, connectionId: string, model: ByokModelInput
  * Replaces a connection's models. A model keeps its row (and every reference to it) while its model ID and use stay the
  * same; one whose ID or use changed is a new model, so a swap of two IDs never collides on the unique pair.
  */
-async function replaceModels(trx: Trx, userId: string, connectionId: string, models: ByokModelInput[]) {
+async function replaceModels(trx: ScopedDbTransaction, userId: string, connectionId: string, models: ByokModelInput[]) {
   const existing = await trx.selectFrom('user_ai_models').select(['id', 'model_id', 'usage'])
     .where('connection_id', '=', connectionId).where('user_id', '=', userId).execute();
   const keep = new Map<string, string>();

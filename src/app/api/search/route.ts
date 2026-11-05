@@ -1,15 +1,8 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, settlePromise } from '@/lib/api-utils';
 import { escapeLike } from '@/lib/db/sql-helpers';
 
 interface ChartRow { id: string; name: string; birth_date: string; birth_time: string | null }
-
-function settle<T>(promise: Promise<T>) {
-    return promise.then(
-        (data) => ({ data, error: null }),
-        (error: unknown) => ({ data: null, error }),
-    );
-}
 
 /** 命盘检索与对话检索并行；命盘查询失败只省略该分组，不让整次搜索失败。 */
 export async function GET(request: NextRequest) {
@@ -36,8 +29,8 @@ export async function GET(request: NextRequest) {
     const db = auth.db;
     const pattern = `%${escapeLike(query)}%`;
     const [messages, bazi, ziwei] = await Promise.all([
-        settle(db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 })),
-        settle(db.tx((trx) => trx
+        settlePromise(db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 })),
+        settlePromise(db.tx((trx) => trx
             .selectFrom('bazi_charts')
             .select(['id', 'name', 'birth_date', 'birth_time'])
             .where('user_id', '=', auth.user.id)
@@ -45,7 +38,7 @@ export async function GET(request: NextRequest) {
             .orderBy('created_at', 'desc')
             .limit(5)
             .execute())),
-        settle(db.tx((trx) => trx
+        settlePromise(db.tx((trx) => trx
             .selectFrom('ziwei_charts')
             .select(['id', 'name', 'birth_date', 'birth_time'])
             .where('user_id', '=', auth.user.id)

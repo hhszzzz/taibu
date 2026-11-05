@@ -21,6 +21,9 @@ export interface ScopedDb {
   rpc<N extends RpcName>(name: N, args: RpcArgs<N>, options?: TxOptions): Promise<RpcResult<N>>;
 }
 
+/** The Kysely transaction a `ScopedDb.tx` callback receives. */
+export type ScopedDbTransaction = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 function authenticatedClaims(sub: string): Record<string, string> {

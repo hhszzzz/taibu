@@ -238,6 +238,7 @@ export function describePlanDuration(plan: Pick<SubscriptionPlanView, 'durationU
     return `${plan.durationValue} ${DURATION_UNIT_LABELS[plan.durationUnit]}`;
 }
 
+/** Trim and cap a user-supplied string; non-strings become empty. */
 export const clampText = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const isIn = <T extends string>(values: readonly T[], value: unknown): value is T => typeof value === 'string' && (values as readonly string[]).includes(value);
 

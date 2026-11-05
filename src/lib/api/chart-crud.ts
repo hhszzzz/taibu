@@ -7,7 +7,7 @@ import { calculateBazi } from 'taibu-core/bazi';
 import { calculateZiwei } from 'taibu-core/ziwei';
 import { buildBaziInputFromStoredFields } from '@/lib/divination/bazi-record';
 import { isValidBirthTimeString, resolveBirthTimeOptions } from '@/lib/divination/birth-time';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, settlePromise } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { insertIntoDynamic, selectFromDynamic, updateTableDynamic } from '@/lib/db/sql-helpers';
 import { isValidUUID } from '@/lib/validation';
@@ -152,14 +152,11 @@ export function createChartGetHandler(config: ChartCrudConfig) {
             return jsonError('缺少命盘 ID', 400);
         }
 
-        const result = await auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
+        const result = await settlePromise(auth.db.tx((trx) => selectFromDynamic(trx, config.tableName)
             .selectAll()
             .where('id', '=', id)
             .where('user_id', '=', auth.user.id)
-            .executeTakeFirst()).then(
-            (data) => ({ data, error: null }),
-            (error: unknown) => ({ data: null, error }),
-        );
+            .executeTakeFirst()));
 
         if (result.error) {
             return jsonError('获取命盘失败', 500);
@@ -208,13 +205,10 @@ export function createChartPostHandler(config: ChartCrudConfig) {
             return jsonError(error instanceof Error ? error.message : '命盘出生参数无效', 400);
         }
 
-        const result = await auth.db.tx((trx) => insertIntoDynamic(trx, config.tableName)
+        const result = await settlePromise(auth.db.tx((trx) => insertIntoDynamic(trx, config.tableName)
             .values(payload)
             .returning('id')
-            .executeTakeFirst()).then(
-            (data) => ({ data, error: null }),
-            (error: unknown) => ({ data: null, error }),
-        );
+            .executeTakeFirst()));
 
         if (result.error) {
             return jsonError('保存命盘失败', 500);
@@ -280,15 +274,12 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
             updatePayload = prepared.payload;
         }
 
-        const result = await auth.db.tx((trx) => updateTableDynamic(trx, config.tableName)
+        const result = await settlePromise(auth.db.tx((trx) => updateTableDynamic(trx, config.tableName)
             .set(updatePayload)
             .where('id', '=', body.chartId)
             .where('user_id', '=', auth.user.id)
             .returning('id')
-            .executeTakeFirst()).then(
-            (data) => ({ data, error: null }),
-            (error: unknown) => ({ data: null, error }),
-        );
+            .executeTakeFirst()));
 
         if (result.error) {
             return jsonError(result.error instanceof Error ? result.error.message : '更新失败', 500);

@@ -4,17 +4,13 @@ import { randomInt } from 'node:crypto';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { REDEMPTION_BATCH_MAX, type RedeemResult, type RedemptionBatchInput, type RedemptionCodeKind, type RedemptionCodeStatus, type RedemptionCodeView } from './config';
+import { BillingError } from './errors';
 import { usdToMicros } from './money';
 
 const CODE_CHARS = 'abcdefghijklmnopqrstuvwxyz0123456789';
 const CODE_LENGTH = 20;
 
-export class RedemptionError extends Error {
-    constructor(message: string, readonly status: number, readonly code: string) {
-        super(message);
-        this.name = 'RedemptionError';
-    }
-}
+export class RedemptionError extends BillingError {}
 
 /**
  * `tb-` and 20 lowercase letters or digits. A code is money, so it comes from a cryptographic source: Math.random's
@@ -34,7 +30,10 @@ export function validateRedemptionBatch(input: RedemptionBatchInput): string | n
     } else if (input.kind !== 'subscription' || typeof input.planId !== 'string' || !input.planId) {
         return '兑换码类型无效';
     }
-    if (input.expiresAt != null && (Number.isNaN(Date.parse(input.expiresAt)) || Date.parse(input.expiresAt) <= Date.now())) return '过期时间需要晚于现在';
+    if (input.expiresAt != null) {
+        const expiresAt = Date.parse(input.expiresAt);
+        if (Number.isNaN(expiresAt) || expiresAt <= Date.now()) return '过期时间需要晚于现在';
+    }
     return null;
 }
 

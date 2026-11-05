@@ -13,20 +13,22 @@ const SECONDS = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-di
 const DAY = new Intl.DateTimeFormat('zh-CN', { year: 'numeric', month: '2-digit', day: '2-digit' });
 const COUNT = new Intl.NumberFormat('en-US');
 
-export function formatBillingTime(value: string | null | undefined): string {
+function dateText(formatter: Intl.DateTimeFormat, value: string | null | undefined): string {
     const date = value ? new Date(value) : null;
-    return date && !Number.isNaN(date.getTime()) ? TIME.format(date) : '—';
+    return date && !Number.isNaN(date.getTime()) ? formatter.format(date) : '—';
+}
+
+export function formatBillingTime(value: string | null | undefined): string {
+    return dateText(TIME, value);
 }
 
 /** To the second, for an entry's details. */
 export function formatBillingSecond(value: string | null | undefined): string {
-    const date = value ? new Date(value) : null;
-    return date && !Number.isNaN(date.getTime()) ? SECONDS.format(date) : '—';
+    return dateText(SECONDS, value);
 }
 
 export function formatBillingDay(value: string | null | undefined): string {
-    const date = value ? new Date(value) : null;
-    return date && !Number.isNaN(date.getTime()) ? DAY.format(date) : '—';
+    return dateText(DAY, value);
 }
 
 export function formatCount(value: number): string {
@@ -119,6 +121,13 @@ export function ledgerDetailParts(entry: Pick<LedgerEntryView, 'usage' | 'subscr
 /** The model as lists name it: the catalog's display name, or the ID once the model is gone. */
 export function ledgerModelName(entry: Pick<LedgerEntryView, 'modelKey' | 'modelLabel'>): string | null {
     return entry.modelLabel?.name ?? entry.modelKey;
+}
+
+/** The signed amount a ledger row shows: a charge is displayed without its sign, because the column says it was spent. */
+export function ledgerAmount(entry: Pick<LedgerEntryView, 'kind' | 'amountMicros'>): { micros: number; signed: boolean } {
+    return entry.kind === 'usage'
+        ? { micros: Math.abs(entry.amountMicros), signed: false }
+        : { micros: entry.amountMicros, signed: true };
 }
 
 /** The line an entry is listed under: its own description, or where a model call came from. */

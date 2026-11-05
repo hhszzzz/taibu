@@ -8,8 +8,8 @@ import { SubscriptionIcon, WalletIcon } from '@/lib/navigation/nav-icons';
 import { LedgerAmount, LedgerMarks, LedgerModel } from '@/components/billing/LedgerEntryRow';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
-import { LEDGER_KIND_LABELS, LEDGER_KIND_TONES, type LedgerEntryView, type LedgerUsage } from '@/lib/billing/config';
-import { billingSourceLabel, formatBillingTime, formatCount } from '@/lib/billing/format';
+import { LEDGER_KIND_LABELS, LEDGER_KIND_TONES, type LedgerEntryView, type LedgerEntryWithUser, type LedgerUsage } from '@/lib/billing/config';
+import { billingSourceLabel, formatBillingTime, formatCount, ledgerAmount } from '@/lib/billing/format';
 
 const TH = 'px-2.5 py-2.5 text-left text-xs font-medium text-foreground-tertiary';
 const TD = 'px-2.5 py-2.5 text-[13px] text-foreground-secondary';
@@ -50,20 +50,29 @@ function FundingIcons({ entry }: { entry: LedgerEntryView }) {
     );
 }
 
+/** 日期与时间分两行；只解析并格式化一次。 */
+function TimeCell({ value }: { value: string }) {
+    const [date, time] = formatBillingTime(value).split(' ');
+    return (
+        <span className="flex flex-col leading-tight">
+            <span>{date}</span>
+            <span className="text-[11px] text-foreground-tertiary">{time}</span>
+        </span>
+    );
+}
+
 function UserMark({ email }: { email: string }) {
     return <span aria-hidden="true" className="flex size-6 shrink-0 items-center justify-center rounded-full bg-fill-field text-[11px] font-semibold text-foreground-secondary">
         {email.trim().charAt(0).toUpperCase()}
     </span>;
 }
 
-export type LedgerTableEntry = LedgerEntryView & { userId?: string; userEmail?: string | null };
-
 export function LedgerTable({ entries, label, showUser = false, onOpen, onModel, onUser }: {
-    entries: readonly LedgerTableEntry[];
+    entries: readonly LedgerEntryWithUser[];
     /** The table's accessible name, e.g. 用量日志. */
     label: string;
     showUser?: boolean;
-    onOpen: (entry: LedgerTableEntry) => void;
+    onOpen: (entry: LedgerEntryWithUser) => void;
     onModel?: (model: string) => void;
     onUser?: (email: string) => void;
 }) {
@@ -86,10 +95,7 @@ export function LedgerTable({ entries, label, showUser = false, onOpen, onModel,
                     {entries.map(entry => (
                         <tr key={entry.id} className="border-b border-border transition-colors last:border-b-0 hover:bg-background-secondary/50">
                             <td className={`${TD} whitespace-nowrap pl-4 font-mono text-xs tabular-nums`}>
-                                <span className="flex flex-col leading-tight">
-                                    <span>{formatBillingTime(entry.createdAt).split(' ')[0]}</span>
-                                    <span className="text-[11px] text-foreground-tertiary">{formatBillingTime(entry.createdAt).split(' ')[1]}</span>
-                                </span>
+                                <TimeCell value={entry.createdAt} />
                             </td>
                             {showUser ? <td className={`${TD} whitespace-nowrap`}>
                                 {entry.userEmail && onUser ? (
@@ -127,7 +133,7 @@ export function LedgerTable({ entries, label, showUser = false, onOpen, onModel,
                                 ) : (
                                     <span className="inline-flex items-center gap-1.5">
                                         <FundingIcons entry={entry} />
-                                        <LedgerAmount micros={entry.kind === 'usage' ? Math.abs(entry.amountMicros) : entry.amountMicros} signed={entry.kind !== 'usage'} />
+                                        <LedgerAmount {...ledgerAmount(entry)} />
                                     </span>
                                 )}
                             </td>

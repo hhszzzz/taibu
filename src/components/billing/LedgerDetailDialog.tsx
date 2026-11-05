@@ -11,11 +11,9 @@ import { Button } from '@/components/ui/Button';
 import { CollapsibleDetailSection, DetailRow, DetailSection, DetailStack } from '@/components/ui/DetailLayout';
 import { Dialog } from '@/components/ui/Dialog';
 import { ModelIcon } from '@/components/ui/ModelIcon';
-import { LEDGER_KIND_LABELS, LEDGER_KIND_TONES, type LedgerEntryView } from '@/lib/billing/config';
-import { billingSourceLabel, formatBillingSecond, formatCostLine, formatCount, ledgerCostBreakdown, ledgerEntryTitle, windowLabel } from '@/lib/billing/format';
+import { LEDGER_KIND_LABELS, LEDGER_KIND_TONES, type LedgerEntryWithUser } from '@/lib/billing/config';
+import { billingSourceLabel, formatBillingSecond, formatCostLine, formatCount, ledgerAmount, ledgerCostBreakdown, ledgerEntryTitle, windowLabel } from '@/lib/billing/format';
 import { formatUsd } from '@/lib/billing/money';
-
-export type LedgerDetailEntry = LedgerEntryView & { userId?: string; userEmail?: string | null };
 
 const REFERENCE_LABELS: Record<string, string> = {
     conversation: '对话', agent_run: 'Agent 任务', billing_ledger: '原扣费流水', payment_order: '支付订单',
@@ -24,7 +22,7 @@ const REFERENCE_LABELS: Record<string, string> = {
 const LINK = 'text-accent hover:underline';
 
 /** What the entry belongs to; a member opens their own conversation, an administrator jumps to the task log. */
-function ReferenceRow({ entry, admin, onNavigate }: { entry: LedgerDetailEntry; admin: boolean; onNavigate: () => void }) {
+function ReferenceRow({ entry, admin, onNavigate }: { entry: LedgerEntryWithUser; admin: boolean; onNavigate: () => void }) {
     const { referenceType: type, referenceId: id } = entry;
     if (!type || !id) return null;
     // 管理员调整余额时关联的是操作的管理员本人；早先的流水记的是系统账号，没有可显示的操作人。
@@ -41,7 +39,7 @@ function ReferenceRow({ entry, admin, onNavigate }: { entry: LedgerDetailEntry; 
 }
 
 export function LedgerDetailDialog({ entry, admin = false, onClose, onModel, onUser }: {
-    entry: LedgerDetailEntry | null;
+    entry: LedgerEntryWithUser | null;
     /** The administrator's view: shows the account and links to the task log instead of the conversation. */
     admin?: boolean;
     onClose: () => void;
@@ -75,7 +73,7 @@ export function LedgerDetailDialog({ entry, admin = false, onClose, onModel, onU
         description={ledgerEntryTitle(entry)}>
         <DetailStack>
             <DetailSection title="概览">
-                <DetailRow label="金额"><LedgerAmount micros={entry.kind === 'usage' ? Math.abs(entry.amountMicros) : entry.amountMicros} signed={entry.kind !== 'usage'} /></DetailRow>
+                <DetailRow label="金额"><LedgerAmount {...ledgerAmount(entry)} /></DetailRow>
                 <DetailRow label="时间">{formatBillingSecond(entry.createdAt)}</DetailRow>
                 {entry.source ? <DetailRow label="来源">{billingSourceLabel(entry.source)}</DetailRow> : null}
                 {entry.modelKey ? <DetailRow label="模型" copy={entry.modelKey}

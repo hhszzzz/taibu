@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import type { AIModelConfig, AIModelPricing } from '@/types';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
-import { SUBSCRIPTION_WINDOWS, type BillingSummary, type SubscriptionWindow } from './config';
+import { SUBSCRIPTION_WINDOWS, normalizeBillingBalance, type BillingSummary, type SubscriptionWindow } from './config';
 import { hasTokens, imageCostMicros, isFreeTextModel, usageCostMicros, type TokenUsage } from './pricing';
 
 /** Where a charge came from; the ledger shows it beside the model. */
@@ -30,10 +30,13 @@ const amount = (value: unknown) => (typeof value === 'number' && Number.isFinite
 function normalizeSummary(value: unknown): BillingSummary {
     const source = (value ?? {}) as Record<string, unknown>;
     const subscriptions = Array.isArray(source.subscriptions) ? source.subscriptions as Record<string, unknown>[] : [];
-    return {
+    const balances = normalizeBillingBalance(value) ?? {
         walletMicros: amount(source.walletMicros),
         subscriptionMicros: amount(source.subscriptionMicros),
         spendableMicros: amount(source.spendableMicros),
+    };
+    return {
+        ...balances,
         deductOrder: source.deductOrder === 'wallet' ? 'wallet' : 'subscription',
         subscriptions: subscriptions.map(item => ({
             id: String(item.id),
@@ -96,6 +99,29 @@ export type UsageCharge = {
     description?: string;
 };
 
+type ChargeRecord = {
+    userId: string;
+    micros: number;
+    allowDebt: boolean;
+    source: BillingSource;
+    modelKey: string;
+    usage: Record<string, unknown>;
+    key: string;
+    description: string;
+    referenceType?: string;
+    referenceId?: string;
+};
+
+/** One `billing_charge`; the idempotency key and the failure policy stay with each caller. */
+function recordCharge(input: ChargeRecord) {
+    return systemDb().rpc('billing_charge', {
+        p_user_id: input.userId, p_amount: input.micros, p_allow_debt: input.allowDebt, p_source: input.source,
+        p_model_key: input.modelKey, p_usage: input.usage,
+        p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
+        p_idempotency_key: input.key, p_description: input.description,
+    });
+}
+
 /**
  * Records what a finished call used. The usage already happened, so the wallet may end slightly below zero; the next
  * top-up settles it. A free model's call is recorded at $0, so the usage log shows it too. Never throws: a failed
@@ -105,18 +131,18 @@ export async function chargeUsage(charge: UsageCharge): Promise<number> {
     if (!hasTokens(charge.usage)) return 0;
     const micros = usageCostMicros(charge.model.pricing, charge.usage);
     const prices = tokenPrices(charge.model.pricing);
-    const args = {
-        p_user_id: charge.userId, p_amount: micros, p_allow_debt: true, p_source: charge.source, p_model_key: charge.model.id,
-        p_usage: { ...charge.usage, ...(charge.estimated ? { estimated: true } : {}), ...(prices ? { prices } : {}) },
-        p_reference_type: charge.referenceType ?? null, p_reference_id: charge.referenceId ?? null,
-        p_idempotency_key: charge.idempotencyKey ?? `${charge.source}:${randomUUID()}`, p_description: charge.description ?? '',
-    };
+    const input = {
+        userId: charge.userId, micros, allowDebt: true, source: charge.source, modelKey: charge.model.id,
+        usage: { ...charge.usage, ...(charge.estimated ? { estimated: true } : {}), ...(prices ? { prices } : {}) },
+        key: charge.idempotencyKey ?? `${charge.source}:${randomUUID()}`, description: charge.description ?? '',
+        referenceType: charge.referenceType, referenceId: charge.referenceId,
+    } satisfies ChargeRecord;
     for (let attempt = 0; attempt < 2; attempt++) {
         try {
-            await systemDb().rpc('billing_charge', args);
+            await recordCharge(input);
             return micros;
         } catch (error) {
-            if (attempt === 1) console.error('[billing] usage charge failed', { userId: charge.userId, key: args.p_idempotency_key, micros, code: toDbError(error).code });
+            if (attempt === 1) console.error('[billing] usage charge failed', { userId: charge.userId, key: input.key, micros, code: toDbError(error).code });
         }
     }
     return 0;
@@ -148,11 +174,10 @@ export async function recordDirectUsage(input: {
     if (!hasTokens(input.usage)) return;
     const key = `byok:${randomUUID()}`;
     try {
-        await systemDb().rpc('billing_charge', {
-            p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: input.source ?? 'chat', p_model_key: input.model,
-            p_usage: { ...input.usage, byok: true },
-            p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
-            p_idempotency_key: key, p_description: '自带密钥调用',
+        await recordCharge({
+            userId: input.userId, micros: 0, allowDebt: true, source: input.source ?? 'chat', modelKey: input.model,
+            usage: { ...input.usage, byok: true }, key, description: '自带密钥调用',
+            referenceType: input.referenceType, referenceId: input.referenceId,
         });
     } catch (error) {
         console.error('[billing] byok usage record failed', { userId: input.userId, key, code: toDbError(error).code });
@@ -176,11 +201,11 @@ export async function prepayImages(input: {
     if (micros <= 0) return null;
     const key = `image:${randomUUID()}`;
     try {
-        await systemDb().rpc('billing_charge', {
-            p_user_id: input.userId, p_amount: micros, p_allow_debt: false, p_source: 'image', p_model_key: input.model.id,
-            p_usage: { images: input.images, prices: { image: input.model.pricing?.image ?? 0 } },
-            p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
-            p_idempotency_key: key, p_description: `生成 ${input.images} 张图片`,
+        await recordCharge({
+            userId: input.userId, micros, allowDebt: false, source: 'image', modelKey: input.model.id,
+            usage: { images: input.images, prices: { image: input.model.pricing?.image ?? 0 } },
+            referenceType: input.referenceType, referenceId: input.referenceId,
+            key, description: `生成 ${input.images} 张图片`,
         });
     } catch (error) {
         if (isInsufficientBalance(error)) throw new InsufficientBalanceError();
@@ -204,11 +229,11 @@ export async function recordFreeImages(input: {
     if (input.images <= 0) return;
     const key = `image:${randomUUID()}`;
     try {
-        await systemDb().rpc('billing_charge', {
-            p_user_id: input.userId, p_amount: 0, p_allow_debt: true, p_source: 'image', p_model_key: input.model.id,
-            p_usage: { images: input.images, prices: { image: 0 }, ...(input.byok ? { byok: true } : {}) },
-            p_reference_type: input.referenceType ?? null, p_reference_id: input.referenceId ?? null,
-            p_idempotency_key: key, p_description: `生成 ${input.images} 张图片`,
+        await recordCharge({
+            userId: input.userId, micros: 0, allowDebt: true, source: 'image', modelKey: input.model.id,
+            usage: { images: input.images, prices: { image: 0 }, ...(input.byok ? { byok: true } : {}) },
+            referenceType: input.referenceType, referenceId: input.referenceId,
+            key, description: `生成 ${input.images} 张图片`,
         });
     } catch (error) {
         console.error('[billing] image usage record failed', { userId: input.userId, key, code: toDbError(error).code });

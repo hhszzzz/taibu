@@ -10,12 +10,12 @@ import { parseConfiguredOrigin } from '@/lib/runtime-env';
 import { isValidUUID } from '@/lib/validation';
 import { getBillingSummary } from './account.server';
 import {
-    REDEMPTION_CODE_STATUS_LABELS, normalizeBillingSettings, parseLedgerFilters, parsePlanInput,
-    type AdminBillingUserView, type BillingOverview, type BillingPaymentView, type PaymentOrderView,
-    type RedemptionBatchInput, type RedemptionCodeKind, type RedemptionCodeStatus,
+    clampText, REDEMPTION_CODE_STATUS_LABELS, normalizeBillingSettings, parseLedgerFilters, parsePlanInput,
+    type AdminBillingUserView, type BillingOverview, type BillingPaymentView, type EpayCheckoutInput,
+    type PaymentOrderView, type RedemptionBatchInput, type RedemptionCodeKind, type RedemptionCodeStatus,
 } from './config';
-import { EPAY_METHOD_LABELS, EpayError, createEpayCheckout, getEpayConfig, settleEpayPayment, type EpayCheckoutInput } from './epay.server';
-import { listAllOrders, listLedger, listOrders, listUsage } from './ledger.server';
+import { EPAY_METHOD_LABELS, EpayError, createEpayCheckout, getEpayConfig, settleEpayPayment, type EpaySettlement } from './epay.server';
+import { emailsOf, listAllOrders, listLedger, listOrders, listUsage } from './ledger.server';
 import { usdToMicros } from './money';
 import {
     BillingPlanError, buyPlanWithBalance, cancelSubscription, createPlan, deletePlan, grantSubscription, listPlans, updatePlan,
@@ -34,14 +34,19 @@ const REDEEM_RATE_LIMIT = { endpoint: '/api/billing/redeem', maxRequests: 10, wi
 const CHECKOUT_RATE_LIMIT = { endpoint: '/api/billing/epay/checkout', maxRequests: 10, windowMs: 60_000 } as const;
 const GATEWAY_BODY_LIMIT = 16 * 1024;
 
+/** The signed-in member's own scope; callers return the Response as their reply. */
+async function authenticatedMember(request: NextRequest): Promise<Member | Response> {
+    const auth = await requireUserContext(request);
+    if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
+    return { db: auth.db, userId: auth.user.id };
+}
+
 /** The member's side follows the feature switch, failing closed when it cannot be read. */
 async function member(request: NextRequest): Promise<Member | Response> {
     const state = await readFeatureModuleStateFresh('billing');
     if (state.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
     if (state.status !== 'enabled') return jsonError('钱包与用量日志当前未开放', 403, { code: 'FEATURE_DISABLED' });
-    const auth = await requireUserContext(request);
-    if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    return { db: auth.db, userId: auth.user.id };
+    return authenticatedMember(request);
 }
 
 async function administrator(request: NextRequest): Promise<{ userId: string } | Response> {
@@ -63,7 +68,6 @@ const readBody = async (request: NextRequest) => {
     const parsed = await readJsonBody(request, 256 * 1024);
     return 'error' in parsed ? null : record(parsed.body);
 };
-const text = (value: unknown, max: number) => (typeof value === 'string' ? value.trim().slice(0, max) : '');
 const integer = (value: string | null) => (value !== null && /^\d{1,6}$/u.test(value) ? Number(value) : undefined);
 const pageOf = (params: URLSearchParams) => ({ offset: integer(params.get('offset')), limit: integer(params.get('limit')) });
 
@@ -111,9 +115,7 @@ async function usageReader(request: NextRequest): Promise<Member | Response> {
     ]);
     if (usage.status === 'unavailable' || billing.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
     if (usage.status !== 'enabled' && billing.status !== 'enabled') return jsonError('用量日志当前未开放', 403, { code: 'FEATURE_DISABLED' });
-    const auth = await requireUserContext(request);
-    if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    return { db: auth.db, userId: auth.user.id };
+    return authenticatedMember(request);
 }
 
 export async function readBillingLedger(request: NextRequest) {
@@ -142,7 +144,7 @@ export async function readBillingOrders(request: NextRequest) {
 export async function redeemBillingCode(request: NextRequest) {
     const who = await member(request);
     if (who instanceof Response) return who;
-    const code = text((await readBody(request))?.code, 100);
+    const code = clampText((await readBody(request))?.code, 100);
     if (!code) return jsonError('请输入兑换码', 400);
     if (!(await checkRateLimit(who.userId, REDEEM_RATE_LIMIT.endpoint, REDEEM_RATE_LIMIT)).allowed) {
         return jsonError('兑换太频繁，请稍后再试', 429);
@@ -172,7 +174,7 @@ export async function startEpayCheckout(request: NextRequest) {
     const who = await member(request);
     if (who instanceof Response) return who;
     const body = await readBody(request);
-    const method = text(body?.method, 20);
+    const method = clampText(body?.method, 20);
     let input: EpayCheckoutInput;
     if (body?.kind === 'topup') input = { kind: 'topup', amountUsd: Number(body.amountUsd), method };
     else if (body?.kind === 'subscription' && typeof body.planId === 'string' && isValidUUID(body.planId)) input = { kind: 'subscription', planId: body.planId, method };
@@ -209,10 +211,15 @@ async function gatewayParams(request: NextRequest): Promise<Record<string, strin
     return Object.fromEntries(new URLSearchParams(Buffer.concat(chunks).toString('utf8')));
 }
 
+/** The signed message's settlement, for either route the gateway calls. */
+async function settleGatewayRequest(request: NextRequest): Promise<EpaySettlement> {
+    const params = await gatewayParams(request).catch(() => null);
+    return params && Object.keys(params).length ? settleEpayPayment(params) : 'rejected';
+}
+
 /** The gateway retries until it reads `success`; an ignored status is acknowledged too. */
 export async function handleEpayNotify(request: NextRequest): Promise<Response> {
-    const params = await gatewayParams(request).catch(() => null);
-    const outcome = params && Object.keys(params).length ? await settleEpayPayment(params) : 'rejected';
+    const outcome = await settleGatewayRequest(request);
     return new Response(outcome === 'rejected' ? 'fail' : 'success', {
         headers: { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' },
     });
@@ -220,8 +227,7 @@ export async function handleEpayNotify(request: NextRequest): Promise<Response> 
 
 /** The member's browser coming back from the gateway: settle what it signs, then show the billing center. */
 export async function handleEpayReturn(request: NextRequest): Promise<Response> {
-    const params = await gatewayParams(request).catch(() => null);
-    const outcome = params && Object.keys(params).length ? await settleEpayPayment(params) : 'rejected';
+    const outcome = await settleGatewayRequest(request);
     const payment = outcome === 'paid' || outcome === 'already-paid' ? 'success' : outcome === 'ignored' ? 'pending' : 'fail';
     const origin = parseConfiguredOrigin(process.env.APP_ORIGIN, 'APP_ORIGIN').origin;
     return NextResponse.redirect(`${origin}/settings/billing?payment=${payment}`, 303);
@@ -297,10 +303,10 @@ export async function adminCreateCodes(request: NextRequest) {
     const admin = await administrator(request);
     if (admin instanceof Response) return admin;
     const body = await readBody(request);
-    const expires = text(body?.expiresAt, 40);
+    const expires = clampText(body?.expiresAt, 40);
     if (expires && Number.isNaN(Date.parse(expires))) return jsonError('过期时间无效', 400);
     const common = {
-        count: Number(body?.count), expiresAt: expires ? new Date(Date.parse(expires)).toISOString() : null, batchNote: text(body?.batchNote, 200) || null,
+        count: Number(body?.count), expiresAt: expires ? new Date(Date.parse(expires)).toISOString() : null, batchNote: clampText(body?.batchNote, 200) || null,
     };
     let input: RedemptionBatchInput;
     if (body?.kind === 'balance') input = { kind: 'balance', amountUsd: Number(body.amountUsd), ...common };
@@ -362,12 +368,12 @@ export async function adminReadUser(request: NextRequest, id: string) {
         const profile = await db.tx((trx) => trx.selectFrom('users').select(['id', 'nickname']).where('id', '=', id).executeTakeFirst());
         if (!profile) return jsonError('用户不存在', 404);
         const [emails, summary, ledger, orders] = await Promise.all([
-            db.rpc('admin_get_auth_user_emails', { p_user_ids: [id] }).catch(() => []),
+            emailsOf([id]),
             getBillingSummary(id, db),
             listLedger(id, db, pageOf(request.nextUrl.searchParams), {}, { operators: true }),
             listOrders(id, db, { limit: 20 }),
         ]);
-        const user: AdminBillingUserView = { userId: id, email: emails[0]?.email ?? null, nickname: profile.nickname, walletMicros: summary.walletMicros };
+        const user: AdminBillingUserView = { userId: id, email: emails.get(id) ?? null, nickname: profile.nickname, walletMicros: summary.walletMicros };
         return jsonOk({ user, summary, ledger, orders: orders.orders });
     } catch (error) {
         return failure(error, '读取用户账户');
@@ -387,7 +393,7 @@ export async function adminChangeUser(request: NextRequest, id: string) {
             if (!micros) return jsonError('金额需要是 -100000 到 100000 之间、不为 0 的美元金额', 400);
             try {
                 // 用管理员自己的身份调用：流水里记下的操作人就是他，而不是系统账号。
-                await userDb(admin.userId).rpc('billing_adjust_wallet', { p_user_id: id, p_amount: micros, p_description: text(body.description, 200) });
+                await userDb(admin.userId).rpc('billing_adjust_wallet', { p_user_id: id, p_amount: micros, p_description: clampText(body.description, 200) });
             } catch (error) {
                 const { message, code } = toDbError(error);
                 if (message === 'INSUFFICIENT_BALANCE') return jsonError('余额不足以扣减这么多', 409, { code: 'INSUFFICIENT_BALANCE' });
@@ -396,7 +402,7 @@ export async function adminChangeUser(request: NextRequest, id: string) {
             }
         } else if (body?.action === 'grant') {
             if (typeof body.planId !== 'string' || !isValidUUID(body.planId)) return jsonError('请选择套餐', 400);
-            await grantSubscription(id, body.planId, text(body.note, 200) || null);
+            await grantSubscription(id, body.planId, clampText(body.note, 200) || null);
         } else {
             return jsonError('操作无效', 400);
         }

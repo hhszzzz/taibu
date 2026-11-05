@@ -5,27 +5,22 @@ import { systemDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { isInsufficientBalance } from './account.server';
 import {
-    SUBSCRIPTION_WINDOWS, type DurationUnit, type SubscriptionLimit, type SubscriptionPlanInput, type SubscriptionPlanView,
-    type SubscriptionWindow,
+    SUBSCRIPTION_WINDOWS, compareWindows, type DurationUnit, type SubscriptionLimit, type SubscriptionPlanInput,
+    type SubscriptionPlanView, type SubscriptionWindow,
 } from './config';
+import { BillingError } from './errors';
 
-export class BillingPlanError extends Error {
-    constructor(message: string, readonly status: number, readonly code: string) {
-        super(message);
-        this.name = 'BillingPlanError';
-    }
-}
+export class BillingPlanError extends BillingError {}
 
 const windowOf = (period: string): SubscriptionWindow =>
     SUBSCRIPTION_WINDOWS.includes(period as SubscriptionWindow) ? period as SubscriptionWindow : 'total';
-const byWindow = (a: SubscriptionLimit, b: SubscriptionLimit) => SUBSCRIPTION_WINDOWS.indexOf(a.period) - SUBSCRIPTION_WINDOWS.indexOf(b.period);
 
 function toPlanView(row: SubscriptionPlanRow, limits: SubscriptionLimit[]): SubscriptionPlanView {
     return {
         id: row.id, title: row.title, subtitle: row.subtitle,
         features: Array.isArray(row.features) ? row.features.filter((item): item is string => typeof item === 'string') : [],
         priceUsd: Number(row.price_usd), durationUnit: row.duration_unit as DurationUnit, durationValue: row.duration_value,
-        limits: [...limits].sort(byWindow),
+        limits: [...limits].sort(compareWindows),
         purchasable: row.purchasable, enabled: row.enabled, maxPerUser: row.max_per_user, sortOrder: row.sort_order,
     };
 }
@@ -37,6 +32,15 @@ function planColumns(input: SubscriptionPlanInput) {
         purchasable: input.purchasable, enabled: input.enabled,
         max_per_user: input.maxPerUser, sort_order: input.sortOrder,
     };
+}
+
+/** Writes a plan's allowances; an update replaces the whole set. */
+type Trx = Parameters<Parameters<ScopedDb['tx']>[0]>[0];
+
+function insertLimits(trx: Trx, planId: string, limits: readonly SubscriptionLimit[]) {
+    return trx.insertInto('subscription_plan_limits')
+        .values(limits.map(limit => ({ plan_id: planId, period: limit.period, allowance_micros: limit.allowanceMicros })))
+        .execute();
 }
 
 /** The windows of each plan, keyed by plan; one query for the whole list. */
@@ -64,9 +68,7 @@ export async function createPlan(input: SubscriptionPlanInput): Promise<Subscrip
     const db = systemDb();
     const row = await db.tx(async (trx) => {
         const created = await trx.insertInto('subscription_plans').values(planColumns(input)).returningAll().executeTakeFirstOrThrow();
-        await trx.insertInto('subscription_plan_limits')
-            .values(input.limits.map(limit => ({ plan_id: created.id, period: limit.period, allowance_micros: limit.allowanceMicros })))
-            .execute();
+        await insertLimits(trx, created.id, input.limits);
         return created;
     });
     return toPlanView(row, input.limits);
@@ -81,9 +83,7 @@ export async function updatePlan(id: string, input: SubscriptionPlanInput): Prom
             .where('id', '=', id).returningAll().executeTakeFirst();
         if (!updated) return null;
         await trx.deleteFrom('subscription_plan_limits').where('plan_id', '=', id).execute();
-        await trx.insertInto('subscription_plan_limits')
-            .values(input.limits.map(limit => ({ plan_id: id, period: limit.period, allowance_micros: limit.allowanceMicros })))
-            .execute();
+        await insertLimits(trx, id, input.limits);
         return updated;
     });
     return row ? toPlanView(row, input.limits) : null;

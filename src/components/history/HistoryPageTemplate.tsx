@@ -74,6 +74,8 @@ export interface HistoryPageConfig {
     kbTitleFn?: (item: HistorySummaryItem) => string;
     /** 覆盖默认卡片里的补充信息行（如塔罗的正逆位牌名） */
     renderDetail?: HistoryDetailRenderer;
+    /** 完全自定义卡片；一般只需 renderDetail */
+    renderCard?: (item: HistorySummaryItem, actions: CardActions) => ReactNode;
     /** loadHistoryRestore 的额外参数 (如 timezone) */
     restoreTimezone?: string;
     /** 数据变更时的 invalidate types */
@@ -100,7 +102,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
         searchPlaceholder = '搜索记录', emptyMessage = '还没有历史记录',
         emptyDescription = '完成一次占测后，结果会自动保存在这里。', actionLabel = '开始新的占测',
         actionHref, deleteMessage, kbSourceType, layout = 'grid',
-        kbTitleFn, renderDetail, restoreTimezone, invalidateTypes,
+        kbTitleFn, renderDetail, renderCard, restoreTimezone, invalidateTypes,
     } = config;
 
     const router = useRouter();
@@ -284,6 +286,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
 
     const renderItem = (item: HistorySummaryItem) => {
         const actions = makeActions(item);
+        if (renderCard) return renderCard(item, actions);
         const Card = layout === 'grid' ? HistoryGridCard : HistoryListRow;
         return <Card item={item} actions={actions} viewing={viewingId === item.id} renderDetail={renderDetail} />;
     };
@@ -363,7 +366,7 @@ export function HistoryPageTemplate(config: HistoryPageConfig) {
                             {filteredItems.map(item => <HistoryItem key={item.id} item={item} render={renderItem} />)}
                         </ul>
                     ) : (
-                        <ul className="divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
+                        <ul className={renderCard ? 'flex flex-col gap-3' : 'divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface'}>
                             {filteredItems.map(item => <HistoryItem key={item.id} item={item} render={renderItem} />)}
                         </ul>
                     )}

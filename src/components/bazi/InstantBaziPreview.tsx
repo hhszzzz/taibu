@@ -13,6 +13,7 @@ import { Solar } from 'lunar-javascript';
 import { baziPillarEntries, calculateBazi } from 'taibu-core/bazi';
 import type { BaziFormData } from '@/types';
 import { getEarthlyBranchByHour } from '@/lib/divination/bazi-form-utils';
+import { formatLocalDateTime } from '@/lib/divination/display-helpers';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 
@@ -98,7 +99,7 @@ export function InstantBaziPreview({ onUseInstant }: InstantBaziPreviewProps) {
         return null;
     }
 
-    const solarText = `${currentTime.getFullYear()}-${String(currentTime.getMonth() + 1).padStart(2, '0')}-${String(currentTime.getDate()).padStart(2, '0')} ${String(currentTime.getHours()).padStart(2, '0')}:${String(currentTime.getMinutes()).padStart(2, '0')}`;
+    const solarText = formatLocalDateTime(currentTime);
     const lunarText = `农历${LUNAR_MONTH_NAMES[lunarInfo.month] ?? ''}${LUNAR_DAY_NAMES[lunarInfo.day] ?? ''} ${lunarInfo.hourBranch}时`;
     const pillars = baziPillarEntries(instantBazi);
 

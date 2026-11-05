@@ -34,6 +34,7 @@ import { useChartMutation } from '@/lib/hooks/useUserCharts';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
+import { formatClockTime, formatDateParts } from '@/lib/divination/display-helpers';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
@@ -306,8 +307,8 @@ function BaziResultContent() {
         const payload = {
             name: formData.name,
             gender: formData.gender,
-            birth_date: `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`,
-            birth_time: `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
+            birth_date: formatDateParts(formData.birthYear, formData.birthMonth, formData.birthDay),
+            birth_time: formatClockTime(formData.birthHour, formData.birthMinute),
             birth_place: formData.birthPlace || null,
             longitude: formData.longitude ?? null,
             ...resolveBirthTimeOptions(formData),
@@ -558,7 +559,7 @@ function BaziResultContent() {
     /** 问太卜：未保存时先落库，再带上命盘进入 AI 对话。 */
     const handleAsk = async () => {
         const name = formData.name?.trim() || '未命名';
-        const birth = `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`;
+        const birth = formatDateParts(formData.birthYear, formData.birthMonth, formData.birthDay);
         const savedId = chartId ?? (userId && !isUnknownTime ? await saveOnce(persistChart) : null);
         if (userId && !isUnknownTime && !savedId) showToast('error', '保存失败，命盘未能带入对话');
         openChatWithResult(router, {

@@ -13,6 +13,8 @@ import {
 
 type ChartType = 'bazi' | 'ziwei';
 
+type AuthContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
+
 type ChartRecord = BirthTimeResolution & {
     id: string;
     name: string;
@@ -26,17 +28,27 @@ type ChartRecord = BirthTimeResolution & {
     created_at: string;
 };
 
+/** 与两张命盘表共用的列；客户端只读这些字段。 */
+const CHART_COLUMNS = [
+    'id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude',
+    'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'created_at',
+] as const;
+
 function isChartType(value: unknown): value is ChartType {
     return value === 'bazi' || value === 'ziwei';
+}
+
+/** 客户端带上当前账号；账号已切换时拒绝，避免旧账号的数据落进新会话。 */
+function matchesExpectedUser(request: NextRequest, auth: AuthContext): boolean {
+    const expectedUserId = request.headers.get('X-Expected-User-Id');
+    return expectedUserId === null || expectedUserId === auth.user.id;
 }
 
 function getChartTable(type: ChartType) {
     return type === 'bazi' ? 'bazi_charts' : 'ziwei_charts';
 }
 
-async function loadDefaultChartIds(
-    auth: Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>,
-) {
+async function loadDefaultChartIds(auth: AuthContext) {
     const { settings, error } = await getUserSettingsSnapshot(auth.db, auth.user.id);
     return {
         defaultChartIds: toDefaultChartIds(settings),
@@ -47,25 +59,20 @@ async function loadDefaultChartIds(
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    if (!matchesExpectedUser(request, auth)) {
         return jsonError('账号已切换，请重新加载命盘', 409);
     }
-    const chartColumns = [
-        'id', 'name', 'gender', 'birth_date', 'birth_time', 'birth_place', 'longitude',
-        'calendar_type', 'is_leap_month', 'timezone', 'disambiguation', 'created_at',
-    ] as const;
 
     const [baziCharts, ziweiCharts, settingsResult] = await Promise.all([
         auth.db.tx((trx) => trx
             .selectFrom('bazi_charts')
-            .select(chartColumns)
+            .select(CHART_COLUMNS)
             .where('user_id', '=', auth.user.id)
             .orderBy('created_at', 'desc')
             .execute()) as Promise<ChartRecord[]>,
         auth.db.tx((trx) => trx
             .selectFrom('ziwei_charts')
-            .select(chartColumns)
+            .select(CHART_COLUMNS)
             .where('user_id', '=', auth.user.id)
             .orderBy('created_at', 'desc')
             .execute()) as Promise<ChartRecord[]>,
@@ -103,8 +110,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    if (!matchesExpectedUser(request, auth)) {
         return jsonError('账号已切换，请重新加载命盘', 409);
     }
     let body: { type?: unknown; id?: unknown };
@@ -147,8 +153,7 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId !== null && expectedUserId !== auth.user.id) {
+    if (!matchesExpectedUser(request, auth)) {
         return jsonError('账号已切换，请重新加载命盘', 409);
     }
     const type = request.nextUrl.searchParams.get('type');

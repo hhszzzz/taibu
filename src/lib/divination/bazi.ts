@@ -243,20 +243,6 @@ export const SAN_HE_TABLE: { branches: [EarthlyBranch, EarthlyBranch, EarthlyBra
     name: SAN_HE_NAMES[item.element],
 }));
 
-/** 半合表：两个地支可以形成半合 */
-export const BAN_HE_TABLE: { branches: [EarthlyBranch, EarthlyBranch]; result: FiveElement; type: 'sheng' | 'mu' }[] = [
-    // 生方半合（长生+帝旺）
-    { branches: ['申', '子'], result: '水', type: 'sheng' },
-    { branches: ['亥', '卯'], result: '木', type: 'sheng' },
-    { branches: ['寅', '午'], result: '火', type: 'sheng' },
-    { branches: ['巳', '酉'], result: '金', type: 'sheng' },
-    // 墓方半合（帝旺+墓）
-    { branches: ['子', '辰'], result: '水', type: 'mu' },
-    { branches: ['卯', '未'], result: '木', type: 'mu' },
-    { branches: ['午', '戌'], result: '火', type: 'mu' },
-    { branches: ['酉', '丑'], result: '金', type: 'mu' },
-];
-
 /** 六合表及合化结果 */
 export const LIU_HE_TABLE: Record<EarthlyBranch, { partner: EarthlyBranch; result: FiveElement }> = Object.fromEntries(
     DI_ZHI.map((branch) => [

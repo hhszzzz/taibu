@@ -28,6 +28,7 @@ import { Button } from '@/components/ui/Button';
 import { downloadShareCard, shareCard } from '@/lib/share-card';
 import type { DailyFortune, FortuneLevels, FortuneChartScores } from '@/lib/divination/fortune';
 import { fortuneLevelToChartValue, isLevelFavorable } from '@/lib/divination/fortune';
+import { formatLocalDate } from '@/lib/divination/display-helpers';
 import type { FortuneLevel } from '@/types';
 
 interface ShareCardProps {
@@ -85,10 +86,6 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
         });
     };
 
-    const formatDateShort = (d: Date) => {
-        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    };
-
     const handleDownload = async () => {
         if (!cardRef.current) return;
 
@@ -96,7 +93,7 @@ export function ShareCard({ fortune, date, userName, isPersonalized, almanac }: 
         try {
             await downloadShareCard(
                 { element: cardRef.current },
-                `taibu-fortune-${formatDateShort(date)}.png`
+                `taibu-fortune-${formatLocalDate(date)}.png`
             );
         } catch (error) {
             console.error('下载失败:', error);

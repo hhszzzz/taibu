@@ -7,13 +7,14 @@
  */
 import { useEffect, useState } from 'react';
 import { calculateDailyAlmanac, type AlmanacOutput } from 'taibu-core/almanac';
+import { formatLocalDate } from '@/lib/divination/display-helpers';
 
 export type DailyAlmanacDetail = AlmanacOutput['almanac'];
 export type DailyHourFortune = DailyAlmanacDetail['hourlyFortune'][number];
 
 /** 本地日期 → YYYY-MM-DD（与页面 `date` 参数一致，按用户本地日历日计算）。 */
 export function toLocalDateKey(date: Date): string {
-    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+    return formatLocalDate(date);
 }
 
 /** 返回所选日期的黄历细项；计算中或失败时返回 null（界面以 "—" / 骨架占位）。 */

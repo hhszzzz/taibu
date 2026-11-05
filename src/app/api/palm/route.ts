@@ -13,10 +13,8 @@ import {
     generatePalmTitle,
     type HandType,
 } from '@/lib/divination/palm';
-import { createDirectInterpretHandlers, createInterpretHandler, type InterpretInput } from '@/lib/api/divination-pipeline';
+import { createDirectInterpretHandlers, createInterpretHandler, parseVisionImageInput, visionOptions, type InterpretInput } from '@/lib/api/divination-pipeline';
 import { SOURCE_CHART_TYPE_MAP } from '@/lib/visualization/chart-types';
-
-const SUPPORTED_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);
 
 interface PalmReadingInput extends InterpretInput {
     analysisType: string;
@@ -70,20 +68,11 @@ const handleAnalyze = createInterpretHandler<PalmInterpretInput>({
     },
     parseInput: (body) => {
         const b = body as Record<string, unknown>;
-        const imageBase64 = b.imageBase64 as string | undefined;
-        if (!imageBase64) {
-            return { error: '请上传手相图片', status: 400 };
-        }
-        const raw = typeof b.imageMimeType === 'string' ? b.imageMimeType.trim().toLowerCase() : '';
-        if (!raw || !SUPPORTED_IMAGE_MIME_TYPES.has(raw)) {
-            return { error: '图片格式不支持', status: 400 };
-        }
-        return { ...parseReading(b), imageBase64, imageMimeType: raw };
+        const image = parseVisionImageInput(b, '请上传手相图片');
+        if ('error' in image) return image;
+        return { ...parseReading(b), ...image };
     },
-    buildVisionOptions: (input) => ({
-        imageBase64: input.imageBase64,
-        imageMimeType: input.imageMimeType,
-    }),
+    buildVisionOptions: visionOptions,
 });
 
 const direct = createDirectInterpretHandlers<PalmReadingInput>({

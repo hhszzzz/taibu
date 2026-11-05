@@ -18,6 +18,7 @@ import {
     type TarotSpreadDefinition,
 } from 'taibu-core/tarot';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
+import { formatDateParts, formatLocalDate } from '@/lib/divination/display-helpers';
 
 export type TarotSuit = 'major' | 'wands' | 'cups' | 'swords' | 'pentacles';
 export type CardOrientation = 'upright' | 'reversed';
@@ -335,10 +336,7 @@ function resolveDateKey(date: Date, timeZone: string): string {
 }
 
 function resolveLocalDateKey(date: Date): string {
-    const year = date.getFullYear();
-    const month = String(date.getMonth() + 1).padStart(2, '0');
-    const day = String(date.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return formatLocalDate(date);
 }
 
 function createEphemeralSeed(): string {
@@ -423,7 +421,7 @@ function buildTarotCanonicalPayload(input: {
     const birthDateText = typeof input.birthDate === 'string' ? input.birthDate.trim() : '';
     const normalizedBirth = birthDateText ? parseBirthDateParts(birthDateText) : null;
     const normalizedBirthText = normalizedBirth
-        ? `${normalizedBirth.birthYear}-${String(normalizedBirth.birthMonth).padStart(2, '0')}-${String(normalizedBirth.birthDay).padStart(2, '0')}`
+        ? formatDateParts(normalizedBirth.birthYear, normalizedBirth.birthMonth, normalizedBirth.birthDay)
         : birthDateText;
 
     const result: CoreTarotOutput = {

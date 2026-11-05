@@ -13,7 +13,7 @@ import {
     type QimenInput,
     type QimenOutput,
 } from '@/lib/divination/qimen';
-import { saveUserOwnedDivinationRecord } from '@/lib/api/divination-pipeline';
+import { isRouteError, saveUserOwnedDivinationRecord, type RouteError } from '@/lib/api/divination-pipeline';
 
 interface QimenRequest {
     action: 'calculate' | 'save';
@@ -27,12 +27,6 @@ interface QimenRequest {
     panType?: 'zhuan';
     juMethod?: 'chaibu' | 'maoshan';
     zhiFuJiGong?: 'jiLiuYi' | 'jiWuGong';
-}
-
-type RouteError = { error: string; status: number };
-
-function isRouteError(value: unknown): value is RouteError {
-    return Boolean(value && typeof value === 'object' && 'error' in value && 'status' in value);
 }
 
 function isIntegerField(value: unknown): value is number {

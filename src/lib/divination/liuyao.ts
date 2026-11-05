@@ -8,7 +8,6 @@
 import { XUN_KONG_TABLE as CORE_XUN_KONG_TABLE } from 'taibu-core/data/shensha';
 import { HEXAGRAMS as CORE_HEXAGRAMS, YAO_CI as CORE_YAO_CI, type Hexagram } from 'taibu-core/data/hexagrams';
 import {
-    calculateFullYaoInfo as calculateFullYaoInfoCore,
     calculateGanZhiTime as calculateGanZhiTimeCore,
     calculateKongWangByPillar as calculateKongWangByPillarCore,
     calculateDerivedHexagrams,
@@ -16,7 +15,6 @@ import {
     findHexagram as findHexagramCore,
     formatGanZhiTime as formatGanZhiTimeCore,
     getHexagramContext,
-    hasInvalidYongShenTargets as hasInvalidYongShenTargetsCore,
     normalizeYongShenTargets as normalizeYongShenTargetsCore,
     performFullAnalysis as performFullAnalysisCore,
     KONG_WANG_LABELS,
@@ -79,7 +77,7 @@ export type {
 export type LiuQin = LiuQinType;
 export type { Hexagram };
 export type Yao = CoreYao;
-export { calculateDerivedHexagrams, calculateGuaShen, getHexagramContext };
+export { calculateDerivedHexagrams, calculateGuaShen };
 
 export interface Trigram {
     name: string;
@@ -158,7 +156,7 @@ export function formatHexagramPalace(code: string): string {
     return palace ? `${palace.name}宫${palace.element}` : '';
 }
 
-export function tossCoin(): boolean {
+function tossCoin(): boolean {
     return Math.random() < 0.5;
 }
 
@@ -222,10 +220,6 @@ export function normalizeYongShenTargets(targets?: readonly unknown[]): LiuQin[]
     return normalizeYongShenTargetsCore(targets);
 }
 
-export function hasInvalidYongShenTargets(targets?: readonly unknown[]): boolean {
-    return hasInvalidYongShenTargetsCore(targets);
-}
-
 export function calculateGanZhiTime(date: Date): GanZhiTime {
     return calculateGanZhiTimeCore(date);
 }
@@ -236,14 +230,6 @@ export function formatGanZhiTime(gz: GanZhiTime): string {
 
 export function calculateKongWangByPillar(ganZhiTime: GanZhiTime): KongWangByPillar {
     return calculateKongWangByPillarCore(ganZhiTime);
-}
-
-export function calculateFullYaoInfo(
-    yaos: Yao[],
-    hexagramCode: string,
-    dayStem: TianGan,
-): FullYaoInfo[] {
-    return calculateFullYaoInfoCore(yaos, hexagramCode, dayStem);
 }
 
 export function performFullAnalysis(

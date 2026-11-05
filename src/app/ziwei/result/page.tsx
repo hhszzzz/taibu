@@ -37,6 +37,7 @@ import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components
 import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
 import { useChartMutation } from '@/lib/hooks/useUserCharts';
 import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
+import { formatClockTime, formatDateParts } from '@/lib/divination/display-helpers';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
@@ -65,8 +66,6 @@ interface FlightState {
     palaces: ZiweiPalaceFlights[] | null;
     failed: boolean;
 }
-
-const formatClock = (hour: number, minute: number) => `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
 
 function ZiweiResultContent() {
     const searchParams = useSearchParams();
@@ -297,8 +296,8 @@ function ZiweiResultContent() {
         const payload = {
             name: resolvedFormData.name,
             gender: resolvedFormData.gender,
-            birth_date: `${resolvedFormData.birthYear}-${String(resolvedFormData.birthMonth).padStart(2, '0')}-${String(resolvedFormData.birthDay).padStart(2, '0')}`,
-            birth_time: formatClock(resolvedFormData.birthHour, resolvedFormData.birthMinute || 0),
+            birth_date: formatDateParts(resolvedFormData.birthYear, resolvedFormData.birthMonth, resolvedFormData.birthDay),
+            birth_time: formatClockTime(resolvedFormData.birthHour, resolvedFormData.birthMinute || 0),
             calendar_type: resolvedFormData.calendarType,
             is_leap_month: resolvedFormData.isLeapMonth ?? false,
             birth_place: resolvedFormData.birthPlace || null,
@@ -337,7 +336,7 @@ function ZiweiResultContent() {
         if (!resolvedFormData || !output) return;
         const savedId = chartId ?? (userId ? await saveOnce(persistChart) : null);
         if (userId && !savedId) showToast('error', '保存失败，命盘未能带入对话');
-        const birth = `${resolvedFormData.birthYear}-${String(resolvedFormData.birthMonth).padStart(2, '0')}-${String(resolvedFormData.birthDay).padStart(2, '0')}`;
+        const birth = formatDateParts(resolvedFormData.birthYear, resolvedFormData.birthMonth, resolvedFormData.birthDay);
         openChatWithResult(router, {
             text: '请结合这张紫微斗数命盘，分析命宫、三方四正与当前大限，并给出可执行建议。',
             mentions: savedId ? [{
@@ -489,7 +488,7 @@ function ZiweiResultContent() {
                             horoscopeHighlight={chartHighlight}
                             horoscopeInfo={mode === 'horoscope' ? horoscopeInfo : undefined}
                             subjectName={resolvedFormData.name}
-                            birthTime={formatClock(chart.input.birthHour, chart.input.birthMinute || 0)}
+                            birthTime={formatClockTime(chart.input.birthHour, chart.input.birthMinute || 0)}
                             birthPlace={resolvedFormData.birthPlace}
                             selectedPalace={activePalace}
                             onSelectedPalaceChange={setSelectedPalace}

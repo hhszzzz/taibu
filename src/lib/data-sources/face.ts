@@ -1,6 +1,7 @@
 import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
+import { extractConversationAnalysis, loadProviderConversation } from '@/lib/data-sources/conversation';
 import { applyListFilters } from '@/lib/db/data-source-filters';
 
 type FaceRow = {
@@ -10,12 +11,6 @@ type FaceRow = {
     created_at: string;
     conversation_id: string | null;
     conversation?: { messages?: unknown; source_data?: Record<string, unknown> } | null;
-};
-
-const extractConversationAnalysis = (conversation?: { messages?: unknown } | null): string | null => {
-    const messages = Array.isArray(conversation?.messages) ? conversation?.messages : [];
-    const assistant = messages.find((m: { role?: string; content?: string }) => m?.role === 'assistant' && m?.content);
-    return assistant?.content || null;
 };
 
 function getFaceAnalysisTypeLabel(type: string | null | undefined): string {
@@ -59,13 +54,7 @@ export const faceProvider: DataSourceProvider<FaceRow> = {
             .where('user_id', '=', userId)
             .executeTakeFirst());
         if (!data) return null;
-        const conversation = data.conversation_id
-            ? await db.tx((trx) => trx
-                .selectFrom('conversations')
-                .select(['messages', 'source_data'])
-                .where('id', '=', data.conversation_id as string)
-                .executeTakeFirst()) ?? null
-            : null;
+        const conversation = await loadProviderConversation(db, data.conversation_id);
         return { ...data, conversation } as FaceRow;
     },
 

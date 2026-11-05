@@ -5,6 +5,8 @@ import {
 } from '@/lib/divination/place-resolution';
 
 const AMAP_GEOCODE_ENDPOINT = 'https://restapi.amap.com/v3/geocode/geo';
+/** Bound the per-process cache; a birth-place lookup set is small, but a public form must not grow it forever. */
+const GEOCODE_CACHE_LIMIT = 500;
 const geocodeCache = new Map<string, Promise<PlaceResolution>>();
 
 type AmapGeocodeRecord = {
@@ -107,6 +109,10 @@ export async function geocodePlaceWithAmap(place: string): Promise<PlaceResoluti
     }
 
     const pending = fetchAmapGeocode(query, key);
+    if (geocodeCache.size >= GEOCODE_CACHE_LIMIT) {
+        const oldest = geocodeCache.keys().next().value;
+        if (oldest) geocodeCache.delete(oldest);
+    }
     geocodeCache.set(query, pending);
     try {
         return await pending;

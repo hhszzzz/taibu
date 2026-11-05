@@ -226,7 +226,7 @@ export const KEY_DATE_DESCRIPTIONS: Record<string, Record<InterpretationMode, st
 /**
  * 根据模式获取十神解读
  */
-export function getTenGodInterpretation(tenGod: string, mode: InterpretationMode): string {
+function getTenGodInterpretation(tenGod: string, mode: InterpretationMode): string {
     return TEN_GOD_INTERPRETATIONS[tenGod]?.[mode] || TEN_GOD_INTERPRETATIONS['比肩'][mode];
 }
 
@@ -242,7 +242,7 @@ export function getScoreLevel(level: FortuneLevel): 'high' | 'medium' | 'low' {
 /**
  * 根据模式获取分数解读
  */
-export function getScoreInterpretation(level: FortuneLevel, mode: InterpretationMode): string {
+function getScoreInterpretation(level: FortuneLevel, mode: InterpretationMode): string {
     const grade = getScoreLevel(level);
     return SCORE_INTERPRETATIONS[grade][mode];
 }
@@ -250,7 +250,7 @@ export function getScoreInterpretation(level: FortuneLevel, mode: Interpretation
 /**
  * 根据模式获取维度建议
  */
-export function getDimensionAdvice(
+function getDimensionAdvice(
     dimension: 'career' | 'wealth' | 'love' | 'health' | 'social',
     level: FortuneLevel,
     mode: InterpretationMode

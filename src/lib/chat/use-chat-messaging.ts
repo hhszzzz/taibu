@@ -7,7 +7,7 @@ import { extractPlainAttachment } from '@/lib/chat/composer-files';
 import { createConversation, deleteConversation, DEFAULT_CONVERSATION_TITLE } from '@/lib/chat/conversation';
 import { buildDraftTitle } from '@/lib/chat/draft-title';
 import { isNearBottom } from '@/lib/chat/chat-scroll';
-import { chatStreamManager, ChatRunnerError, type ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
+import { chatStreamManager, ChatRunnerError, type ChatStreamStartResult, type ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
 import { byokThinking, isByokRef } from '@/lib/byok/config';
 import { useOwnModels, type OwnModel } from '@/lib/byok/client';
@@ -164,6 +164,32 @@ export function useChatMessaging({
         };
     };
 
+    /** The empty reply shown while a plain chat streams. */
+    const pendingAssistantMessage = (id: string, reply: { model: string; modelName: string }): ChatMessage => ({
+        id, role: 'assistant', content: '', createdAt: new Date().toISOString(), model: reply.model, modelName: reply.modelName,
+    });
+
+    /** A plain chat request; an edit or a regeneration sends the same, without an attachment or web search. */
+    const plainChatRequestBody = (options: {
+        conversationId: string;
+        messages: ChatMessage[];
+        mentions: Mention[];
+        attachment?: ChatAttachment;
+        webSearch?: boolean;
+    }) => ({
+        messages: options.messages,
+        conversationId: options.conversationId,
+        stream: true,
+        model: selectedModel,
+        reasoning: reasoningEnabled,
+        reasoningEffort: state.reasoningEffort,
+        ...(options.attachment ? { attachment: options.attachment } : {}),
+        ...(options.webSearch ? { webSearch: true } : {}),
+        mentions: options.mentions.map((mention) => ({ ...mention })),
+        visualizationSettings: readLocalVisualizationSettings(localStorage),
+        timezone: browserTimeZone(),
+    });
+
     const refreshViewerStateTimerRef = useRef<NodeJS.Timeout | null>(null);
     const debouncedRefreshViewerState = useCallback(() => {
         if (refreshViewerStateTimerRef.current) {
@@ -189,6 +215,14 @@ export function useChatMessaging({
         const walletOpen = isFeatureEnabled('billing');
         showToast('info', walletOpen ? (message || '余额不足，请充值、兑换或订阅后再试') : '余额不足', walletOpen ? TOP_UP_TOAST : undefined);
     }, [isFeatureEnabled, markViewerBalanceExhausted, showToast]);
+
+    /** A task that never started: undo the optimistic messages and tell the reader why. */
+    const reportStartFailure = (startResult: ChatStreamStartResult, restore: () => void) => {
+        if (startResult.ok) return;
+        restore();
+        if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
+        else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
+    };
 
     /** 缓存的余额可能落后于刚完成的充值：拦下发送前再读一次，只有确认仍为空才提示。 */
     const guardBalance = useCallback(async () => {
@@ -230,13 +264,14 @@ export function useChatMessaging({
             const isActiveConversationEvent = convId === currentActiveConversationId;
             const isAuthRequired = event.errorCode === 'AUTH_REQUIRED'
                 || event.errorMessage?.includes('请先登录') === true;
+            const taskFinished = event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed';
 
             if (event.type === 'task_started') {
                 setStreamingConversationIds(prev => {
                     if (prev.has(convId)) return prev;
                     const next = new Set(prev); next.add(convId); return next;
                 });
-            } else if (event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed') {
+            } else if (taskFinished) {
                 setStreamingConversationIds(prev => {
                     if (!prev.has(convId)) return prev;
                     const next = new Set(prev); next.delete(convId); return next;
@@ -276,10 +311,10 @@ export function useChatMessaging({
                 });
             }
 
-            if (event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed') {
+            if (taskFinished) {
                 debouncedRefreshViewerState();
             }
-            if (hasLoadedConversationsRef.current && (event.type === 'task_completed' || event.type === 'task_stopped' || event.type === 'task_failed')) {
+            if (hasLoadedConversationsRef.current && taskFinished) {
                 void refreshConversationList();
             }
             if (event.type === 'task_failed' && event.errorCode === 'INSUFFICIENT_BALANCE' && isActiveConversationEvent) {
@@ -529,9 +564,7 @@ export function useChatMessaging({
             }
             const assistantMessageId = (Date.now() + 1).toString();
             const reply = replyModel(selectedModel);
-            const initialAssistantMessage: ChatMessage = {
-                id: assistantMessageId, role: 'assistant', content: '', createdAt: new Date().toISOString(), model: reply.model, modelName: reply.modelName,
-            };
+            const initialAssistantMessage = pendingAssistantMessage(assistantMessageId, reply);
             const optimisticMessages = [...newMessages, initialAssistantMessage];
             setMessages(optimisticMessages);
             const saveSucceeded = await saveMessages(conversationId, newMessages, isNewConversation ? (draftTitle || undefined) : undefined);
@@ -543,33 +576,17 @@ export function useChatMessaging({
             }
             clearSubmittedDraft();
 
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
-            // 读取可视化设置
-            const visualizationSettings = readLocalVisualizationSettings(localStorage);
-
             const startResult = await chatStreamManager.startTask({
-                conversationId, requestHeaders: headers,
-                requestBody: {
-                    messages: newMessages,
-                    conversationId,
-                    stream: true,
-                    model: selectedModel,
-                    reasoning: reasoningEnabled,
-                    reasoningEffort: state.reasoningEffort,
-                    attachment,
-                    webSearch: attachmentState.webSearchEnabled || undefined,
-                    mentions: messageMentions.map(m => ({ ...m })),
-                    visualizationSettings,
-                    timezone: browserTimeZone(),
-                },
+                conversationId, requestHeaders: { 'Content-Type': 'application/json' },
+                requestBody: plainChatRequestBody({
+                    conversationId, messages: newMessages, mentions: messageMentions,
+                    attachment, webSearch: attachmentState.webSearchEnabled,
+                }),
                 baseMessages: newMessages, assistantMessage: initialAssistantMessage, runner: reply.runner,
             });
-            if (!startResult.ok) {
+            reportStartFailure(startResult, () => {
                 if (conversationId === activeConversationIdRef.current) setMessages(newMessages);
-                if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
-                else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
-            }
+            });
         } catch (error) {
             console.error('发送失败:', error);
             if (conversationId === activeConversationIdRef.current) {
@@ -625,19 +642,10 @@ export function useChatMessaging({
 
         const assistantMessageId = (Date.now() + 1).toString();
         const reply = replyModel(selectedModel);
-        const initialAssistantMessage: ChatMessage = {
-            id: assistantMessageId,
-            role: 'assistant',
-            content: '',
-            createdAt: new Date().toISOString(),
-            model: reply.model,
-            modelName: reply.modelName,
-        };
+        const initialAssistantMessage = pendingAssistantMessage(assistantMessageId, reply);
         if (isTargetActive()) setMessages([...newMessages, initialAssistantMessage]);
 
         try {
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
             const onBeforeSave = (finalMessages: ChatMessage[], assistantContent: string): ChatMessage[] => {
                 const newVersion = { userContent: newContent, attachments: updatedUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', aiMessageId: initialAssistantMessage.id, aiModel: initialAssistantMessage.model, aiModelName: initialAssistantMessage.modelName, createdAt: new Date().toISOString() };
                 const updatedVersions = [...existingVersions, newVersion];
@@ -646,25 +654,15 @@ export function useChatMessaging({
             };
 
             const startResult = await chatStreamManager.startTask({
-                conversationId: targetConversationId, requestHeaders: headers,
-                requestBody: {
-                    messages: newMessages,
-                    conversationId: targetConversationId,
-                    stream: true,
-                    model: selectedModel,
-                    reasoning: reasoningEnabled,
-                    reasoningEffort: state.reasoningEffort,
-                    mentions: messageMentions,
-                    visualizationSettings: readLocalVisualizationSettings(localStorage),
-                    timezone: browserTimeZone(),
-                },
+                conversationId: targetConversationId, requestHeaders: { 'Content-Type': 'application/json' },
+                requestBody: plainChatRequestBody({
+                    conversationId: targetConversationId, messages: newMessages, mentions: messageMentions,
+                }),
                 baseMessages: newMessages, assistantMessage: initialAssistantMessage, onBeforeSave, runner: reply.runner,
             });
-            if (!startResult.ok) {
+            reportStartFailure(startResult, () => {
                 if (isTargetActive()) setMessages(originalSnapshot);
-                if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
-                else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
-            }
+            });
         } catch (error) {
             console.error('编辑发送失败:', error);
             if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), unavailableReply('抱歉，服务暂时不可用。')]);
@@ -725,19 +723,10 @@ export function useChatMessaging({
 
         const assistantMessageId = (Date.now() + 1).toString();
         const reply = replyModel(selectedModel);
-        const initialAssistantMessage: ChatMessage = {
-            id: assistantMessageId,
-            role: 'assistant',
-            content: '',
-            createdAt: new Date().toISOString(),
-            model: reply.model,
-            modelName: reply.modelName,
-        };
+        const initialAssistantMessage = pendingAssistantMessage(assistantMessageId, reply);
         if (isTargetActive()) setMessages([...updatedPreviousMessages, initialAssistantMessage]);
 
         try {
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-
             const onBeforeSave = lastUserMessage
                 ? (finalMessages: ChatMessage[], assistantContent: string): ChatMessage[] => {
                     const newVersion = { userContent: lastUserMessage.content, attachments: lastUserMessage.attachments, mentions: messageMentions.length ? [...messageMentions] : undefined, aiContent: assistantContent || '抱歉，我暂时无法回答这个问题。', aiMessageId: initialAssistantMessage.id, aiModel: initialAssistantMessage.model, aiModelName: initialAssistantMessage.modelName, createdAt: new Date().toISOString() };
@@ -753,25 +742,15 @@ export function useChatMessaging({
                 : undefined;
 
             const startResult = await chatStreamManager.startTask({
-                conversationId: targetConversationId, requestHeaders: headers,
-                requestBody: {
-                    messages: updatedPreviousMessages,
-                    conversationId: targetConversationId,
-                    stream: true,
-                    model: selectedModel,
-                    reasoning: reasoningEnabled,
-                    reasoningEffort: state.reasoningEffort,
-                    mentions: messageMentions,
-                    visualizationSettings: readLocalVisualizationSettings(localStorage),
-                    timezone: browserTimeZone(),
-                },
+                conversationId: targetConversationId, requestHeaders: { 'Content-Type': 'application/json' },
+                requestBody: plainChatRequestBody({
+                    conversationId: targetConversationId, messages: updatedPreviousMessages, mentions: messageMentions,
+                }),
                 baseMessages: updatedPreviousMessages, assistantMessage: initialAssistantMessage, onBeforeSave, runner: reply.runner,
             });
-            if (!startResult.ok) {
+            reportStartFailure(startResult, () => {
                 if (isTargetActive()) setMessages(originalSnapshot);
-                if (startResult.code === 'INSUFFICIENT_BALANCE') markBalanceExhausted(startResult.message);
-                else showToast(startResult.code === 'CONVERSATION_BUSY' ? 'info' : 'error', startResult.message);
-            }
+            });
         } catch (error) {
             console.error('重新生成失败:', error);
             if (isTargetActive()) setMessages(prev => [...prev.slice(0, -1), unavailableReply('抱歉，服务暂时不可用。')]);

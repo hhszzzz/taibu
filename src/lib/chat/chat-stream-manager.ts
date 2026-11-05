@@ -20,7 +20,6 @@ export interface ChatStreamTaskSnapshot {
     metadata?: AIMessageMetadata;
     startedAt: number;
     updatedAt: number;
-    hasVisibleToken: boolean;
     /** The model the reply was asked of, also when it failed before any text arrived. */
     model?: string;
     modelName?: string;
@@ -96,7 +95,6 @@ interface ChatStreamTaskInternal {
     reasoningStartTime?: number;
     startedAt: number;
     updatedAt: number;
-    hasVisibleToken: boolean;
     cleanupTimer: ReturnType<typeof setTimeout> | null;
     stopRequested: boolean;
     onBeforeSave?: BeforeSaveHook;
@@ -170,13 +168,7 @@ export function classifyApiError(
 }
 
 function isAbortError(error: unknown): boolean {
-    if (error instanceof DOMException) {
-        return error.name === 'AbortError';
-    }
-    if (error instanceof Error) {
-        return error.name === 'AbortError';
-    }
-    return false;
+    return (error instanceof DOMException || error instanceof Error) && error.name === 'AbortError';
 }
 
 function buildAssistantFromTask(task: ChatStreamTaskInternal, contentOverride?: string): ChatMessage {
@@ -260,7 +252,6 @@ export class ChatStreamManager {
             reasoningStartTime: undefined,
             startedAt: now,
             updatedAt: now,
-            hasVisibleToken: false,
             cleanupTimer: null,
             stopRequested: false,
             onBeforeSave: params.onBeforeSave,
@@ -460,10 +451,8 @@ export class ChatStreamManager {
 
         const delta = parsed as { type?: unknown; delta?: unknown; textDelta?: unknown };
 
-        let hasChanges = false;
         if (delta.type === 'reasoning-delta' && typeof delta.delta === 'string' && delta.delta.length > 0) {
             this.appendReasoningDelta(task, delta.delta);
-            hasChanges = false;
         }
 
         // AI SDK toUIMessageStreamResponse 使用 textDelta，自定义 SSE 使用 delta
@@ -471,12 +460,6 @@ export class ChatStreamManager {
             : typeof delta.delta === 'string' ? delta.delta : '';
         if (delta.type === 'text-delta' && textChunk.length > 0) {
             this.appendContentDelta(task, textChunk);
-            hasChanges = false;
-        }
-
-        if (hasChanges) {
-            task.updatedAt = Date.now();
-            this.emit({ type: 'task_updated', task: this.buildSnapshot(task) });
         }
     }
 
@@ -493,7 +476,6 @@ export class ChatStreamManager {
     private appendContentDelta(task: ChatStreamTaskInternal, delta: string): void {
         if (!delta) return;
         task.content += delta;
-        task.hasVisibleToken = true;
         task.updatedAt = Date.now();
         this.emit({ type: 'task_updated', task: this.buildSnapshot(task) });
     }
@@ -508,6 +490,17 @@ export class ChatStreamManager {
         if (error instanceof ChatRunnerError && error.status === 401) return { code: 'AUTH_REQUIRED', message: error.message };
         // A provider's own failure arrives as ByokRequestError, already written for the reader.
         return { code: 'REQUEST_FAILED', message: error instanceof Error && error.message ? error.message : '请求失败，请稍后再试' };
+    }
+
+    /** The messages to save: the turn plus the reply, after the caller's version history applied. */
+    private finalizeMessages(task: ChatStreamTaskInternal): ChatMessage[] {
+        let finalMessages = [...task.baseMessages, buildAssistantFromTask(task, task.content)];
+        if (task.onBeforeSave) {
+            finalMessages = task.onBeforeSave(finalMessages, task.content);
+            // 将 onBeforeSave 处理后的 baseMessages 存回 task，使后续 getTaskSnapshot 能返回完整版本信息
+            task.baseMessages = finalMessages.slice(0, -1);
+        }
+        return finalMessages;
     }
 
     private async finishCompleted(task: ChatStreamTaskInternal): Promise<void> {
@@ -525,13 +518,7 @@ export class ChatStreamManager {
         task.status = 'completed';
         task.updatedAt = Date.now();
 
-        let finalMessages = [...task.baseMessages, buildAssistantFromTask(task, task.content)];
-        if (task.onBeforeSave) {
-            finalMessages = task.onBeforeSave(finalMessages, task.content);
-            // 将 onBeforeSave 处理后的 baseMessages 存回 task，
-            // 使后续 getTaskSnapshot 能返回包含完整版本信息的消息
-            task.baseMessages = finalMessages.slice(0, -1);
-        }
+        const finalMessages = this.finalizeMessages(task);
         const saved = await this.saveConversationFn(task.conversationId, finalMessages);
         if (!saved) {
             task.status = 'failed';
@@ -565,12 +552,7 @@ export class ChatStreamManager {
 
         let finalMessages = [...task.baseMessages];
         if (hasPartialOutput) {
-            finalMessages = [...task.baseMessages, buildAssistantFromTask(task)];
-            if (task.onBeforeSave) {
-                finalMessages = task.onBeforeSave(finalMessages, task.content);
-                // 将 onBeforeSave 处理后的 baseMessages 存回 task
-                task.baseMessages = finalMessages.slice(0, -1);
-            }
+            finalMessages = this.finalizeMessages(task);
             const saved = await this.saveConversationFn(task.conversationId, finalMessages);
             if (!saved) {
                 this.emit({
@@ -624,15 +606,11 @@ export class ChatStreamManager {
         let messages = messagesOverride;
 
         if (!messages) {
-            if (task.status === 'running') {
-                messages = [...task.baseMessages, buildAssistantFromTask(task, content)];
-            } else if (task.status === 'completed') {
-                messages = [...task.baseMessages, buildAssistantFromTask(task, content)];
-            } else if (content.trim().length > 0 || task.reasoning.trim().length > 0) {
-                messages = [...task.baseMessages, buildAssistantFromTask(task, content)];
-            } else {
-                messages = [...task.baseMessages];
-            }
+            const hasReply = task.status === 'running' || task.status === 'completed'
+                || content.trim().length > 0 || task.reasoning.trim().length > 0;
+            messages = hasReply
+                ? [...task.baseMessages, buildAssistantFromTask(task, content)]
+                : [...task.baseMessages];
         }
 
         return {
@@ -644,7 +622,6 @@ export class ChatStreamManager {
             metadata: task.metadata,
             startedAt: task.startedAt,
             updatedAt: task.updatedAt,
-            hasVisibleToken: task.hasVisibleToken,
             model: task.assistantMessage.model,
             modelName: task.assistantMessage.modelName,
         };

@@ -4,6 +4,13 @@ import { escapeLike } from '@/lib/db/sql-helpers';
 
 interface ChartRow { id: string; name: string; birth_date: string; birth_time: string | null }
 
+function settle<T>(promise: Promise<T>) {
+    return promise.then(
+        (data) => ({ data, error: null }),
+        (error: unknown) => ({ data: null, error }),
+    );
+}
+
 /** 命盘检索与对话检索并行；命盘查询失败只省略该分组，不让整次搜索失败。 */
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
@@ -29,26 +36,23 @@ export async function GET(request: NextRequest) {
     const db = auth.db;
     const pattern = `%${escapeLike(query)}%`;
     const [messages, bazi, ziwei] = await Promise.all([
-        db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 }).then(
-            (data) => ({ data, error: null }),
-            (error) => ({ data: null, error }),
-        ),
-        db.tx((trx) => trx
+        settle(db.rpc('search_conversation_messages', { p_query: query, p_limit: 30 })),
+        settle(db.tx((trx) => trx
             .selectFrom('bazi_charts')
             .select(['id', 'name', 'birth_date', 'birth_time'])
             .where('user_id', '=', auth.user.id)
             .where('name', 'ilike', pattern)
             .orderBy('created_at', 'desc')
             .limit(5)
-            .execute()).then((data) => ({ data, error: null }), (error) => ({ data: null, error })),
-        db.tx((trx) => trx
+            .execute())),
+        settle(db.tx((trx) => trx
             .selectFrom('ziwei_charts')
             .select(['id', 'name', 'birth_date', 'birth_time'])
             .where('user_id', '=', auth.user.id)
             .where('name', 'ilike', pattern)
             .orderBy('created_at', 'desc')
             .limit(5)
-            .execute()).then((data) => ({ data, error: null }), (error) => ({ data: null, error })),
+            .execute())),
     ]);
     if (messages.error) {
         const code = (messages.error as { code?: string }).code;

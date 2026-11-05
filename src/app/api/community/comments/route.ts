@@ -38,10 +38,8 @@ export async function POST(request: NextRequest) {
             return jsonError(`评论不能超过 ${COMMUNITY_LIMITS.comment} 个字符`, 400);
         }
 
-        const authorProfile = await loadSingleCommunityAuthorProfile(auth.db, user.id);
-
-        // 帖子必须存在且未删除；回复的父评论必须属于同一帖子，两件都在插入事务里核对。
-        const outcome = await withRetry(() => auth.db.tx(async (trx) => {
+        // 作者资料与帖子/父评论校验互不依赖，可并行。
+        const outcomePromise = withRetry(() => auth.db.tx(async (trx) => {
             const post = await trx.selectFrom('community_posts').select('id')
                 .where('id', '=', postId).where('is_deleted', '=', false).executeTakeFirst();
             if (!post) return { ok: false as const, error: '帖子不存在或已删除', status: 404 };
@@ -57,6 +55,10 @@ export async function POST(request: NextRequest) {
                 .executeTakeFirstOrThrow();
             return { ok: true as const, data };
         }));
+        const [authorProfile, outcome] = await Promise.all([
+            loadSingleCommunityAuthorProfile(auth.db, user.id),
+            outcomePromise,
+        ]);
         if (!outcome.ok) return jsonError(outcome.error, outcome.status);
         const data = outcome.data;
 

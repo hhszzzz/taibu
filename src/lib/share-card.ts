@@ -20,7 +20,7 @@ export interface ShareCardOptions {
 /**
  * 将 DOM 元素转换为图片 Blob
  */
-export async function captureToBlob(options: ShareCardOptions): Promise<Blob> {
+async function captureToBlob(options: ShareCardOptions): Promise<Blob> {
     const {
         element,
         quality = 0.95,
@@ -58,7 +58,10 @@ export async function downloadShareCard(
     options: ShareCardOptions,
     filename: string = 'fortune-card.png'
 ): Promise<void> {
-    const blob = await captureToBlob(options);
+    downloadBlob(await captureToBlob(options), filename);
+}
+
+function downloadBlob(blob: Blob, filename: string) {
     const url = URL.createObjectURL(blob);
 
     const link = document.createElement('a');
@@ -95,8 +98,8 @@ export async function shareCard(
             return true;
         }
 
-        // 不支持 Web Share API，退回下载
-        await downloadShareCard(options, 'fortune-card.png');
+        // 不支持 Web Share API，退回下载已经生成的图片
+        downloadBlob(blob, 'fortune-card.png');
         return false;
     } catch (error) {
         console.error('分享失败:', error);

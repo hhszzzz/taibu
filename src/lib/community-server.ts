@@ -35,13 +35,20 @@ export function toPublicPost(
     };
 }
 
-type UserProfileRow = {
-    id: string;
-    nickname: string | null;
-    avatar_url: string | null;
+const DEFAULT_COMMUNITY_AUTHOR_NAME = '命理爱好者';
+
+const DEFAULT_COMMUNITY_AUTHOR_PROFILE: CommunityAuthorProfile = {
+    name: DEFAULT_COMMUNITY_AUTHOR_NAME,
+    avatarUrl: null,
 };
 
-const DEFAULT_COMMUNITY_AUTHOR_NAME = '命理爱好者';
+/** 作者资料缺失（加载失败或账号已删）时回落到默认昵称。 */
+export function resolveCommunityAuthorProfile(
+    authorMap: ReadonlyMap<string, CommunityAuthorProfile>,
+    userId: string,
+): CommunityAuthorProfile {
+    return authorMap.get(userId) ?? DEFAULT_COMMUNITY_AUTHOR_PROFILE;
+}
 
 export async function loadCommunityAuthorProfileMap(
     db: ScopedDb,
@@ -75,27 +82,16 @@ export async function loadSingleCommunityAuthorProfile(
     db: ScopedDb,
     userId: string,
 ) {
-    let profile: { nickname: string | null; avatar_url: string | null } | undefined;
-    try {
-        profile = (await db.rpc('community_author_profiles', { p_user_ids: [userId] }))[0];
-    } catch (error) {
-        console.error('[community] failed to load author name:', error);
-        return {
-            name: DEFAULT_COMMUNITY_AUTHOR_NAME,
-            avatarUrl: null,
-        };
-    }
-
-    return normalizeCommunityAuthorProfile(profile ?? null);
+    return resolveCommunityAuthorProfile(await loadCommunityAuthorProfileMap(db, [userId]), userId);
 }
 
-export function normalizeCommunityAuthorName(name: string | null | undefined) {
+function normalizeCommunityAuthorName(name: string | null | undefined) {
     if (typeof name !== 'string') return DEFAULT_COMMUNITY_AUTHOR_NAME;
     const normalized = name.trim();
     return normalized || DEFAULT_COMMUNITY_AUTHOR_NAME;
 }
 
-function normalizeCommunityAuthorProfile(profile: Pick<UserProfileRow, 'nickname' | 'avatar_url'> | null | undefined): CommunityAuthorProfile {
+function normalizeCommunityAuthorProfile(profile: { nickname: string | null; avatar_url: string | null } | null | undefined): CommunityAuthorProfile {
     return {
         name: normalizeCommunityAuthorName(profile?.nickname ?? null),
         avatarUrl: typeof profile?.avatar_url === 'string' && profile.avatar_url.length > 0

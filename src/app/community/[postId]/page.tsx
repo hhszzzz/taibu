@@ -32,6 +32,74 @@ import { PostNavBar, ReportModal, EditPostModal } from '@/components/community/P
 import { PostDetail } from '@/components/community/PostDetail';
 import { CommentSection } from '@/components/community/CommentSection';
 
+function calculateVoteChange(current: VoteType | null, next: VoteType) {
+    const resultVote = current === next ? null : next;
+    return {
+        resultVote,
+        upChange: Number(resultVote === 'up') - Number(current === 'up'),
+        downChange: Number(resultVote === 'down') - Number(current === 'down'),
+    };
+}
+
+function updateCommentVotes(
+    commentList: CommunityComment[],
+    targetId: string,
+    upChange: number,
+    downChange: number
+): CommunityComment[] {
+    return commentList.map(comment => {
+        if (comment.id === targetId) {
+            return {
+                ...comment,
+                upvote_count: comment.upvote_count + upChange,
+                downvote_count: comment.downvote_count + downChange,
+            };
+        }
+        if (comment.replies && comment.replies.length > 0) {
+            return {
+                ...comment,
+                replies: updateCommentVotes(comment.replies, targetId, upChange, downChange),
+            };
+        }
+        return comment;
+    });
+}
+
+function addReplyToComment(
+    commentList: CommunityComment[],
+    parentId: string,
+    newReply: CommunityComment
+): CommunityComment[] {
+    return commentList.map(comment => {
+        if (comment.id === parentId) {
+            return {
+                ...comment,
+                replies: [...(comment.replies || []), { ...newReply, replies: [] }],
+            };
+        }
+        if (comment.replies && comment.replies.length > 0) {
+            return {
+                ...comment,
+                replies: addReplyToComment(comment.replies, parentId, newReply),
+            };
+        }
+        return comment;
+    });
+}
+
+function removeCommentFromList(commentList: CommunityComment[], commentId: string): CommunityComment[] {
+    return commentList.reduce<CommunityComment[]>((acc, comment) => {
+        if (comment.id === commentId) {
+            return acc;
+        }
+        const nextReplies = comment.replies?.length
+            ? removeCommentFromList(comment.replies, commentId)
+            : comment.replies;
+        acc.push(nextReplies !== comment.replies ? { ...comment, replies: nextReplies } : comment);
+        return acc;
+    }, []);
+}
+
 export default function PostDetailPage() {
     const params = useParams();
     const { user, loading } = useSessionSafe();
@@ -147,31 +215,6 @@ function PostDetailContent({ postId }: { postId: string }) {
         }
 
         const currentVote = targetType === 'post' ? postVote : userVotes.get(targetId) || null;
-
-        const calculateVoteChange = (current: VoteType | null, newVote: VoteType) => {
-            let upChange = 0;
-            let downChange = 0;
-
-            if (current === newVote) {
-                if (newVote === 'up') upChange = -1;
-                else downChange = -1;
-                return { upChange, downChange, resultVote: null };
-            } else if (current === null) {
-                if (newVote === 'up') upChange = 1;
-                else downChange = 1;
-                return { upChange, downChange, resultVote: newVote };
-            } else {
-                if (newVote === 'up') {
-                    upChange = 1;
-                    downChange = -1;
-                } else {
-                    upChange = -1;
-                    downChange = 1;
-                }
-                return { upChange, downChange, resultVote: newVote };
-            }
-        };
-
         const { upChange, downChange, resultVote } = calculateVoteChange(currentVote, voteType);
 
         // 乐观更新 UI
@@ -223,30 +266,6 @@ function PostDetailContent({ postId }: { postId: string }) {
         }
     };
 
-    const updateCommentVotes = (
-        commentList: CommunityComment[],
-        targetId: string,
-        upChange: number,
-        downChange: number
-    ): CommunityComment[] => {
-        return commentList.map(comment => {
-            if (comment.id === targetId) {
-                return {
-                    ...comment,
-                    upvote_count: comment.upvote_count + upChange,
-                    downvote_count: comment.downvote_count + downChange,
-                };
-            }
-            if (comment.replies && comment.replies.length > 0) {
-                return {
-                    ...comment,
-                    replies: updateCommentVotes(comment.replies, targetId, upChange, downChange),
-                };
-            }
-            return comment;
-        });
-    };
-
     // 发表评论
     const handleComment = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -277,28 +296,6 @@ function PostDetailContent({ postId }: { postId: string }) {
         }
     };
 
-    const addReplyToComment = (
-        commentList: CommunityComment[],
-        parentId: string,
-        newReply: CommunityComment
-    ): CommunityComment[] => {
-        return commentList.map(comment => {
-            if (comment.id === parentId) {
-                return {
-                    ...comment,
-                    replies: [...(comment.replies || []), { ...newReply, replies: [] }],
-                };
-            }
-            if (comment.replies && comment.replies.length > 0) {
-                return {
-                    ...comment,
-                    replies: addReplyToComment(comment.replies, parentId, newReply),
-                };
-            }
-            return comment;
-        });
-    };
-
     const handleDeleteComment = async (commentId: string) => {
         if (!user) {
             showToast('warning', '请先登录');
@@ -315,19 +312,6 @@ function PostDetailContent({ postId }: { postId: string }) {
             if (!mounted.current) return;
             showToast('error', error instanceof Error ? error.message : '删除评论失败');
         }
-    };
-
-    const removeCommentFromList = (commentList: CommunityComment[], commentId: string): CommunityComment[] => {
-        return commentList.reduce<CommunityComment[]>((acc, comment) => {
-            if (comment.id === commentId) {
-                return acc;
-            }
-            const nextReplies = comment.replies?.length
-                ? removeCommentFromList(comment.replies, commentId)
-                : comment.replies;
-            acc.push(nextReplies !== comment.replies ? { ...comment, replies: nextReplies } : comment);
-            return acc;
-        }, []);
     };
 
     const handleDeletePost = async () => {

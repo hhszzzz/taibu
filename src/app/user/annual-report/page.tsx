@@ -23,6 +23,28 @@ import { LoginOverlay } from '@/components/auth/LoginOverlay';
 import { useToast } from '@/components/ui/Toast';
 import { useSessionSafe } from '@/lib/hooks/session-context';
 
+function YearControls({ year, onChange, refreshing, onRefresh }: {
+    year: number;
+    onChange: (year: number) => void;
+    refreshing: boolean;
+    onRefresh: () => void;
+}) {
+    return (
+        <>
+            <Select
+                ariaLabel="年份"
+                value={year}
+                onChange={onChange}
+                options={[2026, 2025, 2024].map(option => ({ value: option, label: `${option}年` }))}
+                className="h-9 w-auto min-w-28"
+            />
+            <IconButton label="刷新年度报告" disabled={refreshing} onClick={onRefresh}>
+                <RefreshCw className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
+            </IconButton>
+        </>
+    );
+}
+
 export default function AnnualReportPage() {
     const { user, loading } = useSessionSafe();
     return <AnnualReportContent key={`${loading}:${user?.id ?? ''}`} enabled={!loading && !!user} />;
@@ -77,13 +99,12 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
     };
 
     // 获取使用最多的功能
-    const getTopFeature = () => {
-        if (!report) return null;
-        const entries = Object.entries(report.featureUsage);
-        if (entries.length === 0) return null;
-        const sorted = entries.sort((a, b) => b[1] - a[1]);
-        return sorted[0];
-    };
+    const featureEntries = report
+        ? Object.entries(report.featureUsage)
+            .filter(([, count]) => count > 0)
+            .sort((a, b) => b[1] - a[1])
+        : [];
+    const topFeature = featureEntries[0] ?? null;
 
     // 渲染月度使用柱状图
     const renderMonthlyChart = () => {
@@ -116,9 +137,7 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
     // 渲染功能使用分布
     const renderFeatureDistribution = () => {
         if (!report) return null;
-        const entries = Object.entries(report.featureUsage)
-            .filter(([, count]) => count > 0)
-            .sort((a, b) => b[1] - a[1]);
+        const entries = featureEntries;
 
         if (entries.length === 0) {
             return <p className="text-foreground-secondary text-center py-4">暂无使用数据</p>;
@@ -194,8 +213,6 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
         );
     }
 
-    const topFeature = getTopFeature();
-
     return (
         <LoginOverlay message="登录后查看年度报告">
             <div className="min-h-screen bg-background">
@@ -209,31 +226,23 @@ function AnnualReportContent({ enabled }: { enabled: boolean }) {
                             </p>
                         </div>
                         <div className="flex items-center gap-2">
-                            <Select
-                                ariaLabel="年份"
-                                value={selectedYear}
+                            <YearControls
+                                year={selectedYear}
                                 onChange={setSelectedYear}
-                                options={[2026, 2025, 2024].map(year => ({ value: year, label: `${year}年` }))}
-                                className="h-9 w-auto min-w-28"
+                                refreshing={refreshing}
+                                onRefresh={handleRefresh}
                             />
-                            <IconButton label="刷新年度报告" disabled={refreshing} onClick={handleRefresh}>
-                                <RefreshCw className={refreshing ? 'animate-spin' : undefined} aria-hidden="true" />
-                            </IconButton>
                         </div>
                     </div>
 
                     {/* 移动端操作栏 */}
                     <div className="md:hidden flex items-center justify-between mb-4">
-                        <Select
-                            ariaLabel="年份"
-                            value={selectedYear}
+                        <YearControls
+                            year={selectedYear}
                             onChange={setSelectedYear}
-                            options={[2026, 2025, 2024].map(year => ({ value: year, label: `${year}年` }))}
-                            className="h-9 w-auto min-w-28"
+                            refreshing={refreshing}
+                            onRefresh={handleRefresh}
                         />
-                        <IconButton label="刷新年度报告" disabled={refreshing} onClick={handleRefresh}>
-                            <RefreshCw className={refreshing ? 'animate-spin' : ''} aria-hidden="true" />
-                        </IconButton>
                     </div>
 
                     {error ? (

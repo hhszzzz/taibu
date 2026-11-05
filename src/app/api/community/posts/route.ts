@@ -6,7 +6,7 @@
 
 import { NextRequest } from 'next/server';
 import { PostCategory, PostFilters, normalizePostInput } from '@/lib/community';
-import { loadCommunityAuthorProfileMap, loadSingleCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
+import { loadCommunityAuthorProfileMap, loadSingleCommunityAuthorProfile, resolveCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
 import { jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { anonDb } from '@/lib/db/context.server';
 import { escapeLike } from '@/lib/db/sql-helpers';
@@ -50,7 +50,7 @@ export async function GET(request: NextRequest) {
             result.rows.map((post) => post.user_id),
         );
         const safePosts = result.rows.map((post) =>
-            toPublicPost(post as unknown as CommunityPostRow, authorMap.get(post.user_id) || { name: '命理爱好者', avatarUrl: null }),
+            toPublicPost(post as unknown as CommunityPostRow, resolveCommunityAuthorProfile(authorMap, post.user_id)),
         );
 
         return jsonOk({
@@ -82,19 +82,23 @@ export async function POST(request: NextRequest) {
             return jsonError(normalized.error, 400);
         }
 
-        const authorProfile = await loadSingleCommunityAuthorProfile(auth.db, user.id);
-
         const postValues = Object.fromEntries(Object.entries({ user_id: user.id, ...normalized.data }).filter(([, value]) => value !== undefined));
 
-        let post;
-        try {
-            post = await auth.db.tx((trx) => trx
-                .insertInto('community_posts')
-                .values(postValues as never)
-                .returningAll()
-                .executeTakeFirstOrThrow());
-        } catch (postError) {
-            console.error('创建帖子失败:', postError);
+        // 作者资料与插入互不依赖，可并行。
+        const insertPromise = auth.db.tx((trx) => trx
+            .insertInto('community_posts')
+            .values(postValues as never)
+            .returningAll()
+            .executeTakeFirstOrThrow())
+            .catch((postError) => {
+                console.error('创建帖子失败:', postError);
+                return null;
+            });
+        const [authorProfile, post] = await Promise.all([
+            loadSingleCommunityAuthorProfile(auth.db, user.id),
+            insertPromise,
+        ]);
+        if (!post) {
             return jsonError('创建帖子失败', 500);
         }
 

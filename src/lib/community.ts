@@ -5,6 +5,7 @@
  */
 
 import { requestBrowserData } from '@/lib/browser-api';
+import { isPlainObject } from '@/lib/validation';
 
 // =====================================================
 // 类型定义
@@ -103,10 +104,6 @@ export interface PostFilters {
 }
 
 type PostWriteMode = 'create' | 'update';
-
-function isPlainObject(value: unknown): value is Record<string, unknown> {
-    return !!value && typeof value === 'object' && !Array.isArray(value);
-}
 
 function isPostCategory(value: string): value is PostCategory {
     return POST_CATEGORIES.some((item) => item.value === value);

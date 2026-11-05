@@ -1,3 +1,5 @@
+import { isPlainObject } from '@/lib/validation';
+
 export interface Announcement {
     id: string;
     content: string;
@@ -72,11 +74,11 @@ export function parseAnnouncementInput(
     options: { partial?: boolean } = {},
 ): { value?: AnnouncementInput; error?: string } {
     const partial = options.partial ?? false;
-    if (!body || typeof body !== 'object' || Array.isArray(body)) {
+    if (!isPlainObject(body)) {
         return { error: '请求体不是合法对象' };
     }
 
-    const raw = body as Record<string, unknown>;
+    const raw = body;
     const value: AnnouncementInput = {};
 
     if (!partial || hasOwn(raw, 'content')) {
@@ -89,11 +91,11 @@ export function parseAnnouncementInput(
 }
 
 export function getAnnouncementCenterLocalState(raw: unknown): AnnouncementCenterLocalState {
-    if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    if (!isPlainObject(raw)) {
         return {};
     }
 
-    const parsed = raw as Record<string, unknown>;
+    const parsed = raw;
     const state: AnnouncementCenterLocalState = {};
 
     if (typeof parsed.seenAnnouncementKey === 'string' && parsed.seenAnnouncementKey.trim()) {

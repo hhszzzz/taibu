@@ -32,7 +32,7 @@ export async function GET(request: NextRequest) {
         });
         if (count === null) return jsonError('获取公告失败', 500);
 
-        return jsonOk({ count: count ?? 0 });
+        return jsonOk({ count });
     }
 
     if (latestOnly) {

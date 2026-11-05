@@ -7,7 +7,7 @@
 
 import { NextRequest } from 'next/server';
 import { CommunityComment, normalizePostInput } from '@/lib/community';
-import { loadCommunityAuthorProfileMap, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
+import { loadCommunityAuthorProfileMap, resolveCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
 import { getAuthContext, jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
 import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
@@ -50,35 +50,71 @@ export async function GET(
         const postRow = post;
         const postId = postRow.id as string;
 
-        // The counter is a definer function (readers have no write policy) and
-        // must never make the post unreadable when it fails.
-        try {
-            await withRetry(() => db.rpc('increment_community_post_view_count', { post_id: id }));
-        } catch (viewError) {
-            console.error('更新浏览量失败:', viewError);
-        }
+        // 浏览量计数与评论读取互不依赖；计数失败也不影响帖子可读性。
+        const viewCountPromise = withRetry(() => db.rpc('increment_community_post_view_count', { post_id: id }))
+            .catch((viewError) => {
+                console.error('更新浏览量失败:', viewError);
+            });
+        const commentsPromise = withRetry(() => db.tx((trx) => trx
+            .selectFrom('community_comments')
+            .selectAll()
+            .where('post_id', '=', id)
+            .where('is_deleted', '=', false)
+            .orderBy('created_at', 'asc')
+            .execute()))
+            .then((rows) => rows as unknown as CommunityCommentRow[])
+            .catch((commentsError) => {
+                console.error('获取评论失败:', commentsError);
+                return [] as CommunityCommentRow[];
+            });
 
-        let commentsData: CommunityCommentRow[];
-        try {
-            commentsData = await withRetry(() => db.tx((trx) => trx
-                .selectFrom('community_comments')
-                .selectAll()
-                .where('post_id', '=', id)
-                .where('is_deleted', '=', false)
-                .orderBy('created_at', 'asc')
-                .execute())) as unknown as CommunityCommentRow[];
-        } catch (commentsError) {
-            console.error('获取评论失败:', commentsError);
-            commentsData = [];
-        }
+        const [, commentsData] = await Promise.all([viewCountPromise, commentsPromise]);
 
-        const authorMap = await loadCommunityAuthorProfileMap(db, [
-            postRow.user_id as string,
-            ...commentsData.map((comment) => comment.user_id),
+        const currentUserId = user?.id;
+        const isPostAuthor = currentUserId ? postRow.user_id === currentUserId : false;
+        const viewer = {
+            isAuthenticated: !!currentUserId,
+            isAuthor: isPostAuthor,
+        };
+        const viewerVotes = {
+            post: null as 'up' | 'down' | null,
+            comments: {} as Record<string, 'up' | 'down'>,
+        };
+
+        // 作者资料与当前用户的投票状态互不依赖，可并行读取。
+        const voteRowsPromise = currentUserId
+            ? withRetry(() => db.tx((trx) => trx
+                .selectFrom('community_votes')
+                .select(['target_type', 'target_id', 'vote_type'])
+                .where('user_id', '=', currentUserId)
+                .where('target_id', 'in', [postId, ...commentsData.map((comment) => comment.id)])
+                .execute()))
+                .catch((voteError) => {
+                    console.error('获取帖子投票状态失败:', voteError);
+                    return [];
+                })
+            : Promise.resolve([]);
+
+        const [authorMap, voteRows] = await Promise.all([
+            loadCommunityAuthorProfileMap(db, [
+                postRow.user_id as string,
+                ...commentsData.map((comment) => comment.user_id),
+            ]),
+            voteRowsPromise,
         ]);
 
+        for (const row of voteRows) {
+            if (row.target_type === 'post' && row.target_id === postId) {
+                viewerVotes.post = row.vote_type as 'up' | 'down';
+                continue;
+            }
+            if (row.target_type === 'comment' && typeof row.target_id === 'string') {
+                viewerVotes.comments[row.target_id] = row.vote_type as 'up' | 'down';
+            }
+        }
+
         type CommentWithReplies = CommunityCommentRow & { replies: CommentWithReplies[] };
-        const comments: CommentWithReplies[] = (commentsData || []).map((comment: CommunityCommentRow) => ({
+        const comments: CommentWithReplies[] = commentsData.map((comment: CommunityCommentRow) => ({
             ...comment,
             replies: [],
         }));
@@ -101,44 +137,6 @@ export async function GET(
             }
         });
 
-        // 获取当前用户信息（需要在处理评论前获取）
-        const currentUserId = user?.id;
-        const isPostAuthor = currentUserId ? postRow.user_id === currentUserId : false;
-        const viewer = {
-            isAuthenticated: !!currentUserId,
-            isAuthor: isPostAuthor,
-        };
-        const commentIds = comments.map((comment) => comment.id);
-        const viewerVotes = {
-            post: null as 'up' | 'down' | null,
-            comments: {} as Record<string, 'up' | 'down'>,
-        };
-
-        if (currentUserId) {
-            const voteTargetIds: string[] = [postId, ...commentIds];
-            if (voteTargetIds.length > 0) {
-                try {
-                    const voteRows = await withRetry(() => db.tx((trx) => trx
-                        .selectFrom('community_votes')
-                        .select(['target_type', 'target_id', 'vote_type'])
-                        .where('user_id', '=', currentUserId)
-                        .where('target_id', 'in', voteTargetIds)
-                        .execute()));
-                    for (const row of voteRows) {
-                        if (row.target_type === 'post' && row.target_id === postId) {
-                            viewerVotes.post = row.vote_type as 'up' | 'down';
-                            continue;
-                        }
-                        if (row.target_type === 'comment' && typeof row.target_id === 'string') {
-                            viewerVotes.comments[row.target_id] = row.vote_type as 'up' | 'down';
-                        }
-                    }
-                } catch (voteError) {
-                    console.error('获取帖子投票状态失败:', voteError);
-                }
-            }
-        }
-
         // 为评论添加 author/isAuthor 标记，然后移除 user_id
         type SafeComment = Omit<CommentWithReplies, 'user_id' | 'replies'> & {
             author_name: string;
@@ -152,7 +150,7 @@ export async function GET(
             const isPostAuthor = comment.user_id === postRow.user_id;
             const { replies, ...safeComment } = comment;
             delete (safeComment as { user_id?: unknown }).user_id;
-            const authorProfile = authorMap.get(comment.user_id) || { name: '命理爱好者', avatarUrl: null };
+            const authorProfile = resolveCommunityAuthorProfile(authorMap, comment.user_id);
             return {
                 ...safeComment,
                 author_name: authorProfile.name,
@@ -165,7 +163,7 @@ export async function GET(
 
         const safePost = toPublicPost(
             postRow as unknown as CommunityPostRow,
-            authorMap.get(postRow.user_id as string) || { name: '命理爱好者', avatarUrl: null },
+            resolveCommunityAuthorProfile(authorMap, postRow.user_id as string),
         );
         const safeComments = rootComments.map(c => processComment(c));
 
@@ -230,7 +228,7 @@ export async function PUT(
 
         const authorMap = await loadCommunityAuthorProfileMap(auth.db, [user.id]);
         return jsonOk(
-            toPublicPost(data as unknown as CommunityPostRow, authorMap.get(user.id) || { name: '命理爱好者', avatarUrl: null }),
+            toPublicPost(data as unknown as CommunityPostRow, resolveCommunityAuthorProfile(authorMap, user.id)),
         );
     } catch (error) {
         console.error('更新帖子失败:', error);

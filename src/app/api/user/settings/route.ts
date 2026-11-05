@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, staleUserResponse } from '@/lib/api-utils';
 import { json } from '@/lib/db/sql-helpers';
 import {
     buildUserSettingsUpdatePayload,
@@ -9,18 +9,10 @@ import {
 } from '@/lib/user/settings';
 import { validPromptTemplates } from '@/lib/agent/prompt-templates';
 
-/** A client that switched accounts mid-request must reload instead of writing to the new account. */
-function rejectStaleUser(request: NextRequest, userId: string): ReturnType<typeof jsonError> | null {
-  const expectedUserId = request.headers.get('X-Expected-User-Id');
-  return expectedUserId !== null && expectedUserId !== userId
-    ? jsonError('账号已切换，请重新加载设置', 409)
-    : null;
-}
-
 export async function GET(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  const staleUser = rejectStaleUser(request, auth.user.id);
+  const staleUser = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载设置');
   if (staleUser) return staleUser;
 
   const { settings, error } = await getUserSettingsSnapshot(auth.db, auth.user.id);
@@ -36,7 +28,7 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  const staleUser = rejectStaleUser(request, auth.user.id);
+  const staleUser = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载设置');
   if (staleUser) return staleUser;
   let body: UserSettingsUpdateInput;
   try {

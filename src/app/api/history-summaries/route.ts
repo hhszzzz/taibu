@@ -1,5 +1,5 @@
 import { type NextRequest } from 'next/server';
-import { jsonError, jsonOk, requireUserContext, settlePromise } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, settlePromise, type AuthenticatedUserContext } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { selectFromDynamic } from '@/lib/db/sql-helpers';
 import {
@@ -11,8 +11,6 @@ import {
 } from '@/lib/history/registry';
 
 type HistoryRow = Record<string, unknown>;
-
-type AuthenticatedContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
 
 function toHistoryRow(value: unknown): HistoryRow | null {
     if (!value || typeof value !== 'object' || Array.isArray(value)) {
@@ -41,7 +39,7 @@ async function attachConversations(db: ScopedDb, rows: HistoryRow[]): Promise<Hi
 }
 
 async function loadHistoryItems(
-    auth: AuthenticatedContext,
+    auth: AuthenticatedUserContext,
     type: HistoryType,
     limit: number,
     offset: number,
@@ -83,7 +81,7 @@ async function loadHistoryItems(
 }
 
 async function loadHistoryRow(
-    auth: AuthenticatedContext,
+    auth: AuthenticatedUserContext,
     type: HistoryType,
     id: string,
 ) {

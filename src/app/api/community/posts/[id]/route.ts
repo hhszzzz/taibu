@@ -8,9 +8,9 @@
 import { NextRequest } from 'next/server';
 import { CommunityComment, normalizePostInput } from '@/lib/community';
 import { loadCommunityAuthorProfileMap, resolveCommunityAuthorProfile, toPublicPost, type CommunityPostRow } from '@/lib/community-server';
-import { getAuthContext, jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
+import { getAuthContext, jsonError, jsonOk, readJsonBody } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { ensureFeatureEnabledFresh, requireFeatureUserContext } from '@/lib/feature-gate-utils';
 
 type CommunityCommentRow = Omit<CommunityComment, 'author_name' | 'author_avatar_url' | 'replies'> & {
     user_id: string;
@@ -183,13 +183,9 @@ export async function PUT(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'community', '社区功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) {
-            return jsonError(auth.error.message, auth.error.status);
-        }
         const { user } = auth;
 
         const { id } = await params;
@@ -240,13 +236,9 @@ export async function DELETE(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
 ) {
-    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'community', '社区功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) {
-            return jsonError(auth.error.message, auth.error.status);
-        }
         const { user } = auth;
 
         const { id } = await params;

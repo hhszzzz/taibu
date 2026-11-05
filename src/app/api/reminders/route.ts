@@ -13,13 +13,7 @@ import {
     scheduleKeyDateReminders,
     type ReminderType
 } from '@/lib/reminders';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
-
-function expectedUserMismatch(request: NextRequest, userId: string) {
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    if (expectedUserId === null || expectedUserId === userId) return null;
-    return jsonError('账号已切换，请重新加载设置', 409, { success: false });
-}
+import { jsonError, jsonOk, requireUserContext, staleUserResponse } from '@/lib/api-utils';
 
 // GET - 获取提醒订阅设置
 export async function GET(request: NextRequest) {
@@ -28,8 +22,8 @@ export async function GET(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
-        const mismatch = expectedUserMismatch(request, auth.user.id);
-        if (mismatch) return mismatch;
+        const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载设置', { success: false });
+        if (stale) return stale;
         const { user } = auth;
         const db = auth.db;
 
@@ -67,8 +61,8 @@ export async function POST(request: NextRequest) {
         if ('error' in auth) {
             return jsonError(auth.error.message, auth.error.status, { success: false });
         }
-        const mismatch = expectedUserMismatch(request, auth.user.id);
-        if (mismatch) return mismatch;
+        const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载设置', { success: false });
+        if (stale) return stale;
         const { user } = auth;
         const db = auth.db;
 

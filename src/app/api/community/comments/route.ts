@@ -6,19 +6,15 @@
 import { NextRequest } from 'next/server';
 import { COMMUNITY_LIMITS } from '@/lib/community';
 import { loadSingleCommunityAuthorProfile } from '@/lib/community-server';
-import { jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
 import { hasNonEmptyStrings, isValidUUID } from '@/lib/validation';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { requireFeatureUserContext } from '@/lib/feature-gate-utils';
 
 export async function POST(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'community', '社区功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) {
-            return jsonError(auth.error.message, auth.error.status);
-        }
         const { user } = auth;
 
         const parsed = await readJsonBody<Record<string, unknown>>(request, 16 * 1024);

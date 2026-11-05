@@ -66,10 +66,13 @@ export async function getAuthContext(request: NextRequest): Promise<AuthContextR
     }
 }
 
+/** The signed-in caller's scoped database and profile. */
+export type AuthenticatedUserContext = { db: ScopedDb; user: AppUser };
+
 export async function requireUserContext(
     request: NextRequest
 ): Promise<
-    | { db: ScopedDb; user: AppUser }
+    | AuthenticatedUserContext
     | { error: { message: string; status: number } }
 > {
     const { db, user, authError } = await getAuthContext(request);
@@ -154,12 +157,32 @@ export function jsonOk<TPayload>(payload: TPayload, status = 200, headers?: Reco
     return NextResponse.json(payload, { status, headers });
 }
 
+/** A parsed-input failure a route returns as-is. */
+export type RouteError = { error: string; status: number };
+
+export function isRouteError(value: unknown): value is RouteError {
+    return Boolean(value && typeof value === 'object' && 'error' in value && 'status' in value);
+}
+
 /** Wraps a promise as `{ data, error }`, so callers can inspect failures without try/catch. */
 export function settlePromise<T>(promise: Promise<T>): Promise<{ data: T; error: null } | { data: null; error: unknown }> {
     return promise.then(
         (data) => ({ data, error: null }),
         (error: unknown) => ({ data: null, error }),
     );
+}
+
+/** A client that switched accounts mid-request must reload instead of touching the new account. */
+export function staleUserResponse(
+    request: NextRequest,
+    userId: string,
+    message: string,
+    extra?: Record<string, unknown>,
+): NextResponse | null {
+    const expectedUserId = request.headers.get('X-Expected-User-Id');
+    return expectedUserId !== null && expectedUserId !== userId
+        ? jsonError(message, 409, extra)
+        : null;
 }
 
 export const SSE_HEADERS = {

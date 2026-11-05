@@ -1,6 +1,6 @@
 import { type NextRequest } from 'next/server';
 import type { BirthTimeResolution } from '@/lib/divination/birth-time';
-import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, staleUserResponse, type AuthenticatedUserContext } from '@/lib/api-utils';
 import { deleteFromDynamic, selectFromDynamic } from '@/lib/db/sql-helpers';
 import { invalidateMentionCache } from '@/lib/mentions';
 import {
@@ -12,8 +12,6 @@ import {
 } from '@/lib/user/settings';
 
 type ChartType = 'bazi' | 'ziwei';
-
-type AuthContext = Exclude<Awaited<ReturnType<typeof requireUserContext>>, { error: unknown }>;
 
 type ChartRecord = BirthTimeResolution & {
     id: string;
@@ -38,17 +36,11 @@ function isChartType(value: unknown): value is ChartType {
     return value === 'bazi' || value === 'ziwei';
 }
 
-/** 客户端带上当前账号；账号已切换时拒绝，避免旧账号的数据落进新会话。 */
-function matchesExpectedUser(request: NextRequest, auth: AuthContext): boolean {
-    const expectedUserId = request.headers.get('X-Expected-User-Id');
-    return expectedUserId === null || expectedUserId === auth.user.id;
-}
-
 function getChartTable(type: ChartType) {
     return type === 'bazi' ? 'bazi_charts' : 'ziwei_charts';
 }
 
-async function loadDefaultChartIds(auth: AuthContext) {
+async function loadDefaultChartIds(auth: AuthenticatedUserContext) {
     const { settings, error } = await getUserSettingsSnapshot(auth.db, auth.user.id);
     return {
         defaultChartIds: toDefaultChartIds(settings),
@@ -59,9 +51,8 @@ async function loadDefaultChartIds(auth: AuthContext) {
 export async function GET(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    if (!matchesExpectedUser(request, auth)) {
-        return jsonError('账号已切换，请重新加载命盘', 409);
-    }
+    const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+    if (stale) return stale;
 
     const [baziCharts, ziweiCharts, settingsResult] = await Promise.all([
         auth.db.tx((trx) => trx
@@ -110,9 +101,8 @@ export async function GET(request: NextRequest) {
 export async function PATCH(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    if (!matchesExpectedUser(request, auth)) {
-        return jsonError('账号已切换，请重新加载命盘', 409);
-    }
+    const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+    if (stale) return stale;
     let body: { type?: unknown; id?: unknown };
     try {
         body = await request.json() as { type?: unknown; id?: unknown };
@@ -153,9 +143,8 @@ export async function PATCH(request: NextRequest) {
 export async function DELETE(request: NextRequest) {
     const auth = await requireUserContext(request);
     if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-    if (!matchesExpectedUser(request, auth)) {
-        return jsonError('账号已切换，请重新加载命盘', 409);
-    }
+    const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+    if (stale) return stale;
     const type = request.nextUrl.searchParams.get('type');
     const id = request.nextUrl.searchParams.get('id');
 

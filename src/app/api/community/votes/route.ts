@@ -6,10 +6,10 @@
 
 import { NextRequest } from 'next/server';
 import { TargetType, VoteType } from '@/lib/community';
-import { getAuthContext, jsonError, jsonOk, readJsonBody, requireUserContext } from '@/lib/api-utils';
+import { getAuthContext, jsonError, jsonOk, readJsonBody } from '@/lib/api-utils';
 import { withRetry } from '@/lib/retry';
 import { isValidUUID, missingFields, missingSearchParams } from '@/lib/validation';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { ensureFeatureEnabledFresh, requireFeatureUserContext } from '@/lib/feature-gate-utils';
 
 export async function GET(request: NextRequest) {
     const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
@@ -47,13 +47,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'community', '社区功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) {
-            return jsonError(auth.error.message, auth.error.status);
-        }
         const parsed = await readJsonBody<Record<string, unknown>>(request, 4 * 1024);
         if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
         const body = parsed.body;

@@ -7,7 +7,7 @@ import { calculateBazi } from 'taibu-core/bazi';
 import { calculateZiwei } from 'taibu-core/ziwei';
 import { buildBaziInputFromStoredFields } from '@/lib/divination/bazi-record';
 import { isValidBirthTimeString, resolveBirthTimeOptions } from '@/lib/divination/birth-time';
-import { jsonError, jsonOk, requireUserContext, settlePromise } from '@/lib/api-utils';
+import { jsonError, jsonOk, requireUserContext, settlePromise, staleUserResponse } from '@/lib/api-utils';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { insertIntoDynamic, selectFromDynamic, updateTableDynamic } from '@/lib/db/sql-helpers';
 import { isValidUUID } from '@/lib/validation';
@@ -143,10 +143,8 @@ export function createChartGetHandler(config: ChartCrudConfig) {
     return async function GET(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-        const expectedUserId = request.headers.get('X-Expected-User-Id');
-        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-            return jsonError('账号已切换，请重新加载命盘', 409);
-        }
+        const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+        if (stale) return stale;
         const id = request.nextUrl.searchParams.get('id');
         if (!id) {
             return jsonError('缺少命盘 ID', 400);
@@ -174,10 +172,8 @@ export function createChartPostHandler(config: ChartCrudConfig) {
     return async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-        const expectedUserId = request.headers.get('X-Expected-User-Id');
-        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-            return jsonError('账号已切换，请重新加载命盘', 409);
-        }
+        const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+        if (stale) return stale;
         let body: { payload?: Record<string, unknown> };
         try {
             body = await request.json() as { payload?: Record<string, unknown> };
@@ -223,10 +219,8 @@ export function createChartUpdateHandler(config: ChartCrudConfig) {
     return async function POST(request: NextRequest) {
         const auth = await requireUserContext(request);
         if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-        const expectedUserId = request.headers.get('X-Expected-User-Id');
-        if (expectedUserId !== null && expectedUserId !== auth.user.id) {
-            return jsonError('账号已切换，请重新加载命盘', 409);
-        }
+        const stale = staleUserResponse(request, auth.user.id, '账号已切换，请重新加载命盘');
+        if (stale) return stale;
         let body: { chartId?: unknown; payload?: unknown };
         try {
             body = await request.json() as { chartId?: unknown; payload?: unknown };

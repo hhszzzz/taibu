@@ -6,9 +6,9 @@
  */
 
 import { NextRequest } from 'next/server';
-import { requireUserContext, jsonError, jsonOk } from '@/lib/api-utils';
+import { jsonError, jsonOk } from '@/lib/api-utils';
 import type { ScopedDbTransaction } from '@/lib/db/context.server';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { requireFeatureUserContext } from '@/lib/feature-gate-utils';
 
 /** The note list and its total share these date filters; both run in their own transaction. */
 function notesQuery(trx: ScopedDbTransaction, userId: string, date: string | null, startDate: string | null, endDate: string | null) {
@@ -20,11 +20,9 @@ function notesQuery(trx: ScopedDbTransaction, userId: string, date: string | nul
 }
 
 export async function GET(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'records', '命理记录功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
 
         const { searchParams } = new URL(request.url);
@@ -56,11 +54,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'records', '命理记录功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
 
         const body = await request.json() as {
@@ -92,11 +88,9 @@ export async function POST(request: NextRequest) {
 }
 
 export async function DELETE(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('records', '命理记录功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'records', '命理记录功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
         const { user } = auth;
 
         const { searchParams } = new URL(request.url);

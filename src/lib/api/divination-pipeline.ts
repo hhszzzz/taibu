@@ -18,6 +18,8 @@ import {
   jsonOk,
   requireUserContext,
   SSE_HEADERS,
+  isRouteError,
+  type RouteError,
 } from '@/lib/api-utils';
 import { userDb, type ScopedDb } from '@/lib/db/context.server';
 import { insertIntoDynamic } from '@/lib/db/sql-helpers';
@@ -88,12 +90,6 @@ type SuccessfulDivinationAuthResult = {
 
 function scopedDbFor(result: { user: { id: string }; db?: ScopedDb }): ScopedDb {
   return result.db ?? userDb(result.user.id);
-}
-
-export type RouteError = { error: string; status: number };
-
-export function isRouteError(value: unknown): value is RouteError {
-  return Boolean(value && typeof value === 'object' && 'error' in value && 'status' in value);
 }
 
 const SUPPORTED_VISION_IMAGE_MIME_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/jpg']);

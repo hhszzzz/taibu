@@ -7,10 +7,10 @@
 
 import { NextRequest } from 'next/server';
 import { COMMUNITY_LIMITS, TargetType, ReportReason, ReportStatus, isReportReason } from '@/lib/community';
-import { jsonError, jsonOk, readJsonBody, requireAdminContext, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireAdminContext } from '@/lib/api-utils';
 import { parsePagination } from '@/lib/pagination';
 import { isValidUUID, missingFields } from '@/lib/validation';
-import { ensureFeatureEnabledFresh } from '@/lib/feature-gate-utils';
+import { requireFeatureUserContext } from '@/lib/feature-gate-utils';
 import { checkRateLimit } from '@/lib/rate-limit';
 
 const REPORT_RATE_LIMIT = { maxRequests: 5, windowMs: 60_000 } as const;
@@ -48,14 +48,9 @@ export async function GET(request: NextRequest) {
 }
 
 export async function POST(request: NextRequest) {
-    const guard = await ensureFeatureEnabledFresh('community', '社区功能当前未启用');
-    if (guard) return guard;
+    const auth = await requireFeatureUserContext(request, 'community', '社区功能当前未启用');
+    if ('response' in auth) return auth.response;
     try {
-        const auth = await requireUserContext(request);
-        if ('error' in auth) {
-            return jsonError(auth.error.message, auth.error.status);
-        }
-
         const parsed = await readJsonBody<Record<string, unknown>>(request, 8 * 1024);
         if ('error' in parsed) return jsonError(parsed.error.message, parsed.error.status);
         const body = parsed.body;

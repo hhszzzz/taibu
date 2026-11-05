@@ -13,7 +13,8 @@ import {
     type QimenInput,
     type QimenOutput,
 } from '@/lib/divination/qimen';
-import { isRouteError, saveUserOwnedDivinationRecord, type RouteError } from '@/lib/api/divination-pipeline';
+import { isRouteError, type RouteError } from '@/lib/api-utils';
+import { saveUserOwnedDivinationRecord } from '@/lib/api/divination-pipeline';
 
 interface QimenRequest {
     action: 'calculate' | 'save';

@@ -27,18 +27,21 @@
 | `0002_subscription_windows` | 把旧的单一订阅额度迁入分周期额度表（5 小时、天、周、月、整期） |
 | `0003_community_report_dedup` | 每个用户对同一目标只保留一条待处理举报 |
 | `0004_retire_browser_provider_runs` | 把仍在进行、使用旧版浏览器直连模型的 Agent 任务结束为失败并清除暂存的 Key；自定义模型改为在设置里添加连接 |
+| `0005_retire_dream_analysis_mode` | 把 `source_type='dream'` 的旧会话归为普通对话，`personality` 中的 `dream`/`mangpai` 改为 `general`，并从 `source_type` 约束中移除 `dream` |
+| `0006_retire_conversation_personality` | 删除 `conversations.personality` 列并丢弃接收人格参数的旧函数重载；存档视图与函数由 `db-init` 按当前定义重建 |
 
 迁移执行完后，如果库里仍有类型不同、改过名或未声明的表与列，`db-init` 不会自行处理：它停下并列出全部差异，这类结构变更要写成新的编号迁移。
 
 ### 删除的数据
 
-以下旧数据在 `0001` 中删除，无法恢复：
+以下旧数据在迁移中删除，无法恢复：
 
 - 积分流水 `credit_transactions`，以及 `users.ai_chat_count`；
 - 会员等级 `users.membership`、`users.membership_expires_at`；
 - 每日签到 `daily_checkins`、激活码 `activation_keys`；
 - 每日早报 `daily_briefing_jobs`、`user_settings.daily_briefing_settings` 与早报提醒订阅；需要的用户可在「定时任务」里用「每日早报」模板重新创建；
-- 旧网关与模型字段，如 `ai_gateways.api_key_env_var`、`ai_gateways.transport` 等。
+- 旧网关与模型字段，如 `ai_gateways.api_key_env_var`、`ai_gateways.transport` 等；
+- `conversations.personality`（`0006`）：旧人格选择随列删除，历史会话按普通对话展示。
 
 ### 升级后需要重新配置
 

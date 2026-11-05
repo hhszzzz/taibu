@@ -119,8 +119,11 @@ async function applyKnowledgeBaseWeights(
     const now = Date.now();
     const cached = kbWeightCache.get(cacheKey);
     const fresh = cached !== undefined && now - cached.timestamp < KB_WEIGHT_CACHE_TTL;
-    const weightMap = new Map<string, string>(fresh && cached ? cached.weights : []);
-    const missingKbIds = kbIds.filter(id => !weightMap.has(id));
+    const cachedWeights = fresh && cached ? cached.weights : null;
+    const missingKbIds = kbIds.filter(id => !cachedWeights?.has(id));
+    const weightMap = missingKbIds.length === 0 && cachedWeights
+        ? cachedWeights
+        : new Map<string, string>(cachedWeights ?? []);
     if (missingKbIds.length > 0) {
         const kbRows = await persistence.loadWeights(effectiveUserId, missingKbIds);
         for (const kb of kbRows || []) {

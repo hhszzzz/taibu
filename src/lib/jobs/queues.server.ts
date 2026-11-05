@@ -1,5 +1,5 @@
 import 'server-only';
-import { Queue } from 'bullmq';
+import { Queue, type DefaultJobOptions } from 'bullmq';
 
 import { createBullConnection } from '@/lib/redis.server';
 
@@ -14,10 +14,12 @@ export type AgentEvalJobData = { runId: string };
 let maintenanceQueue: Queue<MaintenanceJobData> | null = null;
 let agentEvalQueue: Queue<AgentEvalJobData> | null = null;
 
-function createQueue<T>(name: string): Queue<T> {
+/** One queue shape for every worker-backed queue: same connection and prefix. */
+export function createQueue<T>(name: string, defaultJobOptions?: DefaultJobOptions): Queue<T> {
   return new Queue<T>(name, {
     connection: createBullConnection(),
     prefix: JOB_QUEUE_PREFIX,
+    ...(defaultJobOptions ? { defaultJobOptions } : {}),
   });
 }
 

@@ -24,7 +24,6 @@ function createWorker<Data>(options: {
   concurrency: number;
   processor: Processor<Data>;
   failedLabel: string;
-  errorLabel: string;
   detail: (job: Job<Data> | undefined) => unknown;
 }): Worker<Data> {
   const instance = new Worker<Data>(options.name, options.processor, {
@@ -36,7 +35,7 @@ function createWorker<Data>(options: {
     console.warn(`[jobs] ${options.failedLabel} failed:`, options.detail(job), error.message);
   });
   instance.on('error', () => {
-    console.warn(`[jobs] ${options.errorLabel} worker error`);
+    console.warn(`[jobs] ${options.failedLabel.replace(/ job$/u, '')} worker error`);
   });
   return instance;
 }
@@ -55,7 +54,6 @@ async function start(): Promise<void> {
       return summary;
     },
     failedLabel: 'maintenance job',
-    errorLabel: 'maintenance',
     detail: (job) => job?.name,
   });
   emailWorker = createWorker<OutgoingMail>({
@@ -65,7 +63,6 @@ async function start(): Promise<void> {
       await sendMail(job.data);
     },
     failedLabel: 'email job',
-    errorLabel: 'email',
     detail: (job) => job?.id,
   });
   // One evaluation at a time; user tasks are claimed from the database, so this queue never competes for their slots.
@@ -76,7 +73,6 @@ async function start(): Promise<void> {
       await executeAgentEvalRun(job.data.runId);
     },
     failedLabel: 'agent evaluation',
-    errorLabel: 'agent evaluation',
     detail: (job) => job?.data.runId,
   });
 }

@@ -83,9 +83,7 @@ export function getYearSolarTerms(year: number): SolarTerm[] {
         });
     }
 
-    // 去重并排序
-    const unique = Array.from(new Map(terms.map(t => [t.date, t])).values());
-    return unique.sort((a, b) => a.date.localeCompare(b.date));
+    return terms.sort((a, b) => a.date.localeCompare(b.date));
 }
 
 /**

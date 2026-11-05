@@ -40,14 +40,16 @@ function announcementToFormState(announcement: Announcement): AnnouncementFormSt
   };
 }
 
+const PUBLISHED_AT_FORMAT = new Intl.DateTimeFormat('zh-CN', {
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
 function formatPublishedAt(value: string | null) {
   if (!value) return '未发布';
-  return new Date(value).toLocaleString('zh-CN', {
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return PUBLISHED_AT_FORMAT.format(new Date(value));
 }
 
 export function AnnouncementManagementPanel() {

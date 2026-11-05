@@ -20,10 +20,8 @@ function additionalData(gatewayId: string) {
 }
 
 /** What the admin sees of a saved key: enough to tell two keys apart, never enough to use one. */
-export const apiKeyHint = byokKeyHint;
-
 export function sealGatewayApiKey(gatewayId: string, apiKey: string): { secret: AISealedSecret; hint: string } {
-    return { secret: sealSecret(gatewaySecretKey(), apiKey, additionalData(gatewayId)), hint: apiKeyHint(apiKey) };
+    return { secret: sealSecret(gatewaySecretKey(), apiKey, additionalData(gatewayId)), hint: byokKeyHint(apiKey) };
 }
 
 /** Throws AI_GATEWAY_KEY_INVALID when the value was tampered with, sealed for another gateway or under another master key. */

@@ -144,6 +144,42 @@ async function resolveModelConfigForCall(
     return await getDefaultModelConfigAsync('chat', options);
 }
 
+/** One source's attempt: the resolved runtime config and what a request to it needs. */
+type PreparedModelCall = {
+    runtimeConfig: AIModelConfig;
+    model: ReturnType<typeof createModelFromConfig>;
+    coreMessages: ReturnType<typeof toCoreMessages>;
+    systemPrompt: string;
+    reasoning: boolean | undefined;
+};
+
+/**
+ * Resolves the model and runs `run` against the first source that answers. Every call variant shares this, so the
+ * reasoning flag and the request options mean the same on each path.
+ */
+async function withModelCall<T>(
+    messages: AIRequestMessage[],
+    modelId: string,
+    chartContext: string,
+    options: AICallOptions | undefined,
+    run: (call: PreparedModelCall) => Promise<T>,
+    resolution: { requireVision?: boolean; image?: { imageBase64?: string; imageMimeType?: string } } = {},
+): Promise<T> {
+    const config = await resolveModelConfigForCall(modelId, { requireVision: resolution.requireVision });
+    if (!config) {
+        throw new Error(`Unknown model: ${modelId}`);
+    }
+    const systemPrompt = buildSystemPrompt(chartContext, options);
+    return await runWithSourceFallback(config, async (runtimeConfig) => {
+        const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
+        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
+        return await run({
+            runtimeConfig, model, systemPrompt, reasoning,
+            coreMessages: toCoreMessages(messages, resolution.image),
+        });
+    });
+}
+
 /**
  * 统一的 AI 调用接口（非流式）
  */
@@ -153,15 +189,7 @@ export async function callAI(
     chartContext: string = '',
     options?: AICallOptions
 ): Promise<string> {
-    const config = await resolveModelConfigForCall(modelId);
-    if (!config) {
-        throw new Error(`Unknown model: ${modelId}`);
-    }
-    const systemPrompt = buildSystemPrompt(chartContext, options);
-    return await runWithSourceFallback(config, async (runtimeConfig) => {
-        const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
-        const coreMessages = toCoreMessages(messages);
+    return await withModelCall(messages, modelId, chartContext, options, async ({ runtimeConfig, model, coreMessages, systemPrompt, reasoning }) => {
         try { await options?.beforeModelAttempt?.(); } catch (cause) { throw Object.assign(new Error(cause instanceof Error ? cause.message : '模型调用被阻止'), { code: 'MODEL_ATTEMPT_BLOCKED' }); }
         const result = await callWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             abortSignal: options?.abortSignal,
@@ -187,15 +215,7 @@ async function callAIStream(
     modelId: string = DEFAULT_MODEL_ID,
     options?: AICallOptions
 ): Promise<ReadableStream<Uint8Array>> {
-    const config = await resolveModelConfigForCall(modelId);
-    if (!config) {
-        throw new Error(`Unknown model: ${modelId}`);
-    }
-    const systemPrompt = buildSystemPrompt(chartContext, options);
-    return await runWithSourceFallback(config, async (runtimeConfig) => {
-        const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
-        const coreMessages = toCoreMessages(messages);
+    return await withModelCall(messages, modelId, chartContext, options, async ({ runtimeConfig, model, coreMessages, systemPrompt, reasoning }) => {
         const result = await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             abortSignal: options?.abortSignal,
             reasoning,
@@ -218,16 +238,8 @@ export async function callAIUIMessageResult(
     modelId: string = DEFAULT_MODEL_ID,
     options?: AICallOptions
 ): Promise<Awaited<ReturnType<typeof streamWithAISDK>>> {
-    const config = await resolveModelConfigForCall(modelId);
-    if (!config) {
-        throw new Error(`Unknown model: ${modelId}`);
-    }
-    const systemPrompt = buildSystemPrompt(chartContext, options);
-    return await runWithSourceFallback(config, async (runtimeConfig) => {
-        const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
-        const coreMessages = toCoreMessages(messages);
-        const result = await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
+    return await withModelCall(messages, modelId, chartContext, options, async ({ runtimeConfig, model, coreMessages, systemPrompt, reasoning }) => {
+        return await streamWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             abortSignal: options?.abortSignal,
             reasoning,
             reasoningEffort: options?.reasoningEffort ?? undefined,
@@ -236,7 +248,6 @@ export async function callAIUIMessageResult(
             conversationId: options?.conversationId, cacheScope: options?.cacheScope,
             ...usageSink(options, runtimeConfig),
         });
-        return result;
     });
 }
 
@@ -246,19 +257,7 @@ export async function callAIVision(
     chartContext: string = '',
     options?: AICallOptions
 ): Promise<string> {
-    const config = await resolveModelConfigForCall(modelId, { requireVision: true });
-    if (!config) {
-        throw new Error(`Unknown model: ${modelId}`);
-    }
-    const systemPrompt = buildSystemPrompt(chartContext, options);
-
-    return await runWithSourceFallback(config, async (runtimeConfig) => {
-        const reasoning = runtimeConfig.isReasoningDefault || options?.reasoning;
-        const model = createModelFromConfig(runtimeConfig, { reasoning, reasoningEffort: options?.reasoningEffort ?? undefined });
-        const coreMessages = toCoreMessages(messages, {
-            imageBase64: options?.imageBase64,
-            imageMimeType: options?.imageMimeType,
-        });
+    return await withModelCall(messages, modelId, chartContext, options, async ({ runtimeConfig, model, coreMessages, systemPrompt, reasoning }) => {
         const result = await callWithAISDK(model, coreMessages, systemPrompt, runtimeConfig, {
             reasoning,
             reasoningEffort: options?.reasoningEffort ?? undefined,
@@ -268,6 +267,9 @@ export async function callAIVision(
             ...usageSink(options, runtimeConfig),
         });
         return result.text;
+    }, {
+        requireVision: true,
+        image: { imageBase64: options?.imageBase64, imageMimeType: options?.imageMimeType },
     });
 }
 

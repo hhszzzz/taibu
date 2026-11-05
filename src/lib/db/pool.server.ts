@@ -97,6 +97,13 @@ function poolMax(): number {
   return max;
 }
 
+/** Connection lifecycle shared by the application and auth pools. */
+const POOL_LIFECYCLE = {
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+  keepAlive: true,
+} as const;
+
 export function createPool(): pg.Pool {
   const connectionString = process.env.DATABASE_URL;
   if (!connectionString) throw new Error('[db] DATABASE_URL 未配置');
@@ -104,9 +111,7 @@ export function createPool(): pg.Pool {
     connectionString,
     max: poolMax(),
     application_name: process.env.DB_APPLICATION_NAME ?? 'taibu',
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
-    keepAlive: true,
+    ...POOL_LIFECYCLE,
     types: customTypes as pg.CustomTypesConfig,
   });
 }
@@ -127,9 +132,7 @@ export function createAuthPool(): pg.Pool {
     connectionString,
     max: 4,
     application_name: 'taibu-auth',
-    idleTimeoutMillis: 30_000,
-    connectionTimeoutMillis: 5_000,
-    keepAlive: true,
+    ...POOL_LIFECYCLE,
   });
 }
 

@@ -5,7 +5,7 @@ import type { DB } from './generated/schema';
 import { rootDb } from './pool.server';
 import { DbError, toDbError } from './errors';
 import { executeRpc } from './rpc';
-import { systemUserId } from './system-user';
+import { SYSTEM_USER_ID } from './system-user';
 import type { RpcArgs, RpcName, RpcResult } from './generated/rpc';
 
 export type DbScope =
@@ -23,18 +23,22 @@ export interface ScopedDb {
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+function authenticatedClaims(sub: string): Record<string, string> {
+  return { sub, role: 'authenticated', aud: 'authenticated' };
+}
+
 function roleAndClaims(scope: DbScope): { role: string; claims: Record<string, string> } {
   if (scope.kind === 'anon') return { role: 'anon', claims: { role: 'anon' } };
   if (scope.kind === 'system') {
     return {
       role: 'authenticated',
-      claims: { sub: systemUserId(), role: 'authenticated', aud: 'authenticated' },
+      claims: authenticatedClaims(SYSTEM_USER_ID),
     };
   }
   if (!UUID.test(scope.userId)) throw new Error('[db] 用户上下文无效');
   return {
     role: 'authenticated',
-    claims: { sub: scope.userId, role: 'authenticated', aud: 'authenticated' },
+    claims: authenticatedClaims(scope.userId),
   };
 }
 

@@ -84,8 +84,6 @@ let lastSessionBootstrapAt = 0;
 
 const SESSION_CACHE_TTL_MS = 30_000;
 const SESSION_REVALIDATE_EVENT_COOLDOWN_MS = 5_000;
-const LOGIN_GUARD_UNAVAILABLE_CODE = 'login_guard_unavailable';
-const LOGIN_GUARD_UNAVAILABLE_MESSAGE = '登录保护服务暂不可用，请稍后重试';
 
 function emitAuthEvent(event: AuthChangeEvent, state: { session: Session | null; user: AuthUser | null }) {
     for (const listener of authListeners) {
@@ -287,11 +285,11 @@ export async function sendOTP(
     newEmail?: string
 ): Promise<AuthResult> {
     try {
-        if (type === 'signup') {
-            const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'email-verification' });
-            if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
-        } else if (type === 'magiclink') {
-            const { error } = await authClient.emailOtp.sendVerificationOtp({ email, type: 'sign-in' });
+        if (type === 'signup' || type === 'magiclink') {
+            const { error } = await authClient.emailOtp.sendVerificationOtp({
+                email,
+                type: type === 'signup' ? 'email-verification' : 'sign-in',
+            });
             if (error) return { success: false, error: normalizeAuthError(error) ?? undefined };
         } else if (type === 'recovery') {
             return await resetPassword(email);
@@ -351,8 +349,6 @@ export async function resetPasswordWithOTP(
 export const authSessionCacheConstants = {
     SESSION_CACHE_TTL_MS,
     SESSION_REVALIDATE_EVENT_COOLDOWN_MS,
-    LOGIN_GUARD_UNAVAILABLE_CODE,
-    LOGIN_GUARD_UNAVAILABLE_MESSAGE,
 };
 
 function getErrorMessage(code: string): string {

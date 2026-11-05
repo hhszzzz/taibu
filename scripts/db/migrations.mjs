@@ -213,12 +213,8 @@ export async function runMigrations(client, root, options = {}) {
   log(`Ledger: ${applied.size} migration(s) recorded`);
 
   // Validate existing ledger
-  try {
-    validateLedger(migrations, applied);
-    log('Ledger validation passed');
-  } catch (error) {
-    throw error;
-  }
+  validateLedger(migrations, applied);
+  log('Ledger validation passed');
 
   // Find pending
   const pending = findPendingMigrations(migrations, applied);

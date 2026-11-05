@@ -146,9 +146,7 @@ export function jsonError<TExtra extends Record<string, unknown> = Record<string
     status = 400,
     extra?: TExtra
 ) {
-    const body = extra
-        ? ({ success: false, error: message, ...extra } as { success: false; error: string } & TExtra)
-        : ({ success: false, error: message } as { success: false; error: string } & TExtra);
+    const body = { success: false, error: message, ...extra } as { success: false; error: string } & TExtra;
     return NextResponse.json(body, { status });
 }
 

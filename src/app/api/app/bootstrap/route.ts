@@ -61,6 +61,15 @@ async function loadViewerProfile(
   return await loadUserRow(db, user.id);
 }
 
+async function settle<T>(work: Promise<T>, failureLog: string): Promise<{ ok: true; value: T } | { ok: false }> {
+  try {
+    return { ok: true, value: await work };
+  } catch (error) {
+    console.error(failureLog, error);
+    return { ok: false };
+  }
+}
+
 async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>) {
   if (auth.authError) {
     return {
@@ -86,26 +95,14 @@ async function loadViewerState(auth: Awaited<ReturnType<typeof getAuthContext>>)
 
   const user = auth.user;
   const [profileOutcome, unreadOutcome, billing] = await Promise.all([
-    loadViewerProfile(auth.db, user).then(
-      (row) => ({ ok: true as const, row }),
-      (error: unknown) => {
-        console.error('[bootstrap] failed to load viewer profile:', error);
-        return { ok: false as const };
-      },
-    ),
-    getUnreadNotificationCount(auth.db, user.id).then(
-      (count) => ({ ok: true as const, count }),
-      (error: unknown) => {
-        console.error('[bootstrap] failed to load unread notifications:', error);
-        return { ok: false as const };
-      },
-    ),
+    settle(loadViewerProfile(auth.db, user), '[bootstrap] failed to load viewer profile:'),
+    settle(getUnreadNotificationCount(auth.db, user.id), '[bootstrap] failed to load unread notifications:'),
     loadBalance(auth.db, user.id),
   ]);
 
-  const unreadCount = unreadOutcome.ok ? unreadOutcome.count : 0;
+  const unreadCount = unreadOutcome.ok ? unreadOutcome.value : 0;
   const unreadCountLoaded = unreadOutcome.ok;
-  const row = profileOutcome.ok ? profileOutcome.row : undefined;
+  const row = profileOutcome.ok ? profileOutcome.value : undefined;
   if (!row) {
     return {
       viewerLoaded: false,

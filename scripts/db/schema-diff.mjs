@@ -15,15 +15,11 @@ import { fileURLToPath } from 'node:url';
 import { normalizeSchemaDump } from './normalize-schema.mjs';
 import { defaultReportPath } from './report-path.mjs';
 import { libpqEnvironment } from './connection-env.mjs';
+import { cliArgs } from './cli.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const PG_DUMP_BIN = process.env.PG_DUMP_BIN || 'pg_dump';
-const args = process.argv.slice(2);
-const has = (flag) => args.includes(flag);
-const value = (flag, fallback) => {
-  const index = args.indexOf(flag);
-  return index === -1 ? fallback : args[index + 1];
-};
+const { has, value } = cliArgs();
 
 const aUrl = value('--a', process.env.SCHEMA_DIFF_A);
 const bUrl = value('--b', process.env.SCHEMA_DIFF_B);

@@ -24,8 +24,9 @@ export async function isLoginLocked(email: string): Promise<boolean> {
 export async function recordLoginFailure(email: string): Promise<void> {
   try {
     const redisKey = key(email);
-    const count = await getRedisClient().incr(redisKey);
-    if (count === 1) await getRedisClient().expire(redisKey, LOGIN_FAILURE_WINDOW_SECONDS);
+    const client = getRedisClient();
+    const count = await client.incr(redisKey);
+    if (count === 1) await client.expire(redisKey, LOGIN_FAILURE_WINDOW_SECONDS);
   } catch {
     // ignore: fail-open by design
   }

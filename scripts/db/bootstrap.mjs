@@ -5,6 +5,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { quoteIdentifier } from './sql-text.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const bootstrapDir = path.join(root, 'database/bootstrap');
@@ -31,10 +32,6 @@ if (!noPasswords) {
   }
 }
 
-function quoteIdent(value) {
-  return `"${value.replace(/"/g, '""')}"`;
-}
-
 const client = new pg.Client({ connectionString: dsn });
 await client.connect();
 try {
@@ -46,7 +43,7 @@ try {
     console.log(`[db:bootstrap] applied ${file}`);
   }
 
-  const database = quoteIdent(databaseName);
+  const database = quoteIdentifier(databaseName);
   await client.query(`ALTER DATABASE ${database} SET timezone = 'UTC'`);
   await client.query(`REVOKE ALL ON DATABASE ${database} FROM PUBLIC`);
   // taibu_owner creates schemas inside the database; everything else only connects.

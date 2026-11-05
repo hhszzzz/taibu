@@ -37,7 +37,7 @@ import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components
 import { createSavedChart, loadSavedChart, updateSavedChart } from '@/lib/user/charts-client';
 import { useChartMutation } from '@/lib/hooks/useUserCharts';
 import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
-import { formatClockTime, formatDateParts } from '@/lib/divination/display-helpers';
+import { formatClockTime, formatDateParts } from '@/lib/local-date';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';

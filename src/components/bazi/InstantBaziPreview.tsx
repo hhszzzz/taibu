@@ -13,7 +13,7 @@ import { Solar } from 'lunar-javascript';
 import { baziPillarEntries, calculateBazi } from 'taibu-core/bazi';
 import type { BaziFormData } from '@/types';
 import { getEarthlyBranchByHour } from '@/lib/divination/bazi-form-utils';
-import { formatLocalDateTime } from '@/lib/divination/display-helpers';
+import { formatLocalDateTime } from '@/lib/local-date';
 import { ganZhiTextClass } from '@/components/bazi/element-classes';
 import { LUNAR_DAY_NAMES, LUNAR_MONTH_NAMES } from '@/components/bazi/form/options';
 

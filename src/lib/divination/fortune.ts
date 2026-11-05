@@ -9,7 +9,7 @@
 
 import { Solar } from 'lunar-javascript';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
-import { formatLocalDate } from '@/lib/divination/display-helpers';
+import { formatLocalDate } from '@/lib/local-date';
 import {
     STEM_ELEMENTS,
     ZHI_WUXING,

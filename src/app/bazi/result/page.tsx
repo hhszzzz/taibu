@@ -34,7 +34,7 @@ import { useChartMutation } from '@/lib/hooks/useUserCharts';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { parseBirthTimeString, readBirthTimeOptions, resolveBirthTimeOptions, writeBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
 import { parseNumberParam } from '@/lib/divination/bazi-form-utils';
-import { formatClockTime, formatDateParts } from '@/lib/divination/display-helpers';
+import { formatClockTime, formatDateParts } from '@/lib/local-date';
 import { parseLongitude } from '@/lib/divination/place-resolution';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';

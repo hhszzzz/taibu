@@ -7,7 +7,7 @@
  */
 import { useEffect, useState } from 'react';
 import { calculateDailyAlmanac, type AlmanacOutput } from 'taibu-core/almanac';
-import { formatLocalDate } from '@/lib/divination/display-helpers';
+import { formatLocalDate } from '@/lib/local-date';
 
 export type DailyAlmanacDetail = AlmanacOutput['almanac'];
 export type DailyHourFortune = DailyAlmanacDetail['hourlyFortune'][number];

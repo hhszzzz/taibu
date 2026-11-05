@@ -25,6 +25,7 @@ import {
 } from 'taibu-core/utils';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { resolveBirthTimeOptions, type BirthTimeResolution } from '@/lib/divination/birth-time';
+import { formatClockTime, formatDateParts } from '@/lib/local-date';
 import {
     HIDDEN_STEM_DETAILS,
     LIU_CHONG as CORE_LIU_CHONG,
@@ -76,8 +77,8 @@ function toCoreBaziInput(formData: BaziFormData) {
 function buildBaziMeta(formData: BaziFormData): BaziMeta {
     return {
         name: formData.name,
-        birthDate: `${formData.birthYear}-${String(formData.birthMonth).padStart(2, '0')}-${String(formData.birthDay).padStart(2, '0')}`,
-        birthTime: formData.isUnknownTime ? '' : `${String(formData.birthHour).padStart(2, '0')}:${String(formData.birthMinute).padStart(2, '0')}`,
+        birthDate: formatDateParts(formData.birthYear, formData.birthMonth, formData.birthDay),
+        birthTime: formData.isUnknownTime ? '' : formatClockTime(formData.birthHour, formData.birthMinute),
         birthPlace: formData.birthPlace,
         gender: formData.gender,
         calendarType: formData.calendarType,

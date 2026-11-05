@@ -5,7 +5,7 @@
  */
 import type { DaliurenCanonicalJSON } from 'taibu-core/daliuren';
 import { elementTextClass, ganZhiTextClass, isFiveElement } from '@/components/bazi/element-classes';
-import { formatClockTime } from '@/lib/divination/display-helpers';
+import { formatClockTime } from '@/lib/local-date';
 
 type Palace = DaliurenCanonicalJSON['天地盘'][number];
 

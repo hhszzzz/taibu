@@ -5,6 +5,7 @@
  */
 
 import { requestBrowserData, type BrowserRequestInit } from '@/lib/browser-api';
+import { formatLocalDate } from '@/lib/local-date';
 import { isPlainObject, isValidUUID } from '@/lib/validation';
 
 // =====================================================
@@ -542,8 +543,7 @@ export function downloadExportData(data: ExportData, filename?: string): void {
  * 小记按用户当天归档；toISOString() 取的是 UTC 日期，北京时间 0–8 点会落到前一天。
  */
 export function toLocalDateKey(date: Date = new Date()): string {
-    const pad = (value: number) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+    return formatLocalDate(date);
 }
 
 /**

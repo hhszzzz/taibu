@@ -6,7 +6,7 @@ import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import type { ScopedDb } from '@/lib/db/context.server';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
-import { formatLocalDate, formatYearMonth } from '@/lib/divination/display-helpers';
+import { formatLocalDate, formatYearMonth } from '@/lib/local-date';
 
 type FortuneData = { id: string; name: string; content: string; createdAt: string };
 

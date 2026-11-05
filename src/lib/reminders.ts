@@ -8,6 +8,7 @@ import type { ScopedDb } from '@/lib/db/context.server';
 import { systemDb } from '@/lib/db/context.server';
 import { getNextSolarTerm, getSolarTermMeaning } from '@/lib/divination/solar-terms';
 import { calculateDailyFortune, generateEnhancedKeyDates, compareLevels, isLevelFavorable } from '@/lib/divination/fortune';
+import { formatDateParts } from '@/lib/local-date';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
 
@@ -405,7 +406,7 @@ export async function scheduleKeyDateReminders(
     // 各日期互不依赖；RPC 自身按 (user, type, time) 去重。
     const results = await Promise.all(keyDates.map((keyDate) => {
         // 只安排未来的日期
-        const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(keyDate.date).padStart(2, '0')}`;
+        const dateStr = formatDateParts(year, month, keyDate.date);
         if (dateStr <= today) return false;
 
         return scheduleReminderIfAbsent(

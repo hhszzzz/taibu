@@ -18,7 +18,7 @@ import {
     type TarotSpreadDefinition,
 } from 'taibu-core/tarot';
 import { resolveChartTextDetailLevel, type ChartTextDetailLevel } from '@/lib/divination/detail-level';
-import { formatDateParts, formatLocalDate } from '@/lib/divination/display-helpers';
+import { formatDateParts, formatLocalDate } from '@/lib/local-date';
 
 export type TarotSuit = 'major' | 'wands' | 'cups' | 'swords' | 'pentacles';
 export type CardOrientation = 'upright' | 'reversed';

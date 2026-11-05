@@ -5,6 +5,7 @@
  */
 
 import { Solar } from 'lunar-javascript';
+import { formatDateParts } from '@/lib/local-date';
 
 // ===== 节气定义 =====
 
@@ -72,7 +73,7 @@ export function getYearSolarTerms(year: number): SolarTerm[] {
         }
         const jqMonth = jqSolar.getMonth();
         const jqDay = jqSolar.getDay();
-        const dateStr = `${jqYear}-${String(jqMonth).padStart(2, '0')}-${String(jqDay).padStart(2, '0')}`;
+        const dateStr = formatDateParts(jqYear, jqMonth, jqDay);
         const info = SOLAR_TERM_INFO[name] || { meaning: '', tips: '' };
         terms.push({
             name,

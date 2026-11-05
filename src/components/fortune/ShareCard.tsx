@@ -28,7 +28,7 @@ import { Button } from '@/components/ui/Button';
 import { downloadShareCard, shareCard } from '@/lib/share-card';
 import type { DailyFortune, FortuneLevels, FortuneChartScores } from '@/lib/divination/fortune';
 import { fortuneLevelToChartValue, isLevelFavorable } from '@/lib/divination/fortune';
-import { formatLocalDate } from '@/lib/divination/display-helpers';
+import { formatLocalDate } from '@/lib/local-date';
 import type { FortuneLevel } from '@/types';
 
 interface ShareCardProps {

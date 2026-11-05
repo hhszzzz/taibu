@@ -16,6 +16,7 @@ import { useToast } from '@/components/ui/Toast';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { requestBrowserJson } from '@/lib/browser-api';
+import { formatLocalDateTime } from '@/lib/local-date';
 import {
     getNotificationsPage,
     markAllAsRead,
@@ -57,12 +58,6 @@ function getRelativeTime(dateStr: string) {
     if (diffMins < 60) return `${Math.max(1, diffMins)} 分钟前`;
     if (diffHours < 24) return `${diffHours} 小时前`;
     return `${diffDays} 天前`;
-}
-
-function formatAnnouncementDate(dateStr: string) {
-    const date = new Date(dateStr);
-    const pad = (value: number) => String(value).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 /** Infinite-scroll sentinel shared by the notification and announcement lists. */
@@ -503,7 +498,7 @@ export function SidebarAnnouncementCenter({
                                                 className="text-[14px] leading-relaxed text-foreground/80"
                                             />
                                             <div className="text-[11px] font-medium text-foreground-secondary font-mono uppercase tracking-tight">
-                                                {getRelativeTime(announcement.publishedAt)} {formatAnnouncementDate(announcement.publishedAt)}
+                                                {getRelativeTime(announcement.publishedAt)} {formatLocalDateTime(new Date(announcement.publishedAt))}
                                             </div>
                                         </div>
                                     </div>

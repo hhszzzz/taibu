@@ -135,12 +135,18 @@ export async function projectDurableConversation(
     const runningTool = live?.tools?.find(slot => slot.status === "running");
     const scriptCall = live?.nestedTools?.findLast(slot => slot.status === "running");
     const content = live?.generation?.message?.content;
+    // 生成的请求开始时间：客户端据此实时显示「正在思考 N 秒」。
+    const generationStartedAt = typeof live?.generation?.message?.timestamp === "number" && Number.isFinite(live.generation.message.timestamp)
+      ? live.generation.message.timestamp : undefined;
     checkpoint.runtime.activity = checkpoint.question ? { phase: "awaiting_input" }
       // A generation waits for a blocking compaction; a `/compact` task waits for its manual one.
       : live?.compactions?.some(slot => slot.blocking || slot.trigger === "manual") ? { phase: "compacting" }
       : live?.generation?.retry ? { phase: "retrying", attempt: live.generation.attempt }
       : runningTool ? { phase: "tools", toolTitle: scriptCall ? `${title(runningTool.name)} · ${title(scriptCall.name)}` : title(runningTool.name) }
-      : live?.generation ? { phase: content?.at(-1)?.type === "thinking" ? "thinking" : content?.some(part => part.type === "text") ? "responding" : "generating" }
+      : live?.generation ? {
+        phase: content?.at(-1)?.type === "thinking" ? "thinking" : content?.some(part => part.type === "text") ? "responding" : "generating",
+        ...(generationStartedAt === undefined ? {} : { startedAt: generationStartedAt }),
+      }
       : live?.run ? { phase: "preparing" } : { phase: "settling" };
   }
   const answeredTasks = new Map(history.flatMap((e, index) =>

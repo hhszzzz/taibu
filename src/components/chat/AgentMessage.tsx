@@ -9,7 +9,7 @@ import { getAgentArchiveProposal, getAgentArchiveRecord, type AgentArchiveCard, 
 import { MarkdownContent, type MarkdownCitations } from "@/components/ui/MarkdownContent";
 import { BrandMark } from "@/components/brand/BrandMark";
 import { AgentStatus } from './agent/AgentStatus';
-import { AgentActivityGroup, AgentActivityIndicator } from './agent/AgentActivityGroup';
+import { AgentActivityGroup, AgentLiveStatus } from './agent/AgentActivityGroup';
 import { AgentTodoProgress } from './agent/AgentTodoProgress';
 import { AgentEvidenceChip } from './agent/AgentEvidenceChip';
 import { AgentArchiveProposalCard, AgentArchiveReceipt } from './agent/AgentArchiveCards';
@@ -80,6 +80,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
       <div className="agent-message-heading">
         <BrandMark className="agent-avatar" compact />
         <span className="agent-name">太卜</span>
+        <AgentLiveStatus data={data} />
         {/* 进行中由底部那一行实时说明，失败由错误提示说明；这里只给没有别处交代的结局：已停止、没有原因的失败。 */}
         {(data.status === 'cancelled' || (data.status === 'failed' && !data.error)) && <AgentStatus status={data.status} />}
         {summarizing && <span className="agent-response-time">主模型 {summarizing} · 汇总</span>}
@@ -114,7 +115,6 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
       {archive.length > 0 && <div className="agent-archive-list">
         {archive.map(entry => entry.kind === 'card' ? <AgentArchiveProposalCard key={entry.id} card={entry.card} /> : <AgentArchiveReceipt key={entry.id} record={entry.record} />)}
       </div>}
-      <AgentActivityIndicator data={data} />
       {data.error && <p className="agent-error" role="alert"><CircleAlert size={15} aria-hidden="true" />{data.error}</p>}
       {/* Evidence and message actions share one row; it collapses when both are absent. */}
       <div className="agent-message-footer"><AgentEvidenceChip parts={data.parts} />{actions}</div>

@@ -82,7 +82,7 @@ export interface AgentRuntimeInfo {
     compactions: number;
   };
   /** `background`: the main conversation is idle and the task waits for background subagents to report. */
-  activity?: { phase: "preparing" | "generating" | "thinking" | "responding" | "tools" | "compacting" | "retrying" | "awaiting_input" | "background" | "settling"; toolTitle?: string; attempt?: number };
+  activity?: { phase: "preparing" | "generating" | "thinking" | "responding" | "tools" | "compacting" | "retrying" | "awaiting_input" | "background" | "settling"; toolTitle?: string; attempt?: number; /** 本次生成的请求开始时间（epoch ms），用于实时计时。 */ startedAt?: number };
   usage?: { models: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; tools: Record<string, Partial<Pick<Usage, 'input' | 'output' | 'cacheRead' | 'cacheWrite' | 'totalTokens' | 'reasoning'>>>; totalTokens: number };
 }
 

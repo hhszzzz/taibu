@@ -286,7 +286,7 @@ test('详查副标题读出新增的查询参数', () => {
   assert.equal(describeDrilldownSelection({ reference: 'x', fromYear: 2026, toYear: 2029 }), '2026 年起 · 至 2029 年');
   assert.equal(describeDrilldownSelection({ reference: 'x', leiShen: '贵人', focus: '传' }), '类神 贵人 · 只看 传');
   assert.equal(describeDrilldownSelection({ reference: 'x', year: 2027, pillars: ['日柱', '流年'], types: ['六冲'] }), '2027 年 · 涉及 日柱、流年 · 只看 六冲');
-  assert.equal(describeDrilldownSelection({ reference: 'x', sections: ['通根', '透干'], detailLevel: 'full' }), '只看 通根、透干 · 含口径');
+  assert.equal(describeDrilldownSelection({ reference: 'x', sections: ['通根', '透干'], detailLevel: 'full' }), '只看 通根、透干 · 完整');
   // Defaults read as nothing: the full scope and the lean text are what a bare query gets anyway.
   assert.equal(describeDrilldownSelection({ reference: 'x', planet: 'saturn', focus: '全部', detailLevel: 'default' }), '土星');
   assert.equal(describeDrilldownSelection({ reference: 'x', planet: 'saturn', focus: '流运' }), '土星 · 只看 流运');

@@ -240,6 +240,12 @@
 .agent-message-heading { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-avatar { display: block; flex-shrink: 0; width: 24px; height: 24px; color: var(--foreground); }
 .agent-name { font-family: var(--font-brand); font-size: calc(15 / 16 * 1rem); font-weight: 500; color: var(--foreground); }
+/* 实时状态紧跟「太卜」：一行内截断，思考时带秒数。 */
+.agent-heading-live { display: inline-flex; min-width: 0; align-items: center; gap: 6px; overflow: hidden; color: var(--foreground-tertiary); font-size: calc(13 / 16 * 1rem); line-height: 1.4; white-space: nowrap; }
+.agent-heading-live > svg { flex-shrink: 0; color: var(--accent); }
+.agent-heading-live > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.agent-heading-live[data-tone="warning"] { color: var(--chat-warning); }
+.agent-heading-live[data-tone="warning"] > svg { color: inherit; }
 .agent-response-time { font-variant-numeric: tabular-nums; }
 .agent-status { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; color: var(--foreground-secondary); }
 .agent-status > svg { flex-shrink: 0; }
@@ -265,7 +271,6 @@
 .agent-process-label { display: flex; min-width: 0; align-items: baseline; gap: 6px; overflow: hidden; }
 .agent-process-heading.is-live > svg:first-child { color: var(--accent); }
 .agent-process-count { min-width: 0; overflow: hidden; font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; }
-.agent-process-count[data-failed] { color: var(--danger); }
 .agent-process-now { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .agent-process-chevron { flex-shrink: 0; margin-left: 2px; color: var(--foreground-tertiary); transition: rotate .15s; }
 /* 展开 = claude TurnStatus 卡片：发丝环 + 行间发丝分隔，逐行 20px 步骤。 */
@@ -403,12 +408,6 @@ button.agent-step-entity:hover .agent-step-entity-go { color: var(--foreground-s
 .agent-tool-value { max-height: 320px; margin: 0; overflow: auto; overscroll-behavior: contain; padding: 10px 12px; border-radius: 10px; background: var(--background-secondary); color: var(--foreground); font-family: var(--font-mono); font-size: calc(12 / 16 * 1rem); line-height: 1.7; white-space: pre-wrap; overflow-wrap: anywhere; }
 .agent-tool-empty { font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-secondary); }
 .agent-tool-view { display: flex; min-width: 0; flex-direction: column; gap: 16px; }
-.agent-live-activity { display: flex; align-items: center; gap: 8px; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-live-activity > svg { flex-shrink: 0; }
-.agent-live-activity[data-tone="warning"] { color: var(--chat-warning); }
-/* A folded process card carries that line in its heading (phones fold it by default, wider screens when the reader does);
-   the line below then stays announced but out of sight, so one live line shows at a time. */
-.agent-message:has(.agent-process-heading.is-live) > .agent-live-activity { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 /* Chat 的思考沿用「任务过程」的折叠行与步骤卡片：一行「思考」+ 时长，点开是带发丝框的正文。 */
 .chat-thinking { margin: 0 0 12px; }
 .chat-thinking-card .agent-step { padding: 0; border-top: 0; }

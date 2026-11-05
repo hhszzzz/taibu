@@ -71,9 +71,16 @@ export function WorkspaceToolMeta({ tool, runStatus, children }: ToolViewProps &
     </p>;
 }
 
+/** Harness validation text is a process diagnostic, not a result; workspace views never show it. */
+const HARNESS_BLOCK = /<harness>[\s\S]*?<\/harness>/gu;
+function workspaceText(tool: AgentToolPart): string | null {
+    const text = getAgentToolText(tool)?.replace(HARNESS_BLOCK, '').trim();
+    return text || null;
+}
+
 /** Canonical text the tool returned; raw JSON only in the 「详细」 record view when a call has no text at all. */
 export function WorkspaceTextFallback({ tool, note }: { tool: AgentToolPart; note: string }) {
-    const text = getAgentToolText(tool);
+    const text = workspaceText(tool);
     const detailed = useTranscriptRecordView() === 'detailed';
     const raw = tool.output === undefined ? undefined : JSON.stringify(tool.output, null, 2);
     return <div className="agent-ws-fallback">
@@ -87,10 +94,10 @@ export function WorkspaceTextFallback({ tool, note }: { tool: AgentToolPart; not
     </div>;
 }
 
-/** Running, failed or interrupted calls share one presentation in every view. */
+/** Running or interrupted calls share one presentation; failed calls leave no workspace result at all. */
 export function WorkspaceToolPending({ tool, runStatus, running }: ToolViewProps & { running: string }) {
     const state = getAgentToolState(tool, runStatus);
-    if (state.status === 'failed') return <p className="agent-error" role="alert">{getAgentToolText(tool) ?? '工具执行失败，未返回说明。'}</p>;
+    if (state.status === 'failed') return null;
     if (state.status === 'interrupted') return <p className="agent-ws-note">任务结束时这一步仍未完成，没有可显示的结果。</p>;
     return <p className="agent-ws-running" role="status"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{running}</p>;
 }
@@ -438,11 +445,15 @@ export function ArchiveView({ tools, runStatus, step }: { tools: AgentToolPart[]
         </WorkspaceViewHeading>
         <div className="agent-archive-list">
             {tools.map(tool => {
+                // A failed call has no card; its diagnostic stays in the task process.
+                if (tool.status === 'failed') return null;
                 const card = getAgentArchiveProposal(tool);
                 if (card) return <AgentArchiveProposalCard key={tool.id} card={card} />;
                 const record = getAgentArchiveRecord(tool);
                 if (record) return <AgentArchiveReceipt key={tool.id} record={record} />;
-                if (tool.status === 'completed') return <WorkspaceTextFallback key={tool.id} tool={tool} note="档案结果格式无法识别，已显示原始返回。" />;
+                if (tool.status === 'completed') {
+                    return workspaceText(tool) ? <WorkspaceTextFallback key={tool.id} tool={tool} note="档案结果格式无法识别，已显示原始返回。" /> : null;
+                }
                 return <WorkspaceToolPending key={tool.id} tool={tool} runStatus={runStatus}
                     running={tool.name === AGENT_ARCHIVE_TOOLS.record ? '正在记入档案…' : '正在生成保存卡片…'} />;
             })}
@@ -760,7 +771,6 @@ export function CollaborationView({ tool, runStatus, step, onOpenMember }: ToolV
             })}
         {/* Stances fill in as members finish; a finished call without any stance has nothing to compare. */}
         {topics.length > 0 && members.length > 0 && (stances || call === 'running' || call === 'pending') && <DivergenceTable topics={topics} members={members} call={call} />}
-        {tool.status === 'failed' && <p className="agent-error" role="alert">{getAgentToolText(tool) ?? '协作分析未完成。'}</p>}
     </section>;
 }
 
@@ -787,7 +797,6 @@ export function MemoryView({ tools, runStatus, userId, step }: { tools: AgentToo
             setConfirming(null);
         }
     };
-    const failed = tools.filter(tool => getAgentToolState(tool, runStatus).status === 'failed');
     const running = tools.find(tool => ['pending', 'running'].includes(getAgentToolState(tool, runStatus).status));
     return <section className="agent-ws-view" aria-labelledby={id}>
         <WorkspaceViewHeading id={id} kicker={kickerOf(step, '原话依据', '可删除')} title="长期记忆">只保存你明确说过的原话，不保存推断。删除后，之后的任务不会再读取它。</WorkspaceViewHeading>
@@ -803,8 +812,7 @@ export function MemoryView({ tools, runStatus, userId, step }: { tools: AgentToo
                     </span>
                     : <Button unstyled type="button" className="agent-secondary-button" aria-label={`删除记忆：${memory.title}`} onClick={() => setConfirming(memory.id)}><Trash2 size={12} aria-hidden="true" />删除</Button>)}
             </li>)}
-        </ul> : !running && !failed.length && <p className="agent-ws-note">没有已保存的记忆。</p>}
-        {failed.map(tool => <p key={tool.id} className="agent-error" role="alert">{getAgentToolText(tool) ?? '记忆操作失败。'}</p>)}
+        </ul> : !running && <p className="agent-ws-note">没有已保存的记忆。</p>}
     </section>;
 }
 

@@ -2,6 +2,34 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.1.8 · 2026-11-05
+
+### 新功能与体验
+
+- **输入框**：任务完成后，追问建议以灰色幽灵文字出现在空输入框里——Tab 填入、回车直接发送，开始输入就消失。输入框从第二行起逐行长高，不再一换行就跳到大高度。任务进行中也可以直接输入新内容：发送键分「立即发送」与「结束后续问」，不点按钮时的默认方式在「设置 → Agent → 任务进行中的发送」里选择。([66bfae3](https://github.com/hhszzzz/taibu/commit/66bfae36))
+- **运行状态**：实时状态从输入框上方移到「太卜」名字右侧，显示正在思考（秒数每秒更新）、正在整理回答、正在执行工具或等待协作成员；任务过程条只保留进度与结果摘要。([acc13288](https://github.com/hhszzzz/taibu/commit/acc13288))
+- **提问面板**：改成一次一题的卡片。顶部分段进度可点题跳转，悬停显示该题已答内容；数字键选择或勾选、方向键在选项间移动、回车进入下一题、Esc 收起面板；「其他情况」内联在选项下方，卡片高度跟随题目内容平滑变化。([09bd4d5](https://github.com/hhszzzz/taibu/commit/09bd4d58))([817a2e1](https://github.com/hhszzzz/taibu/commit/817a2e1c))
+- **工作区**：盘面顶部去掉重复的「正在查看」图标，查看位置默认收起、点开才列出；「追问」带文字标签，「保存到命盘」改为「保存 / 已保存」文字按钮。多模型协作按主模型与子模型画成树并使用模型图标。默认宽度收窄到对话区的 42%（上限 560px），关闭时宽度与淡出一起收拢。([d2c2b80](https://github.com/hhszzzz/taibu/commit/d2c2b809))
+- **任务清单**：对话里的任务进度行可以就地展开完整清单，不再跳到工作区。([acc13288](https://github.com/hhszzzz/taibu/commit/acc13288))
+
+### 修复
+
+- **记录混在一起**：侧栏在任何页面都按当前对话方式过滤，从设置返回太卜后 Agent 与普通对话不再合并；本地过滤已经藏掉已加载的会话时不再显示「查看更多」。([181fea2](https://github.com/hhszzzz/taibu/commit/181fea28))
+- **失败调用**：失败的工具调用只在任务过程条里留一条记录，不再进入工作区的档案、详情、记忆与协作视图，失败步骤也不会自动展开。([acc13288](https://github.com/hhszzzz/taibu/commit/acc13288))([6d36785](https://github.com/hhszzzz/taibu/commit/6d367859))
+- **多问题**：模型一次问多道题时，问题列表完整保留，工作区的提问记录能列出全部题目与作答。([acc13288](https://github.com/hhszzzz/taibu/commit/acc13288))
+- **Markdown 标记**：模型把 `##标题`、`1.内容`、`-列表` 与中文连写时补上空格，围栏代码块不受影响。([b62c7f3](https://github.com/hhszzzz/taibu/commit/b62c7f31))
+- **Agent 设置**：保存记忆开关时带上完整的聊天偏好，不再把「任务进行中的发送」等其它偏好重置为默认值。([66bfae3](https://github.com/hhszzzz/taibu/commit/66bfae36))
+
+### 调整
+
+- **五行配色**：八字五行在图表、对话与命盘里统一使用工作区那套五行色。([664c75f](https://github.com/hhszzzz/taibu/commit/664c75f6))
+- **详情层级**：详查步骤的参数说明不再写「含口径」，改为「完整」「更多」。([acc13288](https://github.com/hhszzzz/taibu/commit/acc13288))
+- **提示与文案**：去掉任务进行中输入框下方的「后台执行中，关闭页面也会继续」，「补充到当前任务」改为「立即发送」。([66bfae3](https://github.com/hhszzzz/taibu/commit/66bfae36))
+
+### 升级须知
+
+无数据库、配置或 npm 包版本变更；更新到 v1.1.8 后刷新页面即可。任务进行中的默认发送方式可在「设置 → Agent」里选择。
+
 ## v1.1.7 · 2026-11-05
 
 ### 新功能与体验

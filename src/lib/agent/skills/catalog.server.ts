@@ -1,7 +1,7 @@
 import 'server-only';
 import type { PromptSection } from '@earendil-works/pi-durable';
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from '@/lib/app-settings';
-import { extensionAllowance } from '../mcp/config';
+import { extensionAllowance } from '../extensions/config';
 import { AGENT_SKILL_TOOLS } from '../tool-catalog';
 import { parseSkillCommand, type SkillCommand } from './config';
 import { skillBody } from './input.server';
@@ -114,6 +114,20 @@ export async function skillText(entry: SkillEntry): Promise<string | undefined> 
   return entry.source === 'builtin' ? builtinSkillContent(entry.name) : readSkillContent(entry.id);
 }
 
+/**
+ * The skill a task may read now: a built-in method first, then the user's enabled skill of that name. `toolAlias`
+ * also accepts a Core tool name, which resolves to its system's default method. Skills turned off leave the methods.
+ */
+async function resolveSkillEntry(
+  userId: string, name: string, options: { toolAlias?: boolean } = {},
+): Promise<SkillEntry | undefined> {
+  const builtin = options.toolAlias
+    ? findBuiltinSkill(name) ?? findBuiltinSkill(getToolSystem(name) ?? '')
+    : findBuiltinSkill(name);
+  if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
+  return builtin ?? await findAvailableSkill(userId, name);
+}
+
 /** The `<skill>` block for `/skill:名称`, or null when the message is not a skill command. */
 export async function skillCommandBlock(
   userId: string, text: string,
@@ -121,9 +135,7 @@ export async function skillCommandBlock(
   const command = parseSkillCommand(text);
   if (!command) return null;
   if (!command.name) throw new SkillUnavailableError('请在 /skill: 后写技能名称');
-  const builtin = findBuiltinSkill(command.name);
-  if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
-  const skill = builtin ?? await findAvailableSkill(userId, command.name);
+  const skill = await resolveSkillEntry(userId, command.name);
   const content = skill ? await skillText(skill) : undefined;
   if (!skill || content === undefined) throw new SkillUnavailableError(`没有可用的技能「${command.name}」：可能已停用或已删除`);
   return { name: skill.name, args: command.args, block: skillBlock(skill, content) };
@@ -170,9 +182,7 @@ export type SkillLoad = {
 /** `load_skill`: the skill's block. A skill only the user may start is refused, as pi leaves it out of the prompt. */
 export async function loadSkill(userId: string, name: string): Promise<SkillLoad> {
   // 给一个 Core 工具名时取它所属体系的默认方法，模型不必记住体系与方法的对应。
-  const builtin = findBuiltinSkill(name) ?? findBuiltinSkill(getToolSystem(name) ?? '');
-  if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
-  const skill = builtin ?? await findAvailableSkill(userId, name);
+  const skill = await resolveSkillEntry(userId, name, { toolAlias: true });
   if (!skill) throw new SkillUnavailableError(`没有可用的技能「${name}」：以系统提示所列的方法与 available_skills 为准`);
   if (skill.disable_model_invocation) throw new SkillUnavailableError(`技能「${name}」只能由用户在输入框用 /skill:${name} 调用`);
   const content = await skillText(skill);
@@ -195,9 +205,7 @@ export type SkillFileRead = {
 export async function readSkillFilePage(
   userId: string, name: string, path: string, offset = 0,
 ): Promise<SkillFileRead> {
-  const builtin = findBuiltinSkill(name);
-  if (!builtin && !(await skillsScopeEnabled())) throw new SkillUnavailableError('Agent 技能已被管理员关闭');
-  const skill = builtin ?? await findAvailableSkill(userId, name);
+  const skill = await resolveSkillEntry(userId, name);
   if (!skill) throw new SkillUnavailableError(`没有可用的技能「${name}」`);
   const file = skill.files.find((entry) => entry.path === path);
   const content = file ? await readStoredFile(skill.id, path) : undefined;

@@ -12,7 +12,7 @@ import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { SkillManager } from '@/components/settings/skills/SkillManager';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-import type { ExtensionAllowanceView } from '@/lib/agent/mcp/config';
+import type { ExtensionAllowanceView } from '@/lib/agent/extensions/config';
 import type { SkillListing } from '@/lib/agent/skills/client';
 
 function AllowanceNotice({ allowance }: { allowance?: ExtensionAllowanceView }) {

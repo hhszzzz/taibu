@@ -25,11 +25,6 @@ export type AgentApprovalMode = (typeof AGENT_APPROVAL_MODES)[number];
 export const AGENT_APPROVAL_LABELS: Record<AgentApprovalMode, string> = {
   auto: '自动', manual: '手动', allow_all: '全部允许',
 };
-export const AGENT_APPROVAL_HINTS: Record<AgentApprovalMode, string> = {
-  auto: '只有标了「征求同意」的外部工具才先问你。',
-  manual: '每次调用外部工具之前都问你。',
-  allow_all: '外部工具直接调用，不再询问。',
-};
 export function parseAgentApproval(value: unknown): AgentApprovalMode {
   return AGENT_APPROVAL_MODES.includes(value as AgentApprovalMode) ? value as AgentApprovalMode : 'auto';
 }
@@ -139,55 +134,3 @@ export const MCP_SERVER_TEMPLATES = {
     secretHeader: { name: 'authorization', placeholder: 'Bearer tvly-…' },
   },
 } as const satisfies Record<string, { label: string; input: McpServerInput; secretHeader: { name: string; placeholder: string } }>;
-
-/** Whether users may add their own connectors or skills, and how many each may keep; the same for everyone. */
-export type ExtensionGate = { enabled: boolean; limit: number };
-export type AgentExtensionsPolicy = { connectors: ExtensionGate; skills: ExtensionGate };
-export const AGENT_EXTENSIONS_POLICY_KEY = 'agent_extensions_policy';
-export const EXTENSION_LIMIT_MAX: Record<keyof AgentExtensionsPolicy, number> = { connectors: 50, skills: 100 };
-export const DEFAULT_AGENT_EXTENSIONS_POLICY: AgentExtensionsPolicy = {
-  connectors: { enabled: true, limit: 10 },
-  skills: { enabled: true, limit: 30 },
-};
-
-function gateOf(value: unknown, fallback: ExtensionGate, max: number, strict: boolean): ExtensionGate {
-  const fail = (message: string): never => { throw new Error(message); };
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return strict ? fail('扩展策略格式无效') : { ...fallback };
-  const raw = value as Record<string, unknown>;
-  const enabled = typeof raw.enabled === 'boolean' ? raw.enabled : strict ? fail('扩展策略缺少开关') : fallback.enabled;
-  const valid = Number.isInteger(raw.limit) && (raw.limit as number) >= 0 && (raw.limit as number) <= max;
-  if (!valid && strict) fail(`数量上限须为 0–${max} 的整数`);
-  return { enabled, limit: valid ? raw.limit as number : fallback.limit };
-}
-
-/** Stored policy read leniently: a missing or damaged field falls back to its default. */
-export function normalizeAgentExtensionsPolicy(value: unknown): AgentExtensionsPolicy {
-  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : {};
-  return {
-    connectors: gateOf(raw.connectors, DEFAULT_AGENT_EXTENSIONS_POLICY.connectors, EXTENSION_LIMIT_MAX.connectors, false),
-    skills: gateOf(raw.skills, DEFAULT_AGENT_EXTENSIONS_POLICY.skills, EXTENSION_LIMIT_MAX.skills, false),
-  };
-}
-
-/** An administrator's submission, checked strictly. */
-export function parseAgentExtensionsPolicy(value: unknown): AgentExtensionsPolicy {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('扩展策略格式无效');
-  const raw = value as Record<string, unknown>;
-  return {
-    connectors: gateOf(raw.connectors, DEFAULT_AGENT_EXTENSIONS_POLICY.connectors, EXTENSION_LIMIT_MAX.connectors, true),
-    skills: gateOf(raw.skills, DEFAULT_AGENT_EXTENSIONS_POLICY.skills, EXTENSION_LIMIT_MAX.skills, true),
-  };
-}
-
-/** How many of the kind a user may keep in use: zero when the administrator closed it. */
-export function extensionAllowance(gate: ExtensionGate) {
-  return gate.enabled ? gate.limit : 0;
-}
-
-/** What a user's settings page needs to know about one kind of extension. */
-export type ExtensionAllowanceView = {
-  /** False when the administrator closed user additions altogether. */
-  enabled: boolean;
-  limit: number;
-  used: number;
-};

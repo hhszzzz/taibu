@@ -5,6 +5,7 @@ import { readFeatureModuleStateFresh } from '@/lib/app-settings';
 import { systemDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { getModelConfigAsync, getModelsByUsageTypeAsync } from '@/lib/server/ai-config';
+import { readSettingsBody as readBody } from '../settings-owner.server';
 import { platformMcpServers } from '../mcp/store.server';
 import { platformSkills } from '../skills/store.server';
 import { AGENT_PROFILE_NAME_PATTERN, BUILTIN_AGENT_PROFILE_NAMES, DEFAULT_AGENT_PROFILE, type AgentProfileOption, type AgentProfileView } from './config';
@@ -22,8 +23,6 @@ function failure(error: unknown, action: string): Response {
   console.error('[agent-profiles]', { action, code: toDbError(error).code });
   return jsonError(`${action}失败`, 500);
 }
-
-const readBody = (request: NextRequest) => request.json().catch(() => null) as Promise<unknown>;
 
 /** A role's own model must be one the site serves for chat. */
 async function checkModel(fields: Partial<ProfileFields>) {

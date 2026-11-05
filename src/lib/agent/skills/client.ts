@@ -3,7 +3,8 @@
  * their own, through the same shapes.
  */
 import { requestBrowserData } from '@/lib/browser-api';
-import type { ExtensionAllowanceView } from '../mcp/config';
+import { extensionSettingsCaller } from '../extensions/client';
+import type { ExtensionAllowanceView } from '../extensions/config';
 import type { SkillCommand, SkillDetail, SkillInput, SkillScope, SkillView } from './config';
 
 export type SkillListing = { skills: SkillView[]; allowance?: ExtensionAllowanceView };
@@ -12,12 +13,7 @@ const BASE: Record<SkillScope, string> = { platform: '/api/admin/agent-skills', 
 
 /** `userId` pins a member's requests to the account the page was opened with. */
 export function skillClient(scope: SkillScope, userId?: string) {
-  const call = <T>(path: string, method: string, fallbackMessage: string, body?: unknown, signal?: AbortSignal) =>
-    requestBrowserData<T>(`${BASE[scope]}${path}`, {
-      method, signal,
-      ...(userId ? { headers: { 'X-Expected-User-Id': userId } } : {}),
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    }, { fallbackMessage });
+  const call = extensionSettingsCaller(BASE, scope, userId);
   const path = (id: string) => `/${encodeURIComponent(id)}`;
   return {
     list: (signal?: AbortSignal) => call<SkillListing>('', 'GET', '读取技能失败', undefined, signal),

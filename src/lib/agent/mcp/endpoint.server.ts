@@ -32,12 +32,32 @@ export function secretScrubber(secrets: readonly string[]): (text: string) => st
 /** The server's endpoint with its secrets opened: query parameters appended to the URL, headers merged. */
 export function resolveMcpServer(row: McpServerRow): ResolvedMcpServer {
   const scope = { serverId: row.id, ownerId: row.owner_id };
-  const secretHeaders = openMcpSecrets(scope, 'header', row.secret_headers);
-  const secretQuery = openMcpSecrets(scope, 'query', row.secret_query);
-  const url = new URL(row.url);
+  return endpointOf({
+    id: row.id, url: row.url, headers: row.headers, timeoutMs: row.timeout_ms, platform: row.owner_id === null,
+    secretHeaders: openMcpSecrets(scope, 'header', row.secret_headers),
+    secretQuery: openMcpSecrets(scope, 'query', row.secret_query),
+  });
+}
+
+/** A connection from an address and its secrets, used for a saved server and for the settings page's unsaved preview. */
+function endpointOf(fields: {
+  id: string;
+  url: string;
+  headers?: Record<string, string>;
+  secretHeaders?: Record<string, string>;
+  secretQuery?: Record<string, string>;
+  timeoutMs: number;
+  platform?: boolean;
+}): ResolvedMcpServer {
+  const url = new URL(fields.url);
+  const secretHeaders = fields.secretHeaders ?? {};
+  const secretQuery = fields.secretQuery ?? {};
   for (const [name, value] of Object.entries(secretQuery)) url.searchParams.set(name, value);
   return {
-    endpoint: { id: row.id, url: url.href, headers: { ...row.headers, ...secretHeaders }, timeoutMs: row.timeout_ms, platform: row.owner_id === null },
+    endpoint: {
+      id: fields.id, url: url.href, headers: { ...fields.headers, ...secretHeaders }, timeoutMs: fields.timeoutMs,
+      ...(fields.platform === undefined ? {} : { platform: fields.platform }),
+    },
     scrub: secretScrubber([...Object.values(secretHeaders), ...Object.values(secretQuery)]),
   };
 }
@@ -126,19 +146,10 @@ export async function testMcpServerInput(
   options: { signal?: AbortSignal; pool?: McpPool } = {},
 ): Promise<{ snapshot: McpServerSnapshot | null; error: string | null }> {
   try {
-    const secretHeaders = fields.secretHeaders ?? {};
-    const secretQuery = fields.secretQuery ?? {};
-    const url = new URL(fields.url);
-    for (const [name, value] of Object.entries(secretQuery)) url.searchParams.set(name, value);
-
-    const endpoint: McpEndpoint = {
-      id: 'test-preview',
-      url: url.href,
-      headers: { ...fields.headers, ...secretHeaders },
-      timeoutMs: fields.timeoutMs ?? 30_000,
-    };
-
-    const scrub = secretScrubber([...Object.values(secretHeaders), ...Object.values(secretQuery)]);
+    const { endpoint, scrub } = endpointOf({
+      id: 'test-preview', url: fields.url, headers: fields.headers,
+      secretHeaders: fields.secretHeaders, secretQuery: fields.secretQuery, timeoutMs: fields.timeoutMs ?? 30_000,
+    });
     const description = await (options.pool ?? mcpPool).describe(endpoint, { signal: options.signal, fresh: true });
     return { snapshot: snapshotOf(description, scrub, MCP_PLATFORM_TOOL_LIMIT), error: null };
   } catch (error) {

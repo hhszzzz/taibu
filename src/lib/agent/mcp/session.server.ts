@@ -3,7 +3,9 @@ import type { ConversationId, Extension, PromptSection, ToolRegistration } from 
 import { getAgentExtensionsPolicy, readFeatureModuleStateFresh, toAgentToolScopeFeatureId } from '@/lib/app-settings';
 import { systemDb } from '@/lib/db/context.server';
 import type { AgentRunRow } from '../store.server';
-import { MCP_PLATFORM_TOOL_LIMIT, MCP_USER_TOOL_LIMIT, extensionAllowance, type AgentApprovalMode, type McpExposure } from './config';
+import { estimateTokens } from '@/lib/ai/token-estimate';
+import { extensionAllowance } from '../extensions/config';
+import { MCP_PLATFORM_TOOL_LIMIT, MCP_USER_TOOL_LIMIT, type AgentApprovalMode, type McpExposure } from './config';
 import { describeMcpError, resolveMcpServer, type ResolvedMcpServer } from './endpoint.server';
 import { mcpPool, type McpPool, type McpServerDescription } from './pool.server';
 import { currentMcpServer, platformMcpServers, recordMcpServerCheck, userMcpServers, type McpServerRow } from './store.server';
@@ -184,7 +186,7 @@ export async function openAgentMcp(options: {
       return describe(offered, options.main(input.conversationId)) || undefined;
     },
   };
-  const estimate = options.estimate ?? ((text: string) => Math.ceil(text.length / 2));
+  const estimate = options.estimate ?? ((text: string) => estimateTokens('', text));
   const direct = specs.filter((spec) => spec.exposure === 'direct');
   return {
     extension: { name: 'taibu_mcp', tools, sections: [section] },

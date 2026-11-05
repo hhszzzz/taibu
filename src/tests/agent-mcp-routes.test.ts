@@ -5,7 +5,7 @@ import { NextRequest } from 'next/server';
 import { createMockScopedDb } from './helpers/db-mock';
 import { createMockAuthContext } from './helpers/auth-mock';
 import { mcpServerRow } from './helpers/mcp-fixture';
-import { DEFAULT_AGENT_EXTENSIONS_POLICY, type AgentExtensionsPolicy } from '../lib/agent/mcp/config';
+import { DEFAULT_AGENT_EXTENSIONS_POLICY, type AgentExtensionsPolicy } from '../lib/agent/extensions/config';
 import { applyMcpSecretChanges } from '../lib/agent/mcp/secrets.server';
 import type { McpServerRow } from '../lib/agent/mcp/store.server';
 import { mockAIFeatureState } from './helpers/route-mock';

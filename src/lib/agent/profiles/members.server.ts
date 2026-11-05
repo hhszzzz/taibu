@@ -5,7 +5,7 @@ import type { AIModelConfig } from '@/types';
 import { ANALYSIS_METHODS } from '../methods.server';
 import { skillBlock, skillText } from '../skills/catalog.server';
 import type { SkillEntry } from '../skills/builtin.server';
-import { AGENT_SKILL_TOOLS, AGENT_WEB_TOOLS, getAgentToolScope, isAgentCoreTool } from '../tool-catalog';
+import { AGENT_SKILL_TOOLS, AGENT_WEB_TOOLS, isAgentCoreTool } from '../tool-catalog';
 import {
   AGENT_PROFILE_SKILL_CHARS, DEFAULT_AGENT_PROFILE, profileGrants, profileTokenMatches,
   type AgentProfileMode, type AgentProfileView, type ProfileGrantContext,
@@ -58,13 +58,13 @@ export function memberInstructions(options: { identity: string; profile: Pick<Ag
   ].filter(Boolean).join('');
 }
 
-const FAMILY_LABELS: ReadonlyArray<[string, (tool: string) => boolean]> = [
-  ['排盘与计算', isAgentCoreTool],
-  ['用户资料', tool => getAgentToolScope(tool) === 'user-data'],
-  ['联网', tool => AGENT_WEB_TOOLS.has(tool)],
-  ['知识库', tool => tool === 'search_knowledge'],
-  ['技能', tool => tool === AGENT_SKILL_TOOLS.load || tool === AGENT_SKILL_TOOLS.read],
-  ['外部服务', tool => tool.startsWith('mcp__')],
+/** The tool families a role's grants are reported by, in this order; the families themselves come from profiles/config. */
+const FAMILY_LABELS: ReadonlyArray<[token: string, label: string]> = [
+  ['core', '排盘与计算'],
+  ['data', '用户资料'],
+  ['web', '联网'],
+  ['knowledge', '知识库'],
+  ['skills', '技能'],
 ];
 
 export type MemberKit = {
@@ -113,7 +113,11 @@ export function createMemberKit(options: {
     },
     describe: mode => roles(mode).map(profile => {
       const offered = grants(profile);
-      const families = FAMILY_LABELS.filter(([, matches]) => offered.some(matches)).map(([label]) => label);
+      const scope = context();
+      const families = FAMILY_LABELS
+        .filter(([token]) => offered.some(tool => profileTokenMatches(token, tool, scope)))
+        .map(([, label]) => label);
+      if (offered.some(tool => tool.startsWith('mcp__'))) families.push('外部服务');
       if (!families.includes('排盘与计算') && (profile.tools.inherit || profile.tools.allow.includes('system'))) families.unshift('所给体系的排盘与计算');
       return `${profile.name}（${profile.displayName}${profile.description ? `：${profile.description}` : ''}；${families.length ? `可用${families.join('、')}` : '不调用工具，只做推理'}）`;
     }).join('；'),

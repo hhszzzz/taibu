@@ -12,7 +12,7 @@ import {
   AGENT_EXTENSIONS_POLICY_KEY,
   normalizeAgentExtensionsPolicy,
   type AgentExtensionsPolicy,
-} from "@/lib/agent/mcp/config";
+} from "@/lib/agent/extensions/config";
 import {
   AGENT_SCHEDULE_LIMITS_KEY,
   normalizeAgentScheduleLimits,

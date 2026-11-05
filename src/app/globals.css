@@ -298,11 +298,12 @@
   --color-clay: var(--clay);
   --color-accent-soft: var(--accent-soft);
   --color-accent-strong: var(--accent-strong);
-  --color-wood: var(--wx-wood);
-  --color-fire: var(--wx-fire);
-  --color-earth: var(--wx-earth);
-  --color-metal: var(--wx-metal);
-  --color-water: var(--wx-water);
+  /* 干支着色统一走 --element-*（工作区概览与命盘共用同一套可读性配色） */
+  --color-wood: var(--element-wood);
+  --color-fire: var(--element-fire);
+  --color-earth: var(--element-earth);
+  --color-metal: var(--element-metal);
+  --color-water: var(--element-water);
   --color-wood-soft: var(--wx-wood-soft);
   --color-fire-soft: var(--wx-fire-soft);
   --color-earth-soft: var(--wx-earth-soft);

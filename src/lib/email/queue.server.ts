@@ -9,7 +9,7 @@ export const EMAIL_QUEUE = 'taibu-email';
 
 let queue: Queue<OutgoingMail> | null = null;
 
-export function getEmailQueue(): Queue<OutgoingMail> {
+function getEmailQueue(): Queue<OutgoingMail> {
   queue ??= new Queue<OutgoingMail>(EMAIL_QUEUE, {
     connection: createBullConnection(),
     prefix: JOB_QUEUE_PREFIX,

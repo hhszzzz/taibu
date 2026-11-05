@@ -10,7 +10,9 @@ export type OutgoingMail = {
   html?: string;
 };
 
-let cachedTransport: Transporter | null | undefined;
+type Mailer = { config: MailerConfig; transport: Transporter | null };
+
+let cachedMailer: Mailer | undefined;
 
 /** Fails the process at startup instead of inside a queued delivery. */
 export function validateMailer(): MailerConfig {
@@ -23,30 +25,32 @@ export function describeMailer(): MailerConfig & { hasPassword: boolean } {
   return { ...config, password: undefined, hasPassword: Boolean(config.password) };
 }
 
-function getTransport(): Transporter | null {
-  if (cachedTransport !== undefined) return cachedTransport;
+/** The environment is static after boot, so the config and transport are resolved once. */
+function getMailer(): Mailer {
+  if (cachedMailer) return cachedMailer;
   const config = resolveMailerConfig();
-  if (config.transport === 'log') {
-    cachedTransport = null;
-    return cachedTransport;
-  }
-  cachedTransport = createTransport({
-    host: config.host,
-    port: config.port,
-    secure: config.secure,
-    ...(config.user ? { auth: { user: config.user, pass: config.password } } : {}),
-  });
-  return cachedTransport;
+  cachedMailer = {
+    config,
+    transport: config.transport === 'log'
+      ? null
+      : createTransport({
+        host: config.host,
+        port: config.port,
+        secure: config.secure,
+        ...(config.user ? { auth: { user: config.user, pass: config.password } } : {}),
+      }),
+  };
+  return cachedMailer;
 }
 
 export async function sendMail(mail: OutgoingMail): Promise<void> {
-  const transport = getTransport();
+  const { config, transport } = getMailer();
   if (!transport) {
     console.info(`[email:log] to=${mail.to} subject=${mail.subject}\n${mail.text}`);
     return;
   }
   await transport.sendMail({
-    from: resolveMailerConfig().from,
+    from: config.from,
     to: mail.to,
     subject: mail.subject,
     text: mail.text,

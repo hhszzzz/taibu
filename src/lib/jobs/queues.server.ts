@@ -14,19 +14,20 @@ export type AgentEvalJobData = { runId: string };
 let maintenanceQueue: Queue<MaintenanceJobData> | null = null;
 let agentEvalQueue: Queue<AgentEvalJobData> | null = null;
 
-export function getMaintenanceQueue(): Queue<MaintenanceJobData> {
-  maintenanceQueue ??= new Queue<MaintenanceJobData>(MAINTENANCE_QUEUE, {
+function createQueue<T>(name: string): Queue<T> {
+  return new Queue<T>(name, {
     connection: createBullConnection(),
     prefix: JOB_QUEUE_PREFIX,
   });
+}
+
+export function getMaintenanceQueue(): Queue<MaintenanceJobData> {
+  maintenanceQueue ??= createQueue<MaintenanceJobData>(MAINTENANCE_QUEUE);
   return maintenanceQueue;
 }
 
 export function getAgentEvalQueue(): Queue<AgentEvalJobData> {
-  agentEvalQueue ??= new Queue<AgentEvalJobData>(AGENT_EVAL_QUEUE, {
-    connection: createBullConnection(),
-    prefix: JOB_QUEUE_PREFIX,
-  });
+  agentEvalQueue ??= createQueue<AgentEvalJobData>(AGENT_EVAL_QUEUE);
   return agentEvalQueue;
 }
 

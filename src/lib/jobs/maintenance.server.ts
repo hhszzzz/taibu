@@ -17,7 +17,9 @@ function messageOf(reason: unknown): string {
   return reason instanceof Error ? reason.message : String(reason);
 }
 
-async function runSteps(steps: Array<{ name: string; run: () => Promise<unknown> }>): Promise<MaintenanceRunSummary> {
+type MaintenanceStep = { name: string; run: () => Promise<unknown> };
+
+async function runSteps(steps: MaintenanceStep[]): Promise<MaintenanceRunSummary> {
   const settled = await Promise.allSettled(steps.map((step) => step.run()));
   const results = settled.map((result, index) => result.status === 'fulfilled'
     ? { step: steps[index].name, value: result.value }
@@ -29,33 +31,39 @@ async function runSteps(steps: Array<{ name: string; run: () => Promise<unknown>
   return { job: steps.map((step) => step.name).join(','), results };
 }
 
+/** Each `run` resolves its owner when the tick fires, so tests can replace an imported step. */
+const MAINTENANCE_JOBS: Record<string, MaintenanceStep[]> = {
+  reminders: [
+    { name: 'process-scheduled-reminders', run: () => processScheduledReminders() },
+    { name: 'schedule-user-reminders', run: () => scheduleAllUsersReminders() },
+  ],
+  'agent-schedules': [
+    { name: 'process-agent-schedules', run: () => processAgentSchedules() },
+  ],
+  'agent-attachments-cleanup': [
+    { name: 'cleanup-agent-attachments', run: () => cleanupAgentAttachments() },
+    { name: 'cleanup-generated-images', run: () => cleanupGeneratedImages() },
+  ],
+  'notifications-prune': [
+    { name: 'prune-expired-notifications', run: () => pruneExpiredNotifications() },
+  ],
+  'agent-retention': [
+    { name: 'agent-retention', run: () => runAgentRetention() },
+  ],
+  'identity-cleanup': [
+    { name: 'identity-cleanup', run: () => runIdentityCleanup() },
+  ],
+  'billing-maintenance': [
+    { name: 'billing-expire-due', run: () => expireDueBilling() },
+  ],
+};
+
 /**
  * One scheduler tick. Every step is idempotent: a partial failure is reported
  * but does not block the steps that succeeded, exactly like the old cron route.
  */
 export async function runMaintenanceJob(name: string): Promise<MaintenanceRunSummary> {
-  switch (name) {
-    case 'reminders':
-      return runSteps([
-        { name: 'process-scheduled-reminders', run: processScheduledReminders },
-        { name: 'schedule-user-reminders', run: scheduleAllUsersReminders },
-      ]);
-    case 'agent-schedules':
-      return runSteps([{ name: 'process-agent-schedules', run: processAgentSchedules }]);
-    case 'agent-attachments-cleanup':
-      return runSteps([
-        { name: 'cleanup-agent-attachments', run: cleanupAgentAttachments },
-        { name: 'cleanup-generated-images', run: cleanupGeneratedImages },
-      ]);
-    case 'notifications-prune':
-      return runSteps([{ name: 'prune-expired-notifications', run: pruneExpiredNotifications }]);
-    case 'agent-retention':
-      return runSteps([{ name: 'agent-retention', run: runAgentRetention }]);
-    case 'identity-cleanup':
-      return runSteps([{ name: 'identity-cleanup', run: runIdentityCleanup }]);
-    case 'billing-maintenance':
-      return runSteps([{ name: 'billing-expire-due', run: () => expireDueBilling() }]);
-    default:
-      throw new Error(`Unknown maintenance job: ${name}`);
-  }
+  const steps = MAINTENANCE_JOBS[name];
+  if (!steps) throw new Error(`Unknown maintenance job: ${name}`);
+  return runSteps(steps);
 }

@@ -44,17 +44,17 @@ const InteractiveChart = lazy(() => import('./AgentInteractiveChart').then(modul
 
 const MAX_TABS = 20;
 // 工作区是停靠分栏（claude artifacts 预览面板形态）：桌面布局（≥1024，与全站侧栏、会话栏同一断点）参与布局、不遮对话，
-// 更窄的屏幕改为弹窗 / 底部抽屉。默认与对话列平分（盘面在窄宽下自动换成紧凑排布），用户手动调宽后以手动值为准。
-// 量不到面板宽度时（尚未布局）按 320 起算拖拽与键盘调整。
-const FALLBACK_WIDTH = 320;
+// 更窄的屏幕改为弹窗 / 底部抽屉。默认占约 42% 并封顶 560px，比对话列窄但盘面仍能舒展；用户手动调宽后以手动值为准。
+// 量不到面板宽度时（尚未布局）按 560 起算拖拽与键盘调整。
+const FALLBACK_WIDTH = 560;
 // 拖拽边界：面板 280–780，且始终给阅读列留 360（与 .agent-workspace-panel 的 max-width 一致）。
 const MIN_WIDTH = 280;
 const MAX_WIDTH = 780;
 const READING_MIN = 360;
 // 面板只保留右外边距 4px（与上、下齐平）；左侧与对话列齐平，拖动时不会露出一条底色带。
 const PANEL_GUTTER = 4;
-// 百分比相对 .chat-workspace：扣掉右外边距后与对话列对半分；min/max-width 仍按上面的边界收口。
-const DEFAULT_WIDTH = `min(${MAX_WIDTH}px, calc((100% - ${PANEL_GUTTER}px) / 2))`;
+// 默认宽为可用宽度的 42%，上限 560px；min/max-width 仍按上面的边界收口。
+const DEFAULT_WIDTH = `min(560px, calc((100% - ${PANEL_GUTTER}px) * .42))`;
 const SECTION_LABELS: Record<AgentWorkspaceSection, string> = { results: '概览' };
 const TAB_KEYS = ['ArrowLeft', 'ArrowRight', 'Home', 'End'];
 const LIVE_LABELS = { running: '正在更新', waiting: '等待回答' } as const;

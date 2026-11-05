@@ -1,7 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  COMPOSER_COMFORT_HEIGHT,
   COMPOSER_MAX_HEIGHT,
   resolveComposerHeight,
 } from '../lib/chat/composer-height';
@@ -12,11 +11,11 @@ test('a single line keeps the compact field and offers no expand key', () => {
     'an empty hero field is two rows and still counts as one line');
 });
 
-test('a wrapped draft takes the comfortable height with empty space under the text', () => {
-  assert.deepEqual(resolveComposerHeight({ natural: 53, hero: false, expanded: false, viewport: 900 }), { height: COMPOSER_COMFORT_HEIGHT, expandable: false });
-  assert.deepEqual(resolveComposerHeight({ natural: 95, hero: false, expanded: false, viewport: 900 }), { height: COMPOSER_COMFORT_HEIGHT, expandable: false }, 'the comfortable height is a floor, not a hug');
+test('a wrapped draft grows with its content instead of jumping to a fixed height', () => {
+  assert.deepEqual(resolveComposerHeight({ natural: 53, hero: false, expanded: false, viewport: 900 }), { height: 53, expandable: false });
+  assert.deepEqual(resolveComposerHeight({ natural: 95, hero: false, expanded: false, viewport: 900 }), { height: 95, expandable: false });
   assert.deepEqual(resolveComposerHeight({ natural: 130, hero: false, expanded: false, viewport: 900 }), { height: 130, expandable: false });
-  assert.deepEqual(resolveComposerHeight({ natural: 63, hero: true, expanded: false, viewport: 900 }), { height: COMPOSER_COMFORT_HEIGHT, expandable: false });
+  assert.deepEqual(resolveComposerHeight({ natural: 63, hero: true, expanded: false, viewport: 900 }), { height: 63, expandable: false });
 });
 
 test('the field stops at the normal cap and only then offers expansion', () => {

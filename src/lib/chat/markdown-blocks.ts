@@ -10,6 +10,30 @@ function needsDocument(node: Node): boolean {
         || Boolean(node.children?.some(needsDocument));
 }
 
+/**
+ * 中文模型常把 Markdown 标记与内容贴在一起（`##标题`、`1.内容`、`-列表项`、`1、内容`），
+ * 这些在 CommonMark 里都不成块。渲染前按行补一个空格，围栏代码块内原样保留。
+ */
+export function normalizeMarkdownMarkers(source: string): string {
+    if (!/[#\d•·-]/u.test(source)) return source;
+    let fence: { marker: string; length: number } | null = null;
+    return source.split('\n').map(line => {
+        const match = /^ {0,3}(`{3,}|~{3,})(.*)$/u.exec(line);
+        if (match) {
+            if (!fence) fence = { marker: match[1][0], length: match[1].length };
+            else if (match[1][0] === fence.marker && match[1].length >= fence.length && !match[2].trim()) fence = null;
+            return line;
+        }
+        if (fence) return line;
+        return line
+            .replace(/^(\s{0,3})(#{1,6})(?=[^\s#])/u, '$1$2 ')
+            .replace(/^(\s{0,3})(\d{1,9})\.(?=[^\s\d])/u, '$1$2. ')
+            .replace(/^(\s{0,3})(\d{1,9})、\s*/u, '$1$2. ')
+            .replace(/^(\s{0,3})-(?=[^\s\d-])/u, '$1- ')
+            .replace(/^(\s{0,3})[•·]\s*/u, '$1- ');
+    }).join('\n');
+}
+
 /** Same GFM grammar as the renderer; source slices retain indentation and CRLF. */
 export function splitMarkdown(source: string): { blocks: string[]; document: boolean } {
     if (!source) return { blocks: [], document: false };
@@ -46,19 +70,20 @@ export class MarkdownBlocks {
     private blocks: string[] = [];
     private document = false;
     advance(source: string): string[] {
-        if (source === this.source) return this.blocks;
-        const append = this.blocks.length > 0 && source.startsWith(this.source);
-        if (append && this.document) this.blocks = [source];
+        const normalized = normalizeMarkdownMarkers(source);
+        if (normalized === this.source) return this.blocks;
+        const append = this.blocks.length > 0 && normalized.startsWith(this.source);
+        if (append && this.document) this.blocks = [normalized];
         else {
             const stable = append ? this.blocks.slice(0, -1) : [];
-            const tail = source.slice(stable.reduce((total, block) => total + block.length, 0));
+            const tail = normalized.slice(stable.reduce((total, block) => total + block.length, 0));
             const parsed = splitMarkdown(tail);
             this.document = parsed.document;
-            this.blocks = parsed.document ? [source] : [...stable, ...parsed.blocks];
+            this.blocks = parsed.document ? [normalized] : [...stable, ...parsed.blocks];
             // Bound memoized elements in unusually fragmented messages.
             if (this.blocks.length > 512) this.blocks = [this.blocks.slice(0, -128).join(''), ...this.blocks.slice(-128)];
         }
-        this.source = source;
+        this.source = normalized;
         return this.blocks;
     }
 }

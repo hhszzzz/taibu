@@ -228,7 +228,7 @@ test('Agent preference updates preserve display settings and reject invalid temp
   assert.equal(writes.length, 0);
   const response = await patch({ memoryEnabled: false });
   assert.equal(response.status, 200);
-  assert.deepEqual((await response.json()).settings.chatPreferences, { width: 980, fontScale: 115, desktopNotifications: true, promptTemplates: [template], memoryEnabled: false });
+  assert.deepEqual((await response.json()).settings.chatPreferences, { width: 980, fontScale: 115, desktopNotifications: true, promptTemplates: [template], memoryEnabled: false, runningSendMode: 'supplement' });
   assert.equal(writes.length, 1);
   assert.equal((await patch({ promptTemplates: [] })).status, 200);
   assert.deepEqual((settings.chat_preferences as { promptTemplates: unknown }).promptTemplates, []);

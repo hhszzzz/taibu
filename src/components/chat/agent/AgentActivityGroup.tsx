@@ -23,18 +23,36 @@ import { JsonCode, ToolCommand } from './ToolCode';
 import { formatStepMarkdown } from '@/lib/agent/tool-display';
 import { GeneratedImageGallery } from './GeneratedImageGallery';
 import { useEntranceMotion } from '@/lib/motion/entrance';
+import { formatAgentElapsed } from './AgentHeaderStatus';
 // 小盘缩略图的样式在工作区样式表里；分享页只加载对话样式，这里一并引入。
 import './agent-workspace.css';
 
-/** One live line under the answer: what the task is doing and, while a tool runs, what that tool is working on. */
-export function AgentActivityIndicator({ data }: { data: AgentMessageData }) {
+/** 思考中的秒数：服务端给出本次生成的开始时间，客户端每秒刷新。 */
+function useLiveSeconds(startedAt: number | undefined) {
+    // 首帧两边都从开始时间算 0 秒，避免服务端与客户端各取一次 Date.now() 造成水合差。
+    const [now, setNow] = useState(() => startedAt ?? Date.now());
+    useEffect(() => {
+        if (startedAt === undefined) return;
+        queueMicrotask(() => setNow(Date.now()));
+        const timer = setInterval(() => setNow(Date.now()), 1000);
+        return () => clearInterval(timer);
+    }, [startedAt]);
+    return startedAt === undefined ? null : Math.max(0, Math.floor((now - startedAt) / 1000));
+}
+
+/** 实时状态放在「太卜」名字右侧：正在思考 / 整理回答 / 执行工具，思考时带实时秒数。 */
+export function AgentLiveStatus({ data }: { data: AgentMessageData }) {
+    const activity = data.status === 'running' ? data.runtime?.activity : undefined;
+    const seconds = useLiveSeconds(activity?.phase === 'thinking' ? activity.startedAt : undefined);
     if (!['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status)) return null;
     const waiting = data.status === 'awaiting_input';
     const retrying = data.status === 'running' && data.runtime?.activity?.phase === 'retrying';
-    return <div className="agent-live-activity" role="status" data-tone={retrying ? 'warning' : undefined}>
-        {waiting ? <Pause size={14} aria-hidden="true" /> : <LoaderCircle size={14} strokeWidth={2.4} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
-        <span>{getAgentLiveLine(data)}</span>
-    </div>;
+    const line = getAgentLiveLine(data);
+    if (!line) return null;
+    return <span className="agent-heading-live" role="status" data-tone={retrying ? 'warning' : undefined}>
+        {waiting ? <Pause size={13} aria-hidden="true" /> : <LoaderCircle size={13} strokeWidth={2.4} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
+        <span>{line}{seconds !== null ? ` · ${formatAgentElapsed(seconds * 1000)}` : ''}</span>
+    </span>;
 }
 
 /** 成员结论的第一句，作为成员行的预览。 */
@@ -310,7 +328,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 : state === 'running'
                     ? <p className="agent-step-empty">正在等待工具返回结果…</p>
                     : structured ?? <p className="agent-step-empty">{raw !== null ? '已返回结构化结果' : '该步骤没有返回详情。'}</p>)}
-        {!selfContained && openButton(openLabel)}
+        {!selfContained && state !== 'failed' && openButton(openLabel)}
     </div>;
 }
 
@@ -385,23 +403,22 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     const questions = rows.filter(part => part.type === 'question').length;
     // Beside the workspace the live process stays open; narrower screens keep it to two lines.
     // 详细记录视图默认展开每一步（参数与结果）。
-    const open = disclosed ?? (detailed || (active && wide) || failed > 0);
+    // 失败不再自动展开：步骤里已标红，读者需要时自己点开。
+    const open = disclosed ?? (detailed || (active && wide));
     // 任务进行中新加的步骤淡入；展开时已有的步骤、重新挂载的步骤不重放。
     useEntranceMotion(stepsRef, { selector: ':scope > .agent-step', preset: 'fade', scope: `${data.runId}:${tools.length > 0}`, ready: open });
-    const live = !open && streaming ? getAgentLiveLine(data) : null;
     const thinking = summarizeThinkingTime(parts);
+    // 实时状态由「太卜」右侧的 AgentLiveStatus 负责；过程条只给进度或结果摘要。
     const count = !tools.length && !questions
-        ? (thinking ?? (streaming ? '思考中' : '已思考'))
-        : live ? `· ${completed} / ${tools.length} 完成`
+        ? (streaming ? '任务过程' : thinking ?? '已思考')
+        : streaming ? `· ${completed} / ${tools.length} 完成`
         : `${thinking ? `${thinking} · ` : ''}${summarizeAgentActivity(done, questions, failed)}`;
     return <div className="agent-activity-group">
         <section className={`agent-process${open ? ' is-open' : ''}`} aria-label="任务过程">
-            <Button unstyled type="button" className={`agent-process-heading${live ? ' is-live' : ''}`} aria-expanded={open} aria-controls={id} onClick={() => { setDisclosed(!open); if (!open) setRevealed(true); }}>
-                {live && <LoaderCircle size={14} aria-hidden="true" className="animate-spin motion-reduce:animate-none" />}
+            <Button unstyled type="button" className="agent-process-heading" aria-expanded={open} aria-controls={id} onClick={() => { setDisclosed(!open); if (!open) setRevealed(true); }}>
                 <span className="agent-process-label">
                     <span className="sr-only">任务过程</span>
-                    <span className="agent-process-count" data-failed={failed > 0 || undefined}>{count}</span>
-                    {live && <span className="agent-process-now">{live}</span>}
+                    {count && <span className="agent-process-count">{count}</span>}
                     <ChevronRight size={12} aria-hidden="true" className={`agent-process-chevron${open ? ' rotate-90' : ''}`} />
                 </span>
             </Button>

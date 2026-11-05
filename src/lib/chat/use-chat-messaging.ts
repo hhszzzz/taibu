@@ -350,10 +350,20 @@ export function useChatMessaging({
 
     const handleQueueMessage = async () => {
         if (!agent.active || !inputValue.trim() || isSendingToList) return;
+        const draft = inputValue;
+        const submitted = attachmentState;
         const clearSubmittedDraft = state.captureSubmittedDraft(true);
         setIsSendingToList(true);
-        try { await agent.sendCommand(inputValue.trim(), true); clearSubmittedDraft(); }
-        catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
+        clearSubmittedDraft();
+        try { await agent.sendCommand(draft.trim(), true); }
+        catch (error) {
+            if (agent.captureConversation()) {
+                state.setInputValue(draft);
+                state.setMentions(mentions);
+                state.setAttachmentState(submitted);
+            }
+            showToast('error', error instanceof Error ? error.message : '发送失败');
+        }
         finally { setIsSendingToList(false); }
     };
 
@@ -477,12 +487,14 @@ export function useChatMessaging({
         }
     };
 
-    // Send message; `context` is the rich chart quote attached above the composer, `quotes` the answers the user quoted.
-    const handleSend = async (context?: string, quotes?: MessageQuote[]) => {
-        const trimmedInput = [context?.trim(), inputValue.trim()].filter(Boolean).join('\n\n');
+    // Send message; `context` is the rich chart quote attached above the composer, `quotes` the answers the user quoted,
+    // `text` a suggested question sent without filling the draft first.
+    const handleSend = async (context?: string, quotes?: MessageQuote[], text?: string) => {
+        const draft = text ?? inputValue;
+        const trimmedInput = [context?.trim(), draft.trim()].filter(Boolean).join('\n\n');
         const messageQuotes = normalizeMessageQuotes(quotes);
         // `/compact` compacts an idle Agent conversation; it is never sent to a model as a question or instruction.
-        if (parseAgentCompactCommand(inputValue)) {
+        if (parseAgentCompactCommand(draft)) {
             const blocked = agent.mode !== 'agent' ? '压缩上下文用于 Agent 对话'
                 : agent.active ? '任务进行中，结束后再压缩上下文'
                 : !activeConversationId || !messages.length ? '当前对话还没有可压缩的内容'
@@ -491,10 +503,20 @@ export function useChatMessaging({
         }
         if (agent.active && trimmedInput && !isSendingToList) {
             if (messageQuotes.length) { showToast('info', '任务进行中不能附带引用，请先停止当前任务'); return; }
+            const submitted = attachmentState;
             const clearSubmittedDraft = state.captureSubmittedDraft(true);
             setIsSendingToList(true);
-            try { await agent.sendCommand(trimmedInput); clearSubmittedDraft(); }
-            catch (error) { showToast('error', error instanceof Error ? error.message : '发送失败'); }
+            // 先把草稿收走，任务接受得慢也不像「还没发出去」；失败再放回来。
+            clearSubmittedDraft();
+            try { await agent.sendCommand(trimmedInput); }
+            catch (error) {
+                if (agent.captureConversation()) {
+                    state.setInputValue(draft);
+                    state.setMentions(mentions);
+                    state.setAttachmentState(submitted);
+                }
+                showToast('error', error instanceof Error ? error.message : '发送失败');
+            }
             finally { setIsSendingToList(false); }
             return;
         }
@@ -510,6 +532,7 @@ export function useChatMessaging({
         const messageMentions = sanitizeOutgoingMentions(mentions);
         const isNewConversation = !activeConversationId;
         const draftTitle = isNewConversation ? buildDraftTitle(trimmedInput) : null;
+        const submitted = attachmentState;
         let conversationId = activeConversationId;
         try {
             if (!isNewConversation && !conversationValidatedRef.current) {
@@ -549,12 +572,16 @@ export function useChatMessaging({
             const newMessages = [...messages, userMessage];
             if (agent.mode === 'agent') {
                 if (isCurrent()) setMessages(newMessages);
+                // 用户消息已上屏，草稿也立即收走；启动失败再把它放回输入框。
+                clearSubmittedDraft();
                 try {
                     await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, attachment, imageModel, byokKeys: agentByokKeys(modelRefs) });
-                    clearSubmittedDraft();
                 } catch (error) {
                     if (isCurrent()) {
                         setMessages(messages);
+                        state.setInputValue(draft);
+                        state.setMentions(mentions);
+                        state.setAttachmentState(submitted);
                         void state.retryConversationLoad();
                     }
                     if (error instanceof AgentHttpError && error.status === 402) markBalanceExhausted(error.message);

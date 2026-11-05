@@ -499,9 +499,14 @@ export async function executeAgentRun(
     const ask = async (args: Record<string, unknown>, api: ToolExecutionApi, toolContext: Context, tool: DomainTool) => {
       const cacheId = `${api.taskId}:${api.callId}`;
       const response = await tool.execute(cacheId, args, toolContext.abortSignal);
-      const question = (response.details as { question: string }).question;
+      // Keep the full question list on the card: a completed call still lists every item it asked, not the joined text.
+      const asked = response.details as { question: string; questions?: AgentQuestion[] };
+      const question = asked.question;
       const reply = await awaitReply({ question }, api, toolContext);
-      return { output: [{ type: "text" as const, text: JSON.stringify({ question, reply: reply.content }) }], details: { question, reply: reply.content } };
+      return {
+        output: [{ type: "text" as const, text: JSON.stringify({ question, reply: reply.content }) }],
+        details: { question, ...(asked.questions ? { questions: asked.questions } : {}), reply: reply.content } as unknown as JsonValue,
+      };
     };
     /**
      * Plan mode: the model submits a plan and waits for the user's decision. The question part is the user's view of

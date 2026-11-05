@@ -103,6 +103,8 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
   };
   attachmentIds.forEach((id, index) => add('attachment:' + id, { view: 'attachment', family: 'attachment', title: `资料 ${index + 1}` }));
   for (const tool of tools) {
+    // A failed call has no result: it stays in the task process and never opens a workspace page.
+    if (tool.status === 'failed') continue;
     const family = getAgentToolFamily(tool.name);
     switch (family) {
       case 'chart': {

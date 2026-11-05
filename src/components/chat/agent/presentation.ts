@@ -154,7 +154,7 @@ const DRILLDOWN_SELECTION_LABELS: Record<string, (value: unknown) => string> = {
     pillars: listLabel('涉及'),
     types: listLabel('只看'),
     sections: listLabel('只看'),
-    detailLevel: value => value === 'full' ? '含口径' : '',
+    detailLevel: value => value === 'full' ? '完整' : value === 'more' ? '更多' : '',
     leiShen: value => `类神 ${value}`,
     planet: value => DRILLDOWN_PLANETS[String(value)] ?? String(value),
     house: value => `第 ${value} 宫`,

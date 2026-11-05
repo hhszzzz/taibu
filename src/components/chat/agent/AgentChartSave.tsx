@@ -3,7 +3,6 @@
 
 import { useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BookmarkCheck, BookmarkPlus } from 'lucide-react';
 import type { AgentToolPart } from '@/lib/agent/tool-presentation';
 import { findSavedAgentChart, getAgentChartSave, getSavedChartHref } from '@/lib/agent/chart-save';
 import { useChartMutation, useUserCharts } from '@/lib/hooks/useUserCharts';
@@ -24,14 +23,14 @@ export function AgentChartSave({ tool, userId }: { tool: AgentToolPart; userId: 
     const [created, setCreated] = useState<string | null>(null);
     if (!save || !userId) return null;
     const savedId = findSavedAgentChart(library.data, save)?.id ?? (library.isFetching ? created : null);
-    if (savedId) return <Link className="agent-board-tool is-saved" href={getSavedChartHref(save.type, savedId)}
-        aria-label="已保存到我的命盘，打开命盘页" title="已保存到我的命盘，打开命盘页"><BookmarkCheck size={14} aria-hidden="true" /></Link>;
-    return <Button unstyled type="button" className="agent-board-tool" aria-label="保存命盘" title="保存到我的命盘"
+    if (savedId) return <Link className="agent-board-tool has-label is-saved" href={getSavedChartHref(save.type, savedId)}
+        aria-label="已保存到我的命盘，打开命盘页" title="已保存到我的命盘，打开命盘页"><span>已保存</span></Link>;
+    return <Button unstyled type="button" className="agent-board-tool has-label is-save" aria-label="保存命盘" title="保存到我的命盘"
         disabled={mutation.pending || library.isPending}
         onClick={() => void mutation.run(scope => createSavedChart(save.type, save.payload, scope), id => {
             setCreated(id);
             showToast('success', '已保存到我的命盘');
         }, error => showToast('error', error instanceof Error ? error.message : '保存命盘失败'))}>
-        <BookmarkPlus size={14} aria-hidden="true" />
+        <span>保存</span>
     </Button>;
 }

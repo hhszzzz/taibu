@@ -8,7 +8,8 @@ import { isAgentRunTerminal, type AgentRunStatus } from './types';
  *   </followups>
  *
  * The block never reaches the visible answer, including while it streams in;
- * the reader gets one short suggestion, prefilled into the composer to edit or send.
+ * the reader gets one short suggestion shown as ghost text in the composer,
+ * where Tab fills it in and Enter (or send) sends it as-is.
  */
 const OPEN = '<followups>';
 const CLOSE = '</followups>';
@@ -36,11 +37,11 @@ export function splitAgentFollowUps(text: string): { text: string; followUps: st
 }
 
 /**
- * Whether a finished task's suggestion goes into the composer: the run must have been
+ * Whether a finished task's suggestion is offered in the composer: the run must have been
  * seen working on this page (not opened already finished), it must have just completed,
  * and the viewer must not have written a draft of their own.
  */
-export function shouldPrefillFollowUp(input: {
+export function shouldOfferFollowUp(input: {
   previousStatus: AgentRunStatus | undefined;
   status: AgentRunStatus;
   suggestion: string | undefined;

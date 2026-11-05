@@ -9,6 +9,7 @@ import { systemDb } from '@/lib/db/context.server';
 import { getNextSolarTerm, getSolarTermMeaning } from '@/lib/divination/solar-terms';
 import { calculateDailyFortune, generateEnhancedKeyDates, compareLevels, isLevelFavorable } from '@/lib/divination/fortune';
 import { formatDateParts } from '@/lib/local-date';
+import { isPlainObject } from '@/lib/validation';
 import type { BaziOutput as CoreBaziOutput } from 'taibu-core/bazi';
 import { calculateBaziOutputFromStoredFields } from '@/lib/divination/bazi-record';
 
@@ -249,9 +250,7 @@ function buildReminderNotificationPayload(reminder: {
     reminder_type: string;
     content: unknown;
 }): ReminderNotificationPayload {
-    const content = (reminder.content && typeof reminder.content === 'object' && !Array.isArray(reminder.content)
-        ? reminder.content
-        : {}) as Record<string, unknown>;
+    const content: Record<string, unknown> = isPlainObject(reminder.content) ? reminder.content : {};
 
     let title = '';
     let message = '';

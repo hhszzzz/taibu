@@ -4,6 +4,7 @@ import {
     BILLING_LEDGER_TOTALS, billingLedgerWhere, billingReferenceCostsQuery, type BillingLedgerRow, type PaymentOrderRow,
 } from '@/lib/db/billing-queries';
 import { systemDb, type ScopedDb } from '@/lib/db/context.server';
+import { isPlainObject } from '@/lib/validation';
 import type {
     AdminPaymentOrderView, AdminUsagePage, LedgerEntryView, LedgerFilters, LedgerKind, LedgerModelLabel, LedgerPage, LedgerPrices,
     LedgerUsage, PaymentOrderView, ReferenceCost, SubscriptionWindow, UsageByModel, UsageTotals,
@@ -12,10 +13,8 @@ import type {
 const USAGE_COUNTS = ['input', 'output', 'cacheRead', 'cacheWrite', 'reasoning', 'images'] as const;
 const PRICE_KEYS = ['input', 'output', 'cacheRead', 'cacheWrite', 'image'] as const;
 
-const isRecord = (value: unknown): value is Record<string, unknown> => !!value && typeof value === 'object' && !Array.isArray(value);
-
 function ledgerPrices(value: unknown): LedgerPrices | null {
-    if (!isRecord(value)) return null;
+    if (!isPlainObject(value)) return null;
     const prices: LedgerPrices = {};
     for (const key of PRICE_KEYS) {
         const price = value[key];
@@ -26,7 +25,7 @@ function ledgerPrices(value: unknown): LedgerPrices | null {
 }
 
 function ledgerUsage(value: unknown): LedgerUsage | null {
-    if (!isRecord(value)) return null;
+    if (!isPlainObject(value)) return null;
     const usage: LedgerUsage = {};
     for (const key of USAGE_COUNTS) if (typeof value[key] === 'number') usage[key] = value[key];
     if (value.estimated === true) usage.estimated = true;

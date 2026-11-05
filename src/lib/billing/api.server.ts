@@ -3,24 +3,26 @@ import 'server-only';
 import { NextResponse, type NextRequest } from 'next/server';
 import { jsonError, jsonOk, readJsonBody, requireAdminUser, requireUserContext } from '@/lib/api-utils';
 import { readFeatureModuleStateFresh } from '@/lib/app-settings';
+import { requireFeatureUserContext } from '@/lib/feature-gate-utils';
 import { systemDb, userDb, type ScopedDb } from '@/lib/db/context.server';
 import { toDbError } from '@/lib/db/errors';
 import { checkRateLimit } from '@/lib/rate-limit';
 import { parseConfiguredOrigin } from '@/lib/runtime-env';
-import { isValidUUID } from '@/lib/validation';
+import { isPlainObject, isValidUUID } from '@/lib/validation';
 import { getBillingSummary } from './account.server';
 import {
     clampText, REDEMPTION_CODE_STATUS_LABELS, normalizeBillingSettings, parseLedgerFilters, parsePlanInput,
     type AdminBillingUserView, type BillingOverview, type BillingPaymentView, type EpayCheckoutInput,
     type PaymentOrderView, type RedemptionBatchInput, type RedemptionCodeKind, type RedemptionCodeStatus,
 } from './config';
-import { EPAY_METHOD_LABELS, EpayError, createEpayCheckout, getEpayConfig, settleEpayPayment, type EpaySettlement } from './epay.server';
+import { EPAY_METHOD_LABELS, createEpayCheckout, getEpayConfig, settleEpayPayment, type EpaySettlement } from './epay.server';
 import { emailsOf, listAllOrders, listLedger, listOrders, listUsage } from './ledger.server';
+import { BillingError } from './errors';
 import { usdToMicros } from './money';
 import {
-    BillingPlanError, buyPlanWithBalance, cancelSubscription, createPlan, deletePlan, grantSubscription, listPlans, updatePlan,
+    buyPlanWithBalance, cancelSubscription, createPlan, deletePlan, grantSubscription, listPlans, updatePlan,
 } from './plans.server';
-import { RedemptionError, createRedemptionCodes, disableRedemptionCode, listRedemptionCodes, redeemCode } from './redemption.server';
+import { createRedemptionCodes, disableRedemptionCode, listRedemptionCodes, redeemCode } from './redemption.server';
 import { getBillingSettings, setBillingSettings } from './settings.server';
 
 /**
@@ -43,10 +45,9 @@ async function authenticatedMember(request: NextRequest): Promise<Member | Respo
 
 /** The member's side follows the feature switch, failing closed when it cannot be read. */
 async function member(request: NextRequest): Promise<Member | Response> {
-    const state = await readFeatureModuleStateFresh('billing');
-    if (state.status === 'unavailable') return jsonError('功能状态暂时无法确认，请稍后重试', 503, { code: 'FEATURE_STATE_UNAVAILABLE' });
-    if (state.status !== 'enabled') return jsonError('钱包与用量日志当前未开放', 403, { code: 'FEATURE_DISABLED' });
-    return authenticatedMember(request);
+    const auth = await requireFeatureUserContext(request, 'billing', '钱包与用量日志当前未开放');
+    if ('response' in auth) return auth.response;
+    return { db: auth.db, userId: auth.user.id };
 }
 
 async function administrator(request: NextRequest): Promise<{ userId: string } | Response> {
@@ -56,14 +57,14 @@ async function administrator(request: NextRequest): Promise<{ userId: string } |
 }
 
 function failure(error: unknown, action: string): Response {
-    if (error instanceof BillingPlanError || error instanceof RedemptionError || error instanceof EpayError) {
+    if (error instanceof BillingError) {
         return jsonError(error.message, error.status, { code: error.code });
     }
     console.error('[billing]', { action, code: toDbError(error).code });
     return jsonError(`${action}失败`, 500);
 }
 
-const record = (value: unknown) => (value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null);
+const record = (value: unknown) => (isPlainObject(value) ? value : null);
 const readBody = async (request: NextRequest) => {
     const parsed = await readJsonBody(request, 256 * 1024);
     return 'error' in parsed ? null : record(parsed.body);

@@ -1,4 +1,6 @@
 import { PERSONALITY_BASICS, type MBTIType } from '@/lib/divination/mbti';
+import { FACE_ANALYSIS_TYPES } from '@/lib/divination/face';
+import { PALM_ANALYSIS_TYPES } from '@/lib/divination/palm';
 
 export const HISTORY_TYPES = [
   'tarot',
@@ -203,27 +205,11 @@ const TAROT_SPREAD_NAMES: Record<string, string> = {
   'celtic-cross': '凯尔特十字',
 };
 
-const PALM_ANALYSIS_NAMES: Record<string, string> = {
-  full: '综合分析',
-  lifeline: '生命线',
-  headline: '智慧线',
-  heartline: '感情线',
-  fateline: '事业线',
-  marriage: '婚姻线',
-};
-
 const PALM_HAND_NAMES: Record<string, string> = { left: '左手', right: '右手' };
 
-const FACE_ANALYSIS_NAMES: Record<string, string> = {
-  full: '综合分析',
-  forehead: '天庭分析',
-  eyes: '眼相分析',
-  nose: '鼻相分析',
-  mouth: '口相分析',
-  career: '事业运势',
-  love: '感情运势',
-  wealth: '财运分析',
-};
+/** A registered analysis type's display name, shared by the palm and face history rows. */
+const analysisName = (types: readonly { id: string; name: string }[], id: string) =>
+  types.find(item => item.id === id)?.name;
 
 export async function buildHistorySummary(
   type: HistoryType,
@@ -307,22 +293,21 @@ export async function buildHistorySummary(
   }
 
   if (type === 'palm') {
-    const title = `${PALM_HAND_NAMES[String(row.hand_type || '')] || ''}${PALM_ANALYSIS_NAMES[String(row.analysis_type || '')] || '手相分析'}`;
+    const hand = PALM_HAND_NAMES[String(row.hand_type || '')] || '';
+    const analysis = analysisName(PALM_ANALYSIS_TYPES, String(row.analysis_type || '')) || '手相分析';
     return {
       ...base,
-      title: truncateTitle(title),
-      badges: [
-        PALM_HAND_NAMES[String(row.hand_type || '')] || '',
-        PALM_ANALYSIS_NAMES[String(row.analysis_type || '')] || '手相分析',
-      ].filter((value): value is string => value.length > 0),
+      title: truncateTitle(`${hand}${analysis}`),
+      badges: [hand, analysis].filter((value): value is string => value.length > 0),
     };
   }
 
   if (type === 'face') {
+    const analysis = analysisName(FACE_ANALYSIS_TYPES, String(row.analysis_type || '')) || '面相分析';
     return {
       ...base,
-      title: truncateTitle(FACE_ANALYSIS_NAMES[String(row.analysis_type || '')] || '面相分析'),
-      badges: [FACE_ANALYSIS_NAMES[String(row.analysis_type || '')] || '面相分析'],
+      title: truncateTitle(analysis),
+      badges: [analysis],
     };
   }
 

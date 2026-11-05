@@ -1,6 +1,6 @@
 import 'server-only';
 import type { NextRequest } from 'next/server';
-import { jsonError, jsonOk, readJsonBody, requireAdminUser, requireUserContext } from '@/lib/api-utils';
+import { jsonError, jsonOk, readJsonBody, requireAdminUser, requireUserContext, staleUserResponse } from '@/lib/api-utils';
 import { getByokPolicy, readFeatureModuleStateFresh, setByokPolicy } from '@/lib/app-settings';
 import { allModelsDevModels } from '@/lib/admin/models-dev.server';
 import { exactModelsDevMatch } from '@/lib/admin/models-dev';
@@ -42,8 +42,8 @@ async function member(request: NextRequest) {
   if (gate) return gate;
   const auth = await requireUserContext(request);
   if ('error' in auth) return jsonError(auth.error.message, auth.error.status);
-  const expected = request.headers.get('X-Expected-User-Id');
-  if (expected !== null && expected !== auth.user.id) return jsonError('账号已切换', 409);
+  const stale = staleUserResponse(request, auth.user.id, '账号已切换');
+  if (stale) return stale;
   return auth;
 }
 

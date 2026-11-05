@@ -12,6 +12,9 @@ import { isAgentRunTerminal, type AgentRunStatus } from './types';
  */
 const OPEN = '<followups>';
 const CLOSE = '</followups>';
+/** The tags as the Agent instruction writes them; the parser below reads the same pair. */
+export const AGENT_FOLLOW_UP_OPEN = OPEN;
+export const AGENT_FOLLOW_UP_CLOSE = CLOSE;
 export const AGENT_FOLLOW_UP_LIMIT = 1;
 /** Longer lines are prose that slipped into the block, not a question to offer. */
 const MAX_LENGTH = 40;

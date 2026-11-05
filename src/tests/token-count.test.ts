@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { AIModelConfig } from '../types';
-import { estimateTokens, tokenFamily } from '../lib/agent/token-estimate';
+import { estimateTokens, tokenFamily } from '../lib/ai/token-estimate';
 import { countModelTokens, resetTokenCountCache } from '../lib/agent/token-count.server';
 import { sealedGateway } from './helpers/gateway-key';
 
@@ -22,6 +22,14 @@ test('estimates match new-api tokenkit for the same text and model', () => {
   assert.deepEqual(['deepseek-v3.2', 'gpt-5.6-sol', 'claude-haiku-4-5', 'claude-opus-4-7', 'gemini-3.7-flash'].map(model => [estimateTokens(model, code), estimateTokens(model, mixed)]),
     [[31, 21], [30, 18], [37, 25], [49, 28], [37, 17]]);
   assert.equal(estimateTokens('claude-sonnet-5', ''), 0);
+});
+
+test('an unbroken run longer than a word is counted as subwords, not one token', () => {
+  const long = 'a'.repeat(60_000);
+  assert.ok(estimateTokens('deepseek-v3.2', long) > 10_000);
+  assert.ok(estimateTokens('deepseek-v3.2', long) < 60_000);
+  // Normal words stay at the tokenkit weights.
+  assert.equal(estimateTokens('deepseek-v3.2', 'example'), estimateTokens('deepseek-v3.2', 'another'));
 });
 
 const model = (overrides: Partial<AIModelConfig> = {}): AIModelConfig => ({

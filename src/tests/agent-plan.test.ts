@@ -5,7 +5,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { AgentPlanView } from '../components/chat/agent/AgentPlanView';
 import { AgentContextBreakdown } from '../components/chat/agent/AgentContextUsage';
 import { getAgentPlan, getAgentSkills, type AgentToolPart } from '../lib/agent/tool-presentation';
-import { estimateTokens } from '../lib/agent/token-estimate';
+import { estimateTokens } from '../lib/ai/token-estimate';
 import { getAgentSteps, summarizeAgentActivity } from '../components/chat/agent/presentation';
 import { buildAgentWorkspace, getAgentWorkspaceLocation } from '../lib/agent/workspace';
 import type { AgentRuntimeInfo } from '../lib/agent/types';

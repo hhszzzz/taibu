@@ -22,7 +22,7 @@ import {
 } from '@/lib/agent/profiles/config';
 import type { AgentProfileCatalog } from '@/lib/agent/profiles/client';
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
-import { estimateTokens } from '@/lib/agent/token-estimate';
+import { estimateTokens } from '@/lib/ai/token-estimate';
 import { AI_REASONING_EFFORTS } from '@/types';
 import { Field as FieldBase } from '@/components/ui/Field';
 import { Input } from '@/components/ui/Input';

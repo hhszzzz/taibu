@@ -164,7 +164,7 @@ test('the message is dated in the user\'s time zone ahead of anything it carries
 test('a document is cut to its share of the model input, leaving room for the rest of the prompt', async () => {
     const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
     const { resolveModelContextConfig } = require('../lib/ai/model-context') as typeof import('../lib/ai/model-context');
-    const { countTokens } = require('../lib/token-utils') as typeof import('../lib/token-utils');
+    const { estimateTokens } = require('../lib/ai/token-estimate') as typeof import('../lib/ai/token-estimate');
     const config = resolveModelContextConfig('deepseek-chat', false);
     const share = Math.floor((config.maxContext - config.reserveOutput) * 0.4);
     const res = await pb.buildPromptWithSources({
@@ -172,7 +172,7 @@ test('a document is cut to its share of the model input, leaving room for the re
         attachments: { file: { name: '长文.txt', text: '甲乙丙丁戊己庚辛壬癸'.repeat(Math.ceil(share / 2)) } },
     });
     assert.match(res.userMessagePrefix, /\.\.\.（内容已截断）\n【文件内容结束】/u);
-    assert.ok(countTokens(res.userMessagePrefix) <= share + 100, 'the document stays within its share');
+    assert.ok(estimateTokens('deepseek-chat', res.userMessagePrefix) <= share + 100, 'the document stays within its share');
 });
 
 test('buildPromptWithSources injects identity as semantic text instead of raw json', async () => {
@@ -519,19 +519,19 @@ test('an agent task skips the base role because its method card already carries 
     assert.ok(!res.diagnostics.some((layer: { id: string; included: boolean }) => layer.id === 'base_chat_prompt'));
 });
 
-test('countTokens estimates Chinese heavier than Latin', () => {
-    const utils = require('../lib/token-utils') as any;
+test('estimateTokens counts Chinese heavier than Latin', () => {
+    const { estimateTokens } = require('../lib/ai/token-estimate') as typeof import('../lib/ai/token-estimate');
     const cn = '你'.repeat(60);
     const en = 'a'.repeat(60);
-    assert.ok(utils.countTokens(cn) > utils.countTokens(en));
+    assert.ok(estimateTokens('deepseek-chat', cn) > estimateTokens('deepseek-chat', en));
 });
 
 test('truncateToTokens reduces token count', () => {
-    const utils = require('../lib/token-utils') as any;
-    const text = 'A'.repeat(4000);
-    const before = utils.countTokens(text);
-    const truncated = utils.truncateToTokens(text, 200);
-    const after = utils.countTokens(truncated);
+    const utils = require('../lib/ai/token-estimate') as typeof import('../lib/ai/token-estimate');
+    const text = 'A '.repeat(4000);
+    const before = utils.estimateTokens('deepseek-chat', text);
+    const truncated = utils.truncateToTokens('deepseek-chat', text, 200);
+    const after = utils.estimateTokens('deepseek-chat', truncated);
     assert.ok(before > 200);
     assert.ok(after <= 260);
 });

@@ -50,6 +50,7 @@ import {
   AGENT_TOOL_SCOPE_IDS,
   AGENT_WEB_TOOLS,
   CHART_TARGET_DIRECTORY_HEADING,
+  agentChartReferenceNote,
   getAgentDrilldownBase,
   getAgentToolFeatureId,
   getAgentToolScope,
@@ -558,7 +559,7 @@ export async function createAgentTools(
               text: linked ? `${text}\n\n${linked}` : text,
             },
             // details 不发给模型：命盘引用另起一段写给它（与排盘结果的命盘引用一样不进公开文本）
-            ...(chartReference ? [{ type: "text" as const, text: `命盘引用: ${chartReference}。查看、详查或定位这张盘时作为 reference 传入。` }] : []),
+            ...(chartReference ? [{ type: "text" as const, text: agentChartReferenceNote(chartReference) }] : []),
           ],
           details: { id: args.id, type: args.type, ...(chartReference ? { chartReference } : {}) },
         };

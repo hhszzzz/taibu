@@ -4,7 +4,7 @@
  */
 import type { LanguageModelUsage } from 'ai';
 import type { AIModelPricing } from '@/types';
-import { estimateTokens } from '@/lib/agent/token-estimate';
+import { estimateTokens } from '@/lib/ai/token-estimate';
 import { toPiUsage } from '@/lib/agent/usage';
 
 /** Token counts of one call. Output includes reasoning tokens, as providers bill them. */

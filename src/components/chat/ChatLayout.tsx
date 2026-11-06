@@ -91,8 +91,8 @@ interface ChatLayoutProps extends ModelSettingsProps {
     onRegenerateResponse: (messageId: string) => Promise<void>;
     onSwitchVersion: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
-    /** Sends the composer; the optional context is the rich chart quote attached above it, and text overrides the draft. */
-    onSend: (context?: string, quotes?: MessageQuote[], text?: string) => Promise<void>;
+    /** Sends the composer; true once the message was accepted and the draft consumed. */
+    onSend: (context?: string, quotes?: MessageQuote[], text?: string) => Promise<boolean | void>;
     /** 输入框生图：直接调用生图接口，不经过对话模型。 */
     onImageGenerate?: (options: { prompt: string; size: string; count: number }) => void | Promise<void>;
     onStop: () => void;
@@ -390,10 +390,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         if (quote.text.trim().length > MAX_MESSAGE_QUOTE_CHARS) showToast('info', `单段引用最多 ${MAX_MESSAGE_QUOTE_CHARS} 字，已截取`);
         const item = { messageId: quote.messageId, text };
         const token = messageQuoteToken(item);
-        // 引用 = 输入框里的内联 chip：同一段只插一次，最多三段。
-        if (quotesRef.current.some(current => messageQuoteToken(current) === token)) return;
-        if (quotesRef.current.length >= MAX_MESSAGE_QUOTES) { showToast('info', `最多引用 ${MAX_MESSAGE_QUOTES} 段`); return; }
-        setQuotes(current => [...current, item].slice(0, MAX_MESSAGE_QUOTES));
+        // 引用 = 输入框里的内联 chip：只算还留在草稿里的，同一段只插一次，最多三段。
+        const active = quotesRef.current.filter(current => inputValue.includes(messageQuoteToken(current)));
+        if (active.some(current => messageQuoteToken(current) === token)) return;
+        if (active.length >= MAX_MESSAGE_QUOTES) { showToast('info', `最多引用 ${MAX_MESSAGE_QUOTES} 段`); return; }
+        setQuotes([...active, item]);
         const base = inputValue.replace(/\s+$/u, '');
         if (!base.includes(token)) onInputChange(base ? `${base}\n${token} ` : `${token} `);
         focusComposer();
@@ -427,9 +428,10 @@ export function ChatLayout(props: ChatLayoutProps) {
         // 引用 chip 只是输入框里的可见标记：正文剥掉 chip，引用的内容仍作为 quotes 随消息带上。
         const cleaned = stripMessageQuoteTokens(text ?? inputValue, quotes);
         if (!cleaned && !context) { showToast('info', '引用之后，写一句你的问题'); return; }
+        const accepted = await onSend(context, outgoing.length ? outgoing : undefined, cleaned);
+        // 发送被余额提示拦下时草稿还在，引用与追问命盘也留着，用户不必重新添加。
+        if (!accepted) return;
         setFollowUpSuggestion(null);
-        await onSend(context, outgoing.length ? outgoing : undefined, cleaned);
-        // 发送被余额提示拦下时保留引用与追问命盘，用户不必重新添加。
         setChartAsks([]);
         if (outgoing.length) setQuotes([]);
     };

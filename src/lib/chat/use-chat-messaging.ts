@@ -508,7 +508,7 @@ export function useChatMessaging({
             setIsSendingToList(true);
             // 先把草稿收走，任务接受得慢也不像「还没发出去」；失败再放回来。
             clearSubmittedDraft();
-            try { await agent.sendCommand(trimmedInput); }
+            try { await agent.sendCommand(trimmedInput); return true; }
             catch (error) {
                 if (agent.captureConversation()) {
                     state.setInputValue(draft);
@@ -576,6 +576,7 @@ export function useChatMessaging({
                 clearSubmittedDraft();
                 try {
                     await agent.start(conversationId, userMessage, { model: selectedModel, reasoning: reasoningEnabled, mentions: messageMentions, attachment, imageModel, byokKeys: agentByokKeys(modelRefs) });
+                    return true;
                 } catch (error) {
                     if (isCurrent()) {
                         setMessages(messages);
@@ -614,6 +615,7 @@ export function useChatMessaging({
             reportStartFailure(startResult, () => {
                 if (conversationId === activeConversationIdRef.current) setMessages(newMessages);
             });
+            return true;
         } catch (error) {
             console.error('发送失败:', error);
             if (conversationId === activeConversationIdRef.current) {

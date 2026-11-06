@@ -716,10 +716,3 @@ export function stripLeadingTitle(markdown: string, title: string): string {
     const match = /^\s*#[ \t]+(.+?)[ \t#]*(?:\r?\n|$)/.exec(markdown);
     return match && match[1].trim() === title.trim() ? markdown.slice(match[0].length).replace(/^(?:[ \t]*\r?\n)+/, '') : markdown;
 }
-
-/** Three luck periods around `year`: the one it falls in with its neighbours, or the first three before the first starts. */
-export function getDayunWindow(periods: readonly { 干支: string; 起运年份: number }[], year: number) {
-    const current = periods.findIndex((period, index) => year >= period.起运年份 && (index === periods.length - 1 || year < periods[index + 1].起运年份));
-    const start = current < 0 ? 0 : Math.max(0, Math.min(current - 1, periods.length - 3));
-    return periods.slice(start, start + 3).map((period, index) => ({ ...period, current: start + index === current }));
-}

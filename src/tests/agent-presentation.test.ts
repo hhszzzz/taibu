@@ -10,7 +10,7 @@ import { buildAgentWorkspace } from '../lib/agent/workspace';
 import {
     collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
     getAgentStepNumbers, getAgentSteps, getAgentScriptCalls, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
-    getAgentResponseTiming, getAgentTaskDuration, getAgentTaskSpan, getDayunWindow, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
+    getAgentResponseTiming, getAgentTaskDuration, getAgentTaskSpan, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
     summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, summarizeThinkingTime, formatMemberNames, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
 import { formatAgentElapsed } from '../components/chat/agent/AgentHeaderStatus';
@@ -312,17 +312,6 @@ test('a chart tab names the latest task’s steps behind it and what became of t
     const model = buildAgentWorkspace({ parts: [calculated, focus, { ...focus, id: 'focus-again' }], artifacts: [], attachmentIds: [] });
     assert.deepEqual(getAgentLocatedPositions(model), { toolIds: ['focus', 'focus-again'], labels: ['日柱天干 庚', '日柱地支 辰'] }, 'positions are listed once, in first-located order');
     assert.deepEqual(getAgentLocatedPositions(buildAgentWorkspace({ parts: [calculated], artifacts: [], attachmentIds: [] })), { toolIds: [], labels: [] });
-});
-
-test('the overview shows three luck periods around the year, marking the one it falls in', () => {
-    const periods = [{ 干支: '戊寅', 起运年份: 2000 }, { 干支: '己卯', 起运年份: 2010 }, { 干支: '庚辰', 起运年份: 2020 }, { 干支: '辛巳', 起运年份: 2030 }];
-    const window = (year: number, list = periods) => getDayunWindow(list, year).map(period => period.干支 + (period.current ? '*' : ''));
-    assert.deepEqual(window(2025), ['己卯', '庚辰*', '辛巳']);
-    assert.deepEqual(window(2005), ['戊寅*', '己卯', '庚辰'], 'the first period keeps the next two');
-    assert.deepEqual(window(2045), ['己卯', '庚辰', '辛巳*'], 'the last period keeps the two before it');
-    assert.deepEqual(window(1995), ['戊寅', '己卯', '庚辰'], 'before luck starts nothing is current');
-    assert.deepEqual(window(2015, periods.slice(0, 2)), ['戊寅', '己卯*']);
-    assert.deepEqual(getDayunWindow([], 2025), []);
 });
 
 test('an ended task’s duration runs from its creation to the last measured end, never backwards', () => {

@@ -224,7 +224,7 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
                 {PlanIcon && <PlanIcon size={12} aria-hidden="true" />}{planPreview ?? '查看计划'}
             </Button></div>
         </section>}
-        {count === 0 ? <p className="agent-ws-overview-empty"><Files size={16} aria-hidden="true" />Agent 排盘、计算或检索后，成果会汇总在这里。</p>
+        {count === 0 ? <p className="agent-ws-overview-empty"><Files size={16} aria-hidden="true" />Agent 排盘或检索后，成果会汇总在这里。</p>
             : <div className="agent-ws-rows">
                 {readings.map(({ resource, value, state, source, drilldowns }) => {
                     const meta = getChartKindMeta(value.kind);

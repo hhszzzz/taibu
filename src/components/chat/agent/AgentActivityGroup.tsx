@@ -6,7 +6,7 @@ import { ChevronDown, ChevronRight, LoaderCircle, PanelRight, Pause } from 'luci
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, AGENT_WEB_TOOLS, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
-import { getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMemories, getAgentMethod, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMemories, getAgentMethod, getAgentNotes, getAgentPlan, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolQuestions, getAgentToolSearchLoaded, getAgentToolText } from '@/lib/agent/tool-presentation';
 import { useIsDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
@@ -22,6 +22,7 @@ import { CopyButton } from './CopyButton';
 import { JsonCode, ToolCommand } from './ToolCode';
 import { formatStepMarkdown } from '@/lib/agent/tool-display';
 import { GeneratedImageGallery } from './GeneratedImageGallery';
+import { CalculationResult } from './AgentCalculationViews';
 import { useEntranceMotion } from '@/lib/motion/entrance';
 import { formatAgentElapsed } from './AgentHeaderStatus';
 // 小盘缩略图的样式在工作区样式表里；分享页只加载对话样式，这里一并引入。
@@ -286,6 +287,8 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
     const selfContained = members.length > 0 || (structured !== null && text === null);
     const family = getAgentToolFamily(tool.name);
     const chart = family === 'chart' && state === 'completed' ? getAgentChart(tool) : null;
+    // 推演结果只在这里展开：时间线、候选表等给结构化视图，规范文本仍可复制。
+    const calculation = family === 'calculation' && state === 'completed' ? getAgentCalculation(tool) : null;
     const openLabel = family === 'chart' ? '查看盘面' : family === 'drilldown' ? '查看详查' : '在工作区查看';
     return <div className="agent-step-call">
         {/* 详细视图 = 命令行：工具名是命令，参数是选项，按类别着色；普通视图不露参数键名。 */}
@@ -317,7 +320,11 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
             })}
         </ul>}
         {chart && <ChartStepSummary tool={tool} value={chart} />}
-        {members.length === 0 && (text !== null
+        {members.length === 0 && (calculation
+            ? <StepPanel title="推演结果" kind="calculation" actions={text ? copyAction(text, '复制结果') : undefined}>
+                <CalculationResult value={calculation} />
+            </StepPanel>
+            : text !== null
             ? <StepPanel title={chart ? '盘面全文' : '结果'} kind="result" actions={copyAction(text, '复制结果')}>
                 <StepFold><div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="规范文本"><MarkdownContent content={formatStepMarkdown(text)} className="chat-prose" /></div></StepFold>
             </StepPanel>
@@ -328,7 +335,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 : state === 'running'
                     ? <p className="agent-step-empty">正在等待工具返回结果…</p>
                     : structured ?? <p className="agent-step-empty">{raw !== null ? '已返回结构化结果' : '该步骤没有返回详情。'}</p>)}
-        {!selfContained && state !== 'failed' && openButton(openLabel)}
+        {!selfContained && !calculation && state !== 'failed' && openButton(openLabel)}
     </div>;
 }
 

@@ -7,7 +7,7 @@ import { ArrowUpRight, Check, ChevronRight, CircleAlert, Database, Globe, Loader
 import type { AgentRunStatus } from '@/lib/agent/types';
 import type { AgentQuestionAnswer, AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import {
-    getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod,
+    getAgentAttachmentRead, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentMemories, getAgentMethod,
     getAgentNotes, getAgentProfile, getAgentScript, getAgentSearchResults, getAgentToolQuestions, getAgentToolText,
     type AgentConversationHit, type AgentScript, type AgentScriptCall, type AgentSearchMethod, type AgentToolPart,
 } from '@/lib/agent/tool-presentation';
@@ -36,7 +36,6 @@ import { CopyButton } from './AgentToolCard';
 import { AgentArchiveProposalCard, AgentArchiveReceipt } from './AgentArchiveCards';
 import { PrivateAttachmentPreview } from './PrivateAttachments';
 import { ChartMiniPreview } from './chart-preview';
-import { CalculationResult } from './AgentCalculationViews';
 import { ModelAvatar } from './ModelAvatar';
 import { MemberRoleBadge } from './MemberRoleBadge';
 import './agent-workspace.css';
@@ -100,30 +99,6 @@ export function WorkspaceToolPending({ tool, runStatus, running }: ToolViewProps
     if (state.status === 'failed') return null;
     if (state.status === 'interrupted') return <p className="agent-ws-note">任务结束时这一步仍未完成，没有可显示的结果。</p>;
     return <p className="agent-ws-running" role="status"><LoaderCircle size={14} className="animate-spin motion-reduce:animate-none" aria-hidden="true" />{running}</p>;
-}
-
-function CanonicalTextDetails({ tool }: { tool: AgentToolPart }) {
-    const text = getAgentToolText(tool);
-    if (!text) return null;
-    return <details className="agent-ws-canonical">
-        <summary>Core 规范文本</summary>
-        <div className="agent-result-text" tabIndex={0} aria-label="Core 规范文本"><MarkdownContent content={text} /></div>
-    </details>;
-}
-
-/** 推演: Core results as a timeline, candidate list or table, with Core's canonical text beside it. */
-export function CalculationView({ tool, runStatus, step }: ToolViewProps & { step?: number }) {
-    const id = useId();
-    const value = getAgentCalculation(tool);
-    return <section className="agent-ws-view" aria-labelledby={id}>
-        <WorkspaceViewHeading id={id} kicker={kickerOf(step, '太卜 Core 计算', '未另存')} title={tool.title}>中间结果保留在任务过程和工作区中，不另存记录。</WorkspaceViewHeading>
-        {tool.status !== 'completed' ? <WorkspaceToolPending tool={tool} runStatus={runStatus} running="正在计算…" />
-            : !value ? <WorkspaceTextFallback tool={tool} note="结果字段不完整，已显示 Core 返回的规范文本。" />
-            : <>
-                <CalculationResult value={value} />
-                <CanonicalTextDetails tool={tool} />
-            </>}
-    </section>;
 }
 
 const SEARCH_METHOD_LABELS: Record<AgentSearchMethod, string> = { fts: '全文检索命中', trigram: '模糊匹配命中', vector: '语义检索命中' };

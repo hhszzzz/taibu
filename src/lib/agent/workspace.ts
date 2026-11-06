@@ -5,9 +5,10 @@
  * family (tool-catalog.ts): repeated calls about the same chart, record,
  * attachment or method share one tab, searches share the evidence view, plan
  * submissions share the plan page, and the final selections live in the results
- * section. The panel follows the model by showing the location of the latest
- * call. Nothing here calculates, fetches or saves; views only read stored tool
- * results.
+ * section. Calculations are the exception: their results are process steps,
+ * disclosed in the transcript, never a workspace page. The panel follows the
+ * model by showing the location of the latest call. Nothing here calculates,
+ * fetches or saves; views only read stored tool results.
  */
 import type { ChatMessage } from '@/types';
 import { isAgentRunTerminal, type AgentPart, type AgentRunStatus } from './types';
@@ -23,7 +24,7 @@ export type AgentWorkspaceSection = 'results';
 export const AGENT_WORKSPACE_SECTIONS: readonly AgentWorkspaceSection[] = ['results'];
 
 export type AgentWorkspaceView =
-  | 'chart' | 'saved' | 'calculation' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment' | 'notes' | 'history'
+  | 'chart' | 'saved' | 'evidence' | 'data' | 'record' | 'profile' | 'attachment' | 'notes' | 'history'
   | 'method' | 'plan' | 'question' | 'collaboration' | 'member' | 'memory' | 'archive' | 'code' | 'tool';
 
 export interface AgentWorkspaceResource {
@@ -124,7 +125,7 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
         break;
       }
       case 'calculation':
-        add('tool:' + tool.id, { view: 'calculation', family, title: tool.title }, tool);
+        // 推演结果只是过程条里的一步（在步骤里展开），不另开工作区标签。
         break;
       case 'drilldown': {
         // A drilldown belongs to the chart it read; it never replaces that chart's reading.

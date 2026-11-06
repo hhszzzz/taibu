@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
 import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Clock, Database, Files, FileCode2, FileText, Globe, GripVertical, ImagePlus, ListChecks, ScanSearch, Search, Sigma, Sparkles, Users, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
-import { getAgentCalculation, getAgentChart, getAgentPlan, getAgentUnrepresentedArtifacts, type AgentCalculation, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
+import { getAgentChart, getAgentPlan, getAgentUnrepresentedArtifacts, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
@@ -16,7 +16,7 @@ import { ModelAvatar } from './ModelAvatar';
 import { getChartKindMeta } from './chart-registry';
 import {
     describeOverviewFacts, getAgentArtifactHref, getAgentReadingState,
-    getDayunWindow, summarizeAgentTool, type AgentArtifact,
+    summarizeAgentTool, type AgentArtifact,
 } from './presentation';
 
 export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
@@ -31,12 +31,10 @@ const READING_BADGES = { 已保存: ['已保存', 'saved'], 暂存成果: ['未�
 export type WorkspaceRunInfo = Partial<Pick<AgentRunView, 'billing' | 'configuration' | 'createdAt'>>;
 
 type ReadingCard = { resource: AgentWorkspaceResource; value: AgentChart; state: keyof typeof READING_BADGES; source: AgentToolPart; drilldowns: number };
-type CalculationCard = { resource: AgentWorkspaceResource; tool: AgentToolPart; value: AgentCalculation };
 
-/** Readings and calculations of the conversation, one card per tab, from the latest completed call of each. */
+/** Readings of the conversation, one card per tab, from the latest completed call of each. */
 function overviewCards(model: AgentWorkspaceModel, saved: ReadonlySet<string>) {
     const readings: ReadingCard[] = [];
-    const calculations: CalculationCard[] = [];
     for (const resource of model.resources) {
         const tools = resource.toolIds.flatMap(id => model.toolsById.get(id) ?? []);
         if (resource.view === 'chart') {
@@ -45,61 +43,9 @@ function overviewCards(model: AgentWorkspaceModel, saved: ReadonlySet<string>) {
             const source = tools.find(tool => getAgentChart(tool) && tool.name !== 'inspect_chart') ?? reading;
             const drilldowns = tools.filter(tool => getAgentToolFamily(tool.name) === 'drilldown' && tool.status === 'completed').length;
             if (value && source) readings.push({ resource, value, state: getAgentReadingState(source, saved), source, drilldowns });
-        } else if (resource.view === 'calculation') {
-            const tool = tools.findLast(item => getAgentCalculation(item));
-            const value = tool && getAgentCalculation(tool);
-            if (tool && value) calculations.push({ resource, tool, value });
         }
     }
-    return { readings, calculations };
-}
-
-/** 计算结果行：缩略区画能一眼认出的形（大运三步、运限三层），第二行给缩略图之外的结论。 */
-function calculationRow(card: CalculationCard): { thumb: ReactNode; facts: string } {
-    const fallback = summarizeAgentTool(card.tool) ?? '';
-    switch (card.value.kind) {
-        case 'bazi_dayun': {
-            const year = new Date().getFullYear();
-            return {
-                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{getDayunWindow(card.value.data.大运列表, year).map(period =>
-                    <b key={period.起运年份} data-current={period.current || undefined}>{period.干支}</b>)}</span>,
-                facts: [card.value.data.起运信息.顺逆, card.value.data.起运信息.起运详情].filter(Boolean).join(' · ') || fallback,
-            };
-        }
-        case 'ziwei_horoscope':
-            return {
-                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{card.value.data.运限叠宫.slice(0, 3).map(layer => <b key={layer.层次}>{layer.干支}</b>)}</span>,
-                facts: card.value.data.运限叠宫.slice(0, 3).map(layer => `${layer.层次}${layer.落入本命宫位}`).join(' · ') || fallback,
-            };
-        case 'ziwei_flying_star': {
-            const rows = card.value.data.查询结果.slice(0, 2);
-            return { thumb: null, facts: rows.map(row => [row.查询类型, row.判断目标, row.结果].filter(Boolean).join(' ')).join('；') || fallback };
-        }
-        case 'bazi_pillars_resolve': {
-            const [first] = card.value.data.候选列表;
-            return { thumb: null, facts: first ? `${card.value.data.候选列表.length} 个候选 · 首个 ${first.公历} ${first.出生时间}` : '没有匹配的出生时间' };
-        }
-        case 'bazi_hepan': {
-            const { 双方: people, 日柱之间: day, 年柱之间: year, 其余关系: other } = card.value.data;
-            return {
-                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{people.map(person => <b key={person.称呼}>{person.四柱[2].干支}</b>)}</span>,
-                facts: `${people.map(person => `${person.称呼}属${person.生肖}`).join('、')} · 日柱之间 ${day.length} 项 · 年柱之间 ${year.length} 项 · 其余 ${other.length} 项`,
-            };
-        }
-        case 'bazi_hour_candidates': {
-            const { 出生日期: birth, 候选: candidates, 前事年份: events } = card.value.data;
-            return {
-                thumb: <span className="chart-thumb-glyphs" aria-hidden="true">{candidates.slice(0, 3).map(candidate => <b key={candidate.序号}>{candidate.时柱.干支}</b>)}</span>,
-                facts: `${birth.公历} · 候选 ${candidates.length} 个时辰${events ? ` · 比对前事 ${events.map(event => event.年份).join('、')}` : ''}`,
-            };
-        }
-        case 'almanac_select': {
-            const [first] = card.value.data.候选日;
-            return { thumb: null, facts: first ? `${card.value.data.查询.起止日期} · 候选 ${card.value.data.候选日.length} 天 · 首个 ${first.日期}` : `${card.value.data.查询.起止日期} · 没有符合条件的日期` };
-        }
-        default:
-            return { thumb: null, facts: fallback };
-    }
+    return { readings };
 }
 
 /**
@@ -250,7 +196,7 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
     onOpen: (id: string) => void;
 }) {
     const id = useId();
-    const { readings, calculations } = overviewCards(model, saved);
+    const { readings } = overviewCards(model, saved);
     const savedOnly = getAgentUnrepresentedArtifacts(model.tools, artifacts).filter(artifact => getAgentArtifactHref(artifact));
     const located = (resource: AgentWorkspaceResource) => model.evidence.filter(item => item.kind === 'chart' && model.chartResources.get(item.focus.reference) === resource.id).length;
     // 过程资料不再单列：读过、问过、写过的每一步都在聊天里的工具调用过程块中，重复一遍只会让人以为是另一份东西。
@@ -266,7 +212,7 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
         const line = value?.plan.split('\n').map(text => text.replace(/^(?:#{1,6}\s+|>\s*|[-*+]\s+|\d+[.)、]\s*)/u, '').trim()).find(Boolean);
         return line ? (line.length > 40 ? `${line.slice(0, 40)}…` : line) : null;
     })();
-    const count = readings.length + calculations.length + savedOnly.length;
+    const count = readings.length + savedOnly.length;
     return <section className="agent-ws-view agent-ws-overview" aria-labelledby={id}>
         <header className="agent-ws-heading agent-ws-overview-heading">
             <h2 id={id}>本对话的成果</h2>
@@ -290,12 +236,6 @@ export function WorkspaceOverview({ model, artifacts, saved, onOpen }: {
                         tags={tags.length ? tags.map(tag => <em key={tag}>{tag}</em>) : <span>查看完整盘面</span>}
                         label={`${value.title}：${facts}${tags.length ? `，${tags.join('，')}` : ''}，${READING_BADGES[state][0]}`}
                         onOpen={() => onOpen(resource.id)} />;
-                })}
-                {calculations.map(card => {
-                    const row = calculationRow(card);
-                    return <OverviewRow key={card.resource.id} data-overview-result="calculation" icon={Sigma} thumb={row.thumb}
-                        title={card.resource.title} badge={{ text: '未另存', state: 'cached' }} facts={row.facts}
-                        tags={<span>计算结果 · 查看明细</span>} label={`${card.resource.title}：${row.facts}`} onOpen={() => onOpen(card.resource.id)} />;
                 })}
                 {savedOnly.map(artifact => <OverviewRow key={artifact.id} data-overview-result="saved" icon={Files} thumb={null}
                     title={artifact.title} badge={{ text: '已保存', state: 'saved' }} facts={artifact.recordId ? '分析记录' : '命盘'}

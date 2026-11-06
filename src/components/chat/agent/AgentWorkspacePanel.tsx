@@ -26,10 +26,10 @@ import { ChartErrorBoundary } from '@/components/visualization/ChartRenderer';
 import { Menu, MenuContent, MenuItem, MenuTrigger } from '@/components/ui/Menu';
 import { Dialog } from '@/components/ui/Dialog';
 import { AgentToolCard } from './AgentToolCard';
-import { describeAgentChartSubject, getAgentStepNumbers, getAgentToolState, type AgentArtifact } from './presentation';
+import { getAgentStepNumbers, getAgentToolState, type AgentArtifact } from './presentation';
 import type { AgentWorkspaceShown } from './AgentResultContext';
 import {
-    ArchiveView, AttachmentView, CalculationView, CollaborationView, DataListView, EvidenceView, HistoryView, MemberView, MemoryView, MethodView,
+    ArchiveView, AttachmentView, CollaborationView, DataListView, EvidenceView, HistoryView, MemberView, MemoryView, MethodView,
     NotesView, ProfileView, QuestionView, RecordView, ScriptView, WorkspaceTextFallback, WorkspaceToolMeta, WorkspaceToolPending,
 } from './AgentWorkspaceViews';
 import { getChartKindMeta } from './chart-registry';
@@ -116,7 +116,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             body = value && reading
                 ? <Suspense fallback={<p role="status">加载命盘…</p>}>
                     <InteractiveChart key={`${reference ?? reading.id}:${pinned ? named!.id : ''}`} value={value} tool={textSource ?? reading} reference={reference}
-                        focus={focus} followModel={followModel} live={live} pinned={pinned !== null} subject={describeAgentChartSubject(source ?? reading, value)}
+                        focus={focus} followModel={followModel} live={live} pinned={pinned !== null}
                         baziWuxing={value.kind === 'bazi' ? getLatestBaziWuxing(drilldowns) : undefined}
                         actions={source && <AgentChartSave tool={source} userId={userId} />}
                         onAsk={onChartQuestion} />
@@ -135,7 +135,6 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             </Suspense>;
             break;
         }
-        case 'calculation': body = latest && <CalculationView tool={latest} runStatus={runStatus} step={step(latest)} />; break;
         case 'evidence': body = <EvidenceView model={model} tools={tools} runStatus={runStatus} selected={cite}
             paragraph={cite !== null ? citedParagraph?.(cite) ?? null : null} onOpen={onOpen} />; break;
         case 'data': body = <DataListView tools={tools} runStatus={runStatus} step={step(tools.findLast(tool => tool.status === 'completed') ?? latest)} />; break;

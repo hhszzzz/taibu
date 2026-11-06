@@ -36,12 +36,17 @@ test('notes, earlier conversations and the archive each open one page that keeps
   for (const id of ['n1', 'h1', 'e1', 'p1']) assert.equal(model.locations.get(id), page(id)?.id, id);
 });
 
-test('every tool family reaches a workspace location, including external and unknown tools', () => {
+test('every tool family but calculations reaches a workspace location, including external and unknown tools', () => {
   const names = [...listToolDefinitions().map(item => item.name), 'inspect_chart', 'web_search', 'search_knowledge', 'list_user_data', 'read_user_data',
     'read_user_profile', 'read_attachment', 'load_skill', 'read_skill_file', 'ask_user', 'parallel_analysis',
     'read_user_memory', 'remember_user_fact', 'select_final_artifacts', 'codemode', 'mcp__archive__lookup', 'retired_tool'];
   const model = workspace(names.map((name, index) => tool(`call-${index}`, name, { status: 'running', input: name === 'read_attachment' ? { id: randomUUID() } : {} })));
   for (const [index, name] of names.entries()) {
+    // 推演结果只在过程条里展开，不占工作区标签。
+    if (getAgentToolFamily(name) === 'calculation') {
+      assert.equal(model.locations.get(`call-${index}`), undefined, `${name} stays in the process strip`);
+      continue;
+    }
     const location = model.locations.get(`call-${index}`);
     assert.ok(location, `${name} has a workspace location`);
     assert.equal(resolveAgentWorkspaceLocation(model, location), location);

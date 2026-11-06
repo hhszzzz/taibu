@@ -2,6 +2,12 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.1.9 · 2026-11-06
+
+### 修复
+
+- **chat**: render markdown emphasis next to CJK punctuation ([73bc28d](https://github.com/hhszzzz/taibu/commit/73bc28d388d8394a4817fc7f1f3b74d3ea7ab705))
+
 ## v1.1.8 · 2026-11-05
 
 ### 新功能与体验

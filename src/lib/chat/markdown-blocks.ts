@@ -1,10 +1,35 @@
-import { unified } from 'unified';
+import { unified, type PluggableList } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
+import remarkCjkFriendly from 'remark-cjk-friendly/parseOnly';
+import remarkCjkFriendlyGfmStrikethrough from 'remark-cjk-friendly-gfm-strikethrough/parseOnly';
 
-export const markdownPlugins = [remarkGfm];
+type Node = { type?: string; value?: string; children?: Node[] };
+
+/**
+ * `<br>` 是模型在表格单元格里唯一可用的换行写法；转成 mdast break，避免放开任意 HTML。
+ */
+function remarkBreakTags() {
+    const brTag = /^<br\s*\/?>$/iu;
+    const walk = (node: Node) => {
+        if (!node.children) return;
+        node.children = node.children.map(child => {
+            if (child.type === 'html' && typeof child.value === 'string' && brTag.test(child.value.trim())) {
+                return { type: 'break' };
+            }
+            walk(child);
+            return child;
+        });
+    };
+    return (tree: Node) => walk(tree);
+}
+
+/**
+ * CommonMark 不把贴着中文标点的 `*`/`**`/`~~` 当强调（`**「…」**三张盘`、`**…（…）**`），
+ * 模型几乎天天这么写；这两个扩展按 CJK 规范放宽 flanking 判定，不改非 CJK 文本。
+ */
+export const markdownPlugins: PluggableList = [remarkGfm, remarkCjkFriendly, remarkCjkFriendlyGfmStrikethrough, remarkBreakTags];
 const parser = unified().use(remarkParse).use(remarkGfm);
-type Node = { type?: string; children?: Node[] };
 function needsDocument(node: Node): boolean {
     return node.type === 'definition' || node.type === 'footnoteDefinition' || node.type === 'html'
         || Boolean(node.children?.some(needsDocument));

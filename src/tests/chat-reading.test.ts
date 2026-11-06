@@ -1,7 +1,22 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { MarkdownBlocks, normalizeMarkdownMarkers, splitMarkdown, tableCsv } from '@/lib/chat/markdown-blocks';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import { MarkdownBlocks, markdownPlugins, normalizeMarkdownMarkers, splitMarkdown, tableCsv } from '@/lib/chat/markdown-blocks';
 import { normalizeChatPreferences } from '@/lib/chat/preferences';
+
+type MarkdownNode = { type?: string; value?: string; children?: MarkdownNode[] };
+
+function parseWithRendererPlugins(source: string): MarkdownNode {
+    const processor = unified().use(remarkParse).use(markdownPlugins);
+    const tree = processor.parse(source);
+    processor.runSync(tree);
+    return tree as unknown as MarkdownNode;
+}
+
+function countNodes(node: MarkdownNode, type: string): number {
+    return (node.type === type ? 1 : 0) + (node.children ?? []).reduce((total, child) => total + countNodes(child, type), 0);
+}
 
 test('incremental GFM keeps fenced lists and CRLF bytes intact', () => {
     const source = '# 标题\r\n\r\n  - 第一项\r\n  - 第二项\r\n\r\n```chart\r\n{"title":"未完成"\r\n\r\n- 仍属于围栏';
@@ -40,6 +55,29 @@ test('markers glued to Chinese text are spaced for GFM while code fences stay in
     assert.match(normalized, /1\.5 倍与 -1 不变$/u);
     const cache = new MarkdownBlocks();
     assert.equal(cache.advance(source).join(''), normalized, 'the blocks render the normalized text');
+});
+test('CJK-adjacent emphasis and <br> render as markdown, while code fences stay literal', () => {
+    const tree = parseWithRendererPlugins([
+        '排出了**紫微斗数（星曜与飞星四化）与西方占星（本命与外行星流运）**三张盘[1]。',
+        '',
+        '流年辛干**「文昌化忌」直击父母宫（丁巳，主考学功名与录取榜单）**[3]！',
+        '',
+        '这是~~删除（说明）~~文字。',
+        '',
+        '| 年 | 事 |',
+        '| --- | --- |',
+        '| **2018** | 顺遂<br>获重用 |',
+        '',
+        '```',
+        '**代码里保持原样**<br>原样',
+        '```',
+    ].join('\n'));
+    assert.equal(countNodes(tree, 'strong'), 3);
+    assert.equal(countNodes(tree, 'delete'), 1, 'CJK-adjacent strikethrough stays a delete node');
+    assert.equal(countNodes(tree, 'break'), 1, '<br> in a table cell becomes a break node');
+    assert.equal(countNodes(tree, 'html'), 0, 'no raw HTML nodes reach the renderer');
+    const code = JSON.stringify(tree);
+    assert.match(code, /\*\*代码里保持原样\*\*<br>原样/u, 'fenced code keeps its bytes');
 });
 test('reading preferences clamp width and reject unknown scaling or notification consent', () => {
     assert.deepEqual(normalizeChatPreferences({ width: 99999, fontScale: 125, desktopNotifications: true }), { width: 1200, fontScale: 125, desktopNotifications: true, runningSendMode: 'supplement' });

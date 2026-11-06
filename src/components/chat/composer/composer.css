@@ -42,7 +42,17 @@
 .is-hero .chat-composer-shell { padding: 10px 8px 8px; border-radius: 14px; }
 .is-locked .chat-composer-shell { background: var(--background-secondary); box-shadow: none; }
 .chat-composer-shell > :not(.chat-composer-field):not(.chat-composer-actions):not(.chat-composer-send-group) { flex: 0 0 auto; width: 100%; }
-.chat-composer-field { position: relative; flex: 0 0 auto; width: 100%; min-width: 0; }
+/* 主行：单行草稿时 + / 编辑区 / 发送同排；换行、放大或首屏时编辑区独占一行，工具与发送在下一行。 */
+.chat-composer-main { display: grid; min-width: 0; align-items: end; gap: 0; }
+.is-hero .chat-composer-main[data-stacked] { row-gap: 6px; }
+.chat-composer-main:not([data-stacked]) { grid-template-columns: auto minmax(0, 1fr) auto; grid-template-areas: "actions field send"; }
+.chat-composer-main[data-stacked] { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "field field" "actions send"; }
+.chat-composer-main > .chat-composer-actions { grid-area: actions; }
+.chat-composer-main > .chat-composer-field { grid-area: field; min-width: 0; }
+.chat-composer-main > .chat-composer-send-group { grid-area: send; align-self: end; }
+/* 单行时编辑区与 + 之间留一点呼吸：左内衬 5px，约等于加号图标到壳边的距离。 */
+.chat-composer-main:not([data-stacked]) .chat-composer-field .chat-composer-input { padding-left: 5px; }
+.chat-composer-field { position: relative; min-width: 0; }
 /* The overlay draws mention tokens and the placeholder under a transparent textarea; both share metrics. */
 .chat-composer-input { display: block; box-sizing: border-box; width: 100%; margin: 0; padding: 5.5px 8px; border: 0; font: inherit; font-size: calc(15 / 16 * 1rem); line-height: 1.4; letter-spacing: normal; white-space: pre-wrap; overflow-wrap: anywhere; overflow-y: auto; scrollbar-width: thin; }
 .chat-composer-overlay { position: absolute; inset: 0; pointer-events: none; color: var(--foreground); }

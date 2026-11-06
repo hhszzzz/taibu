@@ -27,7 +27,7 @@ import type { AgentChartKind } from '@/lib/agent/tool-catalog';
 import { getCurrentUserSettings } from '@/lib/user/settings';
 import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
-import { ComposerToolbar, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
+import { ComposerSendCluster, ComposerToolbar, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
 import { messageQuoteToken } from '@/lib/chat/quotes';
 import type { MessageQuote } from '@/lib/chat/quotes';
@@ -35,7 +35,7 @@ import type { AgentMessageData } from '@/lib/agent/types';
 import { useComposerCommands } from './composer/ComposerCommands';
 import { usePrivateAttachments } from '@/lib/chat/use-private-attachments';
 import { COMPOSER_FILES_EVENT, documentFileProblem, pickPlainAttachment } from '@/lib/chat/composer-files';
-import { COMPOSER_MAX_HEIGHT, resolveComposerHeight } from '@/lib/chat/composer-height';
+import { COMPOSER_HERO_SINGLE_LINE_HEIGHT, COMPOSER_MAX_HEIGHT, COMPOSER_SINGLE_LINE_HEIGHT, resolveComposerHeight } from '@/lib/chat/composer-height';
 import { PrivateAttachments } from './agent/PrivateAttachments';
 import { GENERATED_IMAGE_SIZE_LABELS } from '@/lib/images/generated';
 import { Select } from '@/components/ui/Select';
@@ -379,23 +379,48 @@ export function ChatComposer({
     const [composerExpanded, setComposerExpanded] = useState(false);
     const [composerExpandable, setComposerExpandable] = useState(false);
     const [composerHeight, setComposerHeight] = useState(0);
+    // 单行草稿一行排（+ / 编辑区 / 发送同排），换行、放大或首屏时编辑区独占一行、工具与发送在下。
+    // 判断只在草稿或模式变化时更新；布局刚切换时下一帧按新宽度重新量高，但不回写判断，避免来回跳。
+    const [composerStacked, setComposerStacked] = useState(variant === 'hero');
+    const layoutKeyRef = useRef<string | null>(null);
     useEffect(() => {
         const textarea = textareaRef.current;
         if (!textarea) return;
-        textarea.style.height = 'auto';
-        const { height, expandable } = resolveComposerHeight({
-            natural: textarea.scrollHeight,
-            hero: variant === 'hero',
-            expanded: composerExpanded,
-            viewport: window.innerHeight,
-        });
-        textarea.style.height = `${height}px`;
-        setComposerHeight(height);
-        setComposerExpandable(expandable);
-        if (!expandable && composerExpanded) setComposerExpanded(false);
-        if (overlayRef.current) {
-            overlayRef.current.scrollTop = textarea.scrollTop;
+        const isHero = variant === 'hero';
+        const singleLine = isHero ? COMPOSER_HERO_SINGLE_LINE_HEIGHT : COMPOSER_SINGLE_LINE_HEIGHT;
+        const applyHeight = () => {
+            // 归零量高会清掉 textarea 内部的滚动位置，先记下再决定放回哪里。
+            const keepScrollTop = textarea.scrollTop;
+            textarea.style.height = 'auto';
+            const natural = textarea.scrollHeight;
+            const { height, expandable } = resolveComposerHeight({
+                natural,
+                hero: isHero,
+                expanded: composerExpanded,
+                viewport: window.innerHeight,
+            });
+            textarea.style.height = `${height}px`;
+            // 光标在末尾（打字）就跟随到底，否则留在原来的滚动位置。
+            const caretAtEnd = textarea.selectionStart === textarea.selectionEnd
+                && textarea.selectionEnd === textarea.value.length;
+            textarea.scrollTop = caretAtEnd ? textarea.scrollHeight : keepScrollTop;
+            setComposerHeight(height);
+            setComposerExpandable(expandable);
+            if (!expandable && composerExpanded) setComposerExpanded(false);
+            if (overlayRef.current) {
+                overlayRef.current.scrollTop = textarea.scrollTop;
+            }
+            return natural;
+        };
+        const natural = applyHeight();
+        const layoutKey = `${variant}|${composerExpanded}|${inputValue}`;
+        if (layoutKeyRef.current !== layoutKey) {
+            layoutKeyRef.current = layoutKey;
+            setComposerStacked(isHero || composerExpanded || natural > singleLine);
         }
+        // 切换布局会改编辑区宽度：下一帧按新宽度重新量一次高度（只量高，不改布局判断）。
+        const frame = requestAnimationFrame(() => { if (textareaRef.current === textarea) applyHeight(); });
+        return () => cancelAnimationFrame(frame);
     }, [inputValue, mentions, textareaRef, overlayRef, variant, composerExpanded]);
 
     // 引用 chip 的文本范围：与提及同形态，退格整体删除；chip 删掉即取消这段引用（发送时只带还在的）。
@@ -722,6 +747,9 @@ export function ChatComposer({
                         disabled={disabled}
                     />
 
+                    <div className="chat-composer-main" data-stacked={composerStacked || undefined}>
+                    <ComposerToolbar {...toolbarProps} showSend={hero} />
+
                     <div className={`chat-composer-field${composerExpandable ? ' has-expand' : ''}`}>
                         {composerExpandable && (
                             <Button unstyled
@@ -779,8 +807,8 @@ export function ChatComposer({
                         />
                     </div>
 
-                    {/* 输入区独占一行，+ 与发送在下方工具行：左侧 +、右侧发送。 */}
-                    <ComposerToolbar {...toolbarProps} />
+                    {!hero && <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
+                    </div>
                 </div>
 
                 {imageMode && imageGeneration && <div className="chat-image-options" role="group" aria-label="生图设置">

@@ -126,11 +126,12 @@ export function PalaceCard({
         .filter(Boolean);
     const decadalRange = formatDecadalRange(palace.大限);
 
-    // 三级高亮：焦点宫（实线 2px 描边 + accent-soft）> 三方四正（1px 半透明描边 + accent-light）> 其他（surface）
+    // 两级底色：焦点宫 accent-soft > 三方四正 accent-light > 其他 surface。
+    // 只用底色不用描边：相邻选中宫之间的 1px 网格缝不会变成双线，选中区域读起来是连着的。
     const toneClass = isSelected
-        ? 'bg-accent-soft ring-2 ring-inset ring-accent'
+        ? 'bg-accent-soft'
         : resolvedRelation
-            ? 'bg-accent-light ring-1 ring-inset ring-accent/55'
+            ? 'bg-accent-light'
             : 'bg-surface hover:bg-background-secondary';
 
     const isStarHighlighted = (group: StarGroup, index: number) =>

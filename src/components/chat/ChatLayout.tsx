@@ -373,11 +373,11 @@ export function ChatLayout(props: ChatLayoutProps) {
         suggestionScope.current = workspaceKey;
         setFollowUpSuggestion(null);
     }, [workspaceKey]);
-    // 引用：选中助手回答中的文字或「引用整条」，进入输入框上方的引用条；发送后随用户消息一起保存。
+    // 引用：选中助手回答中的文字或「引用整条」，在输入框里插入同一种 chip；发送后随用户消息一起保存。
     const [quotes, setQuotes] = useState<MessageQuote[]>([]);
     const quotesRef = useRef(quotes);
     useEffect(() => { quotesRef.current = quotes; }, [quotes]);
-    // 每个对话（含新建的草稿）各有一份引用条，切换对话时不把上一段对话的引用带过去。
+    // 每个对话（含新建的草稿）各有一份引用，切换对话时不把上一段对话的引用带过去。
     const quotesScope = useRef(workspaceKey);
     useEffect(() => {
         if (quotesScope.current === workspaceKey) return;

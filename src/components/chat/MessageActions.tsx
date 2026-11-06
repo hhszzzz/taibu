@@ -20,7 +20,7 @@ export function MessageActions({ message, disabled = false, copied, onCopy, onEd
     onRegenerate?: (id: string) => void;
     onArchive?: (message: ChatMessage) => void;
     onSwitchVersion?: (id: string, index: number) => void;
-    /** 引用整条助手回答，与选中文字引用进入同一个引用条。 */
+    /** 引用整条助手回答，与选中文字引用进入输入框的同一种 chip。 */
     onQuote?: () => void;
 }) {
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();

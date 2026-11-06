@@ -8,7 +8,7 @@
 'use client';
 
 import { useEffect, useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
-import { Maximize2, Minimize2 } from 'lucide-react';
+import { Maximize2, Minimize2, Quote } from 'lucide-react';
 import type { AttachmentState, Mention } from '@/types';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { formatUsd } from '@/lib/billing/money';
@@ -29,7 +29,7 @@ import { MentionManager } from '@/components/chat/composer/MentionManager';
 import { AttachmentBar } from '@/components/chat/composer/AttachmentBar';
 import { ComposerToolbar, type ComposerImageGeneration, type ComposerSendState, type ComposerWebControl } from '@/components/chat/composer/ComposerToolbar';
 import { ComposerStatusBar } from '@/components/chat/composer/ComposerStatusBar';
-import { QuoteBar } from '@/components/chat/composer/QuoteBar';
+import { messageQuoteToken } from '@/lib/chat/quotes';
 import type { MessageQuote } from '@/lib/chat/quotes';
 import type { AgentMessageData } from '@/lib/agent/types';
 import { useComposerCommands } from './composer/ComposerCommands';
@@ -48,11 +48,12 @@ function ChartAskIcon({ kind }: { kind: AgentChartKind }) {
     return <Icon size={12} />;
 }
 
-const findLastAtOutsideTokens = (value: string, tokens: MentionToken[]): number => {
+// chip（引用、追问命盘）自带的 @ 只是字形，不该再唤起提及菜单。
+const findLastAtOutsideTokens = (value: string, tokens: MentionToken[], chips: readonly string[] = []): number => {
     for (let i = value.length - 1; i >= 0; i -= 1) {
         if (value[i] !== '@') continue;
         const inToken = tokens.some(token => i >= token.start && i < token.end);
-        if (!inToken) return i;
+        if (!inToken && !chips.some(chip => chip.length > 0 && value.startsWith(chip, i))) return i;
     }
     return -1;
 };
@@ -103,9 +104,8 @@ interface ChatComposerProps extends ModelSettingsProps {
     onAttachmentChange?: (state: AttachmentState) => void;
     mentions?: Mention[];
     onMentionsChange?: (mentions: Mention[]) => void;
-    /** 从助手回答中引用的片段，显示在输入框上方；发送时随消息一起交给模型。 */
+    /** 从助手回答中引用的片段：在输入框里以 @提及 同形态的 chip 出现，发送时随消息一起交给模型。 */
     quotes?: MessageQuote[];
-    onRemoveQuote?: (index: number) => void;
     /** 追问命盘追加的 chip（与提及同形态，但不在资料列表里）。 */
     chartAsks?: Array<{ token: string; kind: AgentChartKind }>;
     promptKnowledgeBases?: KnowledgeBaseSummary[];
@@ -155,7 +155,6 @@ export function ChatComposer({
     mentions = [],
     onMentionsChange,
     quotes = [],
-    onRemoveQuote,
     chartAsks = [],
     promptKnowledgeBases = [],
     knowledgeBaseEnabled = true,
@@ -399,6 +398,22 @@ export function ChatComposer({
         }
     }, [inputValue, mentions, textareaRef, overlayRef, variant, composerExpanded]);
 
+    // 引用 chip 的文本范围：与提及同形态，退格整体删除；chip 删掉即取消这段引用（发送时只带还在的）。
+    const quoteTokenRanges = useMemo(() => {
+        const ranges: Array<{ start: number; end: number; token: string }> = [];
+        for (const quote of quotes) {
+            const token = messageQuoteToken(quote);
+            let from = 0;
+            for (;;) {
+                const start = inputValue.indexOf(token, from);
+                if (start < 0) break;
+                ranges.push({ start, end: start + token.length, token });
+                from = start + token.length;
+            }
+        }
+        return ranges;
+    }, [quotes, inputValue]);
+
     // 追问 chip 的文本范围：与提及一样，退格时整体删除。
     const chartTokenRanges = useMemo(() => {
         const ranges: Array<{ start: number; end: number; token: string; kind: AgentChartKind }> = [];
@@ -438,7 +453,11 @@ export function ChatComposer({
         if (e.key === 'Backspace' || e.key === 'Delete') {
             const textarea = textareaRef.current;
             if (textarea) {
-                const tokens = [...extractMentionTokens(inputValue, mentions), ...chartTokenRanges.map(range => ({ start: range.start, end: range.end, name: range.token }))];
+                const tokens = [
+                    ...extractMentionTokens(inputValue, mentions),
+                    ...chartTokenRanges.map(range => ({ start: range.start, end: range.end, name: range.token })),
+                    ...quoteTokenRanges.map(range => ({ start: range.start, end: range.end, name: range.token })),
+                ];
                 if (textarea.selectionStart !== textarea.selectionEnd) {
                     const start = textarea.selectionStart;
                     const end = textarea.selectionEnd;
@@ -497,7 +516,7 @@ export function ChatComposer({
                 onMentionsChange(nextMentions);
             }
         }
-        const atIndex = findLastAtOutsideTokens(value, tokens);
+        const atIndex = findLastAtOutsideTokens(value, tokens, [...chartAsks.map(ask => ask.token), ...quotes.map(quote => messageQuoteToken(quote))]);
         if (!canMentionAnything) {
             setMentionOpen(false);
             setMentionQuery('');
@@ -557,29 +576,36 @@ export function ChatComposer({
         textareaRef.current?.focus();
     };
 
-    // 提及与追问 chip 合并成一条高亮序列（追问 chip 与提及同形态：图标 + 名称）。
+    // 提及与两种 chip（追问命盘、引用）合并成一条高亮序列：都是图标 + 名称，随文字一起排。
     const highlightedInput = useMemo(() => {
         const base = buildMentionHighlightedParts(inputValue, mentions);
-        if (!chartTokenRanges.length) return base;
-        type Part = (typeof base)[number] | { kind: 'chart'; value: string; start: number; end: number; chartKind: AgentChartKind };
+        if (!chartTokenRanges.length && !quoteTokenRanges.length) return base;
+        type InlinePart =
+            | { kind: 'chart'; value: string; start: number; end: number; chartKind: AgentChartKind }
+            | { kind: 'quote'; value: string; start: number; end: number };
+        type Part = (typeof base)[number] | InlinePart;
+        const inline: InlinePart[] = [
+            ...chartTokenRanges.map(range => ({ kind: 'chart' as const, value: range.token, start: range.start, end: range.end, chartKind: range.kind })),
+            ...quoteTokenRanges.map(range => ({ kind: 'quote' as const, value: range.token, start: range.start, end: range.end })),
+        ].sort((left, right) => left.start - right.start);
         const parts: Part[] = [];
         let offset = 0;
         for (const part of base) {
             if (part.kind === 'mention') { parts.push(part); offset = part.end; continue; }
             const text = part.value;
-            const matches = chartTokenRanges.filter(range => range.start >= offset && range.end <= offset + text.length);
+            const matches = inline.filter(range => range.start >= offset && range.end <= offset + text.length);
             let cursor = 0;
             for (const match of matches) {
                 const local = match.start - offset;
                 if (local > cursor) parts.push({ kind: 'text', value: text.slice(cursor, local) });
-                parts.push({ kind: 'chart', value: match.token, start: match.start, end: match.end, chartKind: match.kind });
-                cursor = local + match.token.length;
+                parts.push(match);
+                cursor = local + match.value.length;
             }
             if (cursor < text.length) parts.push({ kind: 'text', value: text.slice(cursor) });
             offset += text.length;
         }
         return parts;
-    }, [chartTokenRanges, inputValue, mentions]);
+    }, [chartTokenRanges, quoteTokenRanges, inputValue, mentions]);
 
     const handleButtonClick = () => {
         if (isSendingToList || mentionSettlingRef.current) return;
@@ -685,7 +711,6 @@ export function ChatComposer({
                 {queue}
 
                 <div className="chat-composer-shell">
-                    <QuoteBar quotes={quotes} onRemove={onRemoveQuote} disabled={disabled} />
                     {commands.ui}
                     {contextToken}
                     <PrivateAttachments items={attachmentState?.uploaded} disabled={uploads.uploading} onRemove={id => onAttachmentChange?.({ ...attachmentState, webSearchEnabled: hasWebSearch, uploaded: attachmentState?.uploaded?.filter(item => item.id !== id) })} />
@@ -719,7 +744,11 @@ export function ChatComposer({
                                     ? <span key={`chart-${part.start}`} className="chat-mention-token" data-type="chart">
                                         <span className="chat-mention-at">@<ChartAskIcon kind={part.chartKind} /></span>{part.value.slice(1)}
                                     </span>
-                                    : <span key={`text-${index}`}>{part.value}</span>)
+                                    : part.kind === 'quote'
+                                        ? <span key={`quote-${part.start}`} className="chat-mention-token" data-type="quote">
+                                            <span className="chat-mention-at">@<Quote size={12} strokeWidth={1.45} aria-hidden="true" /></span>{part.value.slice(1)}
+                                        </span>
+                                        : <span key={`text-${index}`}>{part.value}</span>)
                                 : suggestionText
                                     ? <span className="chat-composer-suggestion">{suggestionText}<kbd className="chat-composer-suggestion-key">Tab</kbd></span>
                                     : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}

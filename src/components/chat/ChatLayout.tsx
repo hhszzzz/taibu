@@ -40,7 +40,7 @@ import { SessionDetailsPanel } from './agent/SessionDetailsPanel';
 import { AgentResultContext, isSameWorkspaceShown, type AgentWorkspaceShown } from './agent/AgentResultContext';
 import { getAgentQuestionAnswers, getAgentWorkspaceAutoOpenEvent } from '@/lib/agent/workspace';
 import { chartQuestion, type ChartAskContext } from '@/lib/agent/chart-interaction';
-import { clampMessageQuoteText, MAX_MESSAGE_QUOTE_CHARS, MAX_MESSAGE_QUOTES, type MessageQuote } from '@/lib/chat/quotes';
+import { clampMessageQuoteText, messageQuoteToken, stripMessageQuoteTokens, MAX_MESSAGE_QUOTE_CHARS, MAX_MESSAGE_QUOTES, type MessageQuote } from '@/lib/chat/quotes';
 import { AgentQuestionDock } from './agent/AgentQuestionDock';
 import type { ComposerImageModel, ComposerWebControl } from './composer/ComposerToolbar';
 import { useImageModels } from '@/lib/hooks/useAvailableModels';
@@ -388,15 +388,21 @@ export function ChatLayout(props: ChatLayoutProps) {
         const text = clampMessageQuoteText(quote.text);
         if (!text) return;
         if (quote.text.trim().length > MAX_MESSAGE_QUOTE_CHARS) showToast('info', `单段引用最多 ${MAX_MESSAGE_QUOTE_CHARS} 字，已截取`);
+        const item = { messageId: quote.messageId, text };
+        const token = messageQuoteToken(item);
+        // 引用 = 输入框里的内联 chip：同一段只插一次，最多三段。
+        if (quotesRef.current.some(current => messageQuoteToken(current) === token)) return;
         if (quotesRef.current.length >= MAX_MESSAGE_QUOTES) { showToast('info', `最多引用 ${MAX_MESSAGE_QUOTES} 段`); return; }
-        setQuotes(current => current.some(item => item.messageId === quote.messageId && item.text === text)
-            ? current
-            : [...current, { messageId: quote.messageId, text }].slice(0, MAX_MESSAGE_QUOTES));
-    }, [showToast]);
-    const removeQuote = useCallback((index: number) => setQuotes(current => current.filter((_, position) => position !== index)), []);
+        setQuotes(current => [...current, item].slice(0, MAX_MESSAGE_QUOTES));
+        const base = inputValue.replace(/\s+$/u, '');
+        if (!base.includes(token)) onInputChange(base ? `${base}\n${token} ` : `${token} `);
+        focusComposer();
+    }, [showToast, inputValue, onInputChange, focusComposer]);
+    // 用户删掉草稿里的 chip 就等于取消这段引用；发送只带还留在输入框里的。
+    const activeQuotes = useMemo(() => quotes.filter(quote => inputValue.includes(messageQuoteToken(quote))), [quotes, inputValue]);
     // 追问命盘：与提及同一形态——在输入框尾部追加可识别的 chip，可以连续叠加多条。
     const [chartAsks, setChartAsks] = useState<ChartAskContext[]>([]);
-    const chartAskToken = (ask: ChartAskContext) => `@${ask.title}${ask.targets.length ? ` · ${ask.targets.map(target => target.label).join('、')}` : ' · 整张命盘'}`;
+    const chartAskToken = (ask: ChartAskContext) => `@ ${ask.title}${ask.targets.length ? ` · ${ask.targets.map(target => target.label).join('、')}` : ' · 整张命盘'}`;
     const chartAskKey = (ask: ChartAskContext) => `${ask.reference}:${ask.targets.map(target => target.id).join(',')}`;
     // 输入框里删掉 chip 文本后，对应上下文立即失效（不额外 setState）。
     const activeChartAsks = useMemo(() => chartAsks.filter(ask => inputValue.includes(chartAskToken(ask))), [chartAsks, inputValue]);
@@ -417,9 +423,12 @@ export function ChatLayout(props: ChatLayoutProps) {
     };
     const sendWithContext = async (text?: string) => {
         const context = activeChartAsks.length ? activeChartAsks.map(ask => chartQuestion(ask.reference, ask.targets)).join('\n\n') : undefined;
-        const outgoing = quotes;
+        const outgoing = activeQuotes;
+        // 引用 chip 只是输入框里的可见标记：正文剥掉 chip，引用的内容仍作为 quotes 随消息带上。
+        const cleaned = stripMessageQuoteTokens(text ?? inputValue, quotes);
+        if (!cleaned && !context) { showToast('info', '引用之后，写一句你的问题'); return; }
         setFollowUpSuggestion(null);
-        await onSend(context, outgoing.length ? outgoing : undefined, text);
+        await onSend(context, outgoing.length ? outgoing : undefined, cleaned);
         // 发送被余额提示拦下时保留引用与追问命盘，用户不必重新添加。
         setChartAsks([]);
         if (outgoing.length) setQuotes([]);
@@ -569,7 +578,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         userId, attachmentState, onAttachmentChange,
         mentions, onMentionsChange, promptKnowledgeBases,
-        quotes, onRemoveQuote: removeQuote,
+        quotes: activeQuotes,
         chartAsks: chartAskChips,
         knowledgeBaseEnabled,
         webControl,

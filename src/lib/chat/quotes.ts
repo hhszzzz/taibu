@@ -40,6 +40,21 @@ export function clampMessageQuoteText(value: unknown): string {
     return text.length > MAX_MESSAGE_QUOTE_CHARS ? text.slice(0, MAX_MESSAGE_QUOTE_CHARS) : text;
 }
 
+/** 输入框里的内联引用 chip：与 @提及 同形态，单行略缩预览；发送时从正文里剥掉，内容仍走 quotes 元数据。 */
+const QUOTE_TOKEN_PREVIEW_CHARS = 24;
+export function messageQuoteToken(quote: Pick<MessageQuote, 'text'>): string {
+    const line = clampMessageQuoteText(quote.text).replace(/\s+/gu, ' ');
+    const preview = line.length > QUOTE_TOKEN_PREVIEW_CHARS ? `${line.slice(0, QUOTE_TOKEN_PREVIEW_CHARS)}…` : line;
+    return `@ 引用「${preview}」`;
+}
+
+/** 去掉草稿里所有引用 chip，只留用户自己写的正文。 */
+export function stripMessageQuoteTokens(text: string, quotes: readonly MessageQuote[]): string {
+    let value = text;
+    for (const quote of quotes) value = value.split(messageQuoteToken(quote)).join('');
+    return value.trim();
+}
+
 /**
  * Prefix for the user turn. It follows the same bracket markers as the document and search blocks, so the text
  * inside is read as reference material rather than as further instructions.

@@ -11,7 +11,8 @@ export type MentionTokenMatch = {
     mention?: Mention;
 };
 
-export const buildMentionToken = (mention: Mention): string => `@${mention.name}`;
+/** 提及在草稿里的写法：「@ 名称」——@ 后留一个空格，让图标与名称之间有自然间距。 */
+export const buildMentionToken = (mention: Mention): string => `@ ${mention.name}`;
 
 export const extractMentionTokens = (value: string, mentionList: Mention[]): MentionToken[] => {
     const tokens: MentionToken[] = [];
@@ -20,15 +21,13 @@ export const extractMentionTokens = (value: string, mentionList: Mention[]): Men
     if (names.length === 0) return tokens;
     for (let i = 0; i < value.length; i += 1) {
         if (value[i] !== '@') continue;
-        for (const name of names) {
-            if (value.startsWith(`@${name}`, i)) {
-                const start = i;
-                const end = i + 1 + name.length;
-                tokens.push({ start, end, name });
-                i = end - 1;
-                break;
-            }
-        }
+        // 新草稿写「@ 名称」；旧草稿与旧消息里的「@名称」仍然认。
+        const name = names.find(item => value.startsWith(`@ ${item}`, i) || value.startsWith(`@${item}`, i));
+        if (!name) continue;
+        const spaced = value.startsWith(`@ ${name}`, i);
+        const end = i + (spaced ? 2 : 1) + name.length;
+        tokens.push({ start: i, end, name });
+        i = end - 1;
     }
     return tokens;
 };

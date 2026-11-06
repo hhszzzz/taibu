@@ -748,66 +748,66 @@ export function ChatComposer({
                     />
 
                     <div className="chat-composer-main" data-stacked={composerStacked || undefined}>
-                    <ComposerToolbar {...toolbarProps} showSend={hero} />
+                        <ComposerToolbar {...toolbarProps} showSend={hero} />
 
-                    <div className={`chat-composer-field${composerExpandable ? ' has-expand' : ''}`}>
-                        {composerExpandable && (
-                            <Button unstyled
-                                type="button"
-                                className="chat-composer-expand"
-                                aria-expanded={composerExpanded}
-                                aria-label={composerExpanded ? '收起输入框' : '展开输入框'}
-                                title={composerExpanded ? '收起输入框' : '展开输入框'}
-                                onClick={() => { setComposerExpanded(value => !value); textareaRef.current?.focus(); }}
-                            >
-                                {composerExpanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
-                            </Button>
-                        )}
-                        <div ref={overlayRef} className="chat-composer-input chat-composer-overlay" aria-hidden="true">
-                            {inputValue ? highlightedInput.map((part, index) => part.kind === 'mention'
-                                ? <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}>
-                                    <span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}
-                                </span>
-                                : part.kind === 'chart'
-                                    ? <span key={`chart-${part.start}`} className="chat-mention-token" data-type="chart">
-                                        <span className="chat-mention-at">@<ChartAskIcon kind={part.chartKind} /></span>{part.value.slice(1)}
+                        <div className={`chat-composer-field${composerExpandable ? ' has-expand' : ''}`}>
+                            {composerExpandable && (
+                                <Button unstyled
+                                    type="button"
+                                    className="chat-composer-expand"
+                                    aria-expanded={composerExpanded}
+                                    aria-label={composerExpanded ? '收起输入框' : '展开输入框'}
+                                    title={composerExpanded ? '收起输入框' : '展开输入框'}
+                                    onClick={() => { setComposerExpanded(value => !value); textareaRef.current?.focus(); }}
+                                >
+                                    {composerExpanded ? <Minimize2 size={14} aria-hidden="true" /> : <Maximize2 size={14} aria-hidden="true" />}
+                                </Button>
+                            )}
+                            <div ref={overlayRef} className="chat-composer-input chat-composer-overlay" aria-hidden="true">
+                                {inputValue ? highlightedInput.map((part, index) => part.kind === 'mention'
+                                    ? <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}>
+                                        <span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}
                                     </span>
-                                    : part.kind === 'quote'
-                                        ? <span key={`quote-${part.start}`} className="chat-mention-token" data-type="quote">
-                                            <span className="chat-mention-at">@<Quote size={12} strokeWidth={1.45} aria-hidden="true" /></span>{part.value.slice(1)}
+                                    : part.kind === 'chart'
+                                        ? <span key={`chart-${part.start}`} className="chat-mention-token" data-type="chart">
+                                            <span className="chat-mention-at">@<ChartAskIcon kind={part.chartKind} /></span>{part.value.slice(1)}
                                         </span>
-                                        : <span key={`text-${index}`}>{part.value}</span>)
-                                : suggestionText
-                                    ? <span className="chat-composer-suggestion">{suggestionText}<kbd className="chat-composer-suggestion-key">Tab</kbd></span>
-                                    : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
+                                        : part.kind === 'quote'
+                                            ? <span key={`quote-${part.start}`} className="chat-mention-token" data-type="quote">
+                                                <span className="chat-mention-at">@<Quote size={12} strokeWidth={1.45} aria-hidden="true" /></span>{part.value.slice(1)}
+                                            </span>
+                                            : <span key={`text-${index}`}>{part.value}</span>)
+                                    : suggestionText
+                                        ? <span className="chat-composer-suggestion">{suggestionText}<kbd className="chat-composer-suggestion-key">Tab</kbd></span>
+                                        : <span className="chat-composer-placeholder">{inputPlaceholder}</span>}
+                            </div>
+                            <Textarea
+                                aria-label={inputLabel}
+                                ref={textareaRef}
+                                value={inputValue}
+                                onChange={(e) => handleInputChange(e.target.value)}
+                                onKeyDown={handleKeyDown}
+                                onPaste={event => {
+                                    const files = Array.from(event.clipboardData.files);
+                                    if (files.length) { event.preventDefault(); acceptFiles(files); return; }
+                                    if (!agentMode || !userId || uploads.uploading) return;
+                                    const text = event.clipboardData.getData('text/plain');
+                                    if (text.length > 8000 && !event.clipboardData.getData('text/html')) { event.preventDefault(); void uploads.upload([new File([text], `粘贴资料-${new Date().toISOString().slice(0,10)}.txt`, { type: 'text/plain' })]); showToast('info', '长文本已转为资料，可预览后再发送'); }
+                                }}
+                                onScroll={(e) => {
+                                    if (overlayRef.current) {
+                                        overlayRef.current.scrollTop = e.currentTarget.scrollTop;
+                                    }
+                                }}
+                                placeholder=""
+                                className="chat-composer-input chat-composer-textarea min-h-0"
+                                disabled={disabled}
+                                // claude 的 composer 空态只有一行：rows=1 + field-sizing 随内容长高（hero 首屏给两行起步）
+                                rows={hero ? 2 : 1}
+                            />
                         </div>
-                        <Textarea
-                            aria-label={inputLabel}
-                            ref={textareaRef}
-                            value={inputValue}
-                            onChange={(e) => handleInputChange(e.target.value)}
-                            onKeyDown={handleKeyDown}
-                            onPaste={event => {
-                                const files = Array.from(event.clipboardData.files);
-                                if (files.length) { event.preventDefault(); acceptFiles(files); return; }
-                                if (!agentMode || !userId || uploads.uploading) return;
-                                const text = event.clipboardData.getData('text/plain');
-                                if (text.length > 8000 && !event.clipboardData.getData('text/html')) { event.preventDefault(); void uploads.upload([new File([text], `粘贴资料-${new Date().toISOString().slice(0,10)}.txt`, { type: 'text/plain' })]); showToast('info', '长文本已转为资料，可预览后再发送'); }
-                            }}
-                            onScroll={(e) => {
-                                if (overlayRef.current) {
-                                    overlayRef.current.scrollTop = e.currentTarget.scrollTop;
-                                }
-                            }}
-                            placeholder=""
-                            className="chat-composer-input chat-composer-textarea min-h-0"
-                            disabled={disabled}
-                            // claude 的 composer 空态只有一行：rows=1 + field-sizing 随内容长高（hero 首屏给两行起步）
-                            rows={hero ? 2 : 1}
-                        />
-                    </div>
 
-                    {!hero && <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
+                        {!hero && <ComposerSendCluster send={send} agentMode={agentMode} disabled={disabled} onSend={handleButtonClick} onStop={onStop} />}
                     </div>
                 </div>
 

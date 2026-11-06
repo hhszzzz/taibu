@@ -41,7 +41,7 @@
 .chat-composer-dock.is-hero[data-expanded] { transform: translateY(6vh); }
 .is-hero .chat-composer-shell { padding: 10px 8px 8px; border-radius: 14px; }
 .is-locked .chat-composer-shell { background: var(--background-secondary); box-shadow: none; }
-.chat-composer-shell > :not(.chat-composer-field):not(.chat-composer-actions):not(.chat-composer-send-group) { flex: 0 0 auto; width: 100%; }
+.chat-composer-shell > * { flex: 0 0 auto; width: 100%; }
 /* 主行：单行草稿时 + / 编辑区 / 发送同排；换行、放大或首屏时编辑区独占一行，工具与发送在下一行。 */
 .chat-composer-main { display: grid; min-width: 0; align-items: end; gap: 0; }
 .is-hero .chat-composer-main[data-stacked] { row-gap: 6px; }

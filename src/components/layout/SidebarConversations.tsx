@@ -22,6 +22,7 @@ import '@/components/chat/sidebar/chat-sidebar.css';
 import { SOURCE_TYPE_CONFIG, SOURCE_TYPE_ORDER } from '@/lib/chat/conversation-groups';
 import { resolveConversationRemainingTargetCount } from '@/lib/chat/conversation-list-window';
 import { ConversationMenu } from '@/components/chat/sidebar/ConversationActions';
+import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { Menu, MenuContent, MenuGroup, MenuItem, MenuLabel, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuTrigger, createMenuHandle, type MenuHandle } from '@/components/ui/Menu';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { ConversationMarker, ConversationNavItem } from '@/components/chat/sidebar/ConversationNavItem';
@@ -102,6 +103,7 @@ const RECENT_VISIBLE = 10;
 export function SidebarConversations({ grouping = 'source', markers, withinModal = false }: SidebarConversationsProps = {}) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
+    const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
     const {
         conversations,
         conversationsLoading,
@@ -538,7 +540,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
             </div>
 
             <ConversationMenu menu={conversationMenu} onRename={startInlineRename} onDelete={setPendingDelete}
-                onPin={togglePin} pinned={conv => pinnedSet.has(conv.id)} />
+                onPin={togglePin} pinned={conv => pinnedSet.has(conv.id)} knowledgeBaseEnabled={knowledgeBaseEnabled} />
             <ConfirmDialog isOpen={pendingDelete !== null} onClose={() => { if (!deleteLoading) setPendingDelete(null); }}
                 onConfirm={async () => { await confirmDelete(); }} loading={deleteLoading} title="删除此聊天"
                 description={`删除“${pendingDelete ? formatConversationMenuTitle(pendingDelete) : ''}”后无法恢复。`} confirmText="确认删除" />

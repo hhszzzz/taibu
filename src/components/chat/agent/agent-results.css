@@ -29,11 +29,10 @@
 .agent-chart-dialog-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 1rem; padding: 1rem 1.25rem; border-bottom: 1px solid var(--border); }
 .agent-chart-dialog-header h2 { font-size: 1.25rem; font-family: var(--font-display); }
 .agent-chart-dialog-body { padding: 1rem; overflow: auto; max-height: calc(90dvh - 6rem); }
-/* 命盘 (Main board): the subject and tools, the position being looked at, and the chart with bazi relations drawn on it. */
+/* 命盘 (Main board): the position being looked at with the tools, and the chart with bazi relations drawn on it. */
 .agent-interactive-chart { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
 .agent-board-heading { display: flex; align-items: center; gap: 12px; min-height: 28px; }
-.agent-board-subject { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(13 / 16 * 1rem); color: var(--foreground-secondary); }
-.agent-board-tools { display: flex; flex-shrink: 0; align-items: center; gap: 2px; }
+.agent-board-tools { display: flex; flex-shrink: 0; align-items: center; gap: 2px; margin-left: auto; }
 .agent-board-tool { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border: 0; border-radius: 6px; color: var(--foreground-secondary); }
 .agent-board-tool.has-label { width: auto; height: 28px; gap: 5px; padding: 0 9px; font-size: calc(13 / 16 * 1rem); white-space: nowrap; }
 .agent-board-tool.is-save { border: 1px solid var(--border-hover); }
@@ -42,13 +41,16 @@
 .agent-board-tool:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .agent-board-tool.is-viewing, .agent-board-tool.is-saved { color: var(--accent-hover); }
 .agent-board-tool:disabled { opacity: .5; cursor: default; background: transparent; }
-.agent-board-focus { display: flex; flex-direction: column; align-items: stretch; gap: 6px; padding: 0; border-radius: 0; background: transparent; font-size: calc(12.5 / 16 * 1rem); }
+.agent-board-focus { display: flex; min-width: 0; flex: 1; flex-direction: column; align-items: stretch; gap: 6px; padding: 0; border-radius: 0; background: transparent; font-size: calc(12.5 / 16 * 1rem); }
 .agent-board-focus.is-empty { display: none; }
 .agent-board-focus-line { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .agent-board-focus-label { display: flex; align-items: center; gap: 6px; font-size: calc(12.5 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); white-space: nowrap; }
 .agent-board-focus[data-source="model"] .agent-board-focus-label { color: var(--accent-hover); }
 .agent-board-follow-state { margin-left: 2px; font-weight: 500; white-space: nowrap; color: var(--foreground-tertiary); }
-.agent-board-caption { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); }
+/* 说明：没有位置清单时留在标题行里（单行省略）；有清单时和清单一起收进「N 处」展开区。 */
+.agent-board-focus-detail { display: flex; flex-direction: column; gap: 6px; }
+.agent-board-caption { min-width: 0; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12.5 / 16 * 1rem); color: var(--foreground-tertiary); }
+.agent-board-focus-detail .agent-board-caption { margin: 0; overflow: visible; white-space: normal; line-height: 1.5; overflow-wrap: anywhere; }
 .agent-board-chips-toggle { display: inline-flex; align-items: center; gap: 2px; height: 20px; padding: 0 6px; border-radius: 5px; font-size: calc(11.5 / 16 * 1rem); color: var(--foreground-tertiary); white-space: nowrap; }
 .agent-board-chips-toggle:hover { background: var(--fill-ghost-hover); color: var(--foreground-secondary); }
 .agent-board-chips-toggle svg { transition: transform .12s var(--ease-out); }

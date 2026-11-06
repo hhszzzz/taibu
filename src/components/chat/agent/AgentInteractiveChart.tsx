@@ -18,11 +18,11 @@ import './agent-results.css';
 const NO_ROWS: never[] = [];
 
 /**
- * 命盘 (Main board): the subject line and compact tools, the position being
- * looked at with its actions, the interactive chart and bazi relations. The
- * title lives on the workspace tab, so the board itself does not repeat it.
+ * 命盘 (Main board): the position being looked at with its actions, then the
+ * interactive chart and bazi relations. The title lives on the workspace tab,
+ * and the chart center already states the chart's basics, so neither repeats here.
  */
-export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, subject, baziWuxing, actions, onAsk }: {
+export function AgentInteractiveChart({ value, tool, reference, focus, followModel, live = false, pinned = false, baziWuxing, actions, onAsk }: {
   value: AgentChart; tool: AgentToolPart; reference: string | null; focus?: ChartFocus | null; followModel: boolean;
   /** 工具栏里盘面之外的动作，例如保存命盘。 */
   actions?: ReactNode;
@@ -32,8 +32,6 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   live?: boolean;
   /** The focus was opened from its step or a citation: show and reveal it even while not following. */
   pinned?: boolean;
-  /** 男 · 公历 1990-01-15 09:00 · Asia/Shanghai · 日主 庚 */
-  subject?: string;
   /** 追问：把盘名与当前查看的位置作为富文本上下文交给输入框。 */
   onAsk?: (ask: ChartAskContext) => void;
 }) {
@@ -104,7 +102,7 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     ? { layout: board, located, locatedCells, marks, onSelect: reference && onAsk ? askEdge : undefined }
     : undefined;
   const text = getAgentToolText(tool);
-  // 详查在盘面上方只留一行「太卜正在查看」；看的是哪一项由紧随其后的详查标题说明。
+  // 盘面上方只留一行「太卜正在查看」，与追问、复制同一行；说明与位置清单收在「N 处」里。
   // 任务结束后不再说「正在」，改称它查看过的位置（与工具栏图标的说明一致）。
   const label = model ? live ? '太卜正在查看' : '太卜查看的位置' : null;
   const caption = model?.caption ?? null;
@@ -113,7 +111,19 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   return <section className="agent-interactive-chart" aria-labelledby={titleId} data-viewing={selected.length > 0 || undefined} data-live={(model && live && followModel) || undefined}>
     <header className="agent-board-heading">
       <h3 id={titleId} className="sr-only">{value.title}</h3>
-      {subject && <p className="agent-board-subject">{subject}</p>}
+      <div className={`agent-board-focus${hasFocus ? '' : ' is-empty'}`} aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')} data-source={model ? 'model' : undefined} data-live={(model && live && followModel) || undefined}>
+        <div className="agent-board-focus-line">
+          {label && <span className="agent-board-focus-label">
+            <LocateFixed size={13} aria-hidden="true" /><span>{label}</span>
+            {live && <span className="agent-board-follow-state">{followModel ? '跟随中' : '已暂停跟随'}</span>}
+          </span>}
+          {chips.length === 0 && caption && <span className="agent-board-caption">{caption}</span>}
+          {chips.length > 0 && <Button unstyled type="button" className="agent-board-chips-toggle" aria-expanded={chipsOpen}
+            aria-label={chipsOpen ? '收起查看的位置' : '展开查看的位置'} onClick={() => setChipsOpen(open => !open)}>
+            {chipsOpen ? '收起' : `${chips.length} 处`}<ChevronDown size={12} className={chipsOpen ? 'is-open' : undefined} aria-hidden="true" />
+          </Button>}
+        </div>
+      </div>
       <div className="agent-board-tools">
         {reference && onAsk && <Button unstyled type="button" className="agent-board-tool has-label" aria-label={selected.length ? '追问这里' : '追问这张命盘'}
           title={selected.length ? '追问这里' : '追问这张命盘'} onClick={() => ask(selected)}><MessageCircleQuestion size={14} aria-hidden="true" /><span>追问</span></Button>}
@@ -121,20 +131,11 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
         {actions}
       </div>
     </header>
-    <div className={`agent-board-focus${hasFocus ? '' : ' is-empty'}`} aria-live="polite" data-chart-focus={selected.map(target => target.id).join(',')} data-source={model ? 'model' : undefined} data-live={(model && live && followModel) || undefined}>
-      <div className="agent-board-focus-line">
-        {label && <span className="agent-board-focus-label">
-          <LocateFixed size={13} aria-hidden="true" /><span>{label}</span>
-          {live && <span className="agent-board-follow-state">{followModel ? '跟随中' : '已暂停跟随'}</span>}
-        </span>}
-        {caption && <span className="agent-board-caption">{caption}</span>}
-        {chips.length > 0 && <Button unstyled type="button" className="agent-board-chips-toggle" aria-expanded={chipsOpen}
-          aria-label={chipsOpen ? '收起查看的位置' : '展开查看的位置'} onClick={() => setChipsOpen(open => !open)}>
-          {chipsOpen ? '收起' : `${chips.length} 处`}<ChevronDown size={12} className={chipsOpen ? 'is-open' : undefined} aria-hidden="true" />
-        </Button>}
-      </div>
-      {chipsOpen && chips.length > 0 && <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>}
-    </div>
+    {/* 有位置清单时，说明与清单一起收进「N 处」：收起只剩标题一行。 */}
+    {chipsOpen && chips.length > 0 && <div className="agent-board-focus-detail">
+      {caption && <p className="agent-board-caption">{caption}</p>}
+      <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>
+    </div>}
     <div ref={viewportRef} className="agent-chart-scroll" tabIndex={0} aria-label={value.title + '内容'}>
       <ChartErrorBoundary resetKey={value.chart} fallback={<pre className="agent-board-fallback">{text ?? '命盘数据暂时无法显示'}</pre>}>
         <CanonicalChartView value={value} targets={selected} includeRelated={related} onTargetSelect={onAsk ? askTarget : undefined} baziOverlay={baziOverlay} />

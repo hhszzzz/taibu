@@ -2,6 +2,29 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.1.10 · 2026-11-06
+
+### 新功能与体验
+
+- **六爻 · 铜钱起卦**：起卦页重做——三枚方孔铜钱逐爻掷出，落下后记单、拆、重、交与 ○/×；右侧六爻自下而上即时成卦，手机可开启摇一摇。([bfb43a6](https://github.com/hhszzzz/taibu/commit/bfb43a6c))
+- **六爻 · 选卦起卦**：可按卦名或上下卦选本卦，在画出的六爻上直接点选动爻；右侧实时显示变卦、宫位与动爻标记。([bfb43a6](https://github.com/hhszzzz/taibu/commit/bfb43a6c))
+- **输入框 · 引用**：回答里的引用从输入框上方的引用条改为像 @提及 一样的内联 chip（图标 + 单行预览），随正文排版、退格整体删除；发送时 chip 从正文剥掉，引用内容仍随消息交给模型。([1fc61d8](https://github.com/hhszzzz/taibu/commit/1fc61d82))
+- **输入框 · 单行布局**：会话里的单行草稿保持一行（+、输入区、发送同排），换行后输入区独占一行、工具与发送在下方；超过最大高度继续输入时，光标自动跟随。([e226089](https://github.com/hhszzzz/taibu/commit/e2260895))
+- **追问建议**：灰色幽灵建议保留到这一轮真正发出为止，中途输入再删空也还在。([3229145](https://github.com/hhszzzz/taibu/commit/3229145a))
+- **会话菜单**：每个对话的菜单新增「复制链接」与「加入知识库」，并去掉菜单图标。([a3a6078](https://github.com/hhszzzz/taibu/commit/a3a60789))
+- **Agent · 推演结果**：大运、合盘、择日、运限、飞星、候选时辰等计算只在任务过程的步骤里展开，不再占用工作区标签与概览行。([75fb9ac](https://github.com/hhszzzz/taibu/commit/75fb9acf))
+- **Agent · 过程收起**：模型开始写正文后，之前的工具调用过程自动收起；任务仍在进行时，最后一段过程保持展开。([71f183c](https://github.com/hhszzzz/taibu/commit/71f183c7))
+- **Agent · 命盘头部**：去掉盘面顶部重复的基础信息；「太卜正在查看」与复制、追问同一行，较长说明收进「N 处」展开区。([fc1dfb7](https://github.com/hhszzzz/taibu/commit/fc1dfb73))
+
+### 修复
+
+- **紫微**：选中宫位只保留底色、去掉描边，相邻选中宫之间不再出现缝隙与双线。([54d73ac](https://github.com/hhszzzz/taibu/commit/54d73acc))
+- **引用与追问**：发送被余额或任务状态拦下时，草稿里的引用 chip 与追问命盘不再被清掉；删掉引用 chip 后也能继续添加新的引用。([f40d17c](https://github.com/hhszzzz/taibu/commit/f40d17cb))
+
+### 升级须知
+
+无数据库、配置或 npm 包版本变更；更新到 v1.1.10 后刷新页面即可。
+
 ## v1.1.9 · 2026-11-06
 
 ### 修复

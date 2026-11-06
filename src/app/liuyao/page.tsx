@@ -19,13 +19,12 @@ import { getSessionSnapshot } from '@/lib/auth';
 import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { PageHeader } from '@/components/layout/PageHeader';
+import { GuaGlyph } from '@/components/liuyao/GuaGlyph';
 
 const METHOD_CARD_CLASS = 'flex flex-col gap-3 rounded-2xl border-[0.5px] border-border bg-surface p-5 text-left text-foreground transition-colors hover:bg-background-secondary active:bg-background-tertiary sm:p-[22px]';
 const COIN_ICON_KEYS = ['left', 'middle', 'right'] as const;
-/** 图标自上而下：阳、阴、阳、阳、阴。 */
-const HEXAGRAM_ICON_LINES = [true, false, true, true, false] as const;
 const ABOUT_LIUYAO = [
-    { title: '铜钱法', body: '三正为老阳、三反为老阴，均为变爻；二正一反为少阳，一正二反为少阴。' },
+    { title: '铜钱法', body: '一背为单（少阳），二背为拆（少阴），三背为重（老阳），三字为交（老阴）；重、交为动爻。' },
     { title: '变卦', body: '老阳、老阴变化后得到变卦，反映事情的发展趋势。' },
     { title: '用神', body: '按所问之事取六亲为用神，如问工作取官鬼、问财取妻财。' },
     { title: '一事一占', body: '同一问题不宜反复起卦，以第一次为准。' },
@@ -180,12 +179,8 @@ export default function LiuyaoPage() {
                         </Button>
 
                         <Button unstyled type="button" onClick={handleSelectDivine} className={METHOD_CARD_CLASS}>
-                            <span className="flex h-10 w-10 flex-col justify-center gap-1" aria-hidden="true">
-                                {HEXAGRAM_ICON_LINES.map((yang, index) => (
-                                    yang
-                                        ? <span key={index} className="h-[3px] rounded-sm bg-accent" />
-                                        : <span key={index} className="flex h-[3px] gap-1.5"><span className="flex-1 rounded-sm bg-accent" /><span className="flex-1 rounded-sm bg-accent" /></span>
-                                ))}
+                            <span className="flex h-10 items-center text-accent" aria-hidden="true">
+                                <GuaGlyph code="111000" size="sm" />
                             </span>
                             <span className="font-display text-[19px]">选卦起卦</span>
                             <span className="text-sm leading-relaxed text-foreground-secondary">已有卦象时，手动选择本卦与动爻，直接排盘分析。</span>

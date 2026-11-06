@@ -1,11 +1,10 @@
+/**
+ * 八卦选择器：先天八卦序，每格画出三爻卦形，用于上卦/下卦选择。
+ */
 'use client';
 
 import { Button } from '@/components/ui/Button';
-/**
- * 八卦选择器
- *
- * 显示8个经卦，用于上卦/下卦选择
- */
+import { GuaGlyph } from '@/components/liuyao/GuaGlyph';
 
 interface TrigramSelectorProps {
     label: string;
@@ -13,50 +12,51 @@ interface TrigramSelectorProps {
     onChange: (code: string) => void;
 }
 
-const TRIGRAMS_LIST = [
-    { name: '乾', code: '111', symbol: '☰', element: '天', wuxing: '金' },
-    { name: '兑', code: '110', symbol: '☱', element: '泽', wuxing: '金' },
-    { name: '离', code: '101', symbol: '☲', element: '火', wuxing: '火' },
-    { name: '震', code: '100', symbol: '☳', element: '雷', wuxing: '木' },
-    { name: '巽', code: '011', symbol: '☴', element: '风', wuxing: '木' },
-    { name: '坎', code: '010', symbol: '☵', element: '水', wuxing: '水' },
-    { name: '艮', code: '001', symbol: '☶', element: '山', wuxing: '土' },
-    { name: '坤', code: '000', symbol: '☷', element: '地', wuxing: '土' },
-];
+/** code 自下而上，与六十四卦的卦码一致。 */
+export const TRIGRAMS_LIST = [
+    { name: '乾', code: '111', nature: '天' },
+    { name: '兑', code: '110', nature: '泽' },
+    { name: '离', code: '101', nature: '火' },
+    { name: '震', code: '100', nature: '雷' },
+    { name: '巽', code: '011', nature: '风' },
+    { name: '坎', code: '010', nature: '水' },
+    { name: '艮', code: '001', nature: '山' },
+    { name: '坤', code: '000', nature: '地' },
+] as const;
 
 export function TrigramSelector({ label, value, onChange }: TrigramSelectorProps) {
-    const selectedTrigram = value ? TRIGRAMS_LIST.find(t => t.code === value) : null;
+    const selected = TRIGRAMS_LIST.find(t => t.code === value);
 
     return (
-        <div className="space-y-2">
-            <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium text-foreground">{label}</h4>
-                {selectedTrigram && (
-                    <span className="text-xs font-medium text-accent-strong">
-                        {selectedTrigram.symbol} {selectedTrigram.name} ({selectedTrigram.element})
-                    </span>
-                )}
+        <div className="@container flex flex-col gap-2.5" role="group" aria-label={label}>
+            <div className="flex items-baseline justify-between gap-3">
+                <h3 className="text-sm font-medium text-foreground">{label}</h3>
+                <span className="text-xs text-foreground-secondary">{selected ? `${selected.name}为${selected.nature}` : '未选'}</span>
             </div>
-            <div className="grid grid-cols-4 gap-2">
-                {TRIGRAMS_LIST.map(t => (
-                    <Button unstyled
-                        key={t.code}
-                        type="button"
-                        onClick={() => onChange(t.code)}
-                        aria-pressed={value === t.code}
-                        className={`flex flex-col items-center gap-0.5 rounded-xl px-1 py-2 transition-colors
-                            ${value === t.code
-                                ? 'bg-accent-soft text-accent-strong ring-2 ring-inset ring-accent'
-                                : 'border-[0.5px] border-border bg-surface text-foreground hover:bg-background-secondary'
+            <div className="grid grid-cols-4 gap-1.5 @md:grid-cols-8">
+                {TRIGRAMS_LIST.map(t => {
+                    const isSelected = value === t.code;
+                    return (
+                        <Button unstyled
+                            key={t.code}
+                            type="button"
+                            onClick={() => onChange(t.code)}
+                            aria-pressed={isSelected}
+                            aria-label={`${t.name}，${t.nature}`}
+                            className={`flex flex-col items-center gap-2 rounded-xl pb-2 pt-3 transition-colors duration-[var(--duration-snap)] ${isSelected
+                                ? 'bg-accent-light text-accent-strong ring-1 ring-inset ring-accent'
+                                : 'border-[0.5px] border-border text-foreground hover:bg-fill-ghost-hover'
                             }`}
-                    >
-                        <span className="text-xl">{t.symbol}</span>
-                        <span className="font-display text-sm">{t.name}</span>
-                        <span className="text-[10px] text-foreground-secondary">{t.element}</span>
-                    </Button>
-                ))}
+                        >
+                            <GuaGlyph code={t.code} size="sm" className={isSelected ? 'text-accent' : 'text-foreground-secondary'} />
+                            <span className="flex items-baseline gap-1">
+                                <span className="font-display text-[0.9375rem] leading-none">{t.name}</span>
+                                <span className={`text-[0.6875rem] leading-none ${isSelected ? '' : 'text-foreground-tertiary'}`}>{t.nature}</span>
+                            </span>
+                        </Button>
+                    );
+                })}
             </div>
         </div>
     );
 }
-

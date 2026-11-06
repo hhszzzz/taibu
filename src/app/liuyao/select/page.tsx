@@ -1,119 +1,74 @@
 /**
  * 选卦起卦页面
  *
- * 支持用户手动选择本卦和变爻
+ * 左侧按卦名或上下卦选本卦，右侧画出卦象并点选动爻。
  */
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ChevronLeft, Sparkles, Grid3X3, Layers } from 'lucide-react';
-import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { Button } from '@/components/ui/Button';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { useToast } from '@/components/ui/Toast';
 import { HexagramSelector } from '@/components/liuyao/HexagramSelector';
 import { TrigramSelector } from '@/components/liuyao/TrigramSelector';
 import { ChangingLinesSelector } from '@/components/liuyao/ChangingLinesSelector';
+import { LiuyaoCastingHeader } from '@/components/liuyao/LiuyaoCastingHeader';
 import { YongShenTargetPicker } from '@/components/liuyao/YongShenTargetPicker';
+import { useLiuyaoQuestion } from '@/components/liuyao/use-liuyao-question';
 import {
     findHexagram,
     calculateChangedHexagram,
     formatHexagramPalace,
     type Yao,
-    type LiuQin,
 } from '@/lib/divination/liuyao';
 import { getSessionSnapshot } from '@/lib/auth';
-import { readSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
+import { writeSessionJSON } from '@/lib/cache/session-storage';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 
 type SelectMode = 'list' | 'trigram';
 
 const SELECT_MODES = [
-    { mode: 'list', label: '64卦列表', Icon: Grid3X3 },
-    { mode: 'trigram', label: '上下卦组合', Icon: Layers },
-] as const satisfies ReadonlyArray<{ mode: SelectMode; label: string; Icon: typeof Grid3X3 }>;
-const CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-5';
-const RESULT_CHIP_CLASS = 'flex flex-wrap items-baseline gap-x-2 gap-y-1 rounded-xl bg-accent-light px-3.5 py-2.5 text-sm ring-1 ring-inset ring-accent/50';
-type LiuyaoQuestionSession = {
-    question: string;
-    yongShenTargets: LiuQin[];
-};
+    { value: 'list', label: '按卦名' },
+    { value: 'trigram', label: '按上下卦' },
+] as const;
+const CARD_CLASS = 'rounded-2xl border-[0.5px] border-border bg-surface';
+
+function toYaos(code: string, changedPositions: number[]): Yao[] {
+    return code.split('').map((char, i) => ({
+        type: parseInt(char) as 0 | 1,
+        change: changedPositions.includes(i + 1) ? 'changing' : 'stable',
+        position: i + 1,
+    }));
+}
 
 export default function SelectHexagramPage() {
     const router = useRouter();
     const { showToast } = useToast();
+    const { question, yongShenTargets, setYongShenTargets, needsTargets } = useLiuyaoQuestion();
 
-    // 选择方式
     const [selectMode, setSelectMode] = useState<SelectMode>('list');
-
-    // 64卦列表模式
-    const [hexagramCode, setHexagramCode] = useState<string>('');
-
-    // 八卦选择模式
-    const [upperTrigram, setUpperTrigram] = useState<string>('');
-    const [lowerTrigram, setLowerTrigram] = useState<string>('');
-
-    // 变爻
+    // 卦码自下而上：下卦在前（1–3 爻），上卦在后（4–6 爻）；两种选法共用，切换时保留已选。
+    const [lowerTrigram, setLowerTrigram] = useState('');
+    const [upperTrigram, setUpperTrigram] = useState('');
     const [changedPositions, setChangedPositions] = useState<number[]>([]);
-
-    // 问题
-    const [question] = useState(() => {
-        if (typeof window === 'undefined') return '';
-        const payload = readSessionJSON<LiuyaoQuestionSession | string>('liuyao_question');
-        if (!payload) return '';
-        if (typeof payload === 'string') return payload;
-        return payload.question || '';
-    });
-    const [yongShenTargets, setYongShenTargets] = useState<LiuQin[]>(() => {
-        if (typeof window === 'undefined') return [];
-        const payload = readSessionJSON<LiuyaoQuestionSession | string>('liuyao_question');
-        if (!payload || typeof payload === 'string') return [];
-        return Array.isArray(payload.yongShenTargets) ? payload.yongShenTargets : [];
-    });
-
-    // 加载状态
     const [isLoading, setIsLoading] = useState(false);
-    const requiresYongShenTargets = question.trim().length > 0;
 
-    const handleYongShenTargetsChange = (targets: LiuQin[]) => {
-        setYongShenTargets(targets);
-        writeSessionJSON('liuyao_question', { question, yongShenTargets: targets });
+    const effectiveCode = lowerTrigram && upperTrigram ? lowerTrigram + upperTrigram : '';
+    const currentHexagram = effectiveCode ? findHexagram(effectiveCode) : undefined;
+    const changed = effectiveCode && changedPositions.length > 0
+        ? calculateChangedHexagram(toYaos(effectiveCode, changedPositions))
+        : null;
+    const changedHexagram = changed ? findHexagram(changed.changedCode) : undefined;
+
+    const selectHexagram = (code: string) => {
+        setLowerTrigram(code.slice(0, 3));
+        setUpperTrigram(code.slice(3));
     };
 
-    // 计算当前有效的卦码
-    const effectiveCode = useMemo(() => {
-        if (selectMode === 'list') {
-            return hexagramCode;
-        } else {
-            // 八卦组合模式：下卦在前（位置1-3），上卦在后（位置4-6）
-            if (lowerTrigram && upperTrigram) {
-                return lowerTrigram + upperTrigram;
-            }
-            return '';
-        }
-    }, [selectMode, hexagramCode, lowerTrigram, upperTrigram]);
-
-    // 获取当前卦象信息
-    const currentHexagram = effectiveCode ? findHexagram(effectiveCode) : null;
-
-    // 获取变卦信息
-    const changedInfo = useMemo(() => {
-        if (!effectiveCode || changedPositions.length === 0) return null;
-        const yaos: Yao[] = effectiveCode.split('').map((char, i) => ({
-            type: parseInt(char) as 0 | 1,
-            change: changedPositions.includes(i + 1) ? 'changing' : 'stable',
-            position: i + 1,
-        }));
-        const { changedCode, changedLines } = calculateChangedHexagram(yaos);
-        const changedHexagram = findHexagram(changedCode);
-        return { changedCode, changedLines, changedHexagram };
-    }, [effectiveCode, changedPositions]);
-
-    // 生成卦象
     const handleGenerate = async () => {
         if (!effectiveCode || !currentHexagram) return;
-        if (requiresYongShenTargets && yongShenTargets.length === 0) {
+        if (needsTargets) {
             showToast('error', '请至少选择一个分析目标');
             return;
         }
@@ -121,15 +76,8 @@ export default function SelectHexagramPage() {
         setIsLoading(true);
 
         try {
-            // 构建 yaos 数组
-            const yaos: Yao[] = effectiveCode.split('').map((char, i) => ({
-                type: parseInt(char) as 0 | 1,
-                change: changedPositions.includes(i + 1) ? 'changing' : 'stable',
-                position: i + 1,
-            }));
-
-            const changedHexagram = changedInfo?.changedHexagram;
-            const changedLines = changedInfo?.changedLines || [];
+            const yaos = toYaos(effectiveCode, changedPositions);
+            const changedLines = changed?.changedLines || [];
 
             // 保存到数据库
             let divinationId: string | null = null;
@@ -161,7 +109,6 @@ export default function SelectHexagramPage() {
                 console.error('保存起卦记录失败:', error);
             }
 
-            // 构建结果
             const result = {
                 question,
                 yongShenTargets,
@@ -183,149 +130,104 @@ export default function SelectHexagramPage() {
         }
     };
 
-    // 切换选择模式时清空状态
-    const handleModeChange = (mode: SelectMode) => {
-        setSelectMode(mode);
-        setHexagramCode('');
-        setUpperTrigram('');
-        setLowerTrigram('');
-        setChangedPositions([]);
-    };
-
     return (
         <div className="min-h-screen bg-background text-foreground">
-            <div className="mx-auto flex w-full max-w-[720px] flex-col gap-3 px-4 py-4 sm:gap-5 sm:px-8 md:py-10">
-                {/* 返回 - 仅桌面端显示 */}
-                <Link
-                    href="/liuyao"
-                    className="hidden w-fit items-center gap-1.5 text-sm text-foreground-secondary transition-colors hover:text-foreground lg:inline-flex"
-                >
-                    <ChevronLeft className="h-4 w-4" />
-                    返回
-                </Link>
+            <div className="mx-auto flex w-full max-w-[1040px] flex-col gap-4 px-4 py-4 sm:gap-6 sm:px-8 md:py-8">
+                <LiuyaoCastingHeader
+                    title="选卦起卦"
+                    description="已知卦象时，选定本卦、点出动爻，按此刻时间排盘。"
+                    question={question}
+                    yongShenTargets={yongShenTargets}
+                />
 
-                {/* 标题 */}
-                <header className="flex flex-col gap-1.5 text-center lg:text-left">
-                    <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">选卦起卦</h1>
-                    <p className="text-sm text-foreground-secondary">
-                        选择已知卦象，根据当前时间计算分析
-                    </p>
-                </header>
-
-                {requiresYongShenTargets && yongShenTargets.length === 0 && (
+                {needsTargets && (
                     <div className="flex flex-col gap-2">
                         <div className="text-sm text-danger">必须先选择分析目标</div>
                         <YongShenTargetPicker
                             value={yongShenTargets}
-                            onChange={handleYongShenTargetsChange}
+                            onChange={setYongShenTargets}
                             variant="block"
                         />
                     </div>
                 )}
 
-                {/* 选择方式切换 */}
-                <div className="flex gap-1 rounded-xl bg-background-secondary p-1" role="group" aria-label="选卦方式">
-                    {SELECT_MODES.map(({ mode, label, Icon }) => (
-                        <Button unstyled
-                            key={mode}
-                            type="button"
-                            onClick={() => handleModeChange(mode)}
-                            aria-pressed={selectMode === mode}
-                            className={`flex h-9 flex-1 items-center justify-center gap-2 rounded-lg text-sm transition-colors
-                                ${selectMode === mode
-                                    ? 'bg-surface font-medium text-foreground shadow-sm'
-                                    : 'text-foreground-secondary hover:text-foreground'
-                                }`}
-                        >
-                            <Icon className="h-4 w-4" />
-                            {label}
-                        </Button>
-                    ))}
-                </div>
-                <p className="px-1 text-xs text-foreground-secondary">
-                    64 卦列表适合直接选已知卦名；上下卦组合适合按外卦/内卦组合推得本卦。
-                </p>
-
-                {/* 卦选择区域 */}
-                <section className={CARD_CLASS}>
-                    {selectMode === 'list' ? (
-                        <HexagramSelector
-                            value={hexagramCode}
-                            onChange={setHexagramCode}
-                        />
-                    ) : (
-                        <div className="flex flex-col gap-4">
-                            <TrigramSelector
-                                label="上卦（外卦）"
-                                value={upperTrigram}
-                                onChange={setUpperTrigram}
-                            />
-                            <TrigramSelector
-                                label="下卦（内卦）"
-                                value={lowerTrigram}
-                                onChange={setLowerTrigram}
-                            />
-
-                            {/* 组合结果 */}
-                            {currentHexagram && (
-                                <div className={RESULT_CHIP_CLASS}>
-                                    <span className="text-foreground-secondary">组合结果：</span>
-                                    <span className="font-display text-base text-accent-strong">{currentHexagram.name}</span>
-                                    <span className="text-foreground-secondary">
-                                        · {formatHexagramPalace(currentHexagram.code)} · {currentHexagram.nature}
-                                    </span>
+                <div className="@container/select">
+                    <div className="grid gap-4 @3xl/select:grid-cols-[minmax(0,1fr)_20rem] @3xl/select:items-start @3xl/select:gap-5">
+                        <section className={`${CARD_CLASS} flex flex-col gap-4 p-4 sm:p-5`} aria-labelledby="liuyao-select-base">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <h2 id="liuyao-select-base" className="text-[0.9375rem] font-medium">选本卦</h2>
+                                <SegmentedControl
+                                    ariaLabel="选卦方式"
+                                    value={selectMode}
+                                    onChange={setSelectMode}
+                                    options={SELECT_MODES}
+                                    size="sm"
+                                    className="w-[13rem]"
+                                />
+                            </div>
+                            {selectMode === 'list' ? (
+                                <HexagramSelector
+                                    value={effectiveCode}
+                                    onChange={selectHexagram}
+                                    gridClassName="max-h-[min(25rem,55vh)] overflow-y-auto @3xl/select:max-h-none @3xl/select:overflow-visible"
+                                />
+                            ) : (
+                                <div className="flex flex-col gap-5">
+                                    <TrigramSelector label="上卦（外卦）" value={upperTrigram} onChange={setUpperTrigram} />
+                                    <TrigramSelector label="下卦（内卦）" value={lowerTrigram} onChange={setLowerTrigram} />
                                 </div>
                             )}
-                        </div>
-                    )}
-                </section>
+                        </section>
 
-                {/* 变爻选择 */}
-                <section className={CARD_CLASS}>
-                    <ChangingLinesSelector
-                        hexagramCode={effectiveCode}
-                        value={changedPositions}
-                        onChange={setChangedPositions}
-                    />
-                    <p className="mt-2 text-xs text-foreground-secondary">
-                        变爻可多选；不选表示静卦，适合仅看当前态势。
-                    </p>
+                        <aside className={`${CARD_CLASS} flex flex-col gap-4 p-4 sm:p-5 @3xl/select:sticky @3xl/select:top-6`} aria-label="卦象与动爻">
+                            <div className="flex min-h-[3.25rem] flex-col justify-center gap-1 px-2.5">
+                                {currentHexagram ? (
+                                    <>
+                                        <p className="font-display text-[1.375rem] leading-tight">
+                                            {currentHexagram.name}
+                                            {changedHexagram && <> <span className="text-base text-foreground-secondary">之</span> {changedHexagram.name}</>}
+                                        </p>
+                                        <p className="text-xs text-foreground-secondary">
+                                            {formatHexagramPalace(currentHexagram.code)} · 主{currentHexagram.nature}
+                                            {changedHexagram && <>，变入{formatHexagramPalace(changedHexagram.code)}</>}
+                                        </p>
+                                    </>
+                                ) : (
+                                    <>
+                                        <p className="font-display text-[1.375rem] leading-tight text-foreground-tertiary">未选卦</p>
+                                        <p className="text-xs text-foreground-secondary">
+                                            {selectMode === 'trigram' && (upperTrigram || lowerTrigram) ? '上下卦都选好后显示本卦' : '选好本卦后，在这里点出动爻'}
+                                        </p>
+                                    </>
+                                )}
+                            </div>
 
-                    {/* 变卦显示 */}
-                    {changedInfo?.changedHexagram && (
-                        <div className={`mt-3 ${RESULT_CHIP_CLASS}`}>
-                            <span className="text-foreground-secondary">变卦：</span>
-                            <span className="font-display text-base text-accent-strong">{changedInfo.changedHexagram.name}</span>
-                            <span className="text-foreground-secondary">
-                                · {formatHexagramPalace(changedInfo.changedHexagram.code)}
-                            </span>
-                        </div>
-                    )}
-                </section>
+                            <ChangingLinesSelector
+                                hexagramCode={effectiveCode}
+                                value={changedPositions}
+                                onChange={setChangedPositions}
+                            />
 
-                {/* 生成按钮 */}
-                <Button
-                    onClick={handleGenerate}
-                    disabled={!effectiveCode || isLoading}
-                    className="h-12 w-full rounded-xl"
-                >
-                    {isLoading ? (
-                        <>
-                            <SoundWaveLoader variant="inline" />
-                            生成中...
-                        </>
-                    ) : (
-                        <>
-                            <Sparkles className="h-5 w-5" />
-                            生成卦象
-                        </>
-                    )}
-                </Button>
+                            <p className="px-2.5 text-xs leading-relaxed text-foreground-tertiary">
+                                点爻线设为动爻，可多选；不点为静卦。
+                            </p>
 
-                {/* 提示 */}
-                <p className="text-center text-xs text-foreground-secondary">
-                    系统将根据当前时间计算干支、旺衰、空亡等传统分析
-                </p>
+                            <Button
+                                size="lg"
+                                onClick={handleGenerate}
+                                disabled={!currentHexagram}
+                                loading={isLoading}
+                                loadingText="正在排盘"
+                                className="w-full"
+                            >
+                                排出卦盘
+                            </Button>
+                            <p className="-mt-1 text-center text-xs text-foreground-tertiary">
+                                按此刻时间取月建、日辰与旬空
+                            </p>
+                        </aside>
+                    </div>
+                </div>
             </div>
         </div>
     );

@@ -1,0 +1,74 @@
+/* 起卦页的铜钱与爻线动效。铜色是铜钱的领域色，只在 .liuyao-coin 内使用。 */
+.liuyao-coin {
+  --coin-hi: #e4c78c;
+  --coin-body: #b88d4d;
+  --coin-rim: #7d5c2b;
+  --coin-ink: #4f3514;
+  --coin-back-hi: #cfae72;
+  --coin-back-body: #a07942;
+  --coin-duration: 820ms;
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: var(--coin-size, 4rem);
+  aspect-ratio: 1;
+}
+.dark .liuyao-coin {
+  --coin-hi: #d0ab6c;
+  --coin-body: #977341;
+  --coin-rim: #5f4524;
+  --coin-ink: #2e1f0b;
+  --coin-back-hi: #b8935a;
+  --coin-back-body: #806035;
+}
+
+.liuyao-coin__hop,
+.liuyao-coin__shadow { grid-area: 1 / 1; }
+.liuyao-coin__hop { position: relative; z-index: 1; width: 100%; height: 100%; perspective: 40rem; }
+.liuyao-coin__body {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  transform-style: preserve-3d;
+  transform: rotate(var(--coin-tilt, 0deg)) rotateX(var(--coin-turn, 0deg));
+}
+.liuyao-coin__face { position: absolute; inset: 0; width: 100%; height: 100%; backface-visibility: hidden; }
+.liuyao-coin__face--back { transform: rotateX(180deg); }
+.liuyao-coin__shadow {
+  align-self: end;
+  width: 78%;
+  height: 14%;
+  translate: 0 38%;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, color-mix(in srgb, var(--foreground) 16%, transparent), transparent);
+}
+
+/* 抛掷：先腾起翻转，落下后轻弹一次，最终停在结果那一面。 */
+@keyframes liuyao-coin-spin {
+  from { transform: rotate(var(--coin-tilt, 0deg)) rotateX(var(--coin-from, 0deg)); }
+  to { transform: rotate(var(--coin-tilt, 0deg)) rotateX(calc(var(--coin-spins, 3) * 360deg + var(--coin-turn, 0deg))); }
+}
+@keyframes liuyao-coin-hop {
+  0% { translate: 0 0; }
+  42% { translate: 0 -2.25rem; }
+  78% { translate: 0 0; }
+  88% { translate: 0 -.3rem; }
+  100% { translate: 0 0; }
+}
+@keyframes liuyao-coin-shadow {
+  42% { scale: .55; opacity: .45; }
+}
+.liuyao-coin[data-tossing] .liuyao-coin__body { animation: liuyao-coin-spin var(--coin-duration) cubic-bezier(.2, .62, .28, 1) var(--coin-delay, 0ms) both; }
+.liuyao-coin[data-tossing] .liuyao-coin__hop { animation: liuyao-coin-hop var(--coin-duration) var(--ease-out) var(--coin-delay, 0ms) both; }
+.liuyao-coin[data-tossing] .liuyao-coin__shadow { animation: liuyao-coin-shadow var(--coin-duration) var(--ease-out) var(--coin-delay, 0ms) both; }
+
+/* 掷钱的托盘：浅浅一圈，铜钱落在里面。 */
+.liuyao-tray {
+  background: radial-gradient(closest-side, var(--background-tertiary), color-mix(in srgb, var(--background-tertiary) 35%, transparent) 72%, transparent);
+  box-shadow: inset 0 0 0 var(--hairline) var(--hairline-color);
+}
+
+/* 新得一爻：爻线从中间展开。 */
+@keyframes liuyao-line-in { from { opacity: 0; scale: .4 1; } }
+.liuyao-line-in { animation: liuyao-line-in var(--duration-sheet) var(--ease-out) backwards; }

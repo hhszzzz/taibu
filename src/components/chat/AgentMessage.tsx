@@ -91,7 +91,8 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
         <MarkdownContent content={record.summary ?? record.reason ?? ''} />
       </details>)}
       {groups.map((group, index) => {
-        if (group.type === 'activity') return <AgentActivityGroup key={group.id} parts={group.parts} data={data} active={active && !groups.slice(index + 1).some(next => next.type === 'activity')} />;
+        // 模型一旦开始写正文，这之前的工具过程就收起来；任务仍在跑时最后一段过程保持展开。
+        if (group.type === 'activity') return <AgentActivityGroup key={group.id} parts={group.parts} data={data} active={active && !groups.slice(index + 1).some(next => next.type === 'activity' || (next.type === 'content' && next.part.type === 'text'))} />;
         const part = group.part;
         if (part.type === "text") {
           const streaming = data.status === 'running' && index === groups.length - 1 && index === lastText;

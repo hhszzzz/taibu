@@ -112,6 +112,7 @@ import { QuoteSelection } from '@/components/chat/QuoteSelection';
 import { VirtualizedChatMessageList } from '@/components/chat/VirtualizedChatMessageList';
 import { useTranscriptScroll } from '@/lib/chat/use-transcript-scroll';
 import { scrollToMessageId } from '@/lib/chat/message-navigation';
+import { messageQuoteToken, stripMessageQuoteTokens } from '@/lib/chat/quotes';
 import { ShareConversationMenu } from '@/components/chat/ShareConversationMenu';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 const IMAGE_FIXTURE = { id: '11111111-1111-4111-8111-111111111111', size: '1024x1024', mimeType: 'image/png' };
@@ -376,7 +377,7 @@ function PolishProbe() {
     onEditMessage={async (id, content) => { window.fixture.polish.edits.push([id, content]); }} onRegenerateResponse={() => {}} /></section>;
 }
 
-// 引用：选中助手回答中的文字（或「引用整条」）进入输入框上方的引用条，发送后成为用户消息上方的引用卡。
+// 引用：选中助手回答中的文字（或「引用整条」）在输入框里变成 @提及 同形态的内联 chip，发送后成为用户消息上方的引用卡。
 const QUOTE_MESSAGES = [
   { id: 'quote-u0', role: 'user', content: '先问一句', createdAt: ROUND_START },
   { id: 'quote-a1', role: 'assistant', content: '庚金带煞，刚健为最。用神专求月令，不可只论旺衰。', createdAt: ROUND_START },
@@ -387,13 +388,21 @@ function QuoteProbe() {
   const [value, setValue] = useState('');
   const containerRef = useRef(null);
   const endRef = useRef(null);
-  const add = quote => setQuotes(current => current.length >= 3 || current.some(item => item.messageId === quote.messageId && item.text === quote.text)
-    ? current : [...current, quote]);
+  const add = quote => {
+    const token = messageQuoteToken(quote);
+    setQuotes(current => current.length >= 3 || current.some(item => messageQuoteToken(item) === token) ? current : [...current, quote]);
+    setValue(current => {
+      if (current.includes(token)) return current;
+      const base = current.trimEnd();
+      return base ? base + '\n' + token + ' ' : token + ' ';
+    });
+  };
   window.fixture.quote = { quotes: () => quotes };
+  const activeQuotes = quotes.filter(quote => value.includes(messageQuoteToken(quote)));
   const send = () => {
-    const text = value.trim();
+    const text = stripMessageQuoteTokens(value, quotes);
     if (!text) return;
-    setMessages(current => [...current, { id: 'quote-u2', role: 'user', content: text, createdAt: ROUND_START, quotes }]);
+    setMessages(current => [...current, { id: 'quote-u2', role: 'user', content: text, createdAt: ROUND_START, quotes: activeQuotes }]);
     setQuotes([]);
     setValue('');
   };
@@ -401,8 +410,7 @@ function QuoteProbe() {
     <div ref={containerRef}><ChatMessageList messages={messages} isLoading={false} messagesEndRef={endRef} onQuoteMessage={add} /></div>
     <QuoteSelection containerRef={containerRef} messages={messages} onQuote={add} />
     <ChatComposer draftKey="quote-fixture" inputValue={value} onInputChange={setValue} onSend={send} isLoading={false}
-      userId="alice" disabled={false} quotes={quotes}
-      onRemoveQuote={index => setQuotes(current => current.filter((_, position) => position !== index))} />
+      userId="alice" disabled={false} quotes={activeQuotes} />
   </section>;
 }
 
@@ -2593,17 +2601,23 @@ export async function run(existingPage, bundlePath) {
     await floatingQuote.waitFor();
     check('selecting assistant text floats the 引用 button', await floatingQuote.isVisible());
     await floatingQuote.click();
-    const quoteBar = quoteProbe.locator('.chat-composer-quotes');
-    await quoteBar.waitFor();
-    check('the floating button adds the selected passage to the quote bar',
-      (await quoteBar.innerText()).includes('庚金带煞') && await quoteBar.getByRole('button', { name: '移除第 1 段引用' }).count() === 1);
+    const quoteChips = quoteProbe.locator('.chat-composer-overlay .chat-mention-token[data-type="quote"]');
+    await quoteChips.first().waitFor();
+    check('the floating button puts the selected passage into the composer as an inline chip',
+      (await quoteChips.first().innerText()).includes('庚金带煞'));
     await quoteProbe.getByRole('button', { name: '引用整条' }).click();
-    check('引用整条 appends the whole answer to the quote bar',
-      (await quoteBar.innerText()).includes('已引用 2 段') && (await quoteBar.innerText()).includes('用神专求月令'));
-    await quoteBar.getByRole('button', { name: '移除第 2 段引用' }).click();
-    check('a quote can be removed from the bar', (await quoteBar.innerText()).includes('已引用 1 段'));
-    await quoteProbe.getByLabel('输入消息').fill('这段话怎么理解？');
-    await quoteProbe.getByLabel('输入消息').press('Enter');
+    check('引用整条 appends the whole answer as a second chip',
+      await quoteChips.count() === 2 && (await quoteProbe.locator('.chat-composer-overlay').innerText()).includes('用神专求月令'));
+    const quoteInput = quoteProbe.getByLabel('输入消息');
+    // End 在 textarea 里只走到当前行末：直接把光标放到整段草稿末尾再退格。
+    await quoteInput.evaluate(element => { element.focus(); element.setSelectionRange(element.value.length, element.value.length); });
+    await quoteInput.press('Backspace');
+    await quoteInput.press('Backspace');
+    check('deleting a quote chip removes that quote', await quoteChips.count() === 1);
+    // 删掉 chip 后组件会在下一帧把光标放回 chip 起点；等它落定再输入，避免与输入交错。
+    await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
+    await quoteInput.pressSequentially('这段话怎么理解？');
+    await quoteInput.press('Enter');
     const sentUser = quoteProbe.locator('[data-message-id="quote-u2"]');
     await sentUser.waitFor();
     const quoteCard = sentUser.locator('.chat-message-quote');
@@ -2613,7 +2627,8 @@ export async function run(existingPage, bundlePath) {
       const bubble = node.querySelector('.chat-user-bubble');
       return !!quote && !!bubble && !!(quote.compareDocumentPosition(bubble) & Node.DOCUMENT_POSITION_FOLLOWING);
     }));
-    check('sending clears the quote bar', await quoteProbe.locator('.chat-composer-quotes').count() === 0);
+    check('the sent draft drops the chip text', await sentUser.innerText().then(text => text.includes('这段话怎么理解？') && !text.includes('@引用')));
+    check('sending clears the quote chips', await quoteChips.count() === 0);
     // 手机长按选择后点浮出的按钮：React 的 touchstart 监听是被动的，不能靠 preventDefault 保住选区，
     // 所以触摸路径必须在 touchend 上完成引用。
     await page.evaluate(() => {
@@ -2636,9 +2651,9 @@ export async function run(existingPage, bundlePath) {
       button.dispatchEvent(new TouchEvent('touchstart', { bubbles: true, cancelable: true }));
       button.dispatchEvent(new TouchEvent('touchend', { bubbles: true, cancelable: true }));
     });
-    await quoteBar.waitFor();
-    check('a touch tap on the floating button also adds the selected passage',
-      (await quoteBar.innerText()).includes('已引用 1 段'));
+    await quoteChips.first().waitFor();
+    check('a touch tap on the floating button also adds the selected passage as a chip',
+      (await quoteChips.first().innerText()).includes('庚金带煞') && await quoteChips.count() === 1);
     await page.evaluate(() => window.fixture.mount.quote(false));
     await quoteProbe.waitFor({ state: 'detached' });
 
@@ -3383,7 +3398,12 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
     await interactive.getByRole('button', { name: '跟随模型', exact: true }).click();
     await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
-    check('A native chart action highlights the exact day branch and says the model is being followed', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支') && text.includes('太卜正在查看') && text.includes('跟随中')));
+    // 有位置清单时，说明与清单一起收进「N 处」；展开后才出现。
+    const focusChips = interactive.locator('.agent-board-chips-toggle');
+    await focusChips.click();
+    check('A native chart action highlights the exact day branch and says the model is being followed', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('太卜正在查看') && text.includes('跟随中')) &&
+      await interactive.locator('.agent-board-focus-detail').innerText().then(text => text.includes('模型查看日支')));
+    await focusChips.click();
     await interactive.locator('[data-chart-target="bazi:cell:2:0"]').click();
     await until(() => window.fixture.chartQuestion?.targets?.[0]?.id === 'bazi:cell:2:0');
     check('Clicking a chart position asks about it without changing the model-given focus', await interactive.getByRole('button', { name: '跟随模型', exact: true }).getAttribute('aria-pressed') === 'true' &&
@@ -3426,7 +3446,7 @@ export async function run(existingPage, bundlePath) {
     await relation.click();
     await until(() => window.fixture.chartQuestion?.targets?.[0]?.kind === 'bazi_relation');
     await interactive.getByRole('button', { name: '展开查看的位置', exact: true }).click();
-    check('A relation also becomes a chart question while the model focus stays authoritative', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('模型查看日支')) &&
+    check('A relation also becomes a chart question while the model focus stays authoritative', await interactive.locator('.agent-board-focus-detail').innerText().then(text => text.includes('模型查看日支')) &&
       await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0] === '日柱地支 辰'));
     // 五行详查补进盘面：干支自坐与相邻天干画成线，通根与月令透出标在藏干旁并写出所指的天干。
     const wuxingFacts = await page.evaluate(() => {
@@ -3436,7 +3456,8 @@ export async function run(existingPage, bundlePath) {
     });
     await page.evaluate(() => window.fixture.baziDrilldowns());
     await renderBarrier();
-    check('While following, the board names the drilldown it is viewing and keeps relations and flow drawn together', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('太卜正在查看') && text.includes('八字五行旺衰')) &&
+    check('While following, the board names the drilldown it is viewing and keeps relations and flow drawn together', await interactive.locator('.agent-board-focus').innerText().then(text => text.includes('太卜正在查看')) &&
+      await interactive.locator('.agent-board-focus-detail').innerText().then(text => text.includes('八字五行旺衰')) &&
       await edges.count() === wuxingFacts.lines + 1 && await breakEdge.count() === 1);
     // 紧凑与宽松两种藏干写法都在 DOM 里（样式只显示一种），所以每个标记计两次；无根只写在宽松的十神旁。
     const tags = kind => interactive.locator('.agent-chart-scroll [data-relation-tag="' + kind + '"]');
@@ -3630,12 +3651,12 @@ export async function run(existingPage, bundlePath) {
     await renderBarrier();
 
     // Tool families: every call reaches its own workspace view from the chat, and following tracks the latest call.
+    // 推演结果例外：只在过程条的步骤里展开，不另开工作区标签。
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.evaluate(() => window.fixture.workspaceFamilies());
     if (await results.getByRole('button', { name: /任务过程/ }).getAttribute('aria-expanded') !== 'true') await results.getByRole('button', { name: /任务过程/ }).click();
     const dayunStep = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: '八字大运' }) });
     await dayunStep.locator('.agent-step-row').click();
-    await dayunStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).click();
     const workspacePanel = page.locator('#agent-workspace-panel');
     // 过程标签已移除：从聊天转录的步骤行打开同一个工作区视图。
     const openProcessStep = async (name, tabName) => {
@@ -3657,9 +3678,20 @@ export async function run(existingPage, bundlePath) {
       if (await step.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await step.locator('.agent-step-row').click();
       await step.locator('.agent-step-entities[aria-label="协作成员"] button').filter({ hasText: memberName }).click();
     };
-    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
-    check('A calculation step opens the persisted Core dayun timeline with exactly one current period', await workspacePanel.locator('.agent-ws-timeline > li').count() === 9 &&
-      await workspacePanel.locator('.agent-ws-timeline > li[aria-current="step"]').count() === 1 && await workspacePanel.getByText('Core 规范文本', { exact: true }).count() === 1);
+    // 推演结果没有工作区页：展开它的过程步骤，断言就在步骤里做。
+    const openCalculationStep = async (name) => {
+      const toggle = results.getByRole('button', { name: /任务过程/ });
+      if (await toggle.getAttribute('aria-expanded') !== 'true') await toggle.click();
+      const step = results.locator('.agent-step').filter({ has: page.locator('.agent-step-title', { hasText: name }) }).last();
+      if (await step.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await step.locator('.agent-step-row').click();
+      return step;
+    };
+    check('A calculation step discloses the Core dayun timeline in place with exactly one current period', await dayunStep.locator('.agent-ws-timeline > li').count() === 9 &&
+      await dayunStep.locator('.agent-ws-timeline > li[aria-current="step"]').count() === 1 &&
+      await dayunStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).count() === 0);
+    // 其余步骤仍从聊天打开工作区；后面的面板断言用方法页。
+    await openProcessStep('加载方法或技能');
+    await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('Desktop workspace is a complementary panel rather than a modal', await page.locator('aside#agent-workspace-panel').count() === 1 && await page.getByRole('dialog', { name: '工作区' }).count() === 0);
     // 拖拽 = 整块面板实时跟手：拖动中直接改 DOM 宽度，松手后提交为状态。
     const resizer = workspacePanel.locator('.agent-panel-resizer');
@@ -3755,24 +3787,23 @@ export async function run(existingPage, bundlePath) {
     await openProcessStep('加载方法或技能');
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => /版本 \d+\.\d+\.\d+/.test(text) && text.includes('不增加任何执行权限') && text.includes('子平八字')));
-    await openProcessStep('八字合盘');
-    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
-    check('A pairing lists both people and the three relation groups from Core', await workspacePanel.locator('.agent-ws-group').count() === 3 &&
-      await workspacePanel.innerText().then(text => text.includes('日主互见') && text.includes('年命纳音') && text.includes('五行互补') && text.includes('女方')));
-    const pairingStrip = workspacePanel.locator('.agent-ws-pairing');
-    const pairingLines = workspacePanel.locator('.agent-ws-pairing-relations > li');
+    const hepanStep = await openCalculationStep('八字合盘');
+    check('A pairing lists both people and the three relation groups from Core', await hepanStep.locator('.agent-ws-group').count() === 3 &&
+      await hepanStep.innerText().then(text => text.includes('日主互见') && text.includes('年命纳音') && text.includes('五行互补') && text.includes('女方')));
+    const pairingStrip = hepanStep.locator('.agent-ws-pairing');
+    const pairingLines = hepanStep.locator('.agent-ws-pairing-relations > li');
     const pairingCount = await pairingLines.count();
     await pairingLines.first().hover();
     check('A pairing draws each relation between the two charts on one strip, and pointing at a line lights its arc', pairingCount > 0 &&
       await pairingStrip.locator('[data-relation-cell]').count() === 16 && await pairingStrip.locator('[data-relation-edge]').count() === pairingCount &&
       await pairingStrip.locator('[data-relation-edge][data-lit]').count() === 1 && await pairingLines.first().getAttribute('data-active') === '');
-    await workspacePanel.locator('h3').first().hover();
-    await openProcessStep('黄历择日筛选');
-    await workspacePanel.locator('[data-workspace-view="calculation"]').waitFor();
-    check('A date selection names every zodiac it avoids', await workspacePanel.innerText().then(text => text.includes('避冲 丑牛（冲未）、酉鸡（冲卯）')));
-    await openProcessStep('推算出生时辰');
-    await workspacePanel.locator('[data-workspace-view="calculation"] [aria-label="候选时辰"]').waitFor();
-    const hourList = workspacePanel.locator('[aria-label="候选时辰"]');
+    await page.mouse.move(0, 0);
+    await renderBarrier();
+    const almanacStep = await openCalculationStep('黄历择日筛选');
+    check('A date selection names every zodiac it avoids', await almanacStep.innerText().then(text => text.includes('避冲 丑牛（冲未）、酉鸡（冲卯）')));
+    const hourStep = await openCalculationStep('推算出生时辰');
+    const hourList = hourStep.locator('[aria-label="候选时辰"]');
+    await hourList.waitFor();
     check('Hour candidates list every hour of the day, and the longest line wraps inside the workspace', await hourList.locator('li[data-hour-candidate]').count() === 13 &&
       await hourList.locator('li[data-hour-candidate="辰时"]').innerText().then(text => text.includes('辰戌相冲（时支辰·流年支戌）')) &&
       await hourList.evaluate(list => [...list.querySelectorAll('li, small')].every(node => node.scrollWidth <= node.clientWidth + 1) && list.scrollWidth <= list.clientWidth + 1));
@@ -3821,8 +3852,10 @@ export async function run(existingPage, bundlePath) {
     await workspacePanel.getByRole('tab', { name: '概览', exact: true }).click();
     check('The overview keeps results without an evidence card, task summary or a second copy of the process', await workspacePanel.locator('[data-overview-card="evidence"]').count() === 0 &&
       await workspacePanel.innerText().then(text => text.includes('本对话的成果') && !text.includes('过程资料') && !text.includes('依据与定位') && !text.includes('任务摘要') && !text.includes('本任务计费')));
-    const familyTabs = await Promise.all(['八字大运', '子平八字', '两派会诊', '子平', '盲派', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
-    check('Opened and followed family views stay as one tab each', familyTabs.every(count => count === 1));
+    // 推演结果没有工作区标签：大运、合盘、择日、时辰都在过程条的步骤里。
+    const familyTabs = await Promise.all(['子平八字', '两派会诊', '子平', '盲派', '档案检索', '长期记忆', '补充信息', '回答依据'].map(name => workspacePanel.getByRole('tab', { name, exact: true }).count()));
+    check('Opened and followed family views stay as one tab each', familyTabs.every(count => count === 1) &&
+      await workspacePanel.getByRole('tab', { name: '八字大运', exact: true }).count() === 0);
     await results.getByRole('button', { name: /^依据 \d+/ }).click();
     await workspacePanel.locator('[data-workspace-view="evidence"]').waitFor();
     check('The answer evidence chip opens the numbered sources in the workspace', await results.getByRole('button', { name: /^依据 \d+/ }).innerText().then(text => text.includes('联网 2')));

@@ -67,6 +67,8 @@ import MeihuaResultPage from '@/app/meihua/result/page';
 import XiaoliurenResultPage from '@/app/xiaoliuren/result/page';
 import DaliurenResultPage from '@/app/daliuren/result/page';
 import LiuyaoResultPage from '@/app/liuyao/result/page';
+import { CoinToss } from '@/components/liuyao/CoinToss';
+import { ChangingLinesSelector } from '@/components/liuyao/ChangingLinesSelector';
 import { calculateMeihuaBundle } from '@/lib/divination/meihua';
 import { calculateXiaoliurenBundle } from '@/lib/divination/xiaoliuren';
 import { findHexagram } from '@/lib/divination/liuyao';
@@ -414,6 +416,17 @@ function QuoteProbe() {
   </section>;
 }
 
+// 铜钱起卦：六掷落爻，记录交回六爻与每掷结果；动爻选择器单独挂一份。
+function CastingProbe() {
+  const [completed, setCompleted] = useState(null);
+  const [changing, setChanging] = useState([]);
+  window.fixture.casting = { completed: () => completed, changing: () => changing };
+  return <section data-testid="casting-probe">
+    <CoinToss onComplete={(yaos, results) => setCompleted({ yaos, results })} />
+    <ChangingLinesSelector hexagramCode="111000" value={changing} onChange={setChanging} />
+  </section>;
+}
+
 // Chart and visual cards share one shell; a visual runs in a sandboxed srcdoc iframe.
 function VisualizationProbe() {
   const [state, setState] = useState({ content: '', streaming: false });
@@ -663,6 +676,7 @@ function Shell() {
   const [roundsMounted, setRoundsMounted] = useState(false);
   const [polishMounted, setPolishMounted] = useState(false);
   const [quoteMounted, setQuoteMounted] = useState(false);
+  const [castingMounted, setCastingMounted] = useState(false);
   const [visualizationMounted, setVisualizationMounted] = useState(false);
   const [snapshotMounted, setSnapshotMounted] = useState(false);
   const [tarotMounted, setTarotMounted] = useState(false);
@@ -704,7 +718,7 @@ function Shell() {
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
     annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted, scheduled: setScheduledMounted,
     guestComposer: setGuestComposerMounted, modelSelector: setModelSelectorMounted,
-    visualization: setVisualizationMounted, quote: setQuoteMounted, uiPrimitives: setUiPrimitivesMounted };
+    visualization: setVisualizationMounted, quote: setQuoteMounted, casting: setCastingMounted, uiPrimitives: setUiPrimitivesMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
   window.fixture.deleteHistory = deleteHistorySummary;
@@ -793,6 +807,7 @@ function Shell() {
     {roundsMounted && <RoundsProbe />}
     {polishMounted && <PolishProbe />}
     {quoteMounted && <QuoteProbe />}
+    {castingMounted && <CastingProbe />}
     {visualizationMounted && <VisualizationProbe />}
     {historyMounted && <section data-testid="history-page"><HistoryPageTemplate {...historyConfig} /></section>}
     {drawerMounted && <section data-testid="history-drawer"><HistoryDrawer type="tarot" /></section>}
@@ -2656,6 +2671,31 @@ export async function run(existingPage, bundlePath) {
       (await quoteChips.first().innerText()).includes('庚金带煞') && await quoteChips.count() === 1);
     await page.evaluate(() => window.fixture.mount.quote(false));
     await quoteProbe.waitFor({ state: 'detached' });
+
+    // 铜钱起卦：六掷自下而上成卦；动爻在卦象上直接点选。
+    await page.evaluate(() => window.fixture.mount.casting(true));
+    const castingProbe = page.getByTestId('casting-probe');
+    const tossButton = castingProbe.getByRole('button', { name: /^掷.爻$/ });
+    for (let round = 1; round <= 6; round += 1) {
+      await tossButton.click();
+      await until(count => document.querySelector('[data-testid="casting-probe"]')?.textContent.includes('已掷 ' + count + ' / 6'), round);
+    }
+    await until(() => window.fixture.casting.completed() !== null);
+    const cast = await page.evaluate(() => {
+      const done = window.fixture.casting.completed();
+      return { yaos: done.yaos.length, results: done.results.length, coins: done.results.every(item => item.coins.length === 3), positions: done.yaos.map(line => line.position) };
+    });
+    check('Six tosses record six bottom-up lines and hand the completed cast to the page', cast.yaos === 6 && cast.results === 6 && cast.coins && cast.positions.join(',') === '1,2,3,4,5,6');
+    check('The cast panel names every recorded line and reports the finished hexagram', await castingProbe.locator('ol li').allInnerTexts().then(rows => rows.length === 6 && rows.every(text => /单|拆|重|交/.test(text))) &&
+      await castingProbe.getByText('卦成，正在排盘').count() === 1);
+    const firstLine = castingProbe.getByRole('button', { name: '初爻，阳爻，动爻' });
+    await firstLine.click();
+    check('Clicking a line marks it as moving', await firstLine.getAttribute('aria-pressed') === 'true' &&
+      await firstLine.innerText().then(text => text.includes('动') && text.includes('○')));
+    await firstLine.click();
+    check('Clicking the moving line again clears it', await firstLine.getAttribute('aria-pressed') === 'false');
+    await page.evaluate(() => window.fixture.mount.casting(false));
+    await castingProbe.waitFor({ state: 'detached' });
 
     const openCharts = async () => {
       await page.evaluate(() => { history.replaceState(null, '', '#settings/charts'); window.dispatchEvent(new HashChangeEvent('hashchange')); });

@@ -1,6 +1,17 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 
+test('a quoted passage becomes one inline chip token that the draft can drop again', async () => {
+    const { messageQuoteToken, stripMessageQuoteTokens } = require('../lib/chat/quotes') as typeof import('../lib/chat/quotes');
+    const quote = { messageId: 'a1', text: '庚金带煞，刚健为最。\n用神专求月令，不可只论旺衰，亦要看格局高低。' };
+    const token = messageQuoteToken(quote);
+    assert.equal(token, '@ 引用「庚金带煞，刚健为最。 用神专求月令，不可只论旺衰…」', 'newlines fold to spaces and the preview stops at 24 characters');
+    assert.equal(messageQuoteToken({ messageId: 'a2', text: '短句' }), '@ 引用「短句」', 'a short passage keeps its whole text');
+    assert.equal(stripMessageQuoteTokens(`这段话怎么理解？\n${token} `, [quote]), '这段话怎么理解？');
+    assert.equal(stripMessageQuoteTokens(`${token} ${token}`, [quote]), '', 'every occurrence of the chip leaves the draft');
+    assert.equal(stripMessageQuoteTokens('只有问题', [quote]), '只有问题');
+});
+
 test('quotes serialize into one reference block that names each excerpt', async () => {
     const { serializeMessageQuotes } = require('../lib/chat/quotes') as typeof import('../lib/chat/quotes');
     assert.equal(serializeMessageQuotes(undefined), '');

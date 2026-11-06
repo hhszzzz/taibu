@@ -366,7 +366,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         setFollowUpSuggestion(suggestion!);
         focusComposer();
     }, [latestAgentData, inputValue, disabled, focusComposer]);
-    // 用户一动手写自己的内容，建议就让位；切换对话时也不带走。
+    // 建议一直留到这一轮真正发出为止：中途打了又删，幽灵文本仍在；切换对话时不带走。
     const suggestionScope = useRef(workspaceKey);
     useEffect(() => {
         if (suggestionScope.current === workspaceKey) return;
@@ -573,7 +573,7 @@ export function ChatLayout(props: ChatLayoutProps) {
         runningSendMode: preferences.runningSendMode ?? 'supplement',
         onQueueMessage: props.onQueueMessage,
         inputValue, isLoading, isSendingToList,
-        onInputChange: (value: string) => { if (value.trim()) setFollowUpSuggestion(null); onInputChange(value); },
+        onInputChange,
         onSend, onStop, onAuthRequired, disabled,
         selectedModel, onModelChange, reasoningEnabled, onReasoningChange,
         userId, attachmentState, onAttachmentChange,

@@ -1195,9 +1195,14 @@ export async function run(existingPage, bundlePath) {
     subscriptionParts: [], modelKey: 'fixture-own', modelLabel: { name: '自带模型', vendor: 'other', icon: null },
     usage: { input: 210, output: 40, cacheRead: 0, cacheWrite: 0, byok: true, prices: { input: 0, output: 0, cacheRead: null, cacheWrite: null } },
     referenceType: null, referenceId: null, description: '自带密钥调用', createdAt: '2026-10-20T00:00:00.000Z' };
-  const ledgerPage = { entries: [ledgerEntry, byokEntry], nextOffset: null, totals: ledgerTotals, byModel: [{ model: 'fixture-analysis', ...ledgerTotals, modelLabel: ledgerLabel }] };
+  // An Agent task charge: the member sees its source and conversation, never the internal run id.
+  const agentEntry = { ...ledgerEntry, id: 'ledger-entry-agent', amountMicros: -2000, source: 'agent', createdAt: '2026-10-19T00:00:00.000Z',
+    usage: { input: 512, output: 64, cacheRead: 0, cacheWrite: 0, prices: { input: 1, output: 2, cacheRead: null, cacheWrite: null } },
+    referenceType: 'agent_run', referenceId: '7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f', description: '' };
+  const ledgerPage = { entries: [ledgerEntry, byokEntry, agentEntry], nextOffset: null, totals: ledgerTotals, byModel: [{ model: 'fixture-analysis', ...ledgerTotals, modelLabel: ledgerLabel }] };
   const adminUsagePage = { ...ledgerPage, entries: [{ ...ledgerEntry, userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com' },
-    { ...byokEntry, userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com' }] };
+    { ...byokEntry, userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com' },
+    { ...agentEntry, userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com' }] };
   const scheduleRun = { id: '9d8e7f6a-5b4c-4d3e-8f90-1a2b3c4d5e6f', scheduleId: '1a2b3c4d-5e6f-4a7b-8c9d-0e1f2a3b4c5d',
     scheduleName: '每日事业运', template: 'custom', cadence: { kind: 'daily', time: '08:00' }, timezone: 'Asia/Shanghai', scheduleEnabled: true,
     userId: '5a4b3c2d-1e0f-4a9b-8c7d-6e5f4a3b2c1d', userEmail: 'alice@example.com', scheduledFor: '2026-10-21T00:00:00.000Z',
@@ -2162,7 +2167,7 @@ export async function run(existingPage, bundlePath) {
     const usageList = usageLog.getByRole('table', { name: '用量日志', exact: true });
     await usageList.getByText('分析模型', { exact: true }).first().waitFor();
     check('The usage log lists priced model calls with the purse that paid', await usageList.getByText('398 / 35', { exact: true }).isVisible()
-      && await usageList.getByRole('img', { name: '订阅额度' }).isVisible()
+      && await usageList.getByRole('img', { name: '订阅额度' }).first().isVisible()
       && requests.some(item => item.pathname === '/api/billing/ledger' && item.search.includes('offset=0')));
     const ledgerReads = () => requests.filter(item => item.pathname === '/api/billing/ledger').length;
     const readsBeforeQuery = ledgerReads();
@@ -2191,14 +2196,25 @@ export async function run(existingPage, bundlePath) {
     await byokDetail.waitFor();
     check('Its detail says the member\'s own key paid for it', await byokDetail.getByText('自带密钥，本站不扣费', { exact: true }).isVisible());
     await byokDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
-    await byokDetail.waitFor({ state: 'detached' });
+    // An Agent charge names its source for the member but hides the internal run id and ledger id.
+    check('An Agent charge reads 太卜Agent in the member log', await usageList.getByText('太卜Agent', { exact: true }).isVisible());
+    await usageList.getByRole('button', { name: '查看', exact: true }).nth(2).click();
+    const agentDetail = page.getByRole('dialog', { name: /流水详情/u });
+    await agentDetail.waitFor();
+    const agentDetailText = await agentDetail.innerText();
+    check('The member detail names 太卜Agent and hides the run id and the ledger id',
+      agentDetailText.includes('太卜Agent') && !agentDetailText.includes('agent_run') &&
+      !agentDetailText.includes('7b1d4c3e-2f6a-4b8c-9d0e-1a2b3c4d5e6f') && !agentDetailText.includes('流水 ID') &&
+      !agentDetailText.includes('ledger-entry-agent'));
+    await agentDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
+    await agentDetail.waitFor({ state: 'detached' });
 
     // The administrator usage log: every kind, the same details, and the email filter.
     await page.getByRole('button', { name: 'Fixture Admin usage route', exact: true }).click();
     const adminUsage = page.getByTestId('admin-usage');
     const adminUsageTable = adminUsage.getByRole('table', { name: '用量明细', exact: true });
     await adminUsageTable.getByText('alice@example.com', { exact: true }).first().waitFor();
-    const adminUsageRow = adminUsageTable.getByRole('row').filter({ hasText: '分析模型' });
+    const adminUsageRow = adminUsageTable.getByRole('row').filter({ hasText: '分析模型' }).first();
     check('The admin usage log lists every kind with the user and a details column', await adminUsageRow.getByText('消费', { exact: true }).isVisible()
       && await adminUsageRow.getByText('对话', { exact: true }).isVisible()
       && await adminUsageTable.getByRole('button', { name: '查看', exact: true }).first().isVisible());
@@ -2207,7 +2223,8 @@ export async function run(existingPage, bundlePath) {
     await adminUsageTable.getByRole('button', { name: '查看', exact: true }).first().click();
     const adminLedgerDetail = page.getByRole('dialog', { name: /流水详情/u });
     await adminLedgerDetail.waitFor();
-    check('A row details dialog opens from the admin log too', await adminLedgerDetail.getByText(/\$2\/百万 × 35/u).isVisible());
+    check('A row details dialog opens from the admin log too, keeping the ledger id for support', await adminLedgerDetail.getByText(/\$2\/百万 × 35/u).isVisible()
+      && await adminLedgerDetail.getByText('流水 ID', { exact: true }).isVisible() && await adminLedgerDetail.getByText('ledger-entry-1', { exact: true }).isVisible());
     await adminLedgerDetail.getByRole('button', { name: '关闭对话框', exact: true }).click();
     await adminLedgerDetail.waitFor({ state: 'detached' });
 
@@ -3599,6 +3616,16 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartInspect(true));
     await renderBarrier();
     check('Edited saved chart data invalidates manual coordinates on the same resource tab', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && await interactive.locator('.chart-cell-button[aria-pressed=true]').count() === 0);
+    // 「详细」视图展开每一步：读取命盘不再重复画同一张缩略图，真正排盘的步骤才有。
+    await page.evaluate(() => window.fixture.recordView('detailed'));
+    await renderBarrier();
+    await results.locator('.agent-step-chart').first().waitFor();
+    const chartThumbs = await results.locator('.agent-step-chart').count();
+    await page.evaluate(() => window.fixture.chartInspect());
+    await renderBarrier();
+    check('Re-reading a chart adds a step but no second chart thumbnail', await results.locator('.agent-step-chart').count() === chartThumbs);
+    await page.evaluate(() => window.fixture.recordView('normal'));
+    await renderBarrier();
     await interactive.getByRole('button', { name: '关闭工作区', exact: true }).click();
     await page.evaluate(() => window.fixture.mount.results(false));
     await renderBarrier();
@@ -4064,13 +4091,14 @@ export async function run(existingPage, bundlePath) {
     check('The sidebar keeps the announcement center entry', await page.evaluate(() => window.fixture.announcementCenter === 1));
     check('The chat route shows the site sidebar without the old fold rail', await sidebar.getByRole('button', { name: '收起侧栏' }).count() === 0 &&
       await page.locator('.chat-nav.is-rail').count() === 0);
-    // An art-of-divination route renders the same sidebar grouped by source type;
-    // its rows must be the identical .chat-nav-row component used under /chat.
+    // An art-of-divination route renders the same sidebar list; its rows must be the
+    // identical .chat-nav-row component used under /chat, keeping the dated groups.
     await page.evaluate(() => { history.pushState(null, '', '/bazi'); window.dispatchEvent(new Event('fixture:navigate')); });
-    await page.waitForFunction(() => !document.querySelector('.chat-nav-group'));
-    check('占术路由下侧栏改用类型分组，行与 /chat 完全同款', await sidebar.locator('.chat-nav-row').count() === 4 &&
+    await page.waitForFunction(() => window.location.pathname === '/bazi');
+    await sidebar.getByText('最近使用', { exact: true }).waitFor();
+    check('占术路由下侧栏是同一套「最近使用」列表，行与 /chat 完全同款', await sidebar.locator('.chat-nav-row').count() === 4 &&
       await sidebarRow('明年适合换工作吗？').locator('.chat-nav-row-link').count() === 1 &&
-      await sidebarRow('明年适合换工作吗？').getByRole('link').getAttribute('href') === '/chat?id=' + sidebarIds[0] &&
+      await sidebarRow('明年适合换工作吗？').getByRole('link').getAttribute('href') === '/chat?id=' + sidebarIds[0] + '&mode=agent' &&
       await sidebar.locator('.chat-nav-row[data-active]').count() === 0);
     await page.evaluate(() => { window.fixture.sidebarSearch = 0; window.addEventListener('taibu:search', () => { window.fixture.sidebarSearch++; }); });
     await sidebar.getByRole('button', { name: '搜索', exact: true }).click();
@@ -4137,8 +4165,10 @@ export async function run(existingPage, bundlePath) {
     });
     const scheduled = page.getByTestId('scheduled-page');
     await scheduled.getByText('每日早报', { exact: true }).first().waitFor();
-    check('The scheduled page lists cadence, next run and the bound conversation', await scheduled.getByText('每天 08:00 · Asia/Shanghai', { exact: true }).count() === 1 &&
-      await scheduled.getByRole('link', { name: '打开对话' }).getAttribute('href') === '/chat?id=alice-1');
+    check('The scheduled page lists cadence, next run and the bound conversation, previewing a legacy prompt without raw variables',
+      await scheduled.getByText('每天 08:00 · Asia/Shanghai', { exact: true }).count() === 1 &&
+      await scheduled.getByText('今天是 当天，先查黄历再给建议。', { exact: true }).count() === 1 &&
+      await scheduled.getByRole('link', { name: '打开对话' }).getAttribute('href') === '/chat?id=alice-1&mode=agent');
     await scheduled.getByRole('button', { name: '暂停', exact: true }).click();
     await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'PATCH' && item.url === '/api/agent/schedules/schedule-1' && item.body?.enabled === false));
     await scheduled.getByText('已暂停', { exact: true }).first().waitFor();
@@ -4156,7 +4186,12 @@ export async function run(existingPage, bundlePath) {
     await scheduled.getByRole('button', { name: '新建定时任务', exact: true }).click();
     const createEditor = page.locator('dialog[open]');
     await createEditor.getByLabel('任务名称').fill('周末整理');
-    await createEditor.getByLabel('执行内容').fill('整理本周记录并列出下周重点。');
+    check('The editor asks for the request in plain language, with no tool names or template variables',
+      await createEditor.getByText('要太卜做什么', { exact: true }).count() === 1 &&
+      await createEditor.getByText(/绑定命盘会像聊天里的资料引用一起交给太卜/u).count() === 1 &&
+      await createEditor.getByText(/\{\{/u).count() === 0 &&
+      await createEditor.getByRole('button', { name: /\{\{/u }).count() === 0);
+    await createEditor.getByLabel('要太卜做什么').fill('整理本周记录并列出下周重点。');
     await createEditor.getByRole('radio', { name: '每周', exact: true }).click();
     await createEditor.getByRole('button', { name: '周一', exact: true }).click();
     await createEditor.getByRole('button', { name: '周六', exact: true }).click();

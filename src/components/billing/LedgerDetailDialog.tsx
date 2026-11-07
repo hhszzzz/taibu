@@ -1,6 +1,6 @@
 /**
  * 流水详情：概览、用量、按单价逐项的计费明细与资金来源。
- * 会员的用量日志、管理端的用量日志与用户账户共用；管理端多出用户一行，Agent 任务可跳到任务日志。
+ * 会员的用量日志、管理端的用量日志与用户账户共用；管理端多出用户一行。
  */
 'use client';
 
@@ -25,6 +25,8 @@ const LINK = 'text-accent hover:underline';
 function ReferenceRow({ entry, admin, onNavigate }: { entry: LedgerEntryWithUser; admin: boolean; onNavigate: () => void }) {
     const { referenceType: type, referenceId: id } = entry;
     if (!type || !id) return null;
+    // Agent 任务编号只给管理员排障用，会员的用量日志不展示。
+    if (type === 'agent_run' && !admin) return null;
     // 管理员调整余额时关联的是操作的管理员本人；早先的流水记的是系统账号，没有可显示的操作人。
     if (type === 'user') {
         if (entry.kind !== 'adjust' || !entry.operatorEmail) return null;
@@ -90,7 +92,7 @@ export function LedgerDetailDialog({ entry, admin = false, onClose, onModel, onU
                 </DetailRow> : null}
                 <ReferenceRow entry={entry} admin={admin} onNavigate={onClose} />
                 <DetailRow label="变动后余额">{formatUsd(entry.walletAfterMicros, { precise: true })}</DetailRow>
-                <DetailRow label="流水 ID" mono copy={entry.id}>{entry.id}</DetailRow>
+                {admin && <DetailRow label="流水 ID" mono copy={entry.id}>{entry.id}</DetailRow>}
             </DetailSection>
 
             {counts.length ? <DetailSection title="用量"

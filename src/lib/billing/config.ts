@@ -83,7 +83,7 @@ export const LEDGER_KIND_TONES: Record<LedgerKind, 'neutral' | 'accent' | 'succe
     usage: 'neutral', refund: 'success', topup: 'success', subscription: 'accent', redeem: 'accent', adjust: 'warning',
 };
 export const BILLING_SOURCE_LABELS: Record<string, string> = {
-    chat: '对话', analysis: '解读', enhance: '润色', image: '生图', agent: '智能体',
+    chat: '对话', analysis: '解读', enhance: '润色', image: '生图', agent: '太卜Agent',
     admin: '管理员', balance: '余额', code: '兑换码', epay: '在线支付',
 };
 

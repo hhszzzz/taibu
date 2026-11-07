@@ -189,7 +189,7 @@ test('formatting helpers describe usage, funding and ledger titles in Chinese', 
   assert.equal(ledgerEntryTitle({ kind: 'usage', source: 'chat', description: '' }), '对话调用');
   assert.equal(ledgerEntryTitle({ kind: 'topup', source: 'epay', description: '充值 $5' }), '充值 $5');
   assert.equal(ledgerEntryTitle({ kind: 'topup', source: 'epay', description: '' }), '充值');
-  assert.equal(billingSourceLabel('agent'), '智能体');
+  assert.equal(billingSourceLabel('agent'), '太卜Agent');
   assert.equal(billingSourceLabel('unknown'), 'unknown');
   assert.equal(windowLabel('five_hour'), '每 5 小时');
   assert.equal(windowLabel('daily'), '每天');

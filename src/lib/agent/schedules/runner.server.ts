@@ -9,6 +9,7 @@ import { isModelOffered } from '@/lib/ai/ai-access';
 import { getSpendableMicros } from '@/lib/billing/account.server';
 import { isFreeTextModel } from '@/lib/billing/pricing';
 import type { Mention } from '@/types';
+import { buildMentionToken } from '@/lib/mention-tokens';
 import { AgentApiError, submitAgentTask, type AgentSubmitBody } from '../submit.server';
 import { expandAgentSchedulePrompt } from './config';
 import {
@@ -50,6 +51,17 @@ async function knowledgeMentions(db: ScopedDb, userId: string, ids: string[]): P
   const rows = await db.tx((trx) => trx.selectFrom('knowledge_bases').select(['id', 'name'])
     .where('user_id', '=', userId).where('id', 'in', ids).execute());
   return rows.map((row) => ({ type: 'knowledge_base' as const, id: row.id, name: row.name, preview: '' }));
+}
+
+/** The bound chart, or the member's current default, as an ordinary message mention. */
+async function chartMention(db: ScopedDb, userId: string, chartId: string | null): Promise<Mention | null> {
+  const settings = chartId ? null : await db.tx((trx) => trx.selectFrom('user_settings')
+    .select('default_bazi_chart_id').where('user_id', '=', userId).executeTakeFirst());
+  const id = chartId ?? settings?.default_bazi_chart_id ?? null;
+  if (!id) return null;
+  const row = await db.tx((trx) => trx.selectFrom('bazi_charts').select(['id', 'name'])
+    .where('id', '=', id).where('user_id', '=', userId).executeTakeFirst());
+  return row ? { type: 'bazi_chart' as const, id: row.id, name: row.name, preview: '' } : null;
 }
 
 /** Why this occurrence cannot run now, or null when it can be submitted. */
@@ -119,16 +131,17 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
     const content = expandAgentSchedulePrompt(schedule.prompt, {
       scheduledFor: run.scheduledFor, timezone: schedule.timezone, name: schedule.name,
     });
-    const chart = schedule.options.baziChartId;
-    const message = schedule.template === 'custom' && chart
-      ? `${content}\n\n绑定命盘：bazi_chart:${chart}（需要时用 read_user_data 读取）。`
-      : content;
+    const chart = await chartMention(db, schedule.userId, schedule.options.baziChartId);
+    const knowledge = await knowledgeMentions(db, schedule.userId, schedule.options.knowledgeBaseIds);
+    const mentions = chart ? [...knowledge, chart] : knowledge;
+    // 像输入框里 @ 资料一样把名称写进这条自动消息；资料仍由普通提交路径解析。
+    const message = mentions.length ? [content.trimEnd(), ...mentions.map(buildMentionToken)].join(' ') : content;
     const body: AgentSubmitBody = {
       conversationId: schedule.conversationId,
       clientRequestId: `schedule:${run.id}`,
       message: { id: `schedule:${run.id}`, content: message, attachments: {}, quotes: [] },
       model: schedule.options.model ?? undefined,
-      mentions: await knowledgeMentions(db, schedule.userId, schedule.options.knowledgeBaseIds),
+      mentions,
       webEnabled: schedule.options.webEnabled,
       codeMode: false,
       planMode: false,

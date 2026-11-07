@@ -1,6 +1,5 @@
 /**
- * 新建 / 编辑定时任务。模板只决定初始内容：每日早报填入黄历与默认命盘的提示词，
- * 之后时间、时区、执行内容和模型都可以改。
+ * 新建 / 编辑定时任务。模板只决定初始需求描述，之后时间、时区、内容和模型都可以改。
  *
  * 'use client' 标记说明：
  * - 表单草稿、保存状态、模型与命盘选择都在浏览器完成
@@ -14,7 +13,7 @@ import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Switch } from '@/components/ui/Switch';
 import { SegmentedControl } from '@/components/ui/SegmentedControl';
-import { useId, useMemo, useRef, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { PenLine, Sunrise, X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
@@ -60,7 +59,7 @@ const BRIEFING: AgentScheduleTemplate = 'daily_briefing';
 
 const TEMPLATES: ReadonlyArray<{ id: AgentScheduleTemplate; title: string; detail: string; icon: typeof PenLine }> = [
   { id: CUSTOM, title: '自定义', detail: '从空白开始写要它做什么', icon: PenLine },
-  { id: BRIEFING, title: '每日早报', detail: '填入黄历与默认命盘的晨间简报', icon: Sunrise },
+  { id: BRIEFING, title: '每日早报', detail: '按绑定命盘生成当天运势与建议', icon: Sunrise },
 ];
 
 const KINDS: ReadonlyArray<{ value: AgentScheduleKind; label: string }> = [
@@ -69,8 +68,6 @@ const KINDS: ReadonlyArray<{ value: AgentScheduleKind; label: string }> = [
   { value: 'monthly', label: '每月' },
   { value: 'interval', label: '固定间隔' },
 ];
-
-const PROMPT_VARIABLES = ['{{date}}', '{{time}}', '{{weekday}}', '{{timezone}}', '{{name}}'] as const;
 
 function draftFromSchedule(schedule: AgentScheduleView): Draft {
   const cadence = schedule.cadence;
@@ -140,7 +137,6 @@ export function ScheduleEditor({
   const [draft, setDraft] = useState<Draft>(() => schedule ? draftFromSchedule(schedule) : draftFromTemplate(template ?? CUSTOM, defaultChartId));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const promptRef = useRef<HTMLTextAreaElement>(null);
   const editing = Boolean(schedule);
   // 无人值守：自己的模型只列 Key 保存在本站的（由本站代为请求）。
   const models = [
@@ -156,15 +152,6 @@ export function ScheduleEditor({
     } else {
       patch({ template: next });
     }
-  };
-
-  const appendVariable = (token: string) => {
-    const next = `${draft.prompt}${draft.prompt && !/\s$/u.test(draft.prompt) ? ' ' : ''}${token}`;
-    patch({ prompt: next });
-    requestAnimationFrame(() => {
-      promptRef.current?.focus();
-      promptRef.current?.setSelectionRange(next.length, next.length);
-    });
   };
 
   const save = async () => {
@@ -242,16 +229,12 @@ export function ScheduleEditor({
               <Input className="sched-input" aria-label="任务名称" value={draft.name} maxLength={AGENT_SCHEDULE_NAME_MAX} disabled={saving}
                 placeholder="例如：每日早报" onChange={event => patch({ name: event.target.value })} />
             </label>
-            <label className="sched-field"><span>执行内容</span>
-              <Textarea ref={promptRef} className="sched-textarea" aria-label="执行内容" rows={5} value={draft.prompt} maxLength={AGENT_SCHEDULE_PROMPT_MAX}
-                disabled={saving} placeholder="例如：结合今天的干支与我的命盘，写一段 200 字以内的晨间提示。"
+            <label className="sched-field"><span>要太卜做什么</span>
+              <Textarea className="sched-textarea" rows={5} value={draft.prompt} maxLength={AGENT_SCHEDULE_PROMPT_MAX}
+                disabled={saving} placeholder="例如：结合我的命盘，写一段今天的工作与生活提示。"
                 onChange={event => patch({ prompt: event.target.value })} />
             </label>
-            <div className="sched-vars">
-              <span className="sched-hint">可用变量</span>
-              {PROMPT_VARIABLES.map(token => <Button unstyled key={token} type="button" className="sched-var" disabled={saving}
-                onClick={() => appendVariable(token)}>{token}</Button>)}
-            </div>
+            <p className="sched-hint">像平时聊天一样写需求即可；绑定命盘会像聊天里的资料引用一起交给太卜。</p>
           </section>
 
           <section className="sched-section">
@@ -316,12 +299,13 @@ export function ScheduleEditor({
               <label className="sched-field"><span>绑定命盘</span>
                 <Select className="sched-select" ariaLabel="绑定命盘" placeholder="默认命盘"
                   value={draft.baziChartId || null} disabled={saving}
-                  onChange={baziChartId => patch(draft.template === BRIEFING
+                  onChange={baziChartId => patch(draft.template === BRIEFING && draft.prompt === dailyBriefingPrompt(draft.baziChartId || null)
                     ? { baziChartId, prompt: dailyBriefingPrompt(baziChartId) }
                     : { baziChartId })}
                   options={charts.map(chart => ({ value: chart.id, label: chart.name }))} />
               </label>
             </div>
+            <p className="sched-hint">绑定命盘按名称随消息附上，不需要填写编号；「默认命盘」是在「设置 › 命盘」里设为默认的那张。</p>
             <p className="sched-hint">平台模型按实际用量从余额扣费，余额不足时跳过当次运行；自定义模型只能选 Key 保存在本站的，不计费，Key 不可用时跳过并通知。</p>
             <div className="sched-toggles">
               <div className="sched-toggle-row">

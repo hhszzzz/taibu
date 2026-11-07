@@ -4,7 +4,7 @@ import type { TestContext } from 'node:test';
 import type { ScopedDb } from '../lib/db/context.server';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import {
-  agentScheduleLocalParts, dailyBriefingScheduleDefaults, expandAgentSchedulePrompt,
+  agentScheduleLocalParts, dailyBriefingScheduleDefaults, expandAgentSchedulePrompt, previewAgentSchedulePrompt,
   normalizeAgentScheduleCadence, normalizeAgentScheduleLimits, normalizeAgentScheduleOptions,
   parseAgentScheduleInput,
 } from '../lib/agent/schedules/config';
@@ -49,23 +49,29 @@ test('schedule options keep only known fields and fall back safely', () => {
   assert.deepEqual(normalizeAgentScheduleLimits('bad'), { limit: 20 });
 });
 
-test('prompt variables read the occurrence instant in the schedule zone, not the wall clock', () => {
+test('prompt variables only remain for legacy tasks and never appear raw on a card', () => {
   const content = expandAgentSchedulePrompt('{{date}} {{weekday}} {{time}} {{timezone}} {{name}} {{unknown}}', {
     scheduledFor: '2026-10-29T00:00:00Z', timezone: 'Asia/Shanghai', name: '早报',
   });
   assert.equal(content, '2026-10-29 周四 08:00 Asia/Shanghai 早报 {{unknown}}');
   assert.deepEqual(agentScheduleLocalParts(new Date('2026-03-08T04:30:00Z'), 'America/New_York'), { date: '2026-03-07', time: '23:30', weekday: '周六' });
+  assert.equal(previewAgentSchedulePrompt('今天是 {{date}}（{{weekday}}），看黄历。'), '今天是 当天（当天），看黄历。');
+  assert.equal(previewAgentSchedulePrompt('整理  {{name}}  的重点'), '整理 任务名 的重点');
+  assert.equal(previewAgentSchedulePrompt('{{unknown}} 保持原样'), '{{unknown}} 保持原样');
 });
 
-test('the daily briefing template binds the default chart and runs at eight local time', () => {
+test('the daily briefing template is a plain request with no tools, IDs or variables', () => {
   const template = dailyBriefingScheduleDefaults(null);
   assert.equal(template.template, 'daily_briefing');
   assert.deepEqual(template.cadence, { kind: 'daily', time: '08:00' });
   assert.equal(template.options.baziChartId, null);
-  assert.match(template.prompt, /almanac/);
-  assert.match(template.prompt, /用户默认命盘/);
   const bound = dailyBriefingScheduleDefaults('22222222-2222-4222-8222-222222222222');
-  assert.match(bound.prompt, /22222222-2222-4222-8222-222222222222/);
+  for (const prompt of [template.prompt, bound.prompt]) {
+    assert.doesNotMatch(prompt, /almanac|current_time|read_user_data|bazi_chart|\{\{|工具|ID|时区/u);
+    assert.match(prompt, /今天的运势早报/u);
+  }
+  assert.match(bound.prompt, /绑定命盘/u);
+  assert.doesNotMatch(bound.prompt, /22222222-2222-4222-8222-222222222222/u);
 });
 
 type SettleCall = { runId: string; status: string; values: Record<string, unknown> };

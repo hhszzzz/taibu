@@ -4,7 +4,8 @@ import { randomUUID } from 'node:crypto';
 const quote = value => `'${String(value).replaceAll("'", "''")}'`;
 const json = value => `${quote(JSON.stringify(value))}::jsonb`;
 
-const DAILY_BRIEFING_PROMPT = [
+/** The wording the retired go-live migration inserted; legacy rows are still previewed and expanded. */
+const LEGACY_DAILY_BRIEFING_PROMPT = [
   '今天是 {{date}}（{{weekday}}），时区 {{timezone}}。',
   '请生成今日早报：先调用 almanac 查询今天的黄历宜忌、冲煞与吉时；再读取八字命盘{{chart}}的当日运势；最后用简洁中文给出今日宜忌、总体提示、工作与生活建议，以及两到三条行动事项。',
   '没有命盘时清楚说明，只给一般建议。结论以工具返回的数据为依据，不猜测、不夸大。',
@@ -261,7 +262,7 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
       ALTER TABLE public.reminder_subscriptions ADD CONSTRAINT reminder_subscription_type CHECK (reminder_type = ANY (ARRAY['solar_term','fortune','key_date','daily_briefing']));
       INSERT INTO public.user_settings(user_id,daily_briefing_settings,default_bazi_chart_id) VALUES(${quote(legacy)},'{"timezone":"America/New_York","time":"07:15"}',${quote(chartId)});
       INSERT INTO public.reminder_subscriptions(user_id,reminder_type,enabled) VALUES(${quote(legacy)},'daily_briefing',true);`);
-    const prompt = DAILY_BRIEFING_PROMPT.replace('{{chart}}', '（用户默认命盘；没有命盘时说明）');
+    const prompt = LEGACY_DAILY_BRIEFING_PROMPT.replace('{{chart}}', '（用户默认命盘；没有命盘时说明）');
     await asOwner(`WITH candidates AS (
         SELECT s.user_id,
           coalesce(nullif(btrim(u.daily_briefing_settings->>'timezone'),''),'Asia/Shanghai') AS zone,

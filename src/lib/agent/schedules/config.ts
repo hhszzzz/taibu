@@ -233,8 +233,10 @@ export function agentScheduleLocalParts(now: Date, timezone: string): LocalSched
 }
 
 /**
- * Prompt variables read the occurrence's own instant, never "now": a retried or
- * recovered run must expand the same text and hash to the same request.
+ * A scheduled occurrence is one ordinary Agent message. New prompts contain no
+ * placeholders: the task's timezone and bound chart travel with the message,
+ * and the Agent uses its own time tool. Only legacy {{…}} tokens are expanded,
+ * from the occurrence instant so a retry hashes to the same request.
  */
 export function expandAgentSchedulePrompt(
   prompt: string,
@@ -247,6 +249,17 @@ export function expandAgentSchedulePrompt(
     .replaceAll('{{weekday}}', parts.weekday)
     .replaceAll('{{timezone}}', context.timezone)
     .replaceAll('{{name}}', context.name ?? '');
+}
+
+/** 旧任务留下的变量在卡片上的中文写法。 */
+const PROMPT_VARIABLE_WORDS: Record<string, string> = { date: '当天', weekday: '当天', time: '计划时刻', timezone: '本地时区', name: '任务名' };
+
+/** Plain-language preview: a saved legacy prompt never shows its raw variables on the task card. */
+export function previewAgentSchedulePrompt(prompt: string): string {
+  return prompt
+    .replace(/\{\{(\w+)\}\}/gu, (token, key: string) => PROMPT_VARIABLE_WORDS[key] ?? token)
+    .replace(/\s+/gu, ' ')
+    .trim();
 }
 
 export function describeAgentScheduleCadence(cadence: AgentScheduleCadence): string {
@@ -291,16 +304,11 @@ export function formatAgentScheduleMoment(iso: string | null, timezone: string):
   }
 }
 
-/** The built-in 每日早报 text. The migration SQL carries the same wording for existing users. */
+/** The built-in 每日早报 text: what the member wants, not which tools to call. */
 export function dailyBriefingPrompt(chartId: string | null): string {
-  const chart = chartId
-    ? `（用 read_user_data，type=bazi_chart，id=${chartId} 读取绑定命盘）`
-    : '（用户默认命盘；没有命盘时说明）';
-  return [
-    '今天是 {{date}}（{{weekday}}），时区 {{timezone}}。',
-    `请生成今日早报：先调用 almanac 查询今天的黄历宜忌、冲煞与吉时；再读取八字命盘${chart}的当日运势；最后用简洁中文给出今日宜忌、总体提示、工作与生活建议，以及两到三条行动事项。`,
-    '没有命盘时清楚说明，只给一般建议。结论以工具返回的数据为依据，不猜测、不夸大。',
-  ].join('\n');
+  return chartId
+    ? '结合绑定命盘，生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。没有可用数据时如实说明，不猜测。'
+    : '生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。没有设置默认命盘时给一般建议并说明原因，不猜测。';
 }
 
 export function dailyBriefingScheduleDefaults(chartId: string | null): Pick<AgentScheduleInput, 'name' | 'template' | 'prompt' | 'cadence' | 'options'> {

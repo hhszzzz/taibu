@@ -1,4 +1,4 @@
-/* 定时任务编辑器：分组表单、模板卡片、可点变量与设置行，与设置中心同一套控件语言。 */
+/* 定时任务编辑器：分组表单、模板卡片与设置行，与设置中心同一套控件语言。 */
 
 .app-modal.schedule-editor-dialog {
     width: min(680px, calc(100vw - 32px));
@@ -65,10 +65,7 @@
 .sched-day:hover:not(:disabled) { border-color: var(--border-hover); color: var(--foreground); }
 .sched-day[aria-pressed=true] { border-color: transparent; background: var(--accent); color: var(--on-accent); }
 
-/* 变量 */
-.sched-vars { display: flex; flex-wrap: wrap; align-items: center; gap: .375rem; }
-.sched-var { padding: .125rem .375rem; border-radius: .375rem; background: var(--fill-field); font-family: var(--font-mono); font-size: .6875rem; color: var(--foreground-secondary); }
-.sched-var:hover:not(:disabled) { color: var(--foreground); }
+/* 说明 */
 .sched-hint { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
 .sched-hint[data-tone=warning] { color: var(--danger); }
 

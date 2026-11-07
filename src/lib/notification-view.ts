@@ -1,4 +1,5 @@
 import type { Notification } from '@/lib/notification';
+import { conversationHref } from '@/lib/chat/conversation-href';
 
 export type NotificationReadFilter = 'all' | 'unread' | 'read';
 export type NotificationTypeFilter = 'all' | Notification['type'];
@@ -71,7 +72,23 @@ export function reconcileSelectedNotificationIds(
     );
 }
 
-export function resolveNotificationLink(link: string, origin?: string) {
+/** Agent task notices open the Agent conversation directly; other links stay root-relative. */
+export function resolveNotificationLink(notice: Pick<Notification, 'link' | 'event_data'>, origin?: string): string | null {
+    const link = notice.link;
+    const event = notice.event_data;
+    if (!link) return event?.conversationId
+        ? conversationHref({ id: event.conversationId, agentNotice: event.kind === 'agent' || event.kind === 'schedule' }, event.messageId ?? null)
+        : null;
+    const relative = link.startsWith('/') && !link.startsWith('//') ? link : null;
+    const target = relative ? new URL(relative, 'http://taibu.local') : null;
+    // A task notice points at its conversation; a schedule notice may instead point at /scheduled.
+    if (event?.conversationId && (event.kind === 'agent' || (event.kind === 'schedule' && target?.pathname === '/chat'))) {
+        const messageId = target ? target.searchParams.get('message') : event.messageId ?? null;
+        return conversationHref({ id: event.conversationId, agentNotice: true }, messageId);
+    }
+    if (relative) return relative;
+    // 绝对地址只取本地路径，不跟去别人的域名；知道归属对话时直接回那个对话。
+    if (event?.conversationId) return conversationHref({ id: event.conversationId, agentNotice: event.kind === 'schedule' }, event.messageId ?? null);
     const resolvedOrigin = origin ?? (typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
     try {
         const url = new URL(link, resolvedOrigin);

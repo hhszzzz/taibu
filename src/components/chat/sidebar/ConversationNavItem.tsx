@@ -15,6 +15,7 @@ import { Archive, Clock, Cloud, Ellipsis, LoaderCircle } from 'lucide-react';
 // The shared conversation lists render this row outside the chat page too.
 import './chat-sidebar.css';
 import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-display';
+import { conversationHref } from '@/lib/chat/conversation-href';
 import { AGENT_MARKER_LABELS, type ConversationAgentMarker } from '@/lib/agent/activity';
 import type { ConversationListItem } from '@/types';
 import { ConversationItem } from './ConversationItem';
@@ -57,9 +58,11 @@ export const ConversationNavItem = memo(function ConversationNavItem({
         );
     }
     const title = formatConversationMenuTitle(conv);
+    // Agent 会话直接带方式打开，避免先按普通对话渲染再切换。
+    const href = conversationHref(conv);
     return (
         <div data-conversation-row="true" className="chat-nav-row" data-active={isActive || undefined}>
-            <Link href={`/chat?id=${encodeURIComponent(conv.id)}`} aria-current={isActive ? 'page' : undefined} className="chat-nav-row-link" title={title}>
+            <Link href={href} aria-current={isActive ? 'page' : undefined} className="chat-nav-row-link" title={title}>
                 <span className="chat-nav-row-title">{title}</span>
                 <span className="chat-nav-row-badges">
                     {marker ? <ConversationMarker marker={marker} /> : null}

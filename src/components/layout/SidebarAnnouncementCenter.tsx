@@ -322,9 +322,10 @@ export function SidebarAnnouncementCenter({
 
         setMarkingId(null);
 
-        if (notification.link) {
+        const href = resolveNotificationLink(notification);
+        if (href) {
             onClose();
-            router.push(resolveNotificationLink(notification.link));
+            router.push(href);
         }
     };
 

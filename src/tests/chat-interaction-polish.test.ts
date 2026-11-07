@@ -92,6 +92,7 @@ test('a task completion toast opens its conversation', async () => {
     assert.equal(taskNoticeHref({ link: '/chat?id=c1&message=m', event_data: { conversationId: 'c1' } }), '/chat?id=c1&message=m');
     assert.equal(taskNoticeHref({ link: '/scheduled', event_data: undefined }), '/scheduled', 'a schedule that lost its conversation links to its own page');
     assert.equal(taskNoticeHref({ link: 'https://evil.example/chat?id=c1', event_data: { conversationId: 'c 2' } }), '/chat?id=c%202', 'only in-app links are followed');
-    assert.equal(taskNoticeHref({ link: '//evil.example/chat', event_data: { conversationId: 'c3' } }), '/chat?id=c3', 'a protocol-relative link is not an in-app link');
-    assert.equal(taskNoticeHref({ link: null, event_data: undefined }), null);
+    assert.equal(taskNoticeHref({ link: '//evil.example/chat', event_data: { conversationId: 'c3' } }), '/chat?id=c3', 'a protocol-relative foreign origin falls back to the conversation it belongs to');
+    assert.equal(taskNoticeHref({ link: null, event_data: { conversationId: 'c4', kind: 'agent' } }), '/chat?id=c4&mode=agent', 'an Agent task notice opens the Agent conversation');
+    assert.equal(taskNoticeHref({ link: '/chat?id=c4&message=m', event_data: { conversationId: 'c4', kind: 'agent' } }), '/chat?id=c4&mode=agent&message=m', 'an old task link opens the Agent mode at the source message');
 });

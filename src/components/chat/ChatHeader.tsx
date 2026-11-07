@@ -6,7 +6,7 @@
  */
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { ChevronDown, Ellipsis, Share2 } from 'lucide-react';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { useConversationExport } from '@/components/chat/ConversationExportDialog';
@@ -25,6 +25,7 @@ import { CHAT_RECORD_VIEW_LABELS, CHAT_RECORD_VIEWS, useChatRecordView, useChatR
 import type { ReactNode } from 'react';
 import type { ChatRecordView } from '@/lib/chat/chat-record-view';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { conversationHref } from '@/lib/chat/conversation-href';
 
 interface ChatHeaderProps {
     /** Opens the navigation drawer where the page has no sidebar (phones and tablets). */
@@ -38,6 +39,8 @@ interface ChatHeaderProps {
     workspaceButton?: ReactNode;
     knowledgeBaseEnabled: boolean;
     userId?: string | null;
+    /** The open conversation's own mode, when the page knows it before the list loads. */
+    agentConversation?: boolean;
 }
 
 /** 「对话记录视图 ▸」：标题菜单与查看选项共用同一组普通/详细与本机默认。 */
@@ -73,8 +76,10 @@ export function ChatHeader({
     workspaceButton,
     knowledgeBaseEnabled,
     userId = null,
+    agentConversation,
 }: ChatHeaderProps) {
-    const { handleRenameConversation, handleDeleteConversation } = useConversationList();
+    const { conversations, handleRenameConversation, handleDeleteConversation } = useConversationList();
+    const conversation = useMemo(() => conversationId ? conversations.find(item => item.id === conversationId) : undefined, [conversations, conversationId]);
     const { showToast } = useToast();
     const { isFeatureEnabled, loaded: featureTogglesLoaded } = useFeatureToggles();
     // 分享开关关闭时菜单只保留导出，接口同样拒绝读写公开链接。
@@ -107,7 +112,7 @@ export function ChatHeader({
     /** claude 会话标题菜单的「复制链接 C」：拼出当前会话 URL 进剪贴板（纯前端）。 */
     const copyConversationLink = async () => {
         if (!conversationId) return;
-        const url = `${window.location.origin}/chat?id=${encodeURIComponent(conversationId)}`;
+        const url = `${window.location.origin}${conversationHref({ id: conversationId, hasAgentRun: conversation?.hasAgentRun ?? agentConversation })}`;
         try {
             await navigator.clipboard.writeText(url);
             showToast('success', '已复制链接');

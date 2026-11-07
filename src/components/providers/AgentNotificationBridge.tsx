@@ -4,6 +4,7 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import { useToast } from '@/components/ui/Toast';
+import { resolveNotificationLink } from '@/lib/notification-view';
 import { fetchCachedUserSettings } from '@/lib/user/settings';
 import { requestBrowserJson } from '@/lib/browser-api';
 import {
@@ -19,10 +20,7 @@ import {
     type TaskNoticeBaseline,
 } from '@/lib/notification';
 
-type TaskNotification = SiteNotification & {
-    event_key?: string;
-    event_data?: { conversationId?: string; kind?: string; status?: string };
-};
+type TaskNotification = SiteNotification & { event_key?: string };
 
 /**
  * In-app target of a task notice: the link the server wrote when it is one of ours, else the conversation it belongs
@@ -30,9 +28,7 @@ type TaskNotification = SiteNotification & {
  * absolute (a foreign origin) is never.
  */
 export function taskNoticeHref(notice: Pick<TaskNotification, 'link' | 'event_data'>) {
-    if (notice.link?.startsWith('/') && !notice.link.startsWith('//')) return notice.link;
-    const id = notice.event_data?.conversationId;
-    return id ? `/chat?id=${encodeURIComponent(id)}` : null;
+    return resolveNotificationLink(notice);
 }
 
 export function AgentNotificationBridge({ userId }: { userId: string | null }) {

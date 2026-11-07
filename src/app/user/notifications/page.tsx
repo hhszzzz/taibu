@@ -312,9 +312,10 @@ export default function NotificationsPage() {
     };
 
     const handleOpen = async (notification: Notification) => {
-        if (!notification.link) return;
+        const href = resolveNotificationLink(notification);
+        if (!href) return;
         await handleMarkRead(notification);
-        router.push(resolveNotificationLink(notification.link));
+        router.push(href);
     };
 
     const handleDeleteSingle = async (id: string) => {

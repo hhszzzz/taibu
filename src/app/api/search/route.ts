@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     if (!query) {
         const rows = await auth.db.tx((trx) => trx
             .selectFrom('conversations_with_archive_status')
-            .select(['id', 'title', 'updated_at'])
+            .select(['id', 'title', 'updated_at', 'has_agent_run'])
             .where('user_id', '=', auth.user.id)
             .where('is_archived', '=', false)
             .orderBy('updated_at', 'desc')
@@ -21,7 +21,7 @@ export async function GET(request: NextRequest) {
             .execute()).catch(() => null);
         if (rows === null) return jsonError('搜索失败', 500);
         return jsonOk({
-            results: rows.map(row => ({ conversationId: row.id, messageId: null, title: row.title ?? '对话', preview: '' })),
+            results: rows.map(row => ({ conversationId: row.id, messageId: null, title: row.title ?? '对话', preview: '', hasAgentRun: row.has_agent_run === true })),
             charts: [],
         });
     }

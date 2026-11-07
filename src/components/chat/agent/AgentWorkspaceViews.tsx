@@ -26,6 +26,7 @@ import {
 import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import { requestBrowserJson } from '@/lib/browser-api';
+import { conversationHref } from '@/lib/chat/conversation-href';
 import { useTranscriptRecordView } from '@/lib/chat/chat-record-view';
 import { MarkdownContent } from '@/components/ui/MarkdownContent';
 import { Button } from '@/components/ui/Button';
@@ -383,8 +384,9 @@ export function NotesView({ tools, runStatus, step }: { tools: AgentToolPart[]; 
     </section>;
 }
 
-const conversationHref = (hit: AgentConversationHit) =>
-    `/chat?id=${encodeURIComponent(hit.conversationId)}${hit.messageId ? `&message=${encodeURIComponent(hit.messageId)}` : ''}`;
+// 命中的对话可能是普通对话也可能是 Agent 会话：不带方式，打开后按会话自己的方式显示。
+const historyConversationHref = (hit: AgentConversationHit) =>
+    conversationHref({ id: hit.conversationId }, hit.messageId);
 
 /** 以往对话: what the latest search found in the user's other conversations; each hit opens its conversation at the message. */
 export function HistoryView({ tools, runStatus, step }: { tools: AgentToolPart[]; runStatus: AgentRunStatus; step?: number }) {
@@ -400,7 +402,7 @@ export function HistoryView({ tools, runStatus, step }: { tools: AgentToolPart[]
             : hits.length ? <ul className="agent-ws-list" aria-label="命中的对话">
                 {hits.map((hit, index) => <li key={`${hit.conversationId}:${hit.messageId ?? index}`}>
                     <strong>
-                        <Link href={conversationHref(hit)}>{hit.title}</Link>
+                        <Link href={historyConversationHref(hit)}>{hit.title}</Link>
                         <small>{[hit.updatedAt && new Date(hit.updatedAt).toLocaleDateString('zh-CN'), hit.role === 'user' ? '你的提问' : '太卜的回答'].filter(Boolean).join(' · ')}</small>
                     </strong>
                     <blockquote>{hit.excerpt}</blockquote>

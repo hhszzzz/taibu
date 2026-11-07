@@ -3495,10 +3495,12 @@ BEGIN
   IF length(trim(p_query)) NOT BETWEEN 1 AND 200 THEN RAISE EXCEPTION 'invalid search query'; END IF;
   pattern := '%' || replace(replace(replace(trim(p_query), '\', '\\'), '%', '\%'), '_', '\_') || '%';
   SELECT coalesce(jsonb_agg(to_jsonb(search_rows)), '[]'::jsonb) INTO result FROM (
-    (SELECT c.id AS "conversationId", c.title, NULL::text AS "messageId", c.title AS preview, c.updated_at AS "updatedAt"
+    (SELECT c.id AS "conversationId", c.title, NULL::text AS "messageId", c.title AS preview, c.updated_at AS "updatedAt",
+      (EXISTS (SELECT 1 FROM public.agent_runs r WHERE r.conversation_id=c.id AND r.user_id=c.user_id)) AS "hasAgentRun"
       FROM public.conversations c WHERE c.user_id=auth.uid() AND c.title ILIKE pattern ESCAPE '\' ORDER BY c.updated_at DESC LIMIT 10)
     UNION ALL
-    (SELECT c.id, c.title, m.message_id, substr(m.content, greatest(1, strpos(lower(m.content),lower(trim(p_query)))-80), 300), c.updated_at
+    (SELECT c.id, c.title, m.message_id, substr(m.content, greatest(1, strpos(lower(m.content),lower(trim(p_query)))-80), 300), c.updated_at,
+      (EXISTS (SELECT 1 FROM public.agent_runs r WHERE r.conversation_id=c.id AND r.user_id=c.user_id)) AS "hasAgentRun"
       FROM public.conversation_messages m JOIN public.conversations c ON c.id=m.conversation_id
       WHERE c.user_id=auth.uid() AND m.role <> 'system' AND m.content ILIKE pattern ESCAPE '\'
       ORDER BY c.updated_at DESC,m.sequence LIMIT least(greatest(p_limit,1),30))

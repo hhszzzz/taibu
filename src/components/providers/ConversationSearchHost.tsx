@@ -18,8 +18,9 @@ import { Input } from '@/components/ui/Input';
 import { requestBrowserJson } from '@/lib/browser-api';
 import { RECORD_CATEGORIES, type RecordCategory } from '@/lib/records';
 import { getChartKindMeta } from '@/components/chat/agent/chart-registry';
+import { conversationHref } from '@/lib/chat/conversation-href';
 
-type Result = { conversationId: string; messageId: string | null; title: string; preview: string };
+type Result = { conversationId: string; messageId: string | null; title: string; preview: string; hasAgentRun?: boolean };
 type RecordResult = { id: string; title: string; content: string; category: RecordCategory; created_at?: string | null };
 type ChartResult = { id: string; kind: 'bazi' | 'ziwei'; name: string; birth_date: string; birth_time: string | null };
 type Filter = 'all' | 'conversation' | 'record' | 'chart';
@@ -110,7 +111,7 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
     const openEntry = useCallback((entry: Entry | undefined) => {
         if (!entry) return;
         setOpen(false);
-        if (entry.kind === 'conversation') router.push(`/chat?id=${entry.item.conversationId}${entry.item.messageId ? `&message=${encodeURIComponent(entry.item.messageId)}` : ''}`);
+        if (entry.kind === 'conversation') router.push(conversationHref({ id: entry.item.conversationId, hasAgentRun: entry.item.hasAgentRun }, entry.item.messageId));
         else if (entry.kind === 'record') router.push(`/records?id=${encodeURIComponent(entry.item.id)}`);
         else router.push(`/${entry.item.kind}/result?chart=${encodeURIComponent(entry.item.id)}`);
     }, [router]);

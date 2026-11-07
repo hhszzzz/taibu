@@ -6,6 +6,7 @@ import { Menu, MenuContent, MenuItem, MenuSeparator, MenuShortcut, type MenuHand
 import { useToast } from '@/components/ui/Toast';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { formatConversationMenuTitle } from '@/lib/chat/conversation-title-display';
+import { conversationHref } from '@/lib/chat/conversation-href';
 
 /** Desktop sidebar and mobile drawer share the same row menu; each row opens it with its conversation payload. */
 export function ConversationMenu({ menu, onRename, onDelete, onPin, pinned, knowledgeBaseEnabled = false }: {
@@ -19,7 +20,7 @@ export function ConversationMenu({ menu, onRename, onDelete, onPin, pinned, know
     const { showToast } = useToast();
     const [kbTarget, setKbTarget] = useState<ConversationListItem | null>(null);
     const copyLink = async (conversation: ConversationListItem) => {
-        const url = `${window.location.origin}/chat?id=${encodeURIComponent(conversation.id)}`;
+        const url = `${window.location.origin}${conversationHref(conversation)}`;
         try {
             await navigator.clipboard.writeText(url);
             showToast('success', '已复制链接');

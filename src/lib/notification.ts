@@ -7,6 +7,14 @@
 
 import { requestBrowserPayloadOrThrow, requestBrowserJson } from '@/lib/browser-api';
 
+export interface NotificationEventData {
+  conversationId?: string;
+  kind?: string;
+  messageId?: string | null;
+  status?: string;
+  questionId?: string;
+}
+
 export interface Notification {
   id: string;
   user_id: string;
@@ -17,6 +25,8 @@ export interface Notification {
   link: string | null;
   created_at: string;
   popup_claimed_at?: string | null;
+  event_key?: string | null;
+  event_data?: NotificationEventData | null;
 }
 
 interface NotificationPagination {

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { formatNotificationTime, groupNotificationsByDay } from '../lib/notification-view';
+import { formatNotificationTime, groupNotificationsByDay, resolveNotificationLink } from '../lib/notification-view';
 import type { Notification } from '../lib/notification';
 
 const NOW = new Date(2026, 9, 14, 12, 0);
@@ -17,6 +17,18 @@ test('formatNotificationTime hides invalid timestamps and clamps clock skew to �
   assert.equal(formatNotificationTime('', NOW), '');
   assert.equal(formatNotificationTime('not-a-date', NOW), '');
   assert.equal(formatNotificationTime(new Date(2026, 9, 14, 12, 5).toISOString(), NOW), '刚刚');
+});
+
+test('task notices open the Agent conversation once, with the source message', () => {
+  const event = { kind: 'agent', conversationId: 'agent-1', messageId: 'm 1' };
+  assert.equal(resolveNotificationLink({ link: '/chat?id=agent-1&message=m%201', event_data: event }), '/chat?id=agent-1&mode=agent&message=m%201');
+  assert.equal(resolveNotificationLink({ link: null, event_data: event }), '/chat?id=agent-1&mode=agent&message=m%201');
+  assert.equal(resolveNotificationLink({ link: 'https://evil.example/chat?id=agent-1', event_data: event }), '/chat?id=agent-1&mode=agent&message=m%201');
+  assert.equal(resolveNotificationLink({ link: '/scheduled', event_data: { kind: 'schedule', conversationId: 'agent-2' } }), '/scheduled', 'a paused schedule still opens the schedule page');
+  assert.equal(resolveNotificationLink({ link: '/chat?id=agent-2', event_data: { kind: 'schedule', conversationId: 'agent-2' } }), '/chat?id=agent-2&mode=agent', 'a schedule run opens its Agent conversation');
+  assert.equal(resolveNotificationLink({ link: '/chat?id=c%202', event_data: undefined }), '/chat?id=c%202');
+  assert.equal(resolveNotificationLink({ link: '//evil.example/chat' }), '/chat');
+  assert.equal(resolveNotificationLink({ link: null }), null);
 });
 
 test('groupNotificationsByDay keeps the 今天 / 近 7 天 / 更早 order', () => {

@@ -3,7 +3,7 @@
  *
  * 直接渲染在 AI > Chat 导航项下方，与导航共用滚动区域。
  * 初始仅显示少量对话，向下滚动后按需继续加载。
- * 对话页侧栏使用 `grouping="date"`：按日期分组并显示 Agent 任务标记，搜索交给全局搜索。
+ * 站点侧栏统一按日期分组并显示 Agent 任务标记，搜索交给全局搜索。
  *
  * 'use client' 标记说明：
  * - 使用 React hooks 和交互状态
@@ -15,11 +15,9 @@ import { ChevronDown, ChevronRight, ChevronUp, Plus, SlidersHorizontal } from 'l
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { Button } from '@/components/ui/Button';
-import type { ConversationListItem, ConversationSourceType } from '@/types';
+import type { ConversationListItem } from '@/types';
 import { useConversationList } from '@/lib/chat/ConversationListContext';
-import { ConversationGroup } from '@/components/chat/sidebar/ConversationGroup';
 import '@/components/chat/sidebar/chat-sidebar.css';
-import { SOURCE_TYPE_CONFIG, SOURCE_TYPE_ORDER } from '@/lib/chat/conversation-groups';
 import { resolveConversationRemainingTargetCount } from '@/lib/chat/conversation-list-window';
 import { ConversationMenu } from '@/components/chat/sidebar/ConversationActions';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -90,8 +88,6 @@ export function RecentsHead({ userId, recentsOpen, onToggleRecents, onToggleBloc
 }
 
 interface SidebarConversationsProps {
-    /** `date`: 今天 / 昨天 / 7 天内 … groups with task markers (chat sidebar); `source`: grouped by divination type. */
-    grouping?: 'source' | 'date';
     markers?: ReadonlyMap<string, ConversationAgentMarker>;
     /** Inside a modal drawer the row menu renders in the dialog's top layer. */
     withinModal?: boolean;
@@ -100,7 +96,7 @@ interface SidebarConversationsProps {
 /** 最近对话默认列出的条数；其余点「查看更多」展开。 */
 const RECENT_VISIBLE = 10;
 
-export function SidebarConversations({ grouping = 'source', markers, withinModal = false }: SidebarConversationsProps = {}) {
+export function SidebarConversations({ markers, withinModal = false }: SidebarConversationsProps = {}) {
     const pathname = usePathname();
     const searchParams = useSearchParams();
     const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
@@ -119,7 +115,6 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         loadMoreConversations,
     } = useConversationList();
 
-    const [collapsedGroups, setCollapsedGroups] = useState<Set<ConversationSourceType>>(new Set());
     const [conversationMenu] = useState<MenuHandle<ConversationListItem>>(() => createMenuHandle<ConversationListItem>());
     const [pendingDelete, setPendingDelete] = useState<ConversationListItem | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -134,7 +129,6 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         return searchParams.get('id') ?? undefined;
     }, [pathname, searchParams]);
 
-    const wantsDate = grouping === 'date';
     const { user } = useSessionSafe();
     const userId = user?.id ?? null;
     // claude Pinned 组与「分组和排序」：纯前端偏好（localStorage，按用户隔离）。
@@ -200,38 +194,6 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
     const sortGroupItems = useCallback((items: ConversationListItem[]) => listPreferences.sort === 'title'
         ? [...items].sort((a, b) => formatConversationMenuTitle(a).localeCompare(formatConversationMenuTitle(b), 'zh-Hans-CN'))
         : items, [listPreferences.sort]);
-
-    const groupedConversations = useMemo(() => {
-        const groups: Record<ConversationSourceType, ConversationListItem[]> = {
-            chat: [], bazi_wuxing: [], bazi_personality: [],
-            tarot: [], liuyao: [], ziwei: [], mbti: [], hepan: [],
-            palm: [], face: [], qimen: [], daliuren: [],
-            meihua: [], xiaoliuren: [],
-        };
-
-        shownConversations.forEach(conv => {
-            let type = conv.sourceType || 'chat';
-            if (type === 'bazi_personality') {
-                type = 'bazi_wuxing';
-            }
-            if (groups[type]) {
-                groups[type].push(conv);
-            } else {
-                groups.chat.push(conv);
-            }
-        });
-
-        return groups;
-    }, [shownConversations]);
-
-    const toggleGroup = useCallback((type: ConversationSourceType) => {
-        setCollapsedGroups(prev => {
-            const next = new Set(prev);
-            if (next.has(type)) next.delete(type);
-            else next.add(type);
-            return next;
-        });
-    }, []);
 
     // Action menu helpers
     const startInlineRename = useCallback((conv: ConversationListItem) => {
@@ -319,10 +281,8 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
         });
     }, [conversations.length, getScrollContainer]);
 
-    const shouldAutoTopUp = collapsedGroups.size === 0;
-
     useEffect(() => {
-        if (typeof window === 'undefined' || !shouldAutoTopUp) {
+        if (typeof window === 'undefined') {
             return;
         }
 
@@ -361,21 +321,21 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
             observer.disconnect();
             window.removeEventListener('resize', handleResize);
         };
-    }, [getScrollContainer, getSidebarConversationTargetCount, shouldAutoTopUp]);
+    }, [getScrollContainer, getSidebarConversationTargetCount]);
 
     useEffect(() => {
-        if (!hasLoadedConversations || !shouldAutoTopUp || sidebarTargetCount == null) {
+        if (!hasLoadedConversations || sidebarTargetCount == null) {
             return;
         }
 
         triggerConversationListLoad(sidebarTargetCount);
-    }, [hasLoadedConversations, shouldAutoTopUp, sidebarTargetCount, triggerConversationListLoad]);
+    }, [hasLoadedConversations, sidebarTargetCount, triggerConversationListLoad]);
 
     return (
         <>
             {/* 对话区域 — 紧凑内嵌在 Chat 项下方；只有「最近使用」这一段滚动，「已置顶」停在上面。 */}
-            <div className={`${wantsDate ? 'flex min-h-0 flex-1 flex-col' : ''}`}>
-                {wantsDate && pinnedConversations.length > 0 ? (
+            <div className="flex min-h-0 flex-1 flex-col">
+                {pinnedConversations.length > 0 ? (
                     <div className="chat-nav-pinned-block">
                         <section className="chat-nav-group" aria-label="已置顶">
                             <div className="chat-recents-head chat-pinned-head">
@@ -403,13 +363,13 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                     </div>
                 ) : null}
                 {/* 组头固定在列表上方：外面滚动只作用于会话行，箭头与「最近使用」不随列表滑动。 */}
-                {wantsDate && !withinModal ? (
+                {!withinModal ? (
                     <div className="chat-recents-block">
                         <RecentsHead userId={userId} recentsOpen={recentsOpen} onToggleRecents={() => setRecentsOpen(value => !value)}
                             onToggleBlocked={recentsOpen && !!activeId && unpinnedConversations.some(conv => conv.id === activeId) ? true : undefined} />
                     </div>
                 ) : null}
-                <div ref={listViewportRef} className={`relative space-y-0.5 ${wantsDate ? 'min-h-0 flex-1 overflow-y-auto' : ''}`}>
+                <div ref={listViewportRef} className="relative min-h-0 flex-1 space-y-0.5 overflow-y-auto">
                     {conversationListError && !hasLoadedConversations && !conversationsLoading ? (
                         <div className="rounded-md border border-warning/30 bg-warning/5 px-3 py-3 text-xs text-warning">
                             <div>{conversationListError}</div>
@@ -433,15 +393,9 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                             )}
                         </div>
                     ) : shownConversations.length === 0 && !pendingSidebarTitle ? (
-                        wantsDate && !withinModal ? (
-                            <section className="chat-nav-group" aria-label="最近使用">
-                                {recentsOpen && <div className="text-center text-foreground-secondary text-[11px] py-3">暂无对话</div>}
-                            </section>
-                        ) : (
-                            <div className="text-center text-foreground-secondary text-[11px] py-3">
-                                暂无对话
-                            </div>
-                        )
+                        <section className="chat-nav-group" aria-label="最近使用">
+                            {recentsOpen && <div className="text-center text-foreground-secondary text-[11px] py-3">暂无对话</div>}
+                        </section>
                     ) : (
                         <>
                             {conversationListError ? (
@@ -453,72 +407,39 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                                     </Button>
                                 </div>
                             ) : null}
-                            {wantsDate ? (
-                                <div className="chat-recents-block">
-                                    <section className="chat-nav-group" aria-label="最近使用">
-                                    {recentsOpen && <>
-                                    {pendingSidebarTitle ? (
-                                        <div data-conversation-row="true" className="chat-nav-row" data-pending="true">
-                                            <span className="chat-nav-row-link">
-                                                <span className="chat-nav-row-title">{pendingSidebarTitle}</span>
-                                                <ConversationMarker marker="running" />
-                                            </span>
-                                        </div>
-                                    ) : null}
-                                    {/* 已置顶只在「已置顶」组出现；最近使用不重复列出（claude Pinned / Recents 同构）。 */}
-                                    {sortGroupItems(unpinnedConversations).map(conv => (
-                                        <ConversationNavItem
-                                            key={conv.id}
-                                            conv={conv}
-                                            isActive={activeId === conv.id}
-                                            marker={markers?.get(conv.id)}
-                                            menu={conversationMenu}
-                                            isEditing={editingId === conv.id}
-                                            editTitle={editingId === conv.id ? editTitle : ''}
-                                            onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
-                                            onSaveRename={editingId === conv.id ? saveRename : undefined}
-                                            onCancelRename={editingId === conv.id ? cancelRename : undefined}
-                                        />
-                                    ))}
-                                    </>}
-                                    </section>
-                                </div>
-                            ) : SOURCE_TYPE_ORDER.map(type => {
-                                const allItems = groupedConversations[type];
-                                const showPendingInGroup = type === 'chat' && !!pendingSidebarTitle;
-                                if (allItems.length === 0 && !showPendingInGroup) return null;
-
-                                const config = SOURCE_TYPE_CONFIG[type];
-                                const isGroupCollapsed = collapsedGroups.has(type);
-
-                                return (
-                                    <div key={type}>
-                                        <ConversationGroup
-                                            type={type}
-                                            label={config.label}
-                                            items={allItems}
-                                            showLabel={type !== 'chat'}
-                                            isGroupCollapsed={isGroupCollapsed}
-                                            onToggleGroup={toggleGroup}
-                                            activeId={activeId}
-                                            menu={conversationMenu}
-                                            editingId={editingId}
-                                            editTitle={editTitle}
-                                            onEditTitleChange={setEditTitle}
-                                            onSaveRename={saveRename}
-                                            onCancelRename={cancelRename}
-                                            pendingTitle={pendingSidebarTitle}
-                                            showPendingInGroup={showPendingInGroup}
-                                            markers={markers}
-                                            compact
-                                        />
+                            <div className="chat-recents-block">
+                                <section className="chat-nav-group" aria-label="最近使用">
+                                {recentsOpen && <>
+                                {pendingSidebarTitle ? (
+                                    <div data-conversation-row="true" className="chat-nav-row" data-pending="true">
+                                        <span className="chat-nav-row-link">
+                                            <span className="chat-nav-row-title">{pendingSidebarTitle}</span>
+                                            <ConversationMarker marker="running" />
+                                        </span>
                                     </div>
-                                );
-                            })}
+                                ) : null}
+                                {/* 已置顶只在「已置顶」组出现；最近使用不重复列出（claude Pinned / Recents 同构）。 */}
+                                {sortGroupItems(unpinnedConversations).map(conv => (
+                                    <ConversationNavItem
+                                        key={conv.id}
+                                        conv={conv}
+                                        isActive={activeId === conv.id}
+                                        marker={markers?.get(conv.id)}
+                                        menu={conversationMenu}
+                                        isEditing={editingId === conv.id}
+                                        editTitle={editingId === conv.id ? editTitle : ''}
+                                        onEditTitleChange={editingId === conv.id ? setEditTitle : undefined}
+                                        onSaveRename={editingId === conv.id ? saveRename : undefined}
+                                        onCancelRename={editingId === conv.id ? cancelRename : undefined}
+                                    />
+                                ))}
+                                </>}
+                                </section>
+                            </div>
                         </>
                     )}
                     {/* 「最近使用」收起时，展开/收起一并隐藏。 */}
-                    {hasLoadedConversations && (!wantsDate || recentsOpen) && hasMoreToShow && (
+                    {hasLoadedConversations && recentsOpen && hasMoreToShow && (
                         <div className="mt-1 px-2">
                             <Button unstyled type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
                                 onClick={() => { if (!hasHiddenRecents && hasMoreConversations) void loadMoreConversations(); setRecentsLimit(limit => limit + RECENT_VISIBLE); }}
@@ -528,7 +449,7 @@ export function SidebarConversations({ grouping = 'source', markers, withinModal
                             </Button>
                         </div>
                     )}
-                    {hasLoadedConversations && visibleConversations.length > 0 && (!wantsDate || recentsOpen) && !hasMoreToShow && recentsLimit > RECENT_VISIBLE && (
+                    {hasLoadedConversations && visibleConversations.length > 0 && recentsOpen && !hasMoreToShow && recentsLimit > RECENT_VISIBLE && (
                         <div className="mt-1 mb-1 px-2">
                             <Button unstyled type="button" className="flex items-center gap-1 text-[14px] text-foreground-secondary transition-colors hover:text-foreground"
                                 onClick={() => { setRecentsLimit(RECENT_VISIBLE); listViewportRef.current?.parentElement?.scrollTo({ top: 0 }); }}>

@@ -207,10 +207,6 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
 
   assert.match(
     sidebarSource,
-    /const shouldAutoTopUp = collapsedGroups\.size === 0;/u,
-  );
-  assert.match(
-    sidebarSource,
     /if \(availableHeight <= 0 \|\| rowElements\.length === 0\) \{\s*return null;\s*\}/u,
   );
   assert.match(
@@ -219,7 +215,7 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
   );
   assert.match(
     sidebarSource,
-    /if \(!hasLoadedConversations \|\| !shouldAutoTopUp \|\| sidebarTargetCount == null\) \{\s*return;\s*\}[\s\S]*triggerConversationListLoad\(sidebarTargetCount\);/u,
+    /if \(!hasLoadedConversations \|\| sidebarTargetCount == null\) \{\s*return;\s*\}[\s\S]*triggerConversationListLoad\(sidebarTargetCount\);/u,
   );
   assert.doesNotMatch(
     sidebarSource,
@@ -242,7 +238,7 @@ test('sidebar conversation viewport top-up waits for the first page to finish lo
   // The phone drawer shows the sidebar's own panel, so the same top-up rules apply there.
   assert.match(
     chatSidebarSource,
-    /data-conversation-scroll="true">\s*\{user \? <SidebarConversations grouping="date" markers=\{markers\} withinModal=\{Boolean\(onClose\)\} \/>/u,
+    /data-conversation-scroll="true">\s*\{user \? <SidebarConversations markers=\{markers\} withinModal=\{Boolean\(onClose\)\} \/>/u,
   );
   assert.match(mobileDrawerSource, /<ChatSidebarPanel /u);
   assert.doesNotMatch(mobileDrawerSource, /SidebarConversations|setHasUserScrolled/u);

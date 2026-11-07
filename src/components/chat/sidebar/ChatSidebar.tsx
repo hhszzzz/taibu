@@ -131,7 +131,7 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
             {isFeatureEnabled('records') ? <Link href="/records" className="chat-nav-link"><BookOpen size={18} aria-hidden="true" />命理记录</Link> : null}
             {user ? <div className="chat-recents-head"><span>最近使用</span></div> : null}
             <div ref={listRef} className="chat-nav-list" data-conversation-scroll="true">
-                {user ? <SidebarConversations grouping="date" markers={markers} withinModal={Boolean(onClose)} /> : <p className="chat-nav-hint">登录后在这里查看对话与任务进度。</p>}
+                {user ? <SidebarConversations markers={markers} withinModal={Boolean(onClose)} /> : <p className="chat-nav-hint">登录后在这里查看对话与任务进度。</p>}
             </div>
             <div className="chat-nav-footer">{user ? (
                 <div className="chat-nav-footer-row">

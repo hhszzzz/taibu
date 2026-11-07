@@ -24,7 +24,6 @@
 .chat-conversation-drawer .chat-nav-panel { padding: calc(6px + var(--sat)) 8px calc(8px + var(--sab)); }
 .chat-conversation-drawer .chat-nav-footer { padding-top: 8px; }
 .chat-conversation-drawer .chat-nav-list { margin: 0 -8px; padding: 0 8px 12px; }
-.chat-conversation-drawer .chat-nav-group-label { margin-left: 2px; margin-right: 2px; }
 /* 顶部行 = live claude 移动端：关闭键在左（32px），词标随其后，无 logo 方块 */
 .chat-conversation-drawer .chat-nav-brand { padding: 0 0 12px; gap: 0; }
 .chat-conversation-drawer .chat-nav-brand .chat-nav-icon { order: -1; margin-right: 16px; }
@@ -78,27 +77,10 @@
 .chat-nav-group { display: flex; flex-direction: column; gap: 2px; }
 /* 「最近使用」标题到第一条会话的距离，与「占术」标题到八字一致。 */
 .chat-nav-group[aria-label="最近使用"] { padding-top: 4px; }
-.chat-nav-group-label { display: flex; align-items: center; justify-content: space-between; margin: 10px 4px 2px; font-size: 13px; font-weight: 400; color: var(--foreground-tertiary); }
-.chat-nav-group-pinned { justify-content: flex-start; }
-/* claude Recents 组头：悬停/聚焦才显形的 24px 工具钮（「分组和排序」）；已置顶组标签同形但非 heading */
-.chat-nav-group-tools { display: inline-flex; margin-left: auto; }
-.chat-nav-group-tool { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-tertiary); opacity: 0; transition: opacity .15s; }
-.chat-nav-group-tool:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
-.chat-nav-group:hover .chat-nav-group-tool, .chat-nav-group-tool:focus-visible, .chat-nav-group-tool[aria-expanded="true"] { opacity: 1; }
-@media (hover: none) { .chat-nav-group-tool { opacity: .7; } }
-.chat-nav-group-pinned { /* 与 h3 标签同形，但用 div 渲染（验收钉住侧栏 headings 恰为 今天/昨天/更早） */ }
-.chat-nav-group-toggle { display: inline-flex; align-items: center; gap: 2px; border-radius: 6px; color: inherit; font-size: inherit; }
-.chat-nav-group-toggle:hover { color: var(--foreground-secondary); }
-.chat-nav-group-toggle > svg { flex-shrink: 0; }
 /* claude 实测：折叠箭头在组名右侧，且只在悬停/聚焦该组时显形。 */
-.chat-nav-caret, .chat-recents-caret { display: inline-flex; align-items: center; opacity: 0; transition: opacity .12s; }
-.chat-nav-group:hover .chat-nav-caret, .chat-nav-group:focus-within .chat-nav-caret { opacity: 1; }
+.chat-recents-caret { display: inline-flex; align-items: center; opacity: 0; transition: opacity .12s; }
 .chat-recents-block:hover .chat-recents-caret, .chat-recents-block:focus-within .chat-recents-caret { opacity: 1; }
-@media (hover: none) { .chat-nav-caret, .chat-recents-caret { opacity: 1; } }
-/* 置顶投放区：空组显示虚线提示，拖动经过时高亮。 */
-.chat-nav-pin-drop { display: flex; min-height: 32px; align-items: center; padding: 0 8px; border: 1px dashed var(--border-hover); border-radius: 8px; font-size: 13px; color: var(--foreground-tertiary); }
-.chat-nav-group[data-drop-active] > .chat-nav-pin-drop { border-color: var(--accent); color: var(--accent-hover); }
-.chat-nav-group[data-drop-active] { border-radius: 8px; background: var(--fill-field); }
+@media (hover: none) { .chat-recents-caret { opacity: 1; } }
 .chat-nav-row { position: relative; display: flex; min-height: var(--row-h); align-items: center; border-radius: 8px; color: var(--foreground-secondary); font-size: 14px; }
 .chat-nav-row:hover, .chat-nav-row:has([data-popup-open]) { background: var(--df-hover); }
 /* 选中 = 克隆站 Row：--df-selected 实色 #edece8 + primary，不加字重 */
@@ -112,10 +94,10 @@
 .chat-nav-row-cloud { display: inline-flex; color: var(--foreground-tertiary); }
 .chat-nav-row:hover .chat-nav-row-badges, .chat-nav-row:focus-within .chat-nav-row-badges, .chat-nav-row:has([data-popup-open]) .chat-nav-row-badges { visibility: hidden; }
 /* Row actions sit over the marker and appear on hover, focus or while their menu is open. */
-.chat-nav-row-more { position: absolute; top: 50%; right: 4px; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; background: var(--df-selected); color: var(--foreground-secondary); opacity: 0; transform: translateY(-50%); }
-.chat-nav-row:hover .chat-nav-row-more, .chat-nav-row:focus-within .chat-nav-row-more, .chat-nav-row:has([data-popup-open]) .chat-nav-row-more { opacity: 1; }
+.chat-nav-row-more { position: absolute; top: 50%; right: 4px; display: flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; background: var(--df-selected); color: var(--foreground-secondary); opacity: 0; pointer-events: none; transform: translateY(-50%); }
+.chat-nav-row:hover .chat-nav-row-more, .chat-nav-row:focus-within .chat-nav-row-more, .chat-nav-row:has([data-popup-open]) .chat-nav-row-more { opacity: 1; pointer-events: auto; }
 .chat-nav-row-more:hover, .chat-nav-row-more[data-popup-open] { background: var(--fill-ghost-hover); color: var(--foreground); }
-@media (hover: none) { .chat-nav-row-more { position: static; opacity: 1; background: transparent; transform: none; } }
+@media (hover: none) { .chat-nav-row-more { position: static; opacity: 1; pointer-events: auto; background: transparent; transform: none; } }
 
 /* Task markers */
 .chat-nav-marker { flex-shrink: 0; }

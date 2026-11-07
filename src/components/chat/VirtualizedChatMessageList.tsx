@@ -11,6 +11,7 @@ import { useEffect, type MutableRefObject } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import type { ChatMessage, Mention } from '@/types';
 import type { MessageQuote } from '@/lib/chat/quotes';
+import type { MarkdownCitations } from '@/components/ui/MarkdownContent';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
 
 interface VirtualizedChatMessageListProps {
@@ -22,6 +23,8 @@ interface VirtualizedChatMessageListProps {
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
     onQuoteMessage?: (quote: MessageQuote) => void;
+    /** Evidence numbers stamped across the whole conversation, in transcript order. */
+    citationLabels?: MarkdownCitations['labels'];
     disabled?: boolean;
 }
 
@@ -54,6 +57,7 @@ export function VirtualizedChatMessageList({
     onSwitchVersion,
     onArchiveMessage,
     onQuoteMessage,
+    citationLabels,
     disabled = false,
 }: VirtualizedChatMessageListProps) {
 
@@ -129,6 +133,7 @@ export function VirtualizedChatMessageList({
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={onArchiveMessage}
                                     onQuoteMessage={onQuoteMessage}
+                                    citationLabels={citationLabels}
                                 />
                             </div>
                         );

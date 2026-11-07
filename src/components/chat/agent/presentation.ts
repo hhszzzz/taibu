@@ -7,7 +7,7 @@ import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
 import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
 import { parallelAnalysisResults, parallelMemberName, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
-import { countAgentEvidence, getAgentCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
+import { countAgentEvidence, getConversationCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
 import { getCitedParagraphs } from '@/lib/chat/markdown-citations';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
 
@@ -569,15 +569,14 @@ export function getAgentEvidenceSummary(parts: AgentPart[]) {
 }
 
 /**
- * The paragraph, counted from 1, of the latest answer citing `cite`. Answers
- * cite only what their own task returned; one answer is parsed, on demand.
+ * The paragraph, counted from 1, of the latest answer citing `cite`. Numbers run
+ * across the conversation, so an answer may cite a source an earlier turn found.
  */
 export function getAgentCitedParagraph(messages: readonly Pick<ChatMessage, 'agent' | 'content'>[], cite: number): number | null {
+    const labels = getConversationCitationLabels(messages);
     for (let index = messages.length - 1; index >= 0; index--) {
         const { agent, content } = messages[index];
         if (!agent || !content.includes(String(cite))) continue;
-        const labels = getAgentCitationLabels(agent.parts);
-        if (!labels.has(cite)) continue;
         const paragraph = getCitedParagraphs(content, value => labels.has(value)).get(cite);
         if (paragraph !== undefined) return paragraph;
     }

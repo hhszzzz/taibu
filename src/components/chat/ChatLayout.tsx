@@ -59,6 +59,7 @@ import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatRecordViewContext, useChatRecordView } from '@/lib/chat/chat-record-view';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
+import { getConversationCitationLabels } from '@/lib/agent/evidence';
 import { isDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import type { CSSProperties } from 'react';
 import { CHAT_SHORTCUTS, isShortcutSheetKey, isWorkspaceToggleKey, modifierLabel, shouldStopOnEscape } from '@/lib/chat/chat-shortcuts';
@@ -226,6 +227,10 @@ export function ChatLayout(props: ChatLayoutProps) {
         const hidden = new Set(currentRun?.queue?.filter(command => command.state === 'pending' || command.state === 'cancelled').map(command => command.message.id));
         return orderAgentMessagesForDisplay(messages.filter(message => !hidden.has(message.id)), currentRun);
     }, [messages, currentRun]);
+    // 依据编号按整个对话递增：后续回答可以引用之前轮次实际返回过的来源。
+    // 内容不变时保持同一份 Map，流式输出期间已完成的段落不必重新解析。
+    const citationLabelKey = useMemo(() => JSON.stringify([...getConversationCitationLabels(messages)]), [messages]);
+    const citationLabels = useMemo(() => new Map(JSON.parse(citationLabelKey) as Array<[number, string]>), [citationLabelKey]);
     // 新消息淡入：按行号记住已出现的行，临时 id 换成正式 id、虚拟列表滚回视野时不再重放。
     // 新对话发出第一条消息后才拿到会话 ID：这一步仍是同一段对话，作用域沿用，第一轮的淡入不被打断。
     const [motionScope, setMotionScope] = useState(workspaceKey);
@@ -632,6 +637,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                     </Button> : undefined}
                     knowledgeBaseEnabled={knowledgeBaseEnabled}
                     userId={userId}
+                    agentConversation={isAgentMode}
                 />
                 {activeConversationId && <ConversationExportDialog conversationId={activeConversationId} />}
                 {/* 会话列 + 右侧「会话详情」栏（claude /code 停靠栏）：工作区打开时右栏让位。 */}
@@ -670,6 +676,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     onQuoteMessage={addQuote}
+                                    citationLabels={citationLabels}
                                     disabled={transcriptLocked}
                                 />
                             </div>
@@ -681,6 +688,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                                     onSwitchVersion={onSwitchVersion}
                                     onArchiveMessage={activeConversationId ? onArchiveMessage : undefined}
                                     onQuoteMessage={addQuote}
+                                    citationLabels={citationLabels}
                                     disabled={transcriptLocked}
                                 />
                             </div>

@@ -15,7 +15,7 @@ import { formatMentionsForDisplay } from '@/lib/format-mentions';
 import { getVisibleSourcePanelState, getVisibleWebSearch } from '@/lib/chat/feature-normalization';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens } from '@/lib/mention-tokens';
-import { MarkdownContent } from '@/components/ui/MarkdownContent';
+import { MarkdownContent, type MarkdownCitations } from '@/components/ui/MarkdownContent';
 import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
 import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
@@ -46,6 +46,8 @@ interface ChatMessageItemProps {
     onArchiveMessage?: (message: ChatMessage) => void;
     /** 引用这条助手回答的整段文字。 */
     onQuoteMessage?: (quote: MessageQuote) => void;
+    /** Evidence numbers stamped across the whole conversation, in transcript order. */
+    citationLabels?: MarkdownCitations['labels'];
 }
 
 export const ChatMessageItem = memo(function ChatMessageItem({
@@ -59,6 +61,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     onSwitchVersion,
     onArchiveMessage,
     onQuoteMessage,
+    citationLabels,
 }: ChatMessageItemProps) {
     const [editingId, setEditingId] = useState<string | null>(null);
     const [editContent, setEditContent] = useState('');
@@ -295,7 +298,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     variant="chat"
                 />
             )}
-            {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} />
+            {message.agent ? <AgentMessage data={message.agent} actions={assistantActions} citationLabels={citationLabels} />
                 : <div className={`chat-answer${isCurrentStreaming && message.content ? ' is-streaming' : ''}`}><MarkdownContent content={message.content} className="chat-prose" streaming={isCurrentStreaming} onChartError={handleChartError} /></div>}
             {!message.agent && !hasAnswerText && hasReasoning && !isCurrentStreaming && (
                 <p className="chat-message-meta is-assistant">这次只完成了思考，没有生成正文。可以重新生成，或直接追问。</p>

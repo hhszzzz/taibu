@@ -2,9 +2,9 @@
  * 回答依据: the knowledge passages, web pages and chart positions an Agent's
  * tools returned, numbered once per conversation. The server stamps each row
  * with `cite` when the tool runs, so the [n] the model writes is the number the
- * reader sees, and an answer cites only what its own task returned. Rows saved
- * before numbering existed continue after the highest number so far; numbers
- * never repeat or go back.
+ * reader sees, and an answer may cite a source this or an earlier turn returned.
+ * Rows saved before numbering existed continue after the highest number so far;
+ * numbers never repeat or go back.
  */
 import type { ChatMessage } from '@/types';
 import type { AgentPart } from './types';
@@ -64,7 +64,20 @@ export function getAgentEvidenceTitle(item: AgentEvidence): string {
   return item.kind === 'chart' ? `命盘定位 · ${item.focus.caption}` : item.result.title;
 }
 
-/** Numbers an answer may cite, with their titles: what its own task returned and showed the model. */
+/** Numbers an answer may cite: every source stamped and shown to the model in this conversation. */
+export function getConversationCitationLabels(messages: readonly Pick<ChatMessage, 'agent'>[]): ReadonlyMap<number, string> {
+  const labels = new Map<number, string>();
+  let last = 0;
+  for (const message of messages) {
+    for (const item of getAgentEvidence(message.agent?.parts ?? [], last)) {
+      last = item.n;
+      if (item.citable) labels.set(item.n, getAgentEvidenceTitle(item));
+    }
+  }
+  return labels;
+}
+
+/** Numbers an answer may cite from one task's own parts; used by evidence summaries and tests. */
 export function getAgentCitationLabels(parts: readonly AgentPart[]): ReadonlyMap<number, string> {
   return new Map(getAgentEvidence(parts).filter(item => item.citable).map(item => [item.n, getAgentEvidenceTitle(item)]));
 }

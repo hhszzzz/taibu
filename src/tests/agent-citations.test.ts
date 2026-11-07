@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../types';
 import type { AgentPart } from '../lib/agent/types';
 import { getCitedParagraphs, remarkCitations, splitCitations } from '../lib/chat/markdown-citations';
-import { countAgentEvidence, getAgentCitationBase, getAgentCitationLabels, getAgentEvidence, nextAgentCitation } from '../lib/agent/evidence';
+import { countAgentEvidence, getAgentCitationBase, getAgentCitationLabels, getAgentEvidence, getConversationCitationLabels, nextAgentCitation } from '../lib/agent/evidence';
 import { buildAgentWorkspace, parseAgentCitationTarget, resolveAgentWorkspaceLocation } from '../lib/agent/workspace';
 import { getAgentCitedParagraph } from '../components/chat/agent/presentation';
 
@@ -37,6 +37,37 @@ test('the remark plugin turns markers into badges outside code, links and defini
     };
     walk(tree as Parameters<typeof walk>[0]);
     assert.deepEqual(found, [1, 2, 1], 'inline code, link text and code blocks keep their brackets');
+});
+
+test('a later answer badges numbers from an earlier turn', () => {
+    const messages = [answer([knowledge('earlier', [1, 2])], '首轮[1][2]。'), answer([focus('now', 3), knowledge('late', [4])], '结论[1][2][3][4]。')];
+    const labels = getConversationCitationLabels(messages);
+    const processor = unified().use(remarkParse).use(remarkGfm).use(remarkCitations, { isKnown: cite => labels.has(cite) });
+    const found: unknown[] = [];
+    const walk = (node: { type: string; data?: { hProperties?: { dataCite?: number } }; children?: unknown[] }) => {
+        if (node.type === 'citation') found.push(node.data?.hProperties?.dataCite);
+        (node.children as typeof node[] | undefined)?.forEach(walk);
+    };
+    walk(processor.runSync(processor.parse(messages[1].content)) as Parameters<typeof walk>[0]);
+    assert.deepEqual(found, [1, 2, 3, 4], 'numbers continue across turns and a later answer can cite every earlier source');
+});
+
+test('adjacent citations survive the reference link their numeric brackets parse as', () => {
+    const processor = unified().use(remarkParse).use(remarkGfm).use(remarkCitations, { isKnown: known(1, 2, 3, 4) });
+    const found: unknown[] = [];
+    const walk = (node: { type: string; data?: { hProperties?: { dataCite?: number } }; children?: unknown[] }) => {
+        if (node.type === 'citation') found.push(node.data?.hProperties?.dataCite);
+        if (node.type === 'link' || node.type === 'linkReference') found.push('link');
+        (node.children as typeof node[] | undefined)?.forEach(walk);
+    };
+    walk(processor.runSync(processor.parse('结论[2][3][4]。\n\n[3]: https://example.com/source')) as Parameters<typeof walk>[0]);
+    assert.deepEqual(found, [2, 3, 4], 'the reference link text, its label and the following marker are all citations');
+    walk(processor.runSync(processor.parse('见[2]。\n\n[2]: https://example.com/source')) as Parameters<typeof walk>[0]);
+    assert.deepEqual(found.slice(3), [2], 'a shortcut reference with a numeric label is that citation');
+    found.length = 0;
+    walk(processor.runSync(processor.parse('见[链接][3]。\n\n[3]: https://example.com/source')) as Parameters<typeof walk>[0]);
+    assert.deepEqual(found, ['link'], 'a named reference link is left alone');
+    assert.deepEqual([...getCitedParagraphs('第一段[1][2]。\n\n[2]: https://example.com/source', known(1, 2))], [[1, 1], [2, 1]]);
 });
 
 test('the cited paragraph counts prose blocks only and keeps the first citing block', () => {
@@ -72,15 +103,17 @@ test('a new task numbers after the highest number its conversation used', () => 
     ];
     assert.equal(getAgentCitationBase(messages), 4);
     assert.equal(getAgentCitationBase([]), 0);
+    assert.deepEqual([...getConversationCitationLabels(messages)], [[1, '古籍 a-1'], [2, '古籍 a-2'], [4, '命盘定位 · 月柱 丁丑']],
+        'a later answer may cite a number an earlier turn returned');
 });
 
 test('a citation opens its source and finds the paragraph of the answer that cited it', () => {
     const first = [knowledge('kb', [1, 2])], second = [focus('focus', 3)];
-    const messages = [answer(first, '庚金带煞[1]。\n\n用神专求月令[2]。'), answer(second, '月柱丁丑[3]。')];
+    const messages = [answer(first, '庚金带煞[1]。\n\n用神专求月令[2]。'), answer(second, '月柱丁丑[3]。\n\n再引[2][3][4]。')];
     assert.equal(getAgentCitedParagraph(messages, 2), 2);
     assert.equal(getAgentCitedParagraph(messages, 3), 1);
     assert.equal(getAgentCitedParagraph(messages, 9), null, 'an unknown number cites nothing');
-    assert.equal(getAgentCitedParagraph([answer(second, '这里提到 [1] 但不是本任务的依据')], 1), null, 'an answer cites only its own task');
+    assert.equal(getAgentCitedParagraph([answer(second, '这里提到 [1] 但不是本轮的依据')], 1), null, 'an answer needs an actual source from its conversation');
 
     assert.equal(parseAgentCitationTarget('cite:12'), 12);
     for (const id of ['cite:0', 'cite:01', 'cite:x', 'tool:kb', 'cite:1234567890']) assert.equal(parseAgentCitationTarget(id), null, id);

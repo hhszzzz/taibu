@@ -25,13 +25,33 @@ export function splitCitations(text: string, isKnown: (cite: number) => boolean)
     return pieces;
 }
 
-type MdNode = { type: string; value?: string; children?: MdNode[]; data?: Record<string, unknown> };
+type MdNode = { type: string; value?: string; label?: string; children?: MdNode[]; data?: Record<string, unknown> };
 /** Literal text whose brackets are not markers: code, links, definitions, raw HTML and footnotes. */
 const SKIPPED = new Set(['code', 'inlineCode', 'link', 'linkReference', 'definition', 'html', 'image', 'imageReference', 'footnoteReference', 'footnoteDefinition']);
+const NUMERIC_GROUP = /^\d{1,4}(?:[ \t]*[,，、][ \t]*\d{1,4})*$/u;
+const NUMERIC_LABEL = /^\d{1,4}$/u;
+
+const citationNode = (cite: number): MdNode => ({ type: 'citation', data: { hName: 'sup', hProperties: { dataCite: cite }, hChildren: [{ type: 'text', value: String(cite) }] } });
+
+/**
+ * `[2][3]` is a Markdown reference link (text "2", label "3") whenever a `[3]: …` definition is
+ * present, so the answer's adjacent citations would otherwise lose their numbers to link parsing.
+ * Numeric text and label together are the citation group the model wrote; both count.
+ */
+function referenceCitations(node: MdNode, isKnown: (cite: number) => boolean): number[] | null {
+    if (node.type !== 'linkReference') return null;
+    const text = node.children?.length === 1 && node.children[0].type === 'text' ? node.children[0].value?.trim() ?? '' : '';
+    const label = node.label?.trim() ?? '';
+    if (!NUMERIC_GROUP.test(text) || !NUMERIC_LABEL.test(label)) return null;
+    const numbers = [...new Set([...text.split(/[,，、]/u).map(value => Number(value.trim())), Number(label)])];
+    return numbers.every(isKnown) ? numbers : null;
+}
 
 function replaceCitations(node: MdNode, isKnown: (cite: number) => boolean) {
     if (!node.children || SKIPPED.has(node.type)) return;
     node.children = node.children.flatMap(child => {
+        const references = referenceCitations(child, isKnown);
+        if (references) return references.map(citationNode);
         if (child.type !== 'text' || !child.value) {
             replaceCitations(child, isKnown);
             return [child];
@@ -39,8 +59,7 @@ function replaceCitations(node: MdNode, isKnown: (cite: number) => boolean) {
         const pieces = splitCitations(child.value, isKnown);
         if (pieces.length === 1 && typeof pieces[0] === 'string') return [child];
         // Rendered as <sup data-cite="n">n</sup>; the renderer turns it into a badge.
-        return pieces.map(piece => typeof piece === 'string' ? { type: 'text', value: piece }
-            : { type: 'citation', data: { hName: 'sup', hProperties: { dataCite: piece.cite }, hChildren: [{ type: 'text', value: String(piece.cite) }] } });
+        return pieces.map(piece => typeof piece === 'string' ? { type: 'text', value: piece } : citationNode(piece.cite));
     });
 }
 
@@ -53,6 +72,8 @@ const parser = unified().use(remarkParse).use(remarkGfm);
 const UNCOUNTED = new Set(['heading', 'thematicBreak', 'code', 'html', 'definition', 'footnoteDefinition']);
 
 function collectCitations(node: MdNode, isKnown: (cite: number) => boolean, found: number[]) {
+    const references = referenceCitations(node, isKnown);
+    if (references) { found.push(...references); return; }
     if (SKIPPED.has(node.type)) return;
     if (node.type === 'text' && node.value) {
         for (const piece of splitCitations(node.value, isKnown)) if (typeof piece !== 'string') found.push(piece.cite);

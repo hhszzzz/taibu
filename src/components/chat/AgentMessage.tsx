@@ -22,16 +22,15 @@ import { AGENT_WEB_TOOLS } from "@/lib/agent/tool-catalog";
 import { useToast } from '@/components/ui/Toast';
 
 /**
- * [n] badges for what this answer's own task returned; a badge opens its source in the workspace.
+ * [n] badges for evidence numbered across the whole conversation; a badge opens its source in the workspace.
  * The labels keep their identity while text streams in, so settled blocks are not parsed again.
  */
-function useAnswerCitations(parts: AgentPart[]): MarkdownCitations | undefined {
+function useAnswerCitations(data: AgentMessageData, citationLabels?: MarkdownCitations['labels']): MarkdownCitations | undefined {
   const workspace = useAgentResultWorkspace();
-  const key = useMemo(() => JSON.stringify([...getAgentCitationLabels(parts)]), [parts]);
-  const labels = useMemo(() => new Map(JSON.parse(key) as Array<[number, string]>), [key]);
+  const labels = useMemo(() => citationLabels ?? getAgentCitationLabels(data.parts), [citationLabels, data.parts]);
   const active = workspace?.shown?.cite ?? null;
   const openResource = workspace?.openResource;
-  return useMemo(() => labels.size ? { labels, active, onOpen: openResource && ((cite: number) => openResource(`cite:${cite}`)) } : undefined, [labels, active, openResource]);
+  return useMemo(() => labels?.size ? { labels, active, onOpen: openResource && ((cite: number) => openResource(`cite:${cite}`)) } : undefined, [labels, active, openResource]);
 }
 
 type ArchiveEntry = { id: string; kind: 'card'; card: AgentArchiveCard } | { id: string; kind: 'record'; record: AgentArchiveRecord };
@@ -50,7 +49,7 @@ function getArchiveEntries(parts: AgentPart[]): ArchiveEntry[] {
   });
 }
 
-export function AgentMessage({ data, actions }: { data: AgentMessageData; actions?: ReactNode }) {
+export function AgentMessage({ data, actions, citationLabels }: { data: AgentMessageData; actions?: ReactNode; citationLabels?: MarkdownCitations['labels'] }) {
   const { showToast } = useToast();
   const chartErrorToasted = useRef(false);
   const handleChartError = useCallback(() => {
@@ -58,7 +57,7 @@ export function AgentMessage({ data, actions }: { data: AgentMessageData; action
     chartErrorToasted.current = true;
     showToast('error', '图表错误，已隐藏该图表；文字解读仍保留。');
   }, [showToast]);
-  const citations = useAnswerCitations(data.parts);
+  const citations = useAnswerCitations(data, citationLabels);
   const groups = groupAgentParts(data.parts);
   const active = ['queued', 'running', 'awaiting_input', 'cancelling'].includes(data.status);
   const summarizing = data.status === 'running' && data.runtime?.model.name && collaborationProgress(data.parts) ? data.runtime.model.name : null;

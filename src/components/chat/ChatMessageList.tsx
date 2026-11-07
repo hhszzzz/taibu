@@ -10,6 +10,7 @@
 import { useMemo } from 'react';
 import type { ChatMessage, Mention } from '@/types';
 import type { MessageQuote } from '@/lib/chat/quotes';
+import type { MarkdownCitations } from '@/components/ui/MarkdownContent';
 import { ChatMessageItem } from '@/components/chat/ChatMessageItem';
 
 interface ChatMessageListProps {
@@ -21,6 +22,8 @@ interface ChatMessageListProps {
     onSwitchVersion?: (messageId: string, versionIndex: number) => void;
     onArchiveMessage?: (message: ChatMessage) => void;
     onQuoteMessage?: (quote: MessageQuote) => void;
+    /** Evidence numbers stamped across the whole conversation, in transcript order. */
+    citationLabels?: MarkdownCitations['labels'];
     disabled?: boolean;
 }
 
@@ -33,6 +36,7 @@ export function ChatMessageList({
     onSwitchVersion,
     onArchiveMessage,
     onQuoteMessage,
+    citationLabels,
     disabled = false,
 }: ChatMessageListProps) {
     // 找到最后一条正在流式输出的AI消息
@@ -62,6 +66,7 @@ export function ChatMessageList({
                         onSwitchVersion={onSwitchVersion}
                         onArchiveMessage={onArchiveMessage}
                         onQuoteMessage={onQuoteMessage}
+                        citationLabels={citationLabels}
                     />
                 </div>
             ))}

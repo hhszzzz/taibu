@@ -161,8 +161,8 @@ export interface DomainToolResult<T = unknown> {
   usage?: Usage;
 }
 
-/** Who made a call: a collaboration member or background subagent rather than the main agent. */
-export type DomainToolCaller = { member?: boolean };
+/** Who made a call: a collaboration member or background subagent rather than the main agent, or a code mode script. */
+export type DomainToolCaller = { member?: boolean; script?: boolean };
 
 /** Business tools have no dependency on an agent loop implementation. */
 export interface DomainTool<T extends Schema = Schema, R = unknown> extends Tool<T> {

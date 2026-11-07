@@ -15,7 +15,7 @@ const TOOL_TITLES = {
   list_user_data: '检索个人资料', read_user_data: '读取命盘与历史', read_user_notes: '读取每日笔记',
   search_conversations: '检索以往对话', record_user_event: '记入档案', propose_archive_entry: '生成保存卡片',
   read_user_profile: '个性化档案', search_knowledge: '知识库检索', web_search: '联网检索', ask_user: '补充必要信息',
-  inspect_chart: '查看命盘', focus_chart: '定位分析位置', todo_write: '更新计划', load_skill: '加载方法或技能',
+  inspect_chart: '查看命盘', todo_write: '更新计划', load_skill: '加载技能',
   read_skill_file: '读取技能文件', read_attachment: '读取附件', read_user_memory: '读取长期记忆', remember_user_fact: '记住偏好',
   codemode: '运行脚本', tool_search: '查找工具', submit_plan: '提交计划', background_agent: '后台子分析',
 };
@@ -33,7 +33,8 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
   process.chdir(root);
   const require = createRequire(import.meta.url);
   require('./ts-register.cjs');
-  const { getChartTargets, getDrilldownTargets, validateChartFocus } = require('../src/lib/agent/chart-interaction.ts');
+  const { getDrilldownTargets } = require('../src/lib/agent/chart-interaction.ts');
+  const { agentDrilldownCiteNote } = require('../src/lib/agent/tool-catalog.ts');
   const { getAgentChart } = require('../src/lib/agent/tool-presentation.ts');
   const { normalizeQuestions, formatQuestionAnswers } = require('../src/lib/agent/questions.ts');
   const { normalizeAgentArchiveProposal } = require('../src/lib/agent/archive.ts');
@@ -126,40 +127,22 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
     const chart = (name, input, options = {}) => call(name, input, { ms: 900, ...options, details: ({ cacheId }) => coreResult(name, input, cacheId) });
     const calculate = chart;
 
-    /** A drilldown of a reading: Core's same-named tool on the reading's own input, located on its board. */
+    /**
+     * A drilldown of a reading: Core's same-named tool on the reading's own input, located on its board and numbered
+     * after the conversation's evidence, as the runtime numbers the main agent's own drilldowns.
+     */
     const drill = (name, reading, selection, options = {}) => {
       const input = { reference: reading.reference, ...selection };
       return call(name, input, { ms: 700, ...options, details: async ({ cacheId }) => {
         const rendered = core.buildToolSuccessPayload(name, await core.executeTool(name, { ...reading.args, ...selection }),
           { detailLevel: core.normalizeTransportDetailLevel(selection.detailLevel) });
         const targets = getDrilldownTargets(reading.value, rendered.structuredContent).map(({ id, label }) => ({ id, label }));
-        const output = { chartReference: reading.reference, chartKind: reading.kind, selection, result: rendered.structuredContent, targets };
-        artifacts.push({ id: randomUUID(), runId, callId: cacheId, toolName: name, kind: 'tool', args: input,
-          result: { content: rendered.content, details: output, canonicalText: text(rendered), inspectionOrder: state.task,
-            inspection: { chartReference: reading.reference, chartKind: reading.kind, result: reading.board } } });
-        return { output, canonicalText: text(rendered), cached: true };
-      } });
-    };
-    const inspect = (reading) => call('inspect_chart', { reference: reading.reference }, { ms: 300, details: ({ cacheId }) => {
-      const output = { chartReference: reading.reference, chartKind: reading.kind, result: reading.board };
-      artifacts.push({ id: randomUUID(), runId, callId: cacheId, toolName: 'inspect_chart', kind: 'tool', args: { reference: reading.reference },
-        result: { content: [{ type: 'text', text: reading.boardText }], details: output, canonicalText: reading.boardText, inspectionOrder: state.task } });
-      return { output, canonicalText: reading.boardText, cached: true };
-    } });
-    /** focus_chart with targets picked by their labels on the reading's board. */
-    const focus = (reading, labels, caption, includeRelated = false) => {
-      const targets = getChartTargets(reading.value);
-      const targetIds = labels.map((label) => {
-        const target = targets.find((item) => item.label === label) ?? targets.find((item) => item.label.includes(label));
-        if (!target) throw new Error(`no ${reading.kind} target labelled ${label}`);
-        return target.id;
-      });
-      const input = { reference: reading.reference, targetIds, includeRelated, caption };
-      return call('focus_chart', input, { ms: 200, details: ({ cacheId }) => {
         state.cite += 1;
         state.citeCalls[cacheId] = state.cite;
-        return { output: { chartFocus: validateChartFocus(reading.value, reading.reference, targetIds, includeRelated, caption), cite: state.cite },
-          text: `已在工作区定位，cite 编号 ${state.cite}。` };
+        const output = { chartReference: reading.reference, chartKind: reading.kind, selection, result: rendered.structuredContent, targets, cite: state.cite };
+        artifacts.push({ id: randomUUID(), runId, callId: cacheId, toolName: name, kind: 'tool', args: input,
+          result: { content: [{ type: 'text', text: text(rendered) }, { type: 'text', text: agentDrilldownCiteNote(state.cite) }], details: output, canonicalText: text(rendered) } });
+        return { output, canonicalText: text(rendered), cached: true };
       } });
     };
     /** Search rows numbered after the conversation's evidence, as stampCitations does. */
@@ -242,7 +225,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
         lastCite: state.cite,
       };
     };
-    return { turn, think, say, call, chart, calculate, drill, inspect, focus, knowledge, web, tool, todo, ask, plan, script, finish, resolve: coreResult };
+    return { turn, think, say, call, chart, calculate, drill, knowledge, web, tool, todo, ask, plan, script, finish, resolve: coreResult };
   }
 
   /** A conversation of one or more tasks, each with its question, the task's message and any replies. */
@@ -318,7 +301,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
   const rememberRow = { id: randomUUID(), title: '时间表述偏好', content: '以后都用公历时间跟我说', kind: 'preference', updated_at: new Date(now - 75 * 60 * MINUTE).toISOString() };
   memories.push({ ...memoryRows[0], sourceRunId: null, sourceText: '' }, { ...rememberRow, sourceRunId: run(9), sourceText: '记住以后都用公历时间跟我说' });
 
-  // 1. 八字流年，两轮：首轮排盘、定位、详查与引用；次轮沿用同一张盘扫描流年并给出保存卡片。
+  // 1. 八字流年，两轮：首轮排盘、详查与引用；次轮沿用同一张盘扫描流年并给出保存卡片。
   let baziReading;
   await conversation({
     id: conv(5), title: '看看 2026 年的流年运势', hoursAgo: 3,
@@ -337,9 +320,6 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           t.say('先按出生地的真太阳时排盘。');
           baziReading = (await t.chart('bazi', birth)).chart;
           t.turn();
-          await t.inspect(baziReading);
-          await t.focus(baziReading, ['日柱天干 庚', '月柱地支 丑'], '日主庚金生于丑月');
-          t.turn();
           t.think('需要大运和流年的刑冲合害，先加载低频工具。');
           await t.call('tool_search', { query: '大运 流年 刑冲合害' }, { ms: 200, cache: false, details: { loaded: ['bazi_dayun', 'bazi_relations', 'bazi_wuxing'], labels: ['大运', '八字岁运刑冲合害', '八字五行旺衰'] } });
           t.turn();
@@ -352,9 +332,9 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           await t.drill('bazi_relations', baziReading, { year: 2026 });
           await t.drill('bazi_wuxing', baziReading, {});
           t.turn();
-          await t.knowledge('庚金 七杀 丙午 流年 午冲子', [
+          await t.knowledge('庚金 七杀 丙午 流年 丑午相害', [
             { id: 'kb-1', kbId: 'demo-kb', content: '# 七杀与正官的区别\n七杀主压力、竞争与突破，正官主规则、名分与责任。身强逢杀，可化压力为权柄。', method: 'fts', metadata: { file_name: '十神总论.md', category: '命理基础' } },
-            { id: 'kb-2', kbId: 'demo-kb', content: '# 流年地支冲合\n流年冲动原局，先看被冲之神在原局的喜忌，再看冲后有无合解；冲提纲者，多主环境与节奏的变化。', method: 'vector', metadata: { file_name: '流年判断.md', category: '流年' } },
+            { id: 'kb-2', kbId: 'demo-kb', content: '# 流年与提纲\n流年冲害原局，先看被冲害之神在原局的喜忌，再看有无合解；冲害提纲者，多主环境与节奏的变化。', method: 'vector', metadata: { file_name: '流年判断.md', category: '流年' } },
           ]);
           await t.tool('read_user_notes', { since: '2026-10-01' }, { notes: noteRows, more: false }, { ms: 150 });
           await t.tool('read_user_profile', {}, { profile: { identity: '互联网产品经理，正在考虑转向更有决策权的岗位' }, defaultBaziChartId: baziChartId, defaultZiweiChartId: null }, { ms: 120 });
@@ -365,7 +345,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
             { id: 'answer', title: '结合依据给出结论', status: 'completed' },
           ]);
           // 建议问题由投影从回答尾部拆出（follow-ups.ts），正文里不再出现。
-          t.say('2026 年是丙午年。你是庚金日主、生在丑月[1]，丙火七杀透出，对你来说这一年的主题是“在压力里找方向”：七杀主压力，也主突破[2]。\n\n具体看三点：\n\n1. **事业**：七杀代表有分量的机会，但会伴随更高的要求。上半年适合把已有项目做深，不建议同时开三条战线。\n2. **节奏**：流年冲动原局，多主环境与节奏的变化[3]。你最近的笔记也提到睡得晚，把重要决定放在精力稳定的时段，别在赶工后拍板。\n3. **财务**：有机会增加收入，但冲动型支出也会变多，先留出三个月的缓冲。\n\n整体不是“大起大落”的一年，更像一次结构升级：把不合适的部分放掉，留下真正能长期做的。');
+          t.say('2026 年是丙午年。你是庚金日主、生在丑月，月令土旺、日主得相[2]；流年丙火七杀透出[1]，对你来说这一年的主题是“在压力里找方向”：七杀主压力，也主突破[3]。\n\n具体看三点：\n\n1. **事业**：七杀代表有分量的机会，但会伴随更高的要求。上半年适合把已有项目做深，不建议同时开三条战线。\n2. **节奏**：流年午火与月支丑土相害[1]，提纲受扰，多主环境与节奏的变化[4]。你最近的笔记也提到睡得晚，把重要决定放在精力稳定的时段，别在赶工后拍板。\n3. **财务**：有机会增加收入，但冲动型支出也会变多，先留出三个月的缓冲。\n\n整体不是“大起大落”的一年，更像一次结构升级：把不合适的部分放掉，留下真正能长期做的。');
           // One suggestion per answer (follow-ups.ts): the next round's question is exactly this one.
           return t.finish({ followUps: ['2026 年适合换工作吗？'] });
         },
@@ -381,20 +361,20 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           t.turn();
           await t.drill('bazi_liunian_scan', baziReading, { fromYear: 2026, toYear: 2028 });
           t.turn();
-          await t.call('propose_archive_entry', { kind: 'conclusion', category: 'prediction', title: '2026 年下半年适合换岗', content: '七杀透出、流年冲动提纲，上半年做深现有项目，下半年再争取更有决策权的岗位。', date: '2026-09', tags: ['事业'] },
+          await t.call('propose_archive_entry', { kind: 'conclusion', category: 'prediction', title: '2026 年下半年适合换岗', content: '七杀透出、丑午相害，上半年做深现有项目，下半年再争取更有决策权的岗位。', date: '2026-09', tags: ['事业'] },
             { ms: 180, details: ({ cacheId }) => ({
-              output: { runId: run(2), callId: cacheId, proposal: normalizeAgentArchiveProposal({ kind: 'conclusion', category: 'prediction', title: '2026 年下半年适合换岗', content: '七杀透出、流年冲动提纲，上半年做深现有项目，下半年再争取更有决策权的岗位。', date: '2026-09', tags: ['事业'] }, null) },
+              output: { runId: run(2), callId: cacheId, proposal: normalizeAgentArchiveProposal({ kind: 'conclusion', category: 'prediction', title: '2026 年下半年适合换岗', content: '七杀透出、丑午相害，上半年做深现有项目，下半年再争取更有决策权的岗位。', date: '2026-09', tags: ['事业'] }, null) },
               text: '已生成「结论」保存卡片，由用户决定是否保存；不要声称已保存。',
             }) });
           t.turn(4200);
-          t.say('可以换，但别急在上半年。\n\n- **2026 上半年**：七杀刚透出，外部要求多，适合在现岗位把成果做扎实，攒下谈判筹码。\n- **2026 下半年**：流年冲动提纲的力量逐渐落地，这时候争取更有决策权的岗位，成功率更高。\n- **2027 年**：节奏会更稳，如果下半年没动，可以把换岗计划放到 2027 年春天。\n\n我把这条判断做成了一张保存卡片，你觉得有用可以点保存，之后回看是否应验。');
+          t.say('可以换，但别急在上半年。\n\n- **2026 年**：七杀透出、午火与月支丑土相害[5]，外部要求多。上半年在现岗位把成果做扎实，攒下谈判筹码；下半年再争取更有决策权的岗位。\n- **2027 年**：丁未与月支丑土相冲又相刑[5]，是三年里变动最大的一年。如果 2026 年没动，换岗多半会被推着发生，提前准备比被动应对好。\n- **2028 年**：巳申相合，但合中带刑带破[5]，适合在新岗位上稳住，不宜再大动。\n\n我把这条判断做成了一张保存卡片，你觉得有用可以点保存，之后回看是否应验。');
           return t.finish({ followUps: ['换岗前要准备什么？'] });
         },
       },
     ],
   });
 
-  // 2. 奇门择时：起局、定位宫位、宫位详查、择日筛选与联网检索。
+  // 2. 奇门择时：起局、开门所在宫位的详查、择日筛选与联网检索。
   await conversation({
     id: conv(6), title: '下个月适合安排重要沟通吗', hoursAgo: 2,
     rounds: [{
@@ -402,15 +382,12 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
       question: '用奇门看一下，下个月适合安排一场重要沟通吗？我在上海，想问工作上的合作。',
       build: async (t) => {
         t.turn();
-        t.think('按提问时间起局，再看值符、值使与开门落宫；择日用黄历筛选下月的候选日。');
+        t.think('按提问时间起局，问沟通合作先看开门落宫；择日用黄历筛选下月的候选日。');
         const qimen = (await t.chart('qimen', { year: 2026, month: 10, day: 24, hour: 15, minute: 30, timezone: 'Asia/Shanghai', question: '下个月的重要合作沟通' })).chart;
         t.turn();
-        await t.inspect(qimen);
-        const palaces = getChartTargets(qimen.value).filter((target) => target.kind === 'qimen_palace').slice(0, 2).map((target) => target.label);
-        await t.focus(qimen, palaces, '值符与开门所在宫位');
         await t.call('tool_search', { query: '奇门宫位 择日' }, { ms: 200, cache: false, details: { loaded: ['qimen_palace', 'almanac_select'], labels: ['奇门宫位', '黄历择日筛选'] } });
         t.turn();
-        await t.drill('qimen_palace', qimen, { palace: 6 });
+        await t.drill('qimen_palace', qimen, { palace: 9 });
         await t.calculate('almanac_select', { startDate: '2026-11-01', endDate: '2026-11-30', activity: '订盟', excludeClash: ['蛇'], timezone: 'Asia/Shanghai' });
         t.turn();
         await t.web('重要商务谈判 前期准备 要点', [
@@ -418,7 +395,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
           { title: '如何安排一场高效的合作会议', url: 'https://example.com/meeting-agenda', content: '会前发送议程与材料，会上先对齐目标再讨论细节，会后 24 小时内发出纪要。' },
         ]);
         t.turn(4800);
-        t.say('可以安排，而且时机不差。\n\n局里值符与开门所在的宫位都比较顺[1]，说明**沟通本身是通畅的**；阻力主要在准备不足，而不是时机。建议放在下月上旬，提前三天把方案、底线和可让步项写清楚[2][3]。\n\n如果要挑具体日子，择日筛选里下月初的几个候选日更合适（见工作区里的择日结果）；但真正决定结果的，是你带去的信息是否具体。');
+        t.say('可以安排，但要多做准备。\n\n开门落离九宫，天盘戊土得令、月干临宫，事情本身有人推动[1]；但离宫火克开门金，门受宫制[1]，说明**阻力在环境与准备，不在时机**。建议放在下月上旬，提前三天把方案、底线和可让步项写清楚[2][3]。\n\n如果要挑具体日子，择日筛选里下月初的几个候选日更合适（见工作区里的择日结果）；但真正决定结果的，是你带去的信息是否具体。');
         return t.finish({ followUps: ['换成六爻再对照一次'] });
       },
     }],
@@ -481,7 +458,7 @@ export async function buildAgentDemo({ root, baziChartId, plainConversations, no
               steps: [{ name: 'bazi', title: '八字命盘', status: 'completed', input: JSON.stringify(memberBirth), output: memberText.bazi, truncated: true }] },
           ] } });
           t.turn(5600);
-          t.say('三位成员的结论有分歧，但方向一致：**可以往管理走，关键在节奏。**\n\n| 成员 | 判断 | 时间窗口 |\n|---|---|---|\n| 子平 | 转管理，七杀可作权柄 | 2026 年下半年 |\n| 紫微 | 先在专业上立住，再转 | 2027 年春 |\n| 复核 | 先争取管理职责，再换名义 | 2026 下半年至 2027 春 |\n\n我自己看的紫微官禄宫也偏稳重，所以更稳妥的做法是：**今年下半年先在现岗位接带人的职责**，做出一两件有说服力的事，2027 年春天再正式换岗或换名义。');
+          t.say('三位成员的结论有分歧，但方向一致：**可以往管理走，关键在节奏。**\n\n| 成员 | 判断 | 时间窗口 |\n|---|---|---|\n| 子平 | 转管理，七杀可作权柄 | 2026 年下半年 |\n| 紫微 | 先在专业上立住，再转 | 2027 年春 |\n| 复核 | 先争取管理职责，再换名义 | 2026 下半年至 2027 春 |\n\n我自己看的紫微官禄宫是武曲、贪狼同坐，生年禄、权都落在这里[1]，做事务实、执行力强，所以更稳妥的做法是：**今年下半年先在现岗位接带人的职责**，做出一两件有说服力的事，2027 年春天再正式换岗或换名义。');
           return t.finish({ followUps: ['让后台继续跟进紫微流年'] });
         },
       },

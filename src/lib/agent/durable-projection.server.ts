@@ -6,7 +6,7 @@ import { CompactionEntry, LiveDoc } from "@earendil-works/pi-durable";
 import type { AgentDurableStorage } from "./durable-storage.server";
 import { putAgentPart, type AgentCheckpoint, type AgentPart, type AgentRuntimeInfo } from "./types";
 import { projectAgentContextUsage } from "./context-usage";
-import { AGENT_CODEMODE_TOOL, CHART_TARGET_DIRECTORY_HEADING, projectsAgentCanonicalText } from './tool-catalog';
+import { AGENT_CODEMODE_TOOL, projectsAgentCanonicalText } from './tool-catalog';
 import { splitAgentFollowUps } from './follow-ups';
 import { agentScriptCallNumber } from './codemode.server';
 import { isAgentToolLoadCall } from './tool-search.server';
@@ -33,12 +33,11 @@ function scriptCallTask(part: AgentPart) {
 
 /**
  * The text a card keeps for tools whose model-visible text is canonical (tool-catalog.ts): the first text, without the
- * artifact ID and target directory that follow it for the model. Viewing a palace returns only the directory, so it
- * keeps none. Undefined for every other tool.
+ * chart reference that follows it for the model. Undefined for every other tool.
  */
 export function publicCanonicalText(name: string, content: ToolResultMessage["content"]): string | undefined {
   if (!projectsAgentCanonicalText(name)) return undefined;
-  const canonical = content.find(part => part.type === 'text' && !part.text.startsWith(CHART_TARGET_DIRECTORY_HEADING));
+  const canonical = content.find(part => part.type === 'text');
   return canonical?.type === 'text' ? canonical.text : '';
 }
 
@@ -224,7 +223,7 @@ export async function projectDurableConversation(
           card.output = card.name === AGENT_CODEMODE_TOOL ? scriptOutput(message) : message.details ?? message.content;
           Object.assign(card, taskTiming(task));
           if (typeof message.durationMs === 'number' && Number.isFinite(message.durationMs) && message.durationMs >= 0) card.durationMs = message.durationMs;
-          // 第一段是 Core 或资料源的规范文本；其后的命盘引用与定位目录只写给模型，不进公开文本。
+          // 第一段是 Core 或资料源的规范文本；其后的命盘引用与引用编号只写给模型，不进公开文本。
           const canonicalText = publicCanonicalText(card.name, message.content);
           if (canonicalText !== undefined) card.canonicalText = canonicalText;
           if (entry.byTaskId) attach(card.id, `${entry.byTaskId}:${message.toolCallId}`);

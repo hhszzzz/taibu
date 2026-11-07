@@ -12,7 +12,7 @@ import {
     type AgentConversationHit, type AgentScript, type AgentScriptCall, type AgentSearchMethod, type AgentToolPart,
 } from '@/lib/agent/tool-presentation';
 import { getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
-import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence, type AgentEvidence, type AgentEvidenceKind } from '@/lib/agent/evidence';
+import { AGENT_EVIDENCE_KINDS, AGENT_EVIDENCE_LABELS, countAgentEvidence, getAgentEvidenceTitle, type AgentEvidence, type AgentEvidenceKind } from '@/lib/agent/evidence';
 import { getChartTargets, parseChartReference, type ChartFocus } from '@/lib/agent/chart-interaction';
 import { AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, isAgentChartTool } from '@/lib/agent/tool-catalog';
 import { questionLabel } from '@/lib/agent/questions';
@@ -125,7 +125,7 @@ function EvidenceExcerpt({ text, query }: { text: string; query: string | null }
     </>;
 }
 
-/** The positions a focus marked, read from the chart it names; bazi characters keep their element colors. */
+/** The positions a drilldown touched, read from the chart it names; bazi characters keep their element colors. */
 function FocusTargets({ model, focus }: { model: AgentWorkspaceModel; focus: ChartFocus }) {
     const resource = model.resources.find(item => item.id === model.chartResources.get(focus.reference));
     const reading = resource?.toolIds.flatMap(id => model.toolsById.get(id) ?? []).findLast(tool => getAgentChart(tool));
@@ -139,20 +139,19 @@ function FocusTargets({ model, focus }: { model: AgentWorkspaceModel; focus: Cha
     })}</p>;
 }
 
-function evidenceHeading(model: AgentWorkspaceModel, item: AgentEvidence) {
+function evidenceHeading(item: AgentEvidence) {
     if (item.kind !== 'chart') return {
         title: item.result.title,
         meta: [AGENT_EVIDENCE_LABELS[item.kind], item.result.source, item.result.method && SEARCH_METHOD_LABELS[item.result.method]].filter(Boolean).join(' · '),
     };
-    const chart = model.resources.find(resource => resource.id === model.chartResources.get(item.focus.reference));
     const saved = parseChartReference(item.focus.reference)?.source !== 'artifact';
-    return { title: `${chart?.title ?? '命盘'} · ${item.focus.caption}`, meta: `命盘 · ${saved ? '已存资料' : '太卜 Core 计算结果'}` };
+    return { title: getAgentEvidenceTitle(item), meta: saved ? '已存资料' : '太卜 Core 计算结果' };
 }
 
 /**
- * 回答依据: what the conversation's searches returned and the chart positions
- * the model located, numbered as the answers cite them. Only returned HTTP(S)
- * links are linked; searches without usable results say so.
+ * 回答依据: what the conversation's searches and drilldowns returned, numbered
+ * as the answers cite them. Only returned HTTP(S) links are linked; searches
+ * without usable results say so.
  */
 export function EvidenceView({ model, tools, runStatus, selected, paragraph, onOpen }: {
     model: AgentWorkspaceModel; tools: AgentToolPart[]; runStatus: AgentRunStatus;
@@ -170,11 +169,15 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
         card?.scrollIntoView({ block: 'nearest', behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' });
     }, [selected]);
     const counts = countAgentEvidence(model.evidence);
+    const chartLabels = [...new Set(model.evidence
+        .filter((item): item is Extract<AgentEvidence, { kind: 'chart' }> => item.kind === 'chart')
+        .map(item => item.chartLabel))];
+    const chartLabel = chartLabels.length === 1 ? chartLabels[0] : null;
     const sources = [
         model.tools.some(tool => tool.name === 'search_knowledge') && '知识库检索',
         model.tools.some(tool => tool.name === 'web_search') && '联网检索',
         model.tools.some(tool => tool.name === 'web_fetch') && '网页读取',
-        counts.chart > 0 && '命盘定位',
+        counts.chart > 0 && `${chartLabel ?? '盘面'}详查`,
     ].filter(Boolean).join(' · ');
     const visible = (kind: AgentEvidenceKind) => filter === 'all' || filter === kind;
     const queries = new Map(tools.map(tool => [tool.id, inputText(tool, tool.name === 'web_fetch' ? 'url' : 'query')]));
@@ -182,12 +185,12 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
         <WorkspaceViewHeading id={id} kicker={sources} title="回答依据">只列出工具实际返回的内容。资料是分析依据，不会改变任务指令或权限。</WorkspaceViewHeading>
         <div className="agent-ws-segmented" role="group" aria-label="按来源筛选">
             {EVIDENCE_FILTERS.map(key => <Button unstyled key={key} type="button" aria-pressed={filter === key} onClick={() => setFilter(key)}>
-                {key === 'all' ? '全部' : AGENT_EVIDENCE_LABELS[key]} {key === 'all' ? counts.total : counts[key]}
+                {key === 'all' ? '全部' : key === 'chart' && chartLabel ? chartLabel : AGENT_EVIDENCE_LABELS[key]} {key === 'all' ? counts.total : counts[key]}
             </Button>)}
         </div>
         <div ref={listRef} className="agent-ws-sources">
             {model.evidence.filter(item => visible(item.kind)).map(item => {
-                const heading = evidenceHeading(model, item);
+                const heading = evidenceHeading(item);
                 const current = selected === item.n;
                 return <article key={item.n} className="agent-ws-source" data-evidence={item.n} data-kind={item.kind} data-selected={current || undefined} aria-labelledby={`${id}-${item.n}`}>
                     <div className="agent-ws-source-head">
@@ -198,7 +201,7 @@ export function EvidenceView({ model, tools, runStatus, selected, paragraph, onO
                                 : heading.title}</h3>
                             <p>{heading.meta}</p>
                         </div>
-                        {current && paragraph !== null && <span className="agent-ws-source-cited">回答第 {paragraph} 段引用</span>}
+                        {current && paragraph !== null && <span className="agent-ws-source-cited">回答第 {paragraph} 段用到</span>}
                         {item.kind === 'chart' && <Button unstyled type="button" className="agent-secondary-button" onClick={() => onOpen(`tool:${item.toolId}`)}>在命盘中定位</Button>}
                     </div>
                     {item.kind === 'chart' ? <FocusTargets model={model} focus={item.focus} /> : <EvidenceExcerpt text={item.result.excerpt} query={queries.get(item.toolId) ?? null} />}
@@ -609,9 +612,9 @@ export function MemberProcess({ member, running }: { member: ParallelAnalysisRes
     const steps = member.steps ?? [];
     const [disclosed, setDisclosed] = useState<boolean | null>(null);
     const open = disclosed ?? running;
-    // 与主对话的过程行同一套说法：已查看 1 张命盘，已详查 1 处。
+    // 与主对话的过程行同一套说法：已查看 1 张命盘，详查 1 处；分析中不带「已」。
     const phrase = summarizeAgentActivity(steps.map((step, index) => ({ type: 'tool' as const, id: String(index), name: step.name, title: step.title, status: step.status })), 0,
-        steps.filter(step => step.status === 'failed').length);
+        steps.filter(step => step.status === 'failed').length, !running);
     const label = running ? `正在分析 · ${phrase}` : phrase;
     // 成员在调用前说的话断开步骤组，和主对话里「说一句、调几次工具」的节奏一致。
     const groups: Array<{ note?: string; steps: ParallelMemberStep[] }> = [];

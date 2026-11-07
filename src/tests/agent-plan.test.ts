@@ -128,12 +128,12 @@ test('a plan is a process step; the task list stays a progress bar', () => {
     part('b', 'bazi'),
   ]);
   assert.deepEqual(steps.map(step => step.name), ['submit_plan', 'bazi']);
-  assert.equal(summarizeAgentActivity(steps, 0, 0), '已查看 1 张命盘，已提交 1 次计划');
+  assert.equal(summarizeAgentActivity(steps, 0, 0), '查看 1 张命盘，提交 1 次计划');
   assert.equal(summarizeAgentActivity([part('todo', 'todo_write')], 0, 0), '任务过程', 'task-list updates do not count as work');
 });
 
 test('the status line counts methods and skills, not loads', () => {
   const load = (id: string, name: string) => part(id, 'load_skill', { input: { name } });
-  assert.equal(summarizeAgentActivity([load('m1', 'bazi'), load('m2', 'bazi'), load('m3', 'ziwei'), load('s1', 'case-review')], 0, 0), '已使用 3 个技能',
+  assert.equal(summarizeAgentActivity([load('m1', 'bazi'), load('m2', 'bazi'), load('m3', 'ziwei'), load('s1', 'case-review')], 0, 0), '使用 3 个技能',
     'reading a card twice is still one card; the directory is injected, not counted');
 });

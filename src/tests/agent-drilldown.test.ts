@@ -7,6 +7,8 @@ import { getAgentChartReference, getChartTargets, getDrilldownFocus, getDrilldow
 import { createAgentTools } from '../lib/agent/tools.server';
 import { buildAgentWorkspace } from '../lib/agent/workspace';
 import { describeDrilldownSelection } from '../components/chat/agent/presentation';
+import { publicCanonicalText } from '../lib/agent/durable-projection.server';
+import { agentDrilldownCiteNote } from '../lib/agent/tool-catalog';
 import { MemoryStore, row } from './helpers/agent-runtime-fixture';
 import { createMockScopedDb } from './helpers/db-mock';
 
@@ -52,7 +54,7 @@ test('the Agent schema of a drilldown takes a chart reference and selectors, nev
   assert.equal(parameters.additionalProperties, false);
 });
 
-test('a drilldown recomputes the artifact chart, caches as a tool call and counts as an inspection for focus', async () => {
+test('a drilldown recomputes the artifact chart, caches as a tool call and hands the workspace the positions it touched', async () => {
   const { store, tool, reference } = await setup();
   const result = await tool('bazi_relations').execute('5:relations', { reference: reference.toUpperCase().replace('ARTIFACT', 'artifact'), year: 2027 });
   const details = result.details as DrilldownDetails;
@@ -70,10 +72,30 @@ test('a drilldown recomputes the artifact chart, caches as a tool call and count
   assert.doesNotMatch(result.content[0].text, /"targets"|artifact:|bazi:cell:/);
   const write = store.writes.find(item => item.name === 'agent_cache_tool' && item.args.p_tool_name === 'bazi_relations')!;
   assert.equal(write.args.p_kind, 'tool', 'a drilldown is not a new result');
-  assert.equal((write.args.p_result as { inspectionOrder?: number }).inspectionOrder, 5);
-  // focus_chart accepts the drilldown's targets without a separate inspect_chart.
-  const focus = await tool('focus_chart').execute('6:focus', { reference, targetIds: details.targets.map(target => target.id), caption: '流年关系' });
-  assert.deepEqual((focus.details as { chartFocus: { targetIds: string[] } }).chartFocus.targetIds, details.targets.map(target => target.id));
+  assert.deepEqual(Object.keys(write.args.p_result as object).sort(), ['canonicalText', 'content', 'details'], 'no snapshot of the chart rides along');
+});
+
+test('with numbered evidence the main agent\'s drilldown tells the model its number; members and scripts get none', async () => {
+  const { run, tool, reference } = await setup();
+  run.checkpoint.citations = { base: 4, calls: {} };
+  const result = await tool('bazi_relations').execute('relations', { reference, year: 2027 });
+  assert.deepEqual(result.content.slice(1), [{ type: 'text', text: agentDrilldownCiteNote(5) }]);
+  assert.match(agentDrilldownCiteNote(5), /\[5\]/u, 'the note shows the marker to write');
+  assert.equal((result.details as { cite?: number }).cite, 5);
+  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { relations: 5 } });
+  // The step shows Core's text; the number is written for the model only.
+  assert.equal(publicCanonicalText('bazi_relations', result.content), result.canonicalText);
+  // A replay returns and records the same number.
+  assert.deepEqual(await tool('bazi_relations').execute('relations', { reference, year: 2027 }), result);
+  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { relations: 5 } });
+  // A member reports its own sources and a script returns only what it prints: neither is shown a number.
+  for (const caller of [{ member: true }, { script: true }]) {
+    const unnumbered = await tool('bazi_wuxing').execute(JSON.stringify(caller), { reference }, undefined, caller);
+    assert.equal(unnumbered.content.length, 1);
+    assert.equal((unnumbered.details as { cite?: number }).cite, undefined);
+  }
+  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { relations: 5 } });
+  assert.equal(((await tool('bazi_wuxing').execute('wuxing', { reference })).details as { cite?: number }).cite, 6);
 });
 
 test('drilldown filters reach Core while detailLevel only adds the 口径 to the text the model reads', async () => {
@@ -146,7 +168,7 @@ test('the workspace keeps drilldowns under their chart and they never replace it
   assert.deepEqual(focus.targetIds, (result.details as DrilldownDetails).targets.map(target => target.id));
   assert.equal(getDrilldownFocus(pending), null);
   // What the model is looking at follows its drilldowns: running names the step, completed shows its positions,
-  // a failed one changes nothing, and a later focus call takes over.
+  // a failed one changes nothing; in an older conversation a later focus call took over.
   assert.deepEqual(getLatestChartFocus([calculation, pending], reference), { version: 1, reference, targetIds: [], includeRelated: false, caption: '详查中 · 八字刑冲合害' });
   assert.deepEqual(getLatestChartFocus([calculation, drilldown], reference), focus);
   assert.deepEqual(getLatestChartFocus([calculation, drilldown, { ...pending, status: 'failed' }], reference), focus);

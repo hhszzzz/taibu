@@ -79,7 +79,7 @@ test('every Core tool and every registered Agent tool belongs to a presentation 
     routes.mock.restore();
   }
   assert.equal(getAgentToolFamily('mcp__archive__search'), 'external');
-  assert.equal(getAgentToolFamily('focus_chart'), 'chart');
+  assert.equal(getAgentToolFamily('focus_chart'), 'chart', 'the removed focus tool still shows as a chart step in older conversations');
   assert.equal(AGENT_CODEMODE_TOOL, CODEMODE_TOOL_NAME, 'the catalog names Pi’s code mode tool');
   assert.equal(getAgentToolFamily(AGENT_CODEMODE_TOOL), 'code');
   for (const name of ['bazi_dayun', 'bazi_pillars_resolve', 'ziwei_horoscope', 'ziwei_flying_star', 'inspect_chart', 'read_user_data'])

@@ -1,13 +1,14 @@
 import { test, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import type { Message } from '@earendil-works/pi-ai';
 import { baziPillarEntries, toBaziJson, type BaziPillarJSON, type BaziOutput } from 'taibu-core/bazi';
 import { buildToolSuccessPayload, executeTool, listToolDefinitions } from 'taibu-core/mcp';
 import { getAgentChart, getAgentToolText, type AgentToolPart } from '../lib/agent/tool-presentation';
-import { AGENT_CHART_NAMES, AGENT_DRILLDOWN_BASES, CHART_TARGET_DIRECTORY_HEADING, getAgentDrilldownBase } from '../lib/agent/tool-catalog';
-import { CHART_SOURCE_KINDS, chartQuestion, deduplicateChartResults, getAgentChartReference, getChartFocus, getChartResources, getChartTargets, getLatestChartFocus, parseChartReference, validateChartFocus } from '../lib/agent/chart-interaction';
+import { AGENT_CHART_NAMES } from '../lib/agent/tool-catalog';
+import { CHART_SOURCE_KINDS, chartQuestion, getAgentChartReference, getChartFocus, getChartResources, getChartTargets, getLatestChartFocus, parseChartReference, type ChartFocus } from '../lib/agent/chart-interaction';
 import { createAgentTools } from '../lib/agent/tools.server';
-import { authorizeChartReference, loadAgentChart, loadInspectedChart } from '../lib/agent/chart-tools.server';
+import { authorizeChartReference, loadAgentChart } from '../lib/agent/chart-tools.server';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { AgentStore, type AgentRunRow } from '../lib/agent/store.server';
 import { config, row, MemoryStore, scripted } from './helpers/agent-runtime-fixture';
@@ -28,10 +29,6 @@ class ChartStore extends MemoryStore {
   override async chartArtifact(_run: AgentRunRow, id: string) {
     return [...this.drafts.values()].find(artifact => artifact.kind === 'calculation' && artifact.id === id) ?? null;
   }
-  override async inspectedChart(_run: AgentRunRow, reference: string) {
-    return [...this.drafts.values()].reverse().find(artifact => (artifact.tool_name === 'inspect_chart' || getAgentDrilldownBase(artifact.tool_name))
-      && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
-  }
 }
 
 test('all eleven systems expose actual unique targets in default/full output and serialized native history', async () => {
@@ -45,12 +42,11 @@ test('all eleven systems expose actual unique targets in default/full output and
       const tool: AgentToolPart = { type: 'tool', id: definition.name, title: definition.name, name: definition.name, status: 'completed', output: { artifactId: randomUUID(), result: payload.structuredContent } };
       const value = getAgentChart(tool)!;
       assert.ok(value, definition.name + ' ' + detailLevel);
-      const before = JSON.stringify(value), targets = getChartTargets(value), reference = getAgentChartReference(tool)!;
+      const before = JSON.stringify(value), targets = getChartTargets(value);
       assert.ok(targets.length > 0, definition.name);
       assert.equal(new Set(targets.map(target => target.id)).size, targets.length);
+      assert.ok(targets.every(target => target.label.trim().length > 0), definition.name + ' labels every position');
       assert.deepEqual(getChartTargets(getAgentChart(JSON.parse(JSON.stringify(tool)))!), targets);
-      for (const target of targets) assert.deepEqual(validateChartFocus(value, reference, [target.id], true, target.label.slice(0, 160)).targetIds, [target.id]);
-      assert.throws(() => validateChartFocus(value, reference, [definition.name + ':unknown:999'], true, '未知位置'), /不在这张命盘/);
       assert.equal(JSON.stringify(value), before);
     }
   }
@@ -66,11 +62,11 @@ test('normalized friendship palace remains selectable and usable in chart follow
   const tool = await chartTool('ziwei'), chart = getAgentChart(tool)!, reference = getAgentChartReference(tool)!;
   const target = getChartTargets(chart).find(target => target.label.includes('交友'));
   assert.ok(target);
-  assert.deepEqual(validateChartFocus(chart, reference, [target.id], true, '核对交友宫').targetIds, [target.id]);
-  assert.ok(chartQuestion(reference, [target]).includes('交友'));
+  // The question names the positions and the chart; the model drills into them by itself, nothing asks it to mark them.
+  assert.equal(chartQuestion(reference, [target]), '请继续分析这张命盘的' + target.label + '。命盘引用：' + reference + '。');
 });
 
-test('inline results keep one chart per reading and preserve saved inspections, fallback text and unrelated receipts', async () => {
+test('chart resources keep the latest step per reading without changing the transcript', async () => {
   const calculation = await chartTool('bazi');
   const inspected: AgentToolPart = { ...calculation, id: 'inspect', name: 'inspect_chart', output: { chartKind: 'bazi', chartReference: getAgentChartReference(calculation), result: getAgentChart(calculation)!.chart } };
   const repeated = { ...inspected, id: 'inspect-again' };
@@ -80,7 +76,6 @@ test('inline results keep one chart per reading and preserve saved inspections, 
   const receipt: AgentToolPart = { type: 'tool', id: 'focus', name: 'focus_chart', title: '定位', status: 'completed', output: {} };
   const tools = [calculation, inspected, repeated, saved, savedAgain, fallback, receipt];
   const before = JSON.stringify(tools);
-  assert.deepEqual(deduplicateChartResults(tools).map(tool => tool.id), [calculation.id, savedAgain.id, fallback.id, receipt.id]);
   assert.equal(getChartResources(tools).find(resource => resource.reference === getAgentChartReference(calculation))!.tool.id, repeated.id);
   assert.equal(JSON.stringify(tools), before, 'all native inspection steps remain in the transcript');
 });
@@ -208,9 +203,6 @@ test('Ziwei targets use returned palaces, exact star group/index and work with s
   assert.equal(targets.filter(target => target.kind === 'ziwei_palace').length, 12);
   assert.ok(targets.some(target => target.kind === 'ziwei_star'));
   assert.equal(new Set(targets.map(target => target.id)).size, targets.length);
-  const ref = 'artifact:' + randomUUID();
-  assert.throws(() => validateChartFocus(value, ref, ['ziwei:palace:12'], true, '宫位'), /不在这张命盘/);
-  assert.deepEqual(validateChartFocus(value, ref, [targets[0].id, targets[0].id], false, '当前宫位').targetIds, [targets[0].id]);
 });
 
 test('repeated characters retain their actual pillar positions and nonadjacent stem endpoints', async () => {
@@ -228,9 +220,9 @@ test('repeated characters retain their actual pillar positions and nonadjacent s
   ]);
 });
 
-test('completed native actions and chart references restore from serialized history; failed actions do not apply', async () => {
+test('an older conversation\'s focus steps and chart references restore from serialized history; failed ones do not apply', async () => {
   const tool = await chartTool('bazi'), value = getAgentChart(tool)!, reference = getAgentChartReference(tool)!;
-  const focus = validateChartFocus(value, reference, ['bazi:cell:2:1'], true, '查看日支');
+  const focus: ChartFocus = { version: 1, reference, targetIds: ['bazi:cell:2:1'], includeRelated: true, caption: '查看日支' };
   const action: AgentToolPart = { type: 'tool', id: 'focus', name: 'focus_chart', title: '定位', status: 'completed', output: { chartFocus: focus } };
   const inspector: AgentToolPart = { ...tool, id: 'inspect', name: 'inspect_chart', output: { chartReference: reference, chartKind: value.kind, result: value.chart } };
   const restored = JSON.parse(JSON.stringify([tool, inspector, action])) as AgentToolPart[];
@@ -246,7 +238,7 @@ test('completed native actions and chart references restore from serialized hist
 test('reinspection invalidates only the old focus for that reading, including after saved data edits and history restore', async () => {
   const tool = await chartTool('bazi'), value = getAgentChart(tool)!, reference = 'bazi_chart:' + randomUUID();
   const otherReference = 'ziwei_chart:' + randomUUID();
-  const focus = validateChartFocus(value, reference, ['bazi:cell:2:1'], true, '旧盘日支');
+  const focus: ChartFocus = { version: 1, reference, targetIds: ['bazi:cell:2:1'], includeRelated: true, caption: '旧盘日支' };
   const action: AgentToolPart = { type: 'tool', id: 'focus-old', name: 'focus_chart', title: '定位', status: 'completed', output: { chartFocus: focus } };
   const unrelated = { ...action, id: 'focus-other', output: { chartFocus: { ...focus, reference: otherReference, caption: '另一张盘' } } };
   const inspector: AgentToolPart = { ...tool, id: 'inspect-old', name: 'inspect_chart', output: { chartReference: reference, chartKind: value.kind, result: value.chart } };
@@ -263,38 +255,18 @@ test('reinspection invalidates only the old focus for that reading, including af
   assert.equal(getLatestChartFocus([inspector, action, { ...reinspected, output: inspector.output }], reference), null, 'a successful reinspection clears old model analysis even when the result is unchanged');
 });
 
-test('focus requires a real inspected snapshot, validates targets and rechecks disabled features even on cache replay', async t => {
+test('inspect_chart reads a chart of this conversation and nothing else; no tool asks the model to mark positions', async t => {
   const store = new ChartStore(), run = row();
   const tools = await createAgentTools(store, run, run.checkpoint);
+  assert.ok(!tools.some(tool => tool.name === 'focus_chart'), 'the board follows the drilldowns');
   await tools.find(tool => tool.name === 'bazi')!.execute('calculate', birth);
   const reference = 'artifact:' + store.draft('calculate')!.id;
-  const inspect = tools.find(tool => tool.name === 'inspect_chart')!, focus = tools.find(tool => tool.name === 'focus_chart')!;
-  const args = { reference, targetIds: ['bazi:cell:2:1'], caption: '日支' };
-  await assert.rejects(focus.execute('without-inspect', args), /先使用 inspect_chart/);
+  const inspect = tools.find(tool => tool.name === 'inspect_chart')!;
   await assert.rejects(inspect.execute('wrong-owner', { reference: 'artifact:' + randomUUID() }), /不在当前会话/);
-  await inspect.execute('inspect', { reference });
-  await assert.rejects(focus.execute('invalid', { ...args, targetIds: ['fake-palace'] }), /不在这张命盘/);
-  const result = await focus.execute('focus', args);
-  assert.equal((result.details as { chartFocus: { caption: string } }).chartFocus.caption, '日支');
-  // The model gave the reference, ids and caption itself; it only gets a receipt back, not a JSON echo.
-  assert.deepEqual(result.content.map(part => part.text), ['已在工作区定位。']);
-  const cleared = await focus.execute('clear', { ...args, targetIds: [] });
-  assert.deepEqual(cleared.content.map(part => part.text), ['已清除盘面高亮。']);
+  const result = await inspect.execute('inspect', { reference });
+  assert.equal((result.details as { chartKind: string }).chartKind, 'bazi');
   t.mock.method(require('../lib/app-settings'), 'readFeatureModuleStateFresh', async () => ({ status: 'disabled' }));
-  await assert.rejects(focus.execute('focus', args), /该功能已关闭/);
-});
-
-test('with numbered evidence the focus receipt tells the model the number it may cite', async () => {
-  const store = new ChartStore(), run = row();
-  run.checkpoint.citations = { base: 4, calls: {} };
-  const tools = await createAgentTools(store, run, run.checkpoint);
-  await tools.find(tool => tool.name === 'bazi')!.execute('calculate', birth);
-  const reference = 'artifact:' + store.draft('calculate')!.id;
-  await tools.find(tool => tool.name === 'inspect_chart')!.execute('inspect', { reference });
-  const result = await tools.find(tool => tool.name === 'focus_chart')!.execute('focus', { reference, targetIds: ['bazi:cell:2:1'], caption: '日支' });
-  assert.deepEqual(result.content.map(part => part.text), ['已在工作区定位，cite 编号 5。']);
-  assert.equal((result.details as { cite?: number }).cite, 5);
-  assert.deepEqual(run.checkpoint.citations, { base: 4, calls: { focus: 5 } });
+  await assert.rejects(inspect.execute('inspect-off', { reference }), /该功能已关闭/);
 });
 
 test('artifact database lookup scopes both owner and conversation rather than trusting an artifact UUID', async () => {
@@ -317,48 +289,7 @@ test('artifact database lookup scopes both owner and conversation rather than tr
   assert.deepEqual(predicates, [['artifact.id', id], ['artifact.kind', 'calculation'], ['run.user_id', run.user_id], ['run.conversation_id', run.conversation_id]]);
 });
 
-test('inspection lookup uses native numeric task order and never guesses between ambiguous legacy snapshots', async () => {
-  const run = row(), reference = 'artifact:' + randomUUID(), predicates: Array<[string, unknown]> = [], orders: string[] = [];
-  const newer = { id: randomUUID(), result: { inspectionOrder: 40 } }, older = { id: randomUUID(), result: { inspectionOrder: 9 } };
-  let rows: Array<{ id: string; result: { inspectionOrder?: number } }> = [newer, older];
-  const query = {
-    selectAll: () => query,
-    where: (key: string, _operator: string, value: unknown) => { predicates.push([key, value]); return query; },
-    orderBy: (_expression: unknown, modifier: (order: { desc: () => { nullsLast: () => void } }) => void) => {
-      modifier({ desc: () => ({ nullsLast: () => orders.push('desc nulls last') }) });
-      return query;
-    },
-    limit: (value: number) => { assert.equal(value, 2); return query; },
-    execute: async () => rows,
-  };
-  const db = createMockScopedDb({ tx: async work => work({ selectFrom: (table: string) => {
-    assert.equal(table, 'agent_run_artifacts');
-    return query;
-  } } as never) });
-  const store = new AgentStore(db);
-  assert.equal((await store.inspectedChart(run, reference))!.id, newer.id);
-  assert.equal(predicates.length, 3);
-  assert.deepEqual(predicates[0], ['run_id', run.id]);
-  assert.deepEqual(predicates[1], ['tool_name', ['inspect_chart', ...Object.keys(AGENT_DRILLDOWN_BASES)]]);
-  assert.equal(predicates[2][1], reference);
-  assert.deepEqual(orders, ['desc nulls last'], 'JSON numeric order, not text ordering or an invented SQL column');
-  rows = [{ id: older.id, result: {} }, { id: newer.id, result: {} }];
-  await assert.rejects(store.inspectedChart(run, reference), /重新调用 inspect_chart/);
-  rows = rows.slice(0, 1);
-  assert.equal((await store.inspectedChart(run, reference))!.id, older.id);
-  const memory = new ChartStore(), tools = await createAgentTools(memory, run, run.checkpoint);
-  await tools.find(tool => tool.name === 'bazi')!.execute('calculate', birth);
-  const args = { reference: 'artifact:' + memory.draft('calculate')!.id };
-  const inspect = tools.find(tool => tool.name === 'inspect_chart')!;
-  await inspect.execute('9:inspect-earlier', args);
-  await inspect.execute('40:inspect-latest', args);
-  assert.equal(memory.draft('9:inspect-earlier')!.result.inspectionOrder, 9);
-  assert.equal(memory.draft('40:inspect-latest')!.result.inspectionOrder, 40);
-  await inspect.execute('40:inspect-latest', args);
-  assert.equal(memory.writes.filter(write => write.name === 'agent_cache_tool').length, 3, 'replaying the latest inspection preserves its original order and row');
-});
-
-test('saved-chart focus uses the inspected snapshot and rejects revoked ownership on replay', async t => {
+test('a saved chart is read again by each new inspection, never by a replay, and rejects revoked ownership', async t => {
   const store = new ChartStore(), run = row(), id = randomUUID();
   let owned = true, reads = 0;
   const record = { id, gender: 'male', birth_date: '1990-01-15', birth_time: '09:00', timezone: 'Asia/Shanghai' };
@@ -377,15 +308,15 @@ test('saved-chart focus uses the inspected snapshot and rejects revoked ownershi
   t.mock.method(require('../lib/db/context.server'), 'systemDb', () => scoped);
   t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({ get: async (_id: string, userId: string) => { assert.equal(userId, run.user_id); reads++; return record; } }));
   const tools = await createAgentTools(store, run, run.checkpoint), reference = 'bazi_chart:' + id;
-  const inspected = await tools.find(tool => tool.name === 'inspect_chart')!.execute('inspect-saved', { reference });
+  const inspect = tools.find(tool => tool.name === 'inspect_chart')!;
+  const inspected = await inspect.execute('inspect-saved', { reference });
   record.birth_date = '2001-10-01';
-  const snapshot = await loadInspectedChart(store, run, reference);
-  assert.deepEqual(snapshot.value.chart, (inspected.details as { result: unknown }).result);
-  const focus = tools.find(tool => tool.name === 'focus_chart')!, args = { reference, targetIds: ['bazi:cell:2:1'], caption: '日支' };
-  await focus.execute('focus-saved', args);
-  assert.equal(reads, 1, 'focusing never recalculates the inspected reading');
+  assert.deepEqual(await inspect.execute('inspect-saved', { reference }), inspected, 'a replay returns the reading it took');
+  assert.equal(reads, 1, 'a replay never reads the record again');
+  const edited = await inspect.execute('inspect-edited', { reference });
+  assert.notDeepEqual((edited.details as { result: unknown }).result, (inspected.details as { result: unknown }).result);
   owned = false;
-  await assert.rejects(focus.execute('focus-saved', args), /不存在或无权访问/);
+  await assert.rejects(inspect.execute('inspect-saved', { reference }), /不存在或无权访问/);
 });
 
 test('a saved bazi record without a birth time inspects as three pillars instead of failing', async t => {
@@ -401,14 +332,14 @@ test('a saved bazi record without a birth time inspects as three pillars instead
   assert.match(chart.基本信息.出生时辰 ?? '', /^未知（未排时柱/u);
 });
 
-test('native Pi tools project chart actions and rebuild the exact focus after an outer checkpoint is lost', async () => {
+test('native Pi tools project a drilldown onto its chart and rebuild the exact highlight after an outer checkpoint is lost', async () => {
   const store = new ChartStore(), run = row();
   const streamFn = scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'calculate', name: 'bazi', arguments: birth }];
     const reference = 'artifact:' + store.draft('calculate')!.id;
-    if (index === 1) return [{ type: 'toolCall', id: 'inspect', name: 'inspect_chart', arguments: { reference } }];
-    if (index === 2) return [{ type: 'toolCall', id: 'focus', name: 'focus_chart', arguments: { reference, targetIds: ['bazi:cell:2:1'], caption: '模型正在查看日支' } }];
-    return [{ type: 'text', text: '日支分析完成' }];
+    if (index === 1) return [{ type: 'toolCall', id: 'search', name: 'tool_search', arguments: { query: '刑冲合害' } }];
+    if (index === 2) return [{ type: 'toolCall', id: 'relations', name: 'bazi_relations', arguments: { reference, year: 2027 } }];
+    return [{ type: 'text', text: '流年关系分析完成' }];
   });
   await executeAgentRun(store, run, undefined, { config, streamFn });
   const first = store.writes.filter(write => write.name === 'agent_finish_run').at(-1)!;
@@ -416,7 +347,9 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
   const message = first.args.p_message as AgentRunRow['public_message'];
   const tools = message.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool');
   const focus = getLatestChartFocus(tools);
-  assert.equal(focus?.caption, '模型正在查看日支');
+  assert.equal(focus?.caption, '八字岁运刑冲合害');
+  assert.deepEqual(focus!.targetIds, (store.draft('relations')!.result.details as { targets: Array<{ id: string }> }).targets.map(target => target.id));
+  assert.ok(focus!.targetIds.length > 0, 'the drilldown lights the cells it touched without being asked');
   assert.equal(getChartResources(tools).length, 1);
   const bazi = tools.find(part => part.name === 'bazi')!;
   assert.ok(typeof bazi.durationMs === 'number' && bazi.durationMs >= 0, 'durable 1.1.0 records tool execution time on the native result');
@@ -426,7 +359,7 @@ test('native Pi tools project chart actions and rebuild the exact focus after an
   await executeAgentRun(store, run, undefined, { config, streamFn: scripted(() => { assert.fail('completed tools must not execute again'); }) });
   const restored = store.writes.filter(write => write.name === 'agent_finish_run').at(-1)!.args.p_message as AgentRunRow['public_message'];
   assert.deepEqual(getLatestChartFocus(restored.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool')), focus);
-  assert.equal(store.writes.filter(write => write.name === 'agent_cache_tool').length, 3);
+  assert.equal(store.writes.filter(write => write.name === 'agent_cache_tool').length, 2);
   assert.ok(store.writes.every(write => write.name !== 'agent_create_run'));
 });
 
@@ -448,7 +381,7 @@ test('reading a saved chart hands the model its reference in a model-only line; 
   // records follow the chart in the same text, so the workspace's canonical copy shows them too.
   assert.deepEqual(chart.content.map(part => part.text), [
     '已保存的规范文本\n\n【关联的命理记录】\n- 2020-01-01｜人生事件｜换工作（Agent 记录）',
-    `命盘引用: bazi_chart:${id}。查看、详查或定位这张盘时作为 reference 传入。`,
+    `命盘引用: bazi_chart:${id}。查看或详查这张盘时作为 reference 传入。`,
   ]);
   assert.deepEqual(parseChartReference((chart.details as { chartReference: string }).chartReference), { source: 'bazi_chart', id });
   // The case notes come with the chart, up to the reading's limit.
@@ -461,26 +394,26 @@ test('reading a saved chart hands the model its reference in a model-only line; 
   assert.deepEqual(linked, [`${run.user_id}:bazi_chart`, `${run.user_id}:mbti_reading`]);
 });
 
-test('a public inspection step keeps the chart text but never the target directory, even when filtered by palace', async () => {
+const resultText = (messages: readonly Message[], callId: string) => messages.flatMap(message => message.role === 'toolResult' && message.toolCallId === callId
+  ? message.content.flatMap(part => part.type === 'text' ? [part.text] : []) : []).join('\n');
+
+test('a cast hands the model Core text and its reference, and inspecting returns the full text alone', async () => {
   const store = new ChartStore(), run = row();
+  let cast = '';
   const streamFn = scripted(index => {
     if (index === 0) return [{ type: 'toolCall', id: 'calculate', name: 'ziwei', arguments: birth }];
-    const reference = 'artifact:' + store.draft('calculate')!.id;
-    if (index === 1) return [{ type: 'toolCall', id: 'inspect', name: 'inspect_chart', arguments: { reference } }];
-    if (index === 2) return [{ type: 'toolCall', id: 'stars', name: 'inspect_chart', arguments: { reference, palace: '命宫' } }];
+    if (index === 1) return [{ type: 'toolCall', id: 'inspect', name: 'inspect_chart', arguments: { reference: 'artifact:' + store.draft('calculate')!.id } }];
     return [{ type: 'text', text: '命宫看完了' }];
-  });
+  }, messages => { cast ||= resultText(messages, 'calculate'); });
   await executeAgentRun(store, run, undefined, { config, streamFn });
+  assert.match(cast, new RegExp(`命盘引用: artifact:${store.draft('calculate')!.id}。查看或详查这张盘时作为 reference 传入。$`, 'u'));
+  assert.doesNotMatch(cast, /ziwei:(palace|star):|位置清单|focus_chart/u, 'no positions or IDs to copy');
   const message = store.writes.filter(write => write.name === 'agent_finish_run').at(-1)!.args.p_message as AgentRunRow['public_message'];
-  const [inspect, stars] = message.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool' && part.name === 'inspect_chart');
-  // The model reads the chart text and then the directory; the public step keeps only the chart text.
-  const [chartText, directory] = store.draft('inspect')!.result.content.map(part => part.text);
-  assert.ok(directory.startsWith(CHART_TARGET_DIRECTORY_HEADING) && directory.includes('ziwei:palace:0｜'));
-  assert.equal(inspect.canonicalText, chartText);
-  assert.doesNotMatch(chartText, /定位目标|ziwei:palace:/);
-  // By palace the model only gets that palace's star directory, so the step has no canonical text to show.
-  const starDirectory = store.draft('stars')!.result.content.map(part => part.text);
-  assert.ok(starDirectory.length === 1 && starDirectory[0].startsWith(CHART_TARGET_DIRECTORY_HEADING) && starDirectory[0].includes('ziwei:star:'));
-  assert.equal(stars.canonicalText, '');
-  assert.equal(getAgentToolText(stars), null);
+  const tools = message.agent!.parts.filter((part): part is AgentToolPart => part.type === 'tool');
+  const [chartText, ...rest] = store.draft('inspect')!.result.content.map(part => part.text);
+  assert.deepEqual(rest, []);
+  assert.equal(chartText, store.draft('calculate')!.result.chartSnapshot!.canonicalText, 'the full-detail text kept when the chart was cast');
+  assert.equal(tools.find(tool => tool.name === 'inspect_chart')!.canonicalText, chartText);
+  // The cast step shows the chart text only; the reference is written for the model.
+  assert.doesNotMatch(getAgentToolText(tools.find(tool => tool.name === 'ziwei')!) ?? '', /命盘引用/u);
 });

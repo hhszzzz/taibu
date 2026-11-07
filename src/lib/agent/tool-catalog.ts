@@ -12,33 +12,15 @@ export const AGENT_CHART_NAMES = {
 
 export type AgentChartKind = keyof typeof AGENT_CHART_NAMES;
 
-export function isAgentChartTool(name: string): name is AgentChartKind {
-  return Object.hasOwn(AGENT_CHART_NAMES, name);
-}
-
-/**
- * What a `focus_chart` caption points at, by chart kind, as the Agent instruction names each system. A chart kind
- * added to `AGENT_CHART_NAMES` cannot be added without its hint, so the instruction never silently misses one.
- */
-export const AGENT_CHART_FOCUS_HINTS: Readonly<Record<AgentChartKind, string>> = {
-  bazi: '八字的柱位、日支、生克刑害合冲',
-  ziwei: '紫微的宫位星曜',
-  qimen: '奇门的宫、门、星、神及天地盘干',
-  liuyao: '六爻的本变卦、爻位与伏神',
-  meihua: '梅花的本互变卦、体用与阶段',
-  daliuren: '大六壬的四课三传、天地盘及天将',
-  xiaoliuren: '小六壬的推演步骤及落宫',
-  tarot: '塔罗的具体牌位',
-  taiyi: '太乙的观测层、十六宫及星将',
-  astrology: '占星的星体、宫头与相位',
-  almanac: '黄历的宜忌、方位和时辰',
+/** 侧栏、依据卡与标签用的占术短名，不带「命盘/卦盘」一类泛称。 */
+export const AGENT_CHART_SHORT_NAMES: Readonly<Record<AgentChartKind, string>> = {
+  bazi: '八字', ziwei: '紫微', qimen: '奇门', liuyao: '六爻', meihua: '梅花',
+  daliuren: '大六壬', xiaoliuren: '小六壬', tarot: '塔罗', taiyi: '太乙',
+  astrology: '占星', almanac: '黄历',
 };
 
-/** The systems and what to locate in each, as the Agent instruction lists them. */
-export function agentChartFocusHint(): string {
-  return (Object.keys(AGENT_CHART_FOCUS_HINTS) as AgentChartKind[])
-    .map(kind => AGENT_CHART_FOCUS_HINTS[kind])
-    .join('；');
+export function isAgentChartTool(name: string): name is AgentChartKind {
+  return Object.hasOwn(AGENT_CHART_NAMES, name);
 }
 
 /**
@@ -242,7 +224,7 @@ export function getAgentExtensionToolTitle(name: string): string | undefined {
  * the archive, load guidance or dispatch members, each of which the model must do itself.
  */
 export const AGENT_MODEL_ONLY_TOOLS: ReadonlySet<string> = new Set([
-  'ask_user', 'todo_write', 'inspect_chart', 'focus_chart', 'web_search', 'web_fetch', 'search_knowledge', 'read_attachment',
+  'ask_user', 'todo_write', 'inspect_chart', 'web_search', 'web_fetch', 'search_knowledge', 'read_attachment',
   AGENT_SKILL_TOOLS.load, AGENT_SKILL_TOOLS.read, 'read_user_memory', 'remember_user_fact', AGENT_SUBMIT_PLAN_TOOL,
   AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
 ]);
@@ -259,7 +241,7 @@ export function returnsAgentScriptResult(name: string): boolean {
 export const AGENT_MEMBER_DENIED_TOOLS: ReadonlySet<string> = new Set([
   'ask_user', 'todo_write', AGENT_SUBMIT_PLAN_TOOL, 'parallel_analysis', AGENT_BACKGROUND_TOOL,
   'remember_user_fact', AGENT_ARCHIVE_TOOLS.record, AGENT_ARCHIVE_TOOLS.propose,
-  'inspect_chart', 'focus_chart', AGENT_TOOL_SEARCH_TOOL, AGENT_CODEMODE_TOOL, 'generate_image',
+  'inspect_chart', AGENT_TOOL_SEARCH_TOOL, AGENT_CODEMODE_TOOL, 'generate_image',
 ]);
 
 /** Charts, calculations and drilldowns: the tools that compute with Core. */
@@ -269,6 +251,7 @@ export function isAgentCoreTool(name: string): boolean {
 
 const TOOL_FAMILIES: ReadonlyMap<string, AgentToolFamily> = new Map<string, AgentToolFamily>([
   ['inspect_chart', 'chart'],
+  // 已删除的工具：旧对话里的定位卡仍按命盘显示。
   ['focus_chart', 'chart'],
   ['bazi_dayun', 'calculation'],
   ['bazi_pillars_resolve', 'calculation'],
@@ -319,13 +302,12 @@ export function projectsAgentCanonicalText(name: string): boolean {
     || name === 'inspect_chart' || name === 'read_user_data';
 }
 
-/**
- * inspect_chart 写给模型的定位目录（每行「- 目标 ID｜位置」）以此开头。它只是 focus_chart
- * 可用 ID 的清单，不是规范文本，投影时不进公开步骤；按宫位查看只回这份目录。
- */
-export const CHART_TARGET_DIRECTORY_HEADING = '## 定位目标（focus_chart 的 targetIds）';
-
 /** The note after a chart result that tells the model how to point at the same chart again. */
 export function agentChartReferenceNote(reference: string): string {
-  return `命盘引用: ${reference}。查看、详查或定位这张盘时作为 reference 传入。`;
+  return `命盘引用: ${reference}。查看或详查这张盘时作为 reference 传入。`;
+}
+
+/** The note after a numbered drilldown. Said this plainly, right after the facts, models cite it; a bare number they skip. */
+export function agentDrilldownCiteNote(cite: number): string {
+  return `以上详查结果的 cite 编号是 ${cite}：回答中用到这些事实时，在句末标注 [${cite}]。`;
 }

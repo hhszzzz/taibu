@@ -1,11 +1,11 @@
 import type { ChatMessage } from '@/types';
 import { type AgentMessageData, type AgentPart, type AgentRunStatus, type AgentRuntimeInfo } from '@/lib/agent/types';
 import { getAgentToolFamily, type AgentToolFamily, AGENT_ARCHIVE_TOOLS, AGENT_BACKGROUND_TOOL, AGENT_CHART_NAMES, AGENT_CODEMODE_TOOL, AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, isAgentChartTool, isAgentMemberTool } from '@/lib/agent/tool-catalog';
-import { getAgentAttachmentRead, getAgentCalculation, getAgentChart, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
+import { getAgentAttachmentRead, getAgentCalculation, getAgentConversationHits, getAgentDataResults, getAgentGeneratedImages, getAgentMethod, getAgentNotes, getAgentScript, getAgentSearchResults, getAgentSkillLoad, getAgentToolArtifactId, getAgentToolQuestions, type AgentChart } from '@/lib/agent/tool-presentation';
 import { AGENT_ARCHIVE_KIND_LABELS, getAgentArchiveProposal, getAgentArchiveRecord } from '@/lib/agent/archive';
-import { getChartFocus, getChartTargets } from '@/lib/agent/chart-interaction';
+import { getChartFocus } from '@/lib/agent/chart-interaction';
 import { getSavedChartHref } from '@/lib/agent/chart-save';
-import type { AgentWorkspaceModel } from '@/lib/agent/workspace';
+import { chartReferenceOf } from '@/lib/agent/workspace';
 import { parallelAnalysisResults, parallelMemberName, type ParallelAnalysisResult } from '@/lib/agent/parallel-results';
 import { countAgentEvidence, getConversationCitationLabels, getAgentEvidence } from '@/lib/agent/evidence';
 import { getCitedParagraphs } from '@/lib/chat/markdown-citations';
@@ -66,7 +66,7 @@ function analysingMembers(tools: readonly AgentTool[]): string[] {
 
 /**
  * The live line under a running answer: the phase, and while a tool runs what it works on,
- * e.g. 正在定位分析位置 · 月干丁火. A collaboration names the members still analysing instead,
+ * e.g. 正在紫微宫位 · 官禄宫. A collaboration names the members still analysing instead,
  * and so does a task that only waits for its background subagents.
  */
 export function getAgentLiveLine(data: AgentMessageData): string {
@@ -106,7 +106,7 @@ const RAW_TOOL_TITLES: Record<string, string> = {
     [AGENT_ARCHIVE_TOOLS.record]: '记入档案',
     [AGENT_ARCHIVE_TOOLS.propose]: '生成保存卡片',
     read_attachment: '读取附件',
-    [AGENT_SKILL_TOOLS.load]: '加载方法或技能',
+    [AGENT_SKILL_TOOLS.load]: '加载技能',
     [AGENT_SKILL_TOOLS.read]: '读取技能文件',
     todo_write: '更新计划',
     ask_user: '向你确认信息',
@@ -288,7 +288,7 @@ export function summarizeAgentTool(tool: AgentTool): string | null {
         const count = getAgentToolQuestions(tool).length;
         return count ? `${count} 个问题` : null;
     }
-    // A running focus call has only its arguments; the stored focus replaces them once it completes.
+    // An older conversation's focus call: while running it has only its arguments; the stored focus replaces them once it completes.
     if (tool.name === 'focus_chart') return getChartFocus(tool)?.caption ?? (typeof args.caption === 'string' && args.caption.trim() ? args.caption.slice(0, 160) : null);
     if (tool.name === 'todo_write' && Array.isArray(args.items)) return `${args.items.length} 项`;
     if (tool.name === 'read_attachment') {
@@ -376,7 +376,7 @@ export function collectAgentArtifacts(messages: ChatMessage[]): AgentArtifact[] 
     return [...artifacts.values()];
 }
 
-/** Collapsed process line: step titles in first-use order with repeats counted, e.g. 八字排盘、定位分析位置 3 次. */
+/** Collapsed process line: step titles in first-use order with repeats counted, e.g. 八字排盘、八字岁运刑冲合害 3 次. */
 export function summarizeAgentProcess(tools: readonly AgentTool[], limit = 4): string {
     const counts = new Map<string, number>();
     // Plan updates are bookkeeping, not steps the reader looks for.
@@ -386,23 +386,23 @@ export function summarizeAgentProcess(tools: readonly AgentTool[], limit = 4): s
 }
 
 /**
- * claude 状态行词表：按工具家族归并成「已查看 N 张命盘，已读取 N 份资料，开启 N 个智能体」。
- * 协作成员数来自本次调用实际派出的成员，而不是调用次数。
+ * claude 状态行词表：按工具家族归并成「查看 N 张命盘，读取 N 份资料，开启 N 个智能体」。
+ * 命盘按盘计、协作按实际派出的成员计，而不是调用次数。
  */
 const FAMILY_PHRASES: Partial<Record<AgentToolFamily, (count: number) => string>> = {
-    chart: count => `已查看 ${count} 张命盘`,
-    calculation: count => `已计算 ${count} 次`,
-    drilldown: count => `已详查 ${count} 处`,
-    search: count => `已搜索 ${count} 次`,
-    data: count => `已读取 ${count} 份资料`,
+    chart: count => `查看 ${count} 张命盘`,
+    calculation: count => `计算 ${count} 次`,
+    drilldown: count => `详查 ${count} 处`,
+    search: count => `搜索 ${count} 次`,
+    data: count => `读取 ${count} 份资料`,
     // 按技能计：加载和读它的文件都算用了这个技能；方法是内置技能，按方法计。
-    skill: count => `已使用 ${count} 个技能`,
-    plan: count => `已提交 ${count} 次计划`,
-    memory: count => `已记忆 ${count} 条`,
-    archive: count => `已整理 ${count} 条档案`,
-    code: count => `已运行 ${count} 个脚本`,
-    external: count => `已调用 ${count} 个外部工具`,
-    other: count => `已运行 ${count} 个工具`,
+    skill: count => `使用 ${count} 个技能`,
+    plan: count => `提交 ${count} 次计划`,
+    memory: count => `记忆 ${count} 条`,
+    archive: count => `整理 ${count} 条档案`,
+    code: count => `运行 ${count} 个脚本`,
+    external: count => `调用 ${count} 个外部工具`,
+    other: count => `运行 ${count} 个工具`,
 };
 
 function collaborationMembers(tool: AgentTool): number {
@@ -423,15 +423,23 @@ export function summarizeThinkingTime(parts: readonly AgentProcessPart[]): strin
     return rest ? `已思考 ${minutes} 分 ${rest} 秒` : `已思考 ${minutes} 分`;
 }
 
-export function summarizeAgentActivity(tools: readonly AgentTool[], questionCount: number, failed: number): string {
+/** 过程统计；`settled` 时首项带「已」：已查看 1 张命盘，详查 2 处。进行中或跟在「已思考」后面时不带。 */
+export function summarizeAgentActivity(tools: readonly AgentTool[], questionCount: number, failed: number, settled = false): string {
     const counts = new Map<AgentToolFamily, number>();
     let members = 0;
     // A background subagent counts once, when it is started; later messages go to the same one.
     const subagents = new Set<string>();
     // 方法与技能按名计：同一个方法读两次仍是一套。
     const skills = new Set<string>();
+    // 同一张盘的排盘与查看（旧对话里还有定位）都算看了这一张盘。
+    const charts = new Set<string>();
     for (const tool of tools) {
         const family = getAgentToolFamily(tool.name);
+        if (family === 'chart') {
+            charts.add(chartReferenceOf(tool) ?? tool.id);
+            counts.set(family, charts.size);
+            continue;
+        }
         if (tool.name === AGENT_BACKGROUND_TOOL) {
             const args = toolArgs(tool);
             if (args.action === 'spawn' && typeof args.name === 'string' && tool.status !== 'failed') subagents.add(args.name);
@@ -451,10 +459,11 @@ export function summarizeAgentActivity(tools: readonly AgentTool[], questionCoun
     }
     const phrases = (Object.keys(FAMILY_PHRASES) as AgentToolFamily[])
         .flatMap(family => counts.has(family) ? [FAMILY_PHRASES[family]!(counts.get(family)!)] : []);
-    if (questionCount) phrases.push(`已确认 ${questionCount} 项信息`);
+    if (questionCount) phrases.push(`确认 ${questionCount} 项信息`);
     if (members + subagents.size) phrases.push(`开启 ${members + subagents.size} 个智能体`);
     const text = phrases.join('，');
-    return `${text || '任务过程'}${failed ? `，${failed} 处失败` : ''}`;
+    const failure = failed ? `，${failed} 处失败` : '';
+    return text ? `${settled ? '已' : ''}${text}${failure}` : `任务过程${failure}`;
 }
 
 /**
@@ -559,13 +568,16 @@ export const AGENT_TOOL_FAMILY_LABELS: Record<AgentToolFamily, string> = {
 };
 
 /**
- * 依据 chip of one task: what its searches returned plus the chart positions it
- * located. A task that never searched has no chip; its positions live in the chart.
+ * 依据 chip of one task: what its searches and drilldowns returned. A task that
+ * never searched has no chip; what its drilldowns touched shows on the chart.
  */
 export function getAgentEvidenceSummary(parts: AgentPart[]) {
     if (!parts.some(part => part.type === 'tool' && getAgentToolFamily(part.name) === 'search')) return null;
-    const counts = countAgentEvidence(getAgentEvidence(parts));
-    return counts.total ? counts : null;
+    const evidence = getAgentEvidence(parts);
+    const counts = countAgentEvidence(evidence);
+    const charts = new Map<string, number>();
+    for (const item of evidence) if (item.kind === 'chart') charts.set(item.chartLabel, (charts.get(item.chartLabel) ?? 0) + 1);
+    return counts.total ? { ...counts, charts: [...charts] as Array<[string, number]> } : null;
 }
 
 /**
@@ -655,59 +667,11 @@ export function describeOverviewFacts(tool: AgentTool, value: AgentChart): strin
     }
 }
 
-const RULE_ORDER = ['dayBoundary', 'timezone', 'solarTermBasis', 'ruleVersion'] as const;
-const RULE_LABELS: Partial<Record<typeof RULE_ORDER[number], string>> = { dayBoundary: '子时换日', solarTermBasis: '节气' };
-
-/** 子时换日 midnight · Asia/Shanghai · 节气 instant · bazi-2026.10: the rules Core calculated with, as returned. */
-export function describeAgentChartRules(value: AgentChart): string | null {
-    const rules = (value.chart as { 计算规则?: unknown }).计算规则;
-    if (!rules || typeof rules !== 'object' || Array.isArray(rules)) return null;
-    const items = RULE_ORDER.flatMap(key => {
-        const rule = (rules as Record<string, unknown>)[key];
-        return typeof rule === 'string' && rule.trim() ? [RULE_LABELS[key] ? `${RULE_LABELS[key]} ${rule.trim()}` : rule.trim()] : [];
-    });
-    return items.length ? items.join(' · ') : null;
-}
-
 /** Whether a reading is a saved record read back, a task result the final selection saved, or a cached one. */
 export function getAgentReadingState(reading: AgentTool, saved: ReadonlySet<string>): '已存资料' | '已保存' | '暂存成果' {
     if (reading.name === 'inspect_chart') return '已存资料';
     const artifactId = getAgentToolArtifactId(reading);
     return artifactId !== null && saved.has(artifactId) ? '已保存' : '暂存成果';
-}
-
-/**
- * 第 2 步计算 · 第 5 步定位 · 暂存成果: the latest task's steps behind a chart
- * tab and what became of its reading. Calls from earlier tasks carry no number.
- */
-export function describeAgentChartSteps({ reading, focus, numbers, state }: {
-    reading: AgentTool | undefined; focus: AgentTool | undefined; numbers: ReadonlyMap<string, number>; state: string | null;
-}): string {
-    const readingStep = reading && numbers.get(reading.id);
-    const focusStep = focus && numbers.get(focus.id);
-    return [
-        readingStep && `第 ${readingStep} 步${reading.name === 'inspect_chart' ? '读取' : '计算'}`,
-        focusStep && `第 ${focusStep} 步定位`,
-        state,
-    ].filter(Boolean).join(' · ');
-}
-
-/**
- * 模型定位: the focus calls of the conversation and the chart positions they
- * marked, by the labels of the chart they name, in first-located order.
- */
-export function getAgentLocatedPositions(model: AgentWorkspaceModel): { toolIds: string[]; labels: string[] } {
-    const toolIds: string[] = [];
-    const labels = new Set<string>();
-    for (const item of model.evidence) {
-        if (item.kind !== 'chart') continue;
-        toolIds.push(item.toolId);
-        const resource = model.resources.find(entry => entry.id === model.chartResources.get(item.focus.reference));
-        const reading = resource?.toolIds.flatMap(id => model.toolsById.get(id) ?? []).findLast(tool => getAgentChart(tool));
-        const value = reading && getAgentChart(reading);
-        if (value) for (const target of getChartTargets(value)) if (item.focus.targetIds.includes(target.id)) labels.add(target.label);
-    }
-    return { toolIds, labels: [...labels] };
 }
 
 /** A Markdown document without its leading `# Title` when that title is already shown above it. */

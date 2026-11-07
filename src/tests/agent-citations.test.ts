@@ -11,12 +11,16 @@ import { buildAgentWorkspace, parseAgentCitationTarget, resolveAgentWorkspaceLoc
 import { getAgentCitedParagraph } from '../components/chat/agent/presentation';
 
 const known = (...numbers: number[]) => (cite: number) => numbers.includes(cite);
-const REFERENCE = 'artifact:11111111-1111-4111-8111-111111111111';
+const REFERENCE = 'bazi_chart:11111111-1111-4111-8111-111111111111';
 type Tool = Extract<AgentPart, { type: 'tool' }>;
 const knowledge = (id: string, cites: Array<number | undefined>): Tool => ({ type: 'tool', id, name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '庚金' },
     output: cites.map((cite, index) => ({ content: `# 古籍 ${id}-${index + 1}\n段落 ${index + 1}`, ...(cite === undefined ? {} : { cite }) })) });
+// The removed focus_chart tool, as older conversations recorded it.
 const focus = (id: string, cite?: number): Tool => ({ type: 'tool', id, name: 'focus_chart', title: '定位分析位置', status: 'completed',
     output: { chartFocus: { version: 1, reference: REFERENCE, targetIds: [], includeRelated: true, caption: '月柱 丁丑' }, ...(cite === undefined ? {} : { cite }) } });
+const CAST = 'artifact:22222222-2222-4222-8222-222222222222';
+const drilldown = (id: string, cite?: number): Tool => ({ type: 'tool', id, name: 'bazi_relations', title: '八字岁运刑冲合害', status: 'completed', input: { reference: CAST, year: 2027 },
+    output: { chartReference: CAST, chartKind: 'bazi', selection: { year: 2027 }, result: {}, targets: [{ id: 'bazi:cell:1:1', label: '月柱地支 丑' }], ...(cite === undefined ? {} : { cite }) } });
 const answer = (parts: AgentPart[], content: string): ChatMessage => ({ id: `m-${content.length}-${parts.length}`, role: 'assistant', content, createdAt: '2026-10-11',
     agent: { version: 1, runId: 'run', status: 'completed', parts } });
 
@@ -51,6 +55,7 @@ test('a later answer badges numbers from an earlier turn', () => {
     walk(processor.runSync(processor.parse(messages[1].content)) as Parameters<typeof walk>[0]);
     assert.deepEqual(found, [1, 2, 3, 4], 'numbers continue across turns and a later answer can cite every earlier source');
 });
+
 
 test('adjacent citations survive the reference link their numeric brackets parse as', () => {
     const processor = unified().use(remarkParse).use(remarkGfm).use(remarkCitations, { isKnown: known(1, 2, 3, 4) });
@@ -91,8 +96,20 @@ test('evidence is numbered once per conversation from the stamps the server wrot
     assert.deepEqual(evidence.map(item => [item.n, item.kind, item.citable]), [[5, 'knowledge', true], [6, 'knowledge', true], [7, 'chart', true], [8, 'web', false]],
         'an unstamped row is listed but its number was never shown to the model');
     assert.deepEqual(countAgentEvidence(evidence), { total: 4, knowledge: 2, chart: 1, web: 1 });
-    assert.deepEqual([...getAgentCitationLabels(parts)], [[5, '古籍 kb-1'], [6, '古籍 kb-2'], [7, '命盘定位 · 月柱 丁丑']]);
+    assert.deepEqual([...getAgentCitationLabels(parts)], [[5, '古籍 kb-1'], [6, '古籍 kb-2'], [7, '八字 · 月柱 丁丑']]);
     assert.equal(getAgentEvidence([knowledge('stale', [2])], 4)[0].citable, false, 'a stamp behind the conversation is not citable');
+});
+
+test('a numbered drilldown is chart evidence under its own title; one from before numbering keeps old numbers in place', () => {
+    const evidence = getAgentEvidence([knowledge('kb', [1]), drilldown('old'), drilldown('relations', 2), focus('older', 3)]);
+    assert.deepEqual(evidence.map(item => [item.n, item.kind, item.toolId, item.citable]), [[1, 'knowledge', 'kb', true], [2, 'chart', 'relations', true], [3, 'chart', 'older', true]]);
+    const [, relations] = evidence;
+    assert.ok(relations.kind === 'chart');
+    assert.equal(relations.chartLabel, '八字', 'the art the drilldown recorded');
+    assert.deepEqual(relations.focus.targetIds, ['bazi:cell:1:1']);
+    assert.deepEqual([...getConversationCitationLabels([answer([drilldown('relations', 2)], '丑未相冲[2]。')])], [[2, '八字岁运刑冲合害']]);
+    // A conversation from before numbering: its drilldowns were never shown a number, so they take none.
+    assert.equal(getAgentCitationBase([{ agent: { version: 1, runId: 'a', status: 'completed', parts: [knowledge('legacy', [undefined]), drilldown('legacy-drill')] } }]), 1);
 });
 
 test('a new task numbers after the highest number its conversation used', () => {
@@ -103,7 +120,7 @@ test('a new task numbers after the highest number its conversation used', () => 
     ];
     assert.equal(getAgentCitationBase(messages), 4);
     assert.equal(getAgentCitationBase([]), 0);
-    assert.deepEqual([...getConversationCitationLabels(messages)], [[1, '古籍 a-1'], [2, '古籍 a-2'], [4, '命盘定位 · 月柱 丁丑']],
+    assert.deepEqual([...getConversationCitationLabels(messages)], [[1, '古籍 a-1'], [2, '古籍 a-2'], [4, '八字 · 月柱 丁丑']],
         'a later answer may cite a number an earlier turn returned');
 });
 
@@ -125,4 +142,6 @@ test('a citation opens its source and finds the paragraph of the answer that cit
     assert.ok(chart && chart !== 'evidence');
     assert.equal(resolveAgentWorkspaceLocation(chartOnly, 'cite:3'), chart, 'without searches a chart citation opens the chart');
     assert.equal(resolveAgentWorkspaceLocation(chartOnly, 'cite:5'), null);
+    const drilled = buildAgentWorkspace({ parts: [drilldown('relations', 4)], artifacts: [], attachmentIds: [] });
+    assert.equal(resolveAgentWorkspaceLocation(drilled, 'cite:4'), drilled.chartResources.get(CAST), 'a drilldown citation opens the chart it drilled into');
 });

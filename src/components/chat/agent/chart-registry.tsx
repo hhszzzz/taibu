@@ -8,6 +8,7 @@
 'use client';
 
 import type { AgentChartKind } from '@/lib/agent/tool-catalog';
+import { AGENT_CHART_SHORT_NAMES } from '@/lib/agent/tool-catalog';
 import type { NavIcon } from '@/lib/navigation/registry';
 import {
     AstrologyIcon, BaziIcon, DaliurenIcon, DailyIcon, LiuyaoIcon, MeihuaIcon, QimenIcon,
@@ -21,17 +22,17 @@ export interface ChartKindMeta {
 }
 
 export const CHART_KIND_META: Record<AgentChartKind, ChartKindMeta> = {
-    bazi: { icon: BaziIcon, label: '八字' },
-    ziwei: { icon: ZiweiIcon, label: '紫微' },
-    qimen: { icon: QimenIcon, label: '奇门' },
-    liuyao: { icon: LiuyaoIcon, label: '六爻' },
-    meihua: { icon: MeihuaIcon, label: '梅花' },
-    daliuren: { icon: DaliurenIcon, label: '大六壬' },
-    xiaoliuren: { icon: XiaoliurenIcon, label: '小六壬' },
-    tarot: { icon: TarotIcon, label: '塔罗' },
-    taiyi: { icon: TaiyiIcon, label: '太乙' },
-    astrology: { icon: AstrologyIcon, label: '占星' },
-    almanac: { icon: DailyIcon, label: '黄历' },
+    bazi: { icon: BaziIcon, label: AGENT_CHART_SHORT_NAMES.bazi },
+    ziwei: { icon: ZiweiIcon, label: AGENT_CHART_SHORT_NAMES.ziwei },
+    qimen: { icon: QimenIcon, label: AGENT_CHART_SHORT_NAMES.qimen },
+    liuyao: { icon: LiuyaoIcon, label: AGENT_CHART_SHORT_NAMES.liuyao },
+    meihua: { icon: MeihuaIcon, label: AGENT_CHART_SHORT_NAMES.meihua },
+    daliuren: { icon: DaliurenIcon, label: AGENT_CHART_SHORT_NAMES.daliuren },
+    xiaoliuren: { icon: XiaoliurenIcon, label: AGENT_CHART_SHORT_NAMES.xiaoliuren },
+    tarot: { icon: TarotIcon, label: AGENT_CHART_SHORT_NAMES.tarot },
+    taiyi: { icon: TaiyiIcon, label: AGENT_CHART_SHORT_NAMES.taiyi },
+    astrology: { icon: AstrologyIcon, label: AGENT_CHART_SHORT_NAMES.astrology },
+    almanac: { icon: DailyIcon, label: AGENT_CHART_SHORT_NAMES.almanac },
 };
 
 export function getChartKindMeta(kind: string | null | undefined): ChartKindMeta {

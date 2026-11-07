@@ -10,7 +10,6 @@ import { loadAgentChart } from './chart-tools.server';
 import { stableAgentSeed } from './tools.server';
 import { CHART_SOURCE_KINDS, getDrilldownTargets, parseChartReference } from './chart-interaction';
 import { AGENT_CHART_NAMES, getAgentDrilldownBase, type AgentChartKind } from './tool-catalog';
-import type { DomainToolResult } from './types';
 
 /**
  * 详查工具的 Agent 入口：模型只传命盘引用与查询参数，出生或起卦参数从
@@ -142,11 +141,6 @@ async function baseInputOf(store: AgentStore, run: AgentRunRow, reference: strin
   throw new Error('这张命盘暂不支持详查，请先重新排盘');
 }
 
-export interface DrilldownToolResult extends DomainToolResult {
-  /** The chart this drilldown read, so focus_chart can follow it without another inspect_chart. */
-  inspection: { chartReference: string; chartKind: AgentChartKind; result: unknown };
-}
-
 /**
  * The chart a reference names and the input its base tool recomputes it from: the artifact's own arguments or the
  * saved record's birth or casting fields. An artifact is recomputed and must still be the chart the reference shows.
@@ -176,9 +170,7 @@ export async function chartInputOf(
   return { reference, value, input };
 }
 
-export async function executeDrilldown(
-  store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>,
-): Promise<DrilldownToolResult> {
+export async function executeDrilldown(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>) {
   const base = getAgentDrilldownBase(name);
   if (!base) throw new Error(`未知详查工具: ${name}`);
   const { reference: rawReference, ...selection } = args;
@@ -190,9 +182,8 @@ export async function executeDrilldown(
   const targets = getDrilldownTargets(value, rendered.structuredContent).map(({ id, label }) => ({ id, label }));
   const text = rendered.content.map(part => part.text).join('\n');
   return {
-    content: [{ type: 'text', text }],
+    content: [{ type: 'text' as const, text }],
     details: { chartReference: reference, chartKind: base, selection, result: rendered.structuredContent, targets },
     canonicalText: text,
-    inspection: { chartReference: reference, chartKind: base, result: value.chart },
   };
 }

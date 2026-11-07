@@ -188,8 +188,8 @@ function drilldownCells(value: unknown, cells: DrilldownCell[] = [], depth = 0):
 }
 
 /**
- * The chart's own targets a drilldown result touches, at most 16. Positions outside the
- * board (大运、流年…) have no target. A focus call may pass them unchanged.
+ * The chart's own targets a drilldown result touches, at most 16: what the board highlights.
+ * Positions outside the board (大运、流年…) have no target.
  */
 export function getDrilldownTargets(value: AgentChart, result: unknown): ChartTarget[] {
   const targets = getChartTargets(value);
@@ -200,7 +200,7 @@ export function getDrilldownTargets(value: AgentChart, result: unknown): ChartTa
 
 /**
  * 八字详查（岁运刑冲合害、五行、流年扫描）触及的原局字块。岁运叠加的关系都含大运、流年等盘外的柱，
- * 原局之间的关系由命盘自己给出，所以详查只点亮它碰到的原局字；详查完成后盘面直接显示，不需要模型再补一次 focus_chart。
+ * 原局之间的关系由命盘自己给出，所以详查只点亮它碰到的原局字。
  */
 function baziDrilldownTargetIds(targets: ChartTarget[], result: unknown): string[] {
   const cells = drilldownCells(result);
@@ -358,14 +358,7 @@ function liuyaoTargetVisitor(push: PushTarget) {
   };
 }
 
-export function validateChartFocus(value: AgentChart, reference: string, ids: string[], includeRelated: boolean, caption: string): ChartFocus {
-  if (!parseChartReference(reference)) throw new Error('命盘引用格式不正确');
-  if (ids.length > 16 || caption.length > 160) throw new Error('命盘定位内容过长');
-  const targets = new Set(getChartTargets(value).map(target => target.id));
-  if (ids.some(id => !targets.has(id))) throw new Error('定位目标不在这张命盘中，请先查看命盘目标目录');
-  return { version: 1, reference, targetIds: [...new Set(ids)], includeRelated, caption };
-}
-
+/** A position the removed focus_chart tool located; older conversations still show it. */
 export function getChartFocus(tool: AgentToolPart): ChartFocus | null {
   if (tool.name !== 'focus_chart' || tool.status !== 'completed' || !tool.output || typeof tool.output !== 'object') return null;
   const focus = (tool.output as { chartFocus?: ChartFocus }).chartFocus;
@@ -400,17 +393,6 @@ export function getChartResources(tools: AgentToolPart[]) {
   return [...resources.values()];
 }
 
-/** Keep the calculation card; repeated inspection updates its workspace without another inline chart. */
-export function deduplicateChartResults(tools: AgentToolPart[]): AgentToolPart[] {
-  const calculations = new Set(tools.filter(tool => tool.name !== 'inspect_chart' && getAgentChart(tool)).map(getAgentChartReference));
-  const latest = new Map(getChartResources(tools).map(resource => [resource.reference, resource.tool.id]));
-  return tools.filter(tool => {
-    if (tool.name !== 'inspect_chart' || !getAgentChart(tool)) return true;
-    const reference = getAgentChartReference(tool);
-    return !reference || (!calculations.has(reference) && latest.get(reference) === tool.id);
-  });
-}
-
 /**
  * What a drilldown or inspection shows the model looking at: a completed drilldown, the
  * positions its result touches; while either runs, the chart named in its arguments with
@@ -428,7 +410,7 @@ function getDrilldownViewFocus(tool: AgentToolPart): ChartFocus | null {
   return reference ? { version: 1, reference: reference.source + ':' + reference.id, targetIds: [], includeRelated: false, caption: caption.slice(0, 160) } : null;
 }
 
-/** The model's latest view of a chart: a focus call, or the drilldown it ran after it. */
+/** The model's latest view of a chart: its latest drilldown, or a position an older conversation located. */
 export function getLatestChartFocus(tools: AgentToolPart[], reference?: string): ChartFocus | null {
   const reinspected = new Set<string>();
   for (let index = tools.length - 1; index >= 0; index--) {
@@ -446,5 +428,5 @@ export function getLatestChartFocus(tools: AgentToolPart[], reference?: string):
 export function chartQuestion(reference: string, targets: ChartTarget[]) {
   if (!parseChartReference(reference)) throw new Error('命盘引用格式不正确');
   return '请继续分析这张命盘的' + (targets.map(target => target.label).join('、') || '整体情况') +
-    '。命盘引用：' + reference + '。请先查看原盘，并在命盘中标出当前分析位置。';
+    '。命盘引用：' + reference + '。';
 }

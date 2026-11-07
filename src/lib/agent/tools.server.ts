@@ -42,15 +42,16 @@ import { literals } from './tool-schema';
 import { validateTodos } from './todos';
 import { attachmentBytes, attachmentDto, validateAttachmentIds } from './attachments.server';
 import { publicMemory, type AgentMemory } from './memory';
-import { authorizeChartReference, loadAgentChart, loadInspectedChart } from './chart-tools.server';
-import { CHART_SOURCE_KINDS, getChartTargets, validateChartFocus } from './chart-interaction';
+import { authorizeChartReference, loadAgentChart } from './chart-tools.server';
+import { CHART_SOURCE_KINDS } from './chart-interaction';
 import {
+  AGENT_DRILLDOWN_BASES,
   AGENT_MCP_TOOL_PREFIX,
   AGENT_SKILL_TOOLS,
   AGENT_TOOL_SCOPE_IDS,
   AGENT_WEB_TOOLS,
-  CHART_TARGET_DIRECTORY_HEADING,
   agentChartReferenceNote,
+  agentDrilldownCiteNote,
   getAgentDrilldownBase,
   getAgentToolFeatureId,
   getAgentToolScope,
@@ -145,7 +146,7 @@ async function agentToolScopeEnabled(scope: AgentToolScopeId, access: AgentRunAc
 const MEMORY_TOOLS: ReadonlySet<string> = new Set(['read_user_memory', 'remember_user_fact', 'search_conversations', AGENT_RECORD_EVENT_TOOL]);
 const CROSS_TASK_TOOLS: ReadonlySet<string> = new Set(['read_user_profile', ...MEMORY_TOOLS]);
 export async function assertAgentToolAccess(store: AgentStore, run: AgentRunRow, name: string, args: Record<string, unknown>, access: AgentRunAccess = {}) {
-  const feature = ['inspect_chart', 'focus_chart'].includes(name) || getAgentDrilldownBase(name)
+  const feature = name === 'inspect_chart' || getAgentDrilldownBase(name)
     ? await authorizeChartReference(store, run, args.reference)
     : getAgentToolFeatureId(name) ?? name;
   if (FEATURE_MODULE_IDS.includes(feature as FeatureModuleId) && !(await featureEnabled(feature as FeatureModuleId, access))) throw new Error('该功能已关闭');
@@ -195,7 +196,6 @@ const auxiliaryToolTitles: Record<string, string> = {
   ask_user: "补充必要信息",
   current_time: "当前时间",
   inspect_chart: "查看命盘",
-  focus_chart: "定位分析位置",
   // Without a title here the label falls back to the model-facing description, which becomes the step title.
   todo_write: "更新计划",
   [AGENT_SKILL_TOOLS.load]: "加载技能",
@@ -314,7 +314,8 @@ export async function createAgentTools(
   // the last number it used: a replayed result records the same number again.
   // Runs created before numbering have no base and keep unnumbered results. A
   // member's results are not numbered: the answer cites only what the main agent's
-  // own calls returned, and a member names its sources instead.
+  // own calls returned, and a member names its sources instead. A script's
+  // drilldown is not numbered either: the model reads only what the script returns.
   const lastCitation = (except?: string) => Math.max(checkpoint.citations?.base ?? 0,
     ...Object.entries(checkpoint.citations?.calls ?? {}).flatMap(([callId, last]) => callId === except ? [] : [last]));
   const stampCitations = <T extends object>(rows: T[], caller?: DomainToolCaller) => {
@@ -332,6 +333,11 @@ export async function createAgentTools(
   const webSources = (details: unknown, callId: string) => {
     putSources(callId, details as Array<{ title: string; url: string; content: string }>);
     recordCitations(callId, citesOf(details));
+  };
+  // A drilldown carries a number only when it was stamped; a script's took none.
+  const drilldownCitation = (details: unknown, callId: string) => {
+    const cite = readAgentCite((details as { cite?: unknown }).cite);
+    if (cite !== null) recordCitations(callId, [cite]);
   };
   // Checkpoint state is derived from a tool's persisted details only. Fresh
   // results apply it after agent_cache_tool succeeds and cached results replay
@@ -358,8 +364,7 @@ export async function createAgentTools(
       };
       recordCitations(callId, citesOf(details));
     }],
-    ["focus_chart", (details, callId) =>
-      recordCitations(callId, [readAgentCite((details as { cite?: unknown }).cite)])],
+    ...Object.keys(AGENT_DRILLDOWN_BASES).map(name => [name, drilldownCitation] as const),
   ]);
   // Sources, numbers and the question or task list belong to the main agent's answer; a member's calls leave them alone.
   const applyResult = (name: string, details: unknown, callId: string, caller?: DomainToolCaller) => {
@@ -405,13 +410,7 @@ export async function createAgentTools(
             }
           : cached.result;
       }
-      const executed = await execute(args, callId, signal, caller);
-      // Pi Durable allocates increasing numeric task IDs; tools execute sequentially.
-      // Keep the order in cache JSON rather than relying on a nonexistent timestamp column.
-      const taskOrder = Number(callId.split(':', 1)[0]);
-      const inspects = name === 'inspect_chart' || getAgentDrilldownBase(name) !== null;
-      const result = inspects && Number.isSafeInteger(taskOrder) && taskOrder > 0
-        ? { ...executed, inspectionOrder: taskOrder } : executed;
+      const result = await execute(args, callId, signal, caller);
       signal?.throwIfAborted();
       const a = await store.rpc<AgentArtifactRow>("agent_cache_tool", {
         ...store.lease(run),
@@ -465,37 +464,19 @@ export async function createAgentTools(
     if (!source || !getAgentDrilldownBase(def.name)) continue;
     tools.push(wrap(def.name, `${def.description} 先排盘或取得命盘引用，再传 reference 与查询参数，不再重复传出生信息；所查位置会在工作区自动标出。`,
       drilldownParameters(source.selector) as Schema<Record<string, unknown>>,
-      async args => executeDrilldown(store, run, def.name, args), 'tool', def.title));
+      async (args, _callId, _signal, caller) => {
+        const result = await executeDrilldown(store, run, def.name, args);
+        const cite = checkpoint.citations && !caller?.member && !caller?.script ? lastCitation() + 1 : null;
+        return cite ? { ...result, content: [...result.content, { type: 'text', text: agentDrilldownCiteNote(cite) }], details: { ...result.details, cite } } : result;
+      }, 'tool', def.title));
   }
   tools.push(
-    wrap('inspect_chart', '在工作区查看任一占术的真实盘面，返回盘面文本与定位目标 ID。reference 使用 artifact:成果ID，或 read_user_data 返回的已存资料命盘引用。紫微不填 palace 时返回宫位目录；填实际宫名时只返回该宫星曜的定位目标，不再重复盘面文本。不会保存新成果。',
-      obj({ reference: str({ minLength: 1, maxLength: 64 }), palace: opt(str({ minLength: 1, maxLength: 20 })) }, { open: true }),
+    wrap('inspect_chart', '查看一张已排好的盘：在工作区打开，并返回盘面全文，含排盘时没展开的细节。reference 用 artifact:成果ID，或 read_user_data 返回的已存资料命盘引用。可反复查看，不会保存新成果。',
+      obj({ reference: str({ minLength: 1, maxLength: 64 }) }, { open: true }),
       async args => {
         const { reference, value, canonicalText } = await loadAgentChart(store, run, args.reference);
-        let targets = getChartTargets(value);
-        if (args.palace) {
-          if (value.kind !== 'ziwei') throw new Error('宫位筛选仅用于紫微命盘');
-          const palace = value.chart.十二宫位.find(palace => palace.宫位 === args.palace);
-          if (!palace) throw new Error('该宫位不在这张命盘中');
-          const target = targets.find(target => target.kind === 'ziwei_palace' && target.label === palace.宫位 + ' ' + palace.干支);
-          targets = targets.filter(item => 'palaceIndex' in item && target && 'palaceIndex' in target && item.palaceIndex === target.palaceIndex);
-        } else if (value.kind === 'ziwei') targets = targets.filter(target => target.kind === 'ziwei_palace');
-        // 定位目录每行「目标 ID｜位置」；引用、标题与摘要模型已知，不再回传。
-        // 按宫位查看只为取该宫星曜目标，盘面文本已由不带 palace 的查看给出，不重复。
-        const directory = [CHART_TARGET_DIRECTORY_HEADING, '', ...targets.map(({ id, label }) => `- ${id}｜${label}`)].join('\n');
-        return { content: args.palace ? [{ type: 'text', text: directory }] : [{ type: 'text', text: canonicalText }, { type: 'text', text: directory }],
-          details: { chartReference: reference, chartKind: value.kind, result: value.chart }, canonicalText };
-      }),
-    wrap('focus_chart', '展示当前正在分析的命盘位置。必须先 inspect_chart，targetIds 仅用该盘返回的真实 ID；多个 ID 可同时高亮，空数组清除高亮。includeRelated 控制紫微三方四正、大六壬对应盘位及占星本命相位关联（默认 false；确实分析到关联位置时才传 true，盘面随之展开），caption 为面向用户的简短分析主题。',
-      obj({ reference: str({ minLength: 1, maxLength: 64 }), targetIds: arr(str({ minLength: 1, maxLength: 100 }), { maxItems: 16 }),
-        includeRelated: opt(bool()), caption: str({ minLength: 1, maxLength: 160 }) }, { open: true }),
-      async args => {
-        const { reference, value } = await loadInspectedChart(store, run, args.reference);
-        const chartFocus = validateChartFocus(value, reference, args.targetIds, args.includeRelated ?? false, args.caption);
-        // 定位参数是模型自己给的，不再原样回传：只回执与引用编号，盘面按 details 的 chartFocus 显示。
-        const cite = checkpoint.citations ? lastCitation() + 1 : null;
-        const done = chartFocus.targetIds.length ? '已在工作区定位' : '已清除盘面高亮';
-        return { content: [{ type: 'text', text: cite ? `${done}，cite 编号 ${cite}。` : `${done}。` }], details: cite ? { chartFocus, cite } : { chartFocus } };
+        // 引用、标题与摘要模型已知，不再回传。
+        return { content: [{ type: 'text', text: canonicalText }], details: { chartReference: reference, chartKind: value.kind, result: value.chart }, canonicalText };
       }),
   );
   tools.push(

@@ -64,12 +64,6 @@ export class EvalAgentStore extends AgentStore {
     return [...this.drafts.values()].find(artifact => artifact.kind === 'calculation' && artifact.id === id) ?? null;
   }
 
-  override async inspectedChart(...args: Parameters<AgentStore['inspectedChart']>) {
-    const reference = args[1];
-    return [...this.drafts.values()].reverse().find(artifact => (artifact.tool_name === 'inspect_chart' || getAgentDrilldownBase(artifact.tool_name))
-      && (artifact.result.details as { chartReference?: string }).chartReference === reference) ?? null;
-  }
-
   /** Evaluation runs produce no performance rows. */
   override async recordRunMetrics() {}
 

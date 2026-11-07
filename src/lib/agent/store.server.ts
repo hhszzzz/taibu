@@ -1,11 +1,10 @@
 import "server-only";
 import type { ScopedDb } from "@/lib/db/context.server";
-import { json, jsonPath, jsonPathText } from "@/lib/db/sql-helpers";
+import { json } from "@/lib/db/sql-helpers";
 import type { ChatMessage, AIReasoningEffort } from "@/types";
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import type { AgentCheckpoint, AgentRunStatus, AgentRunView } from "./types";
 import { AGENT_ENGINE } from "./engine";
-import { AGENT_DRILLDOWN_BASES } from "./tool-catalog";
 import type { AgentRunMetricsRow } from "./admin-metrics";
 
 export interface AgentRunRow {
@@ -63,9 +62,6 @@ export interface AgentArtifactRow {
     details: unknown;
     canonicalText?: string;
     chartSnapshot?: { kind: string; result: unknown; canonicalText: string };
-    inspectionOrder?: number;
-    /** Drilldowns keep the chart they read, so they count as an inspection for focus_chart. */
-    inspection?: { chartReference: string; chartKind: string; result: unknown };
   };
 }
 export interface AgentCommandRow {
@@ -266,20 +262,5 @@ export class AgentStore {
       .where("run.conversation_id", "=", run.conversation_id)
       .executeTakeFirst());
     return (row ?? null) as unknown as AgentArtifactRow | null;
-  }
-  async inspectedChart(run: AgentRunRow, reference: string): Promise<AgentArtifactRow | null> {
-    const rows = await this.db.tx((trx) => trx
-      .selectFrom("agent_run_artifacts")
-      .selectAll()
-      .where("run_id", "=", run.id)
-      .where("tool_name", "in", ["inspect_chart", ...Object.keys(AGENT_DRILLDOWN_BASES)])
-      .where(jsonPathText("result", ["details", "chartReference"]), "=", reference)
-      .orderBy(jsonPath("result", ["inspectionOrder"]), (order) => order.desc().nullsLast())
-      .limit(2)
-      .execute());
-    const snapshots = rows as unknown as AgentArtifactRow[];
-    if (snapshots.length > 1 && !Number.isSafeInteger(snapshots[0]?.result.inspectionOrder))
-      throw new Error('该命盘有多次旧版查看记录，请重新调用 inspect_chart 后再定位');
-    return snapshots[0] ?? null;
   }
 }

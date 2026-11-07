@@ -61,7 +61,8 @@ const UNFOLLOWED: readonly AgentToolFamily[] = ['plan', 'todo', 'time'];
 
 type Artifact = Extract<AgentPart, { type: 'artifact' }>;
 
-function chartReferenceOf(tool: AgentToolPart): string | null {
+/** The chart a call computed, read, located or drilled into, including one still running. */
+export function chartReferenceOf(tool: AgentToolPart): string | null {
   const reference = getAgentChartReference(tool);
   if (reference || (tool.name !== 'inspect_chart' && tool.name !== 'focus_chart' && !getAgentDrilldownBase(tool.name))) return reference;
   // Inspections, drilldowns and focus calls name their chart in the arguments before they finish.

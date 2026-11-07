@@ -142,6 +142,28 @@ return typeof dayun.text + ':' + dayun.data.大运列表.length;`;
   assert.ok(call.canonicalText?.includes('大运'), 'a deferred calculation keeps its canonical text like a direct call');
 });
 
+test('a script\'s drilldown takes no evidence number, while the model\'s own does', async () => {
+  const store = new MemoryStore(), run = row();
+  run.input.codeMode = true;
+  run.checkpoint.citations = { base: 0, calls: {} };
+  const birth = { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 };
+  await executeAgentRun(store, run, undefined, { config, streamFn: scripted(index => {
+    if (index === 0) return [{ type: 'toolCall', id: 'calculate', name: 'bazi', arguments: birth }];
+    const reference = 'artifact:' + store.draft('calculate')!.id;
+    if (index === 1) return [{ type: 'toolCall', id: 'script', name: 'codemode', arguments: { code: `const r = await tools.bazi_relations({ reference: '${reference}', year: 2027 });\nreturn r.text.split('\\n')[0];` } }];
+    if (index === 2) return [{ type: 'toolCall', id: 'search', name: 'tool_search', arguments: { query: '刑冲合害' } }];
+    if (index === 3) return [{ type: 'toolCall', id: 'relations', name: 'bazi_relations', arguments: { reference, year: 2028 } }];
+    return [{ type: 'text', text: '两年的刑冲合害已比较完毕[1]' }];
+  }) });
+  const finish = finished(store);
+  assert.equal(finish.args.p_status, 'completed', (finish.args.p_message as AgentRunRow['public_message']).agent?.error);
+  const drilldowns = toolParts(store).filter(part => part.name === 'bazi_relations');
+  assert.deepEqual(drilldowns.map(part => [part.parentId === undefined ? 'model' : 'script', part.status, (part.output as { cite?: number }).cite]),
+    [['script', 'completed', undefined], ['model', 'completed', 1]]);
+  assert.match(getAgentScript(toolParts(store).find(part => part.name === 'codemode')!)?.output ?? '', /^# 八字岁运刑冲合害详查$/u, 'the script read the drilldown itself');
+  assert.deepEqual(Object.values((finish.args.p_checkpoint as AgentRunRow['checkpoint']).citations!.calls), [1]);
+});
+
 test('scripts cannot call model-only tools and stop at the call limit', async () => {
   const store = new MemoryStore(), run = row();
   run.input.codeMode = true;

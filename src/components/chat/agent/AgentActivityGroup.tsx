@@ -70,6 +70,7 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
             {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看图片</Button>}
         </div> : null;
     }
+    // 已删除的定位工具：旧对话里的定位步骤照旧显示。
     if (tool.name === 'focus_chart') {
         const focus = getChartFocus(tool);
         if (!focus) return null;
@@ -227,6 +228,12 @@ function StepFold({ children }: { children: ReactNode }) {
 
 const copyAction = (text: string, label: string) => <CopyButton text={text} label={label} iconOnly className="agent-step-copy" />;
 
+/** 这条回答里最先给出这张盘的步骤：再次查看同一张盘只留步骤行，不重复画一张同样的小盘。 */
+function isFirstChartView(tool: AgentTool, parts: readonly AgentPart[]) {
+    const reference = getAgentChartReference(tool);
+    return !reference || parts.find(part => part.type === 'tool' && getAgentChartReference(part) === reference && getAgentChart(part))?.id === tool.id;
+}
+
 /** 排盘步骤：先给一眼认得出的小盘与要点，规范全文收在下面的面板里。 */
 function ChartStepSummary({ tool, value }: { tool: AgentTool; value: NonNullable<ReturnType<typeof getAgentChart>> }) {
     const facts = describeOverviewFacts(tool, value);
@@ -319,7 +326,7 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 </li>;
             })}
         </ul>}
-        {chart && <ChartStepSummary tool={tool} value={chart} />}
+        {chart && isFirstChartView(tool, parts) && <ChartStepSummary tool={tool} value={chart} />}
         {members.length === 0 && (calculation
             ? <StepPanel title="推演结果" kind="calculation" actions={text ? copyAction(text, '复制结果') : undefined}>
                 <CalculationResult value={calculation} />
@@ -416,10 +423,11 @@ export function AgentActivityGroup({ parts, data, active = false }: { parts: Age
     useEntranceMotion(stepsRef, { selector: ':scope > .agent-step', preset: 'fade', scope: `${data.runId}:${tools.length > 0}`, ready: open });
     const thinking = summarizeThinkingTime(parts);
     // 实时状态由「太卜」右侧的 AgentLiveStatus 负责；过程条只给进度或结果摘要。
+    // 「已」只出现一次：有「已思考」时统计跟在后面，不再带。
     const count = !tools.length && !questions
         ? (streaming ? '任务过程' : thinking ?? '已思考')
         : streaming ? `· ${completed} / ${tools.length} 完成`
-        : `${thinking ? `${thinking} · ` : ''}${summarizeAgentActivity(done, questions, failed)}`;
+        : thinking ? `${thinking} · ${summarizeAgentActivity(done, questions, failed)}` : summarizeAgentActivity(done, questions, failed, true);
     return <div className="agent-activity-group">
         <section className={`agent-process${open ? ' is-open' : ''}`} aria-label="任务过程">
             <Button unstyled type="button" className="agent-process-heading" aria-expanded={open} aria-controls={id} onClick={() => { setDisclosed(!open); if (!open) setRevealed(true); }}>

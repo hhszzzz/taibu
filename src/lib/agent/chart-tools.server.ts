@@ -124,15 +124,3 @@ export async function loadAgentChart(store: AgentStore, run: AgentRunRow, refere
   if (!value) throw new Error('命盘数据不完整，无法显示');
   return { reference: normalized, value, canonicalText: bazi ? toBaziText(bazi.output) : toZiweiText(ziwei!.output) };
 }
-
-/** Focus uses the immutable inspected snapshot, even if a saved birth record is later edited. */
-export async function loadInspectedChart(store: AgentStore, run: AgentRunRow, reference: string) {
-  const parsed = parseChartReference(reference);
-  if (!parsed) throw new Error('命盘引用格式不正确');
-  const normalized = parsed.source + ':' + parsed.id;
-  const artifact = await store.inspectedChart(run, normalized);
-  const inspection = artifact?.tool_name === 'inspect_chart' ? artifact.result.details : artifact?.result.inspection;
-  const value = artifact ? getAgentChart({ type: 'tool', id: artifact.id, name: 'inspect_chart', title: '命盘', status: 'completed', output: inspection }) : null;
-  if (!value) throw new Error('请先使用 inspect_chart 查看这张命盘');
-  return { reference: normalized, value };
-}

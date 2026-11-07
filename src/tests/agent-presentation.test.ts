@@ -6,10 +6,9 @@ import { randomUUID } from 'node:crypto';
 import { executeTool, buildToolSuccessPayload, listToolDefinitions } from 'taibu-core/mcp';
 import { getAgentChart } from '../lib/agent/tool-presentation';
 import { getAgentToolFamily } from '../lib/agent/tool-catalog';
-import { buildAgentWorkspace } from '../lib/agent/workspace';
 import {
-    collectAgentArtifacts, describeAgentCallNote, describeAgentChartRules, describeAgentChartSteps, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
-    getAgentStepNumbers, getAgentSteps, getAgentScriptCalls, getAgentLiveLine, getAgentArtifactHref, getAgentLocatedPositions, getAgentReadingState, getAgentToolState,
+    collectAgentArtifacts, describeAgentCallNote, describeAgentChartSubject, describeAgentStep, formatAgentToolDuration,
+    getAgentStepNumbers, getAgentSteps, getAgentScriptCalls, getAgentLiveLine, getAgentArtifactHref, getAgentReadingState, getAgentToolState,
     getAgentResponseTiming, getAgentTaskDuration, getAgentTaskSpan, groupAgentParts, getAgentActivityLabel, getAgentEvidenceSummary, stripLeadingTitle,
     summarizeAgentProcess, summarizeAgentActivity, summarizeAgentTool, summarizeThinkingTime, formatMemberNames, AGENT_TOOL_FAMILY_LABELS, type AgentArtifact, type AgentTool,
 } from '../components/chat/agent/presentation';
@@ -176,21 +175,25 @@ test('a code mode script is one step and its calls stay inside it', () => {
     assert.deepEqual(getAgentScriptCalls(parts).get(script.id)?.map(call => call.id), ['nested:7', 'nested:8']);
     assert.equal(summarizeAgentTool(script), '调用 2 次 · 1 次失败', 'a blocked call counts though it has no part; a row without a call number is not one');
     assert.equal(summarizeAgentTool({ ...script, status: 'running', output: undefined }), null, 'a running script lists no calls yet');
-    assert.equal(summarizeAgentActivity([script, ...calls], 0, 0), '已查看 2 张命盘，已运行 1 个脚本');
+    assert.equal(summarizeAgentActivity([script, ...calls], 0, 0), '查看 2 张命盘，运行 1 个脚本');
 });
 
 test('the evidence chip counts only completed search results and the header clock never runs backwards', () => {
-    const focus = { type: 'tool', id: 'f', name: 'focus_chart', title: '', status: 'completed', output: { chartFocus: { version: 1, reference: 'artifact:11111111-1111-4111-8111-111111111111', targetIds: [], includeRelated: true, caption: '月柱 丁丑' } } } as AgentTool;
+    const focus = { type: 'tool', id: 'f', name: 'focus_chart', title: '', status: 'completed', output: { chartFocus: { version: 1, reference: 'bazi_chart:11111111-1111-4111-8111-111111111111', targetIds: [], includeRelated: true, caption: '月柱 丁丑' } } } as AgentTool;
+    const drilldown = { type: 'tool', id: 'd', name: 'ziwei_palace', title: '紫微宫位', status: 'completed',
+        output: { chartReference: 'artifact:22222222-2222-4222-8222-222222222222', chartKind: 'ziwei', selection: { palace: '官禄' }, result: {}, targets: [], cite: 5 } } as AgentTool;
+    const { cite: _cite, ...unnumbered } = drilldown.output as { cite: number };
     const parts = [
         { type: 'tool', id: 'w', name: 'web_search', title: '', status: 'completed', output: [{ title: 'a', url: 'https://a.example', content: 'x' }] },
         { type: 'tool', id: 'k', name: 'search_knowledge', title: '', status: 'completed', output: [{ content: 'y' }, { content: 'z' }] },
         { type: 'tool', id: 'r', name: 'web_search', title: '', status: 'running' },
         { type: 'tool', id: 'b', name: 'bazi', title: '', status: 'completed', output: [{ content: 'not evidence' }] },
-        focus,
+        focus, drilldown, { ...drilldown, id: 'old', output: unnumbered },
     ] as AgentTool[];
-    assert.deepEqual(getAgentEvidenceSummary(parts), { total: 4, web: 1, knowledge: 2, chart: 1 }, 'located chart positions count beside search results');
+    assert.deepEqual(getAgentEvidenceSummary(parts), { total: 5, web: 1, knowledge: 2, chart: 2, charts: [['八字', 1], ['紫微', 1]] },
+        'an older located position and a numbered drilldown count beside search results; a drilldown from before numbering does not');
     assert.equal(getAgentEvidenceSummary([]), null);
-    assert.equal(getAgentEvidenceSummary([focus]), null, 'a task that never searched has no chip; its positions live in the chart');
+    assert.equal(getAgentEvidenceSummary([focus, drilldown]), null, 'a task that never searched has no chip; its positions live in the chart');
     assert.equal(getAgentEvidenceSummary([{ type: 'tool', id: 'e', name: 'web_search', title: '', status: 'completed', output: [] }]), null, 'empty searches leave nothing to cite');
     assert.equal(formatAgentElapsed(72_000), '1 分 12 秒');
     assert.equal(formatAgentElapsed(-5), '0 秒');
@@ -222,16 +225,27 @@ test('the folded process line names steps in first-use order, counts repeats and
 
 test('the claude-style status line groups tools by effect and names collaboration members', () => {
     const tool = (id: string, name: string, extra: Partial<AgentTool> = {}): AgentTool => ({ type: 'tool', id, name, title: name, status: 'completed', ...extra });
-    assert.equal(summarizeAgentActivity([tool('a', 'bazi'), tool('b', 'inspect_chart')], 0, 0), '已查看 2 张命盘');
-    assert.equal(summarizeAgentActivity([tool('a', 'web_search'), tool('b', 'read_user_data'), tool('c', 'todo_write')], 0, 0), '已搜索 1 次，已读取 1 份资料');
+    assert.equal(summarizeAgentActivity([tool('a', 'bazi'), tool('b', 'inspect_chart')], 0, 0), '查看 2 张命盘');
+    // Casting, reading and locating one chart are one chart looked at; a second chart counts on its own.
+    const reference = 'artifact:11111111-1111-4111-8111-111111111111';
+    const located = (id: string, ref = reference) => tool(id, 'focus_chart', { output: { chartFocus: { version: 1, reference: ref, targetIds: [], includeRelated: false, caption: '日柱' } } });
+    const oneChart = [tool('cast', 'bazi', { output: { artifactId: reference.slice('artifact:'.length), result: {} } }),
+        tool('read', 'inspect_chart', { input: { reference }, output: { chartReference: reference, chartKind: 'bazi', result: {} } }), located('f1'), located('f2'),
+        tool('f3', 'focus_chart', { status: 'running', input: { reference } })];
+    assert.equal(summarizeAgentActivity(oneChart, 0, 0), '查看 1 张命盘');
+    assert.equal(summarizeAgentActivity([...oneChart, located('saved', 'bazi_chart:22222222-2222-4222-8222-222222222222')], 0, 0), '查看 2 张命盘');
+    // Settled lines lead with one 已; the phrases after it and an empty line do not take it.
+    assert.equal(summarizeAgentActivity([...oneChart, tool('d', 'bazi_relations')], 0, 1, true), '已查看 1 张命盘，详查 1 处，1 处失败');
+    assert.equal(summarizeAgentActivity([tool('t', 'todo_write')], 0, 1, true), '任务过程，1 处失败');
+    assert.equal(summarizeAgentActivity([tool('a', 'web_search'), tool('b', 'read_user_data'), tool('c', 'todo_write')], 0, 0), '搜索 1 次，读取 1 份资料');
     const team = tool('t', 'parallel_analysis', { output: { analyses: [{ system: 'bazi', conversationId: 1, status: 'completed' }, { system: 'ziwei', conversationId: 2, status: 'completed' }] } });
     assert.equal(summarizeAgentActivity([team], 0, 0), '开启 2 个智能体');
-    assert.equal(summarizeAgentActivity([tool('a', 'bazi', { status: 'failed' })], 2, 1), '已查看 1 张命盘，已确认 2 项信息，1 处失败');
-    assert.equal(summarizeAgentActivity([], 1, 0), '已确认 1 项信息');
+    assert.equal(summarizeAgentActivity([tool('a', 'bazi', { status: 'failed' })], 2, 1), '查看 1 张命盘，确认 2 项信息，1 处失败');
+    assert.equal(summarizeAgentActivity([], 1, 0), '确认 1 项信息');
     // A skill counts once: loading it and reading its files are one skill used.
     assert.equal(summarizeAgentActivity([tool('k', 'load_skill', { input: { name: 'case-review' } }), tool('f', 'read_skill_file', { input: { name: 'case-review', path: 'notes.md' } }),
-        tool('g', 'load_skill', { input: { name: 'timing' } })], 0, 0), '已使用 2 个技能');
-    assert.equal(summarizeAgentActivity([tool('s', 'select_final_artifacts', { input: { artifactIds: ['a', 'b', 'c'] } })], 0, 0), '已运行 1 个工具', 'a step of a retired tool in an earlier answer still counts as a step');
+        tool('g', 'load_skill', { input: { name: 'timing' } })], 0, 0), '使用 2 个技能');
+    assert.equal(summarizeAgentActivity([tool('s', 'select_final_artifacts', { input: { artifactIds: ['a', 'b', 'c'] } })], 0, 0), '运行 1 个工具', 'a step of a retired tool in an earlier answer still counts as a step');
 });
 
 test('the live line describes the running call only while tools run', () => {
@@ -278,7 +292,7 @@ async function chartCall(id: string, name: string, input?: Record<string, unknow
         output: { artifactId: randomUUID(), result: payload.structuredContent }, canonicalText: payload.content.map(part => part.text).join('\n') };
 }
 
-test('a bazi reading names its subject from the call and the rules Core calculated with, as returned', async () => {
+test('a bazi reading names its subject from the call', async () => {
     const calculated = await chartCall('calc', 'bazi', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 });
     const value = getAgentChart(calculated)!;
     assert.equal(describeAgentChartSubject(calculated, value), '男 · 公历 1990-01-15 09:00 · Asia/Shanghai · 日主 庚');
@@ -286,32 +300,18 @@ test('a bazi reading names its subject from the call and the rules Core calculat
         '男 · 农历 1990-闰05-03 · Asia/Shanghai · 日主 庚', 'a lunar date without an hour keeps its leap month');
     assert.equal(describeAgentChartSubject({ ...calculated, name: 'inspect_chart', input: { reference: 'artifact:x' } }, value), '男 · Asia/Shanghai · 日主 庚', 'a saved chart read back has no birth arguments');
     assert.equal(describeAgentChartSubject({ ...calculated, input: { birthYear: 1990.5, birthMonth: 1, birthDay: 15 } }, value), '男 · Asia/Shanghai · 日主 庚', 'malformed arguments are left out');
-    assert.equal(describeAgentChartRules(value), '子时换日 midnight · Asia/Shanghai · 节气 instant · bazi-2026.10');
-    assert.equal(describeAgentChartRules({ ...value, chart: { ...value.chart, 计算规则: undefined } } as typeof value), null);
-    assert.equal(describeAgentChartRules({ ...value, chart: { ...value.chart, 计算规则: { timezone: ' ', ruleVersion: 7 } } } as unknown as typeof value), null);
     const ziwei = await chartCall('ziwei', 'ziwei');
     const ziweiValue = getAgentChart(ziwei)!;
     assert.equal(describeAgentChartSubject(ziwei, ziweiValue), ziweiValue.summary, 'other kinds keep their summary');
 });
 
-test('a chart tab names the latest task’s steps behind it and what became of the reading', async () => {
+test('a chart tab says what became of the reading', async () => {
     const calculated = await chartCall('calc', 'bazi');
     const artifactId = (calculated.output as { artifactId: string }).artifactId;
     const inspected: AgentTool = { ...calculated, id: 'inspect', name: 'inspect_chart' };
-    const focus: AgentTool = { type: 'tool', id: 'focus', name: 'focus_chart', title: '定位', status: 'completed',
-        output: { chartFocus: { version: 1, reference: 'artifact:' + artifactId, targetIds: ['bazi:cell:2:0', 'bazi:cell:2:1', 'bazi:cell:2:0'], includeRelated: true, caption: '日柱' } } };
     assert.equal(getAgentReadingState(calculated, new Set([artifactId])), '已保存');
     assert.equal(getAgentReadingState(calculated, new Set()), '暂存成果');
     assert.equal(getAgentReadingState(inspected, new Set([artifactId])), '已存资料', 'a reading of a saved chart is the saved record itself');
-    const numbers = new Map([['calc', 2], ['inspect', 3], ['focus', 5]]);
-    assert.equal(describeAgentChartSteps({ reading: calculated, focus, numbers, state: '暂存成果' }), '第 2 步计算 · 第 5 步定位 · 暂存成果');
-    assert.equal(describeAgentChartSteps({ reading: inspected, focus: undefined, numbers, state: '已存资料' }), '第 3 步读取 · 已存资料');
-    assert.equal(describeAgentChartSteps({ reading: calculated, focus, numbers: new Map(), state: '已保存' }), '已保存', 'calls of earlier tasks carry no number');
-    assert.equal(describeAgentChartSteps({ reading: undefined, focus: undefined, numbers, state: null }), '');
-
-    const model = buildAgentWorkspace({ parts: [calculated, focus, { ...focus, id: 'focus-again' }], artifacts: [], attachmentIds: [] });
-    assert.deepEqual(getAgentLocatedPositions(model), { toolIds: ['focus', 'focus-again'], labels: ['日柱天干 庚', '日柱地支 辰'] }, 'positions are listed once, in first-located order');
-    assert.deepEqual(getAgentLocatedPositions(buildAgentWorkspace({ parts: [calculated], artifacts: [], attachmentIds: [] })), { toolIds: [], labels: [] });
 });
 
 test('an ended task’s duration runs from its creation to the last measured end, never backwards', () => {

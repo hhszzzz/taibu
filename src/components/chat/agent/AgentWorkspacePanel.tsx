@@ -102,7 +102,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             const reading = tools.findLast(tool => getAgentChart(tool));
             const value = reading && getAgentChart(reading);
             const reference = reading ? getAgentChartReference(reading) : null;
-            // A focus step opened from the process list or a citation shows that position, not the latest one.
+            // A drilldown (or an older focus step) opened from the process list or a citation shows its positions, not the latest ones.
             const named = namedToolId ? model.toolsById.get(namedToolId) : undefined;
             const opened = named && reference ? getChartFocus(named) ?? getDrilldownFocus(named) : null;
             const pinned = opened?.reference === reference ? opened : null;
@@ -111,7 +111,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             const focus = pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null);
             // The calculation that produced the reading, or the saved chart it read back.
             const source = tools.find(tool => isAgentChartTool(tool.name) && getAgentChart(tool)) ?? reading;
-            // 按宫位查看只回定位目录、没有规范文本：盘面复制与兜底的文本取最近一次带规范文本的读取。
+            // 旧对话里按宫位查看的结果只有定位目录、没有规范文本：盘面复制与兜底的文本取最近一次带规范文本的读取。
             const textSource = tools.findLast(tool => getAgentChart(tool) && getAgentToolText(tool));
             body = value && reading
                 ? <Suspense fallback={<p role="status">加载命盘…</p>}>

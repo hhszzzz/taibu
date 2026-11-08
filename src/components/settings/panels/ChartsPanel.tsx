@@ -133,7 +133,7 @@ function ChartSection({
   const createHref = getNavItemById(type)?.href ?? `/${type}`;
 
   return (
-    <section aria-labelledby={headingId} className="charts-group">
+    <section aria-labelledby={headingId} data-settings-highlight={`charts-${type}`} className="charts-group">
       <div className="charts-group-head">
         <h3 id={headingId}>{title}<span className="settings-section-count">{list.length}</span></h3>
         <Link href={createHref} className={buttonVariants({ variant: 'ghost', size: 'sm' })}>

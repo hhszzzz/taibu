@@ -705,7 +705,7 @@ export default function KnowledgeBasePanel() {
     return (
         <>
             <div className="flex flex-col gap-9">
-                <section aria-labelledby="kb-list-heading" className="flex flex-col gap-3">
+                <section aria-labelledby="kb-list-heading" data-settings-highlight="kb-list" className="flex flex-col gap-3">
                     <div className="flex min-h-10 items-center justify-between gap-3">
                         <h3 id="kb-list-heading" className={SECTION_TITLE}>
                             我的知识库
@@ -787,7 +787,7 @@ export default function KnowledgeBasePanel() {
                     </p>
                 </section>
 
-                <section aria-labelledby="kb-import-heading" className="flex flex-col gap-3">
+                <section aria-labelledby="kb-import-heading" data-settings-highlight="kb-import" className="flex flex-col gap-3">
                     <h3 id="kb-import-heading" className={SECTION_TITLE}>导入外部资料</h3>
                     <div className={`grid gap-4 p-5 sm:grid-cols-2 ${CARD}`}>
                         <label className="settings-field-block">

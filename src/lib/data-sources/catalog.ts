@@ -30,6 +30,14 @@ export function getDataSourceFeatureId(type: DataSourceType): FeatureModuleId {
     return DATA_SOURCE_CATALOG[type].featureId;
 }
 
+/** 搜索、标签用的占术短名。 */
+export const DATA_SOURCE_SHORT_LABELS: Readonly<Record<DataSourceType, string>> = {
+    bazi_chart: '八字', ziwei_chart: '紫微', tarot_reading: '塔罗', liuyao_divination: '六爻',
+    mbti_reading: 'MBTI', hepan_chart: '合盘', face_reading: '面相', palm_reading: '手相',
+    ming_record: '记录', daily_fortune: '日运', monthly_fortune: '月运', qimen_chart: '奇门',
+    daliuren_divination: '大六壬', meihua_divination: '梅花', xiaoliuren_divination: '小六壬',
+};
+
 export function getDataSourceNavId(type: DataSourceType): string {
     return DATA_SOURCE_CATALOG[type].navId;
 }

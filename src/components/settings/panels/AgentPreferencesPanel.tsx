@@ -63,7 +63,7 @@ export function AgentPreferencesPanel({ userId }: { userId: string }) {
         } catch { if (active && !active.signal.aborted) showToast('error', '保存设置失败'); }
         finally { if (active && !active.signal.aborted) setBusy(false); }
     };
-    return <>{memoryAvailable ? <section className="settings-form-section settings-form-section-divided" aria-label="记忆设置">
+    return <>{memoryAvailable ? <section className="settings-form-section settings-form-section-divided" data-settings-highlight="personalization-memory" aria-label="记忆设置">
         <div className="settings-form-heading">
             <h3>记忆<BetaBadge /></h3>
             <p>让太卜记住你的偏好和事实，随时可以查看或删除。</p>

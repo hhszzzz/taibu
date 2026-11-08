@@ -42,7 +42,7 @@ const ORDER_TONE: Record<PaymentOrderView['status'], 'success' | 'warning' | 'ne
 
 function BalanceCard({ summary, onDeductOrder }: { summary: BillingSummary; onDeductOrder: (order: DeductOrder) => void }) {
     return (
-        <section aria-label="可用额度" className={`flex flex-col gap-4 p-6 ${CARD}`}>
+        <section aria-label="可用额度" data-settings-highlight="billing-wallet" className={`flex flex-col gap-4 p-6 ${CARD}`}>
             <div className="flex flex-wrap items-end justify-between gap-4">
                 <div className="flex flex-col gap-1.5">
                     <span className="text-[13px] text-foreground-secondary">可用额度</span>
@@ -83,7 +83,7 @@ function BalanceCard({ summary, onDeductOrder }: { summary: BillingSummary; onDe
 function Subscriptions({ summary }: { summary: BillingSummary }) {
     if (!summary.subscriptions.length) return null;
     return (
-        <section aria-labelledby="billing-subscriptions-heading" className="flex flex-col gap-3">
+        <section aria-labelledby="billing-subscriptions-heading" data-settings-highlight="billing-subscriptions" className="flex flex-col gap-3">
             <h3 id="billing-subscriptions-heading" className={SECTION_HEADING}>我的订阅</h3>
             <ul className={`overflow-hidden ${CARD}`}>
                 {summary.subscriptions.map(subscription => {
@@ -173,7 +173,7 @@ function PlanCard({ plan, payment, busy, onBuy, onPay }: {
 function Orders({ orders }: { orders: PaymentOrderView[] }) {
     if (!orders.length) return null;
     return (
-        <section aria-labelledby="billing-orders-heading" className="flex flex-col gap-3">
+        <section aria-labelledby="billing-orders-heading" data-settings-highlight="billing-orders" className="flex flex-col gap-3">
             <h3 id="billing-orders-heading" className={SECTION_HEADING}>支付订单</h3>
             <ul className={`overflow-hidden ${CARD}`}>
                 {orders.map(order => (
@@ -327,7 +327,7 @@ function BillingContent() {
             <Subscriptions summary={summary} />
 
             {plans.length ? (
-                <section aria-labelledby="billing-plans-heading" className="flex flex-col gap-3">
+                <section aria-labelledby="billing-plans-heading" data-settings-highlight="billing-plans" className="flex flex-col gap-3">
                     <h3 id="billing-plans-heading" className={SECTION_HEADING}>订阅套餐</h3>
                     <div className="grid grid-cols-[repeat(auto-fit,minmax(14rem,1fr))] gap-3">
                         {plans.map(plan => (
@@ -340,7 +340,7 @@ function BillingContent() {
 
             <div className={payment.enabled ? 'grid items-start gap-8 lg:grid-cols-2' : undefined}>
                 {payment.enabled ? (
-                    <section aria-labelledby="billing-topup-heading" className="flex flex-col gap-3">
+                    <section aria-labelledby="billing-topup-heading" data-settings-highlight="billing-topup" className="flex flex-col gap-3">
                         <h3 id="billing-topup-heading" className={SECTION_HEADING}>充值</h3>
                         <div className={`flex flex-col gap-4 p-[18px] ${CARD}`}>
                             <div role="group" aria-label="充值金额" className="flex flex-wrap gap-2">
@@ -370,7 +370,7 @@ function BillingContent() {
                     </section>
                 ) : null}
 
-                <section aria-labelledby="billing-redeem-heading" className="flex flex-col gap-3">
+                <section aria-labelledby="billing-redeem-heading" data-settings-highlight="billing-redeem" className="flex flex-col gap-3">
                     <h3 id="billing-redeem-heading" className={SECTION_HEADING}>兑换码</h3>
                     <form onSubmit={event => void redeem(event)} className="flex flex-wrap items-center gap-2">
                         <Input value={code} onChange={event => setCode(event.target.value)} placeholder="tb-xxxxxxxxxxxxxxxxxxxx" aria-label="兑换码"

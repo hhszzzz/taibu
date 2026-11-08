@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import {
+  BellIcon,
   BillingIcon,
   ChartsIcon,
   ConnectorsIcon,
@@ -10,15 +11,20 @@ import {
   KnowledgeIcon,
   McpIcon,
   MegaphoneIcon,
+  MemoryIcon,
   PersonalizationIcon,
   PluginIcon,
   ProfileIcon,
   RecordsIcon,
+  ScheduleIcon,
   ServerIcon,
   SettingsIcon,
   ShareLinkIcon,
   SkillIcon,
+  SubscriptionIcon,
+  WalletIcon,
 } from '@/lib/navigation/nav-icons';
+import type { SettingsSearchIconName } from '@/lib/settings-search';
 import type { SettingsCenterTab } from '@/lib/settings-center';
 
 export type SettingsCenterIconProps = {
@@ -66,4 +72,13 @@ export const SETTINGS_CENTER_TAB_ICONS: Record<SettingsCenterTab, ComponentType<
   'admin-ai-services': withDefaultSize(ServerIcon),
   'admin-agent-extensions': withDefaultSize(PluginIcon),
   'admin-logs': withDefaultSize(RecordsIcon),
+};
+
+/** 搜索结果里有专属图标的设置项（如「记忆」），其余沿用所在分页的图标。 */
+export const SETTINGS_SEARCH_ITEM_ICONS: Record<SettingsSearchIconName, ComponentType<SettingsCenterIconProps>> = {
+  bell: withDefaultSize(BellIcon),
+  memory: withDefaultSize(MemoryIcon),
+  schedule: withDefaultSize(ScheduleIcon),
+  subscription: withDefaultSize(SubscriptionIcon),
+  wallet: withDefaultSize(WalletIcon),
 };

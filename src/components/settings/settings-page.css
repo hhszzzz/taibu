@@ -51,6 +51,12 @@
 /* Section headings sit beside their content on wide screens. */
 .settings-section, .settings-form-section { min-width: 0; }
 .settings-section + .settings-section { margin-top: 2.5rem; padding-top: 2rem; border-top: 1px solid var(--border); }
+/* 全局搜索跳转：目标区块滚动到视野后短暂描边，不改变布局。 */
+[data-settings-highlight].is-search-highlight { border-radius: 12px; animation: settings-search-highlight 2.4s var(--ease-out) both; }
+@keyframes settings-search-highlight {
+    0%, 18% { box-shadow: 0 0 0 4px var(--accent-soft); background: var(--accent-light); }
+    100% { box-shadow: 0 0 0 0 transparent; background: transparent; }
+}
 .settings-section-heading { display: flex; flex-direction: column; gap: .375rem; margin-bottom: .875rem; }
 .settings-section-title { font-size: .9375rem; font-weight: 600; line-height: 1.5; color: var(--foreground); }
 .settings-section-description { font-size: .8125rem; line-height: 1.6; color: var(--foreground-secondary); }

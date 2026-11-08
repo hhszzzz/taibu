@@ -168,7 +168,7 @@ export default function ProfilePanel() {
     <div>
       <StatusBanner error={error} success={success} />
 
-      <section className="settings-section">
+      <section className="settings-section" data-settings-highlight="profile-profile">
         <div className="settings-section-heading">
           <h3 className="settings-section-title">个人资料</h3>
           <p className="settings-section-description">你在社区与对话中的公开身份。</p>
@@ -214,7 +214,7 @@ export default function ProfilePanel() {
         </div>
       </section>
 
-      <section className="settings-section">
+      <section className="settings-section" data-settings-highlight="profile-security">
         <div className="settings-section-heading">
           <h3 className="settings-section-title">安全</h3>
           <p className="settings-section-description">通过绑定邮箱验证后修改密码。</p>

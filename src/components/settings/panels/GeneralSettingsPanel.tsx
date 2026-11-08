@@ -308,7 +308,7 @@ function AccountGeneralSettingsPanel() {
     <div>
       {loadError ? <div role="alert" className="settings-alert">{loadError}</div> : null}
 
-      <section className="settings-section">
+      <section className="settings-section" data-settings-highlight="general-appearance">
         <div className="settings-section-heading">
           <h3 className="settings-section-title">外观</h3>
           <p className="settings-section-description">选择适合阅读环境的界面明暗。</p>
@@ -334,7 +334,7 @@ function AccountGeneralSettingsPanel() {
         </div>
       </section>
 
-      <SettingsSection title="基础偏好">
+      <SettingsSection title="基础偏好" anchor="general-preferences">
         <SettingsRow
           label="全站字号"
           description="页面、命盘与对话文字一起缩放"
@@ -360,7 +360,7 @@ function AccountGeneralSettingsPanel() {
         />
       </SettingsSection>
 
-      <SettingsSection title="通知与提醒">
+      <SettingsSection title="通知与提醒" anchor="general-notifications">
         {reminderLoadError ? (
           <div role="alert" className="settings-alert">
             <span className="min-w-0 flex-1">{reminderLoadError}</span>

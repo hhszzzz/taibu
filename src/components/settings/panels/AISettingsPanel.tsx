@@ -319,7 +319,7 @@ function AccountAISettingsPanel() {
     <div>
       {error ? <div role="alert" className="settings-alert">{error}</div> : null}
 
-      <section className="settings-form-section" aria-labelledby="ai-style-heading">
+      <section className="settings-form-section" data-settings-highlight="personalization-style" aria-labelledby="ai-style-heading">
         <div className="settings-form-heading">
           <h3 id="ai-style-heading">解读风格</h3>
           <p>告诉 AI 你是谁，以及希望它怎样表达。</p>
@@ -388,7 +388,7 @@ function AccountAISettingsPanel() {
         </div>
       </section>
 
-      <section className="settings-form-section" aria-labelledby="ai-visualization-heading">
+      <section className="settings-form-section" data-settings-highlight="personalization-visualization" aria-labelledby="ai-visualization-heading">
         <div className="settings-form-heading">
           <h3 id="ai-visualization-heading">运势可视化</h3>
           <p>按你选择的维度、图表风格和大运期数生成运势图表。</p>

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/Button';
 import { Suspense, lazy, useEffect, useMemo, useState } from 'react';
 import type { ComponentType, ReactElement } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import './settings-page.css';
 import {
   LockKeyhole,
@@ -28,6 +28,7 @@ import {
 } from '@/lib/settings-center';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { getAdminSubTabs, isAdminSubtabOwner, resolveAdminSubTab } from '@/lib/admin/settings-subtabs';
+import { SETTINGS_HIGHLIGHT_ATTRIBUTE } from '@/lib/settings-search';
 import {
   SETTINGS_CENTER_ICON_SIZES,
   SETTINGS_CENTER_TAB_ICONS,
@@ -233,6 +234,27 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
     queueMicrotask(() => { if (current && resolvedActiveTab) setMountedTabs(tabs => tabs.includes(resolvedActiveTab) ? tabs : [...tabs, resolvedActiveTab]); });
     return () => { current = false; };
   }, [resolvedActiveTab]);
+  // 从全局搜索跳进来：等懒加载的面板渲染后滚动到目标区块，短暂高亮。
+  const highlight = useSearchParams().get('highlight');
+  useEffect(() => {
+    if (!highlight || !/^[a-z0-9:_-]+$/iu.test(highlight)) return;
+    let cancelled = false;
+    let timer = 0;
+    const started = performance.now();
+    const find = () => {
+      if (cancelled) return;
+      const node = document.querySelector<HTMLElement>(`[${SETTINGS_HIGHLIGHT_ATTRIBUTE}="${highlight}"]`);
+      if (node) {
+        node.scrollIntoView({ block: 'center', behavior: 'smooth' });
+        node.classList.add('is-search-highlight');
+        timer = window.setTimeout(() => node.classList.remove('is-search-highlight'), 2400);
+        return;
+      }
+      if (performance.now() - started < 3000) requestAnimationFrame(find);
+    };
+    requestAnimationFrame(find);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [highlight, resolvedActiveTab]);
   const displayTab = resolvedActiveTab ?? 'general';
   const displayTabState = tabs.find(tab => tab.id === displayTab);
   const activeTabLabel = displayTabState?.label ?? '设置';
@@ -284,7 +306,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
         </div>
         <div className="settings-content">
           {children}
-          {renderedTabs.map(tab => <div key={`${user?.id ?? 'visitor'}:${tab}`} className={tab === resolvedActiveTab ? 'block' : 'hidden'} aria-hidden={tab === resolvedActiveTab ? undefined : true} inert={tab !== resolvedActiveTab}>
+          {renderedTabs.map(tab => <div key={`${user?.id ?? 'visitor'}:${tab}`} data-settings-highlight={`panel:${tab}`} className={tab === resolvedActiveTab ? 'block' : 'hidden'} aria-hidden={tab === resolvedActiveTab ? undefined : true} inert={tab !== resolvedActiveTab}>
             {renderSettingsCenterPanel(tab, flags, { isLoggedIn: !!user, isAdmin, profileLoading, profileError: !!profileError })}
           </div>)}
         </div>

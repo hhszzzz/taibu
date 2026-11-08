@@ -38,6 +38,13 @@
 .search-palette-close { display: inline-flex; width: 28px; height: 28px; align-items: center; justify-content: center; border-radius: 6px; font-size: calc(18 / 16 * 1rem); line-height: 1; color: var(--foreground-secondary); }
 .search-palette-close:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .search-palette-close:focus-visible { outline: none; background: var(--fill-ghost-hover); color: var(--foreground); }
+/* 识别到时间词后的一行条件：可点 × 清掉，只保留其余关键词。 */
+.search-palette-time { display: flex; flex-shrink: 0; align-items: center; gap: 8px; padding: 0 24px 8px; font-size: calc(12 / 16 * 1rem); line-height: 1.4; color: var(--foreground-secondary); }
+.search-palette-time > span { display: inline-flex; height: 24px; align-items: center; padding: 0 8px; border-radius: 6px; background: var(--fill-ghost-hover); }
+.search-palette-time > button { display: inline-flex; width: 20px; height: 20px; align-items: center; justify-content: center; border-radius: 4px; color: var(--foreground-tertiary); }
+.search-palette-time > button:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+.search-palette-time > button:focus-visible { outline: none; background: var(--fill-ghost-hover); color: var(--foreground); }
+.search-palette-item-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; color: var(--foreground-secondary); }
 .search-palette-tabs { display: flex; flex-shrink: 0; gap: 2px; padding: 0 24px 10px; }
 .search-palette-tab { height: 28px; padding: 0 10px; border-radius: 6px; font-size: calc(14 / 16 * 1rem); font-weight: 500; line-height: 1; color: var(--foreground-tertiary); transition: color var(--duration-fast) var(--ease-out), background-color var(--duration-fast) var(--ease-out); }
 .search-palette-tab:hover { color: var(--foreground-secondary); background: var(--fill-ghost-hover); }
@@ -53,6 +60,7 @@
 .search-palette-item-title { display: block; overflow: hidden; font-size: calc(14 / 16 * 1rem); font-weight: 400; line-height: calc(20 / 16 * 1rem); text-overflow: ellipsis; white-space: nowrap; }
 .search-palette-item-preview { display: block; overflow: hidden; font-size: calc(12.5 / 16 * 1rem); line-height: calc(18 / 16 * 1rem); color: var(--foreground-tertiary); text-overflow: ellipsis; white-space: nowrap; }
 .search-palette-item-tag { margin-left: 8px; font-size: calc(12 / 16 * 1rem); color: var(--foreground-tertiary); }
+.search-palette-item-meta { margin-left: 8px; font-size: calc(12 / 16 * 1rem); font-variant-numeric: tabular-nums; color: var(--foreground-tertiary); }
 .search-palette-actions { display: inline-flex; flex-shrink: 0; align-items: center; gap: 2px; padding-right: 8px; }
 .search-palette-action { display: inline-flex; width: 24px; height: 24px; align-items: center; justify-content: center; border-radius: 6px; color: var(--foreground-secondary); }
 .search-palette-state { margin: 0; padding: 24px 12px; font-size: calc(13 / 16 * 1rem); line-height: calc(19 / 16 * 1rem); color: var(--foreground-secondary); text-align: center; }

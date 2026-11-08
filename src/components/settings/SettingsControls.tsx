@@ -13,14 +13,17 @@ import { useTabIndicator } from '@/lib/motion/tab-indicator';
 export function SettingsSection({
   title,
   description,
+  anchor,
   children,
 }: {
   title: string;
   description?: ReactNode;
+  /** 搜索跳转时定位并高亮的区块名。 */
+  anchor?: string;
   children: ReactNode;
 }) {
   return (
-    <section className="settings-section">
+    <section className="settings-section" data-settings-highlight={anchor}>
       <div className="settings-section-heading">
         <h3 className="settings-section-title">{title}</h3>
         {description ? <p className="settings-section-description">{description}</p> : null}

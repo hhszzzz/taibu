@@ -127,7 +127,7 @@ const familyParts = () => [
   HOUR_CANDIDATES_FIXTURE_PART,
   { type: 'tool', id: 'family-web', name: 'web_search', title: '联网检索', status: 'completed', input: { query: '庚金 月令' }, output: [{ title: '庚金论', url: 'https://example.com/gengjin', content: '庚金带煞，刚健为最。' }, { title: '无效链接', url: 'javascript:alert(1)', content: '不应成为链接' }] },
   { type: 'tool', id: 'family-kb', name: 'search_knowledge', title: '知识库检索', status: 'completed', input: { query: '不存在的资料' }, output: [] },
-  { type: 'tool', id: 'family-method', name: 'load_skill', title: '加载方法或技能', status: 'completed', input: { name: 'bazi' },
+  { type: 'tool', id: 'family-method', name: 'load_skill', title: '加载技能', status: 'completed', input: { name: 'bazi' },
     output: { name: 'bazi', version: 0, scope: 'builtin', files: [], method: { ...BAZI_METHOD_FIXTURE, tools: ['bazi', 'bazi_dayun'] } } },
   { type: 'tool', id: 'family-team', name: 'parallel_analysis', title: '协作分析', status: 'completed', output: { analyses: [
     { system: 'bazi', conversationId: 21, name: '子平', modelName: '分析模型', reasoningEffort: 'high', focus: '格局取用', status: 'completed', answer: '身强取财官。' },
@@ -1296,7 +1296,7 @@ export async function run(existingPage, bundlePath) {
     const method = request.method();
     if (url.origin !== origin) { blocked.push(request.url()); return route.abort('blockedbyclient'); }
     if (url.pathname === '/fixture.js') return route.fulfill({ status: 200, contentType: 'text/javascript', body: bundle });
-    if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}.relative{position:relative}body{font-family:sans-serif}</style><div id="root"></div><script src="/fixture.js"></script>' });
+    if (url.pathname === '/chat' && method === 'GET') return route.fulfill({ status: 200, contentType: 'text/html', body: '<!doctype html><meta charset="utf-8"><style>[hidden],.hidden{display:none!important}button,input,select,textarea{margin:4px;padding:4px}svg{width:16px;height:16px}.relative{position:relative}body{font-family:sans-serif}.chat-model-option-row{position:relative}.chat-model-info{position:absolute;right:8px;top:50%;width:18px;height:18px;translate:0 -50%}</style><div id="root"></div><script src="/fixture.js"></script>' });
     if (url.pathname === '/favicon.ico') return route.fulfill({ status: 204, body: '' });
     if (url.pathname.startsWith('/_next/image') || url.pathname.startsWith('/tarot_cards/')) return route.fulfill({ status: 200, contentType: 'image/png', body: new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,252,255,31,0,3,3,2,0,239,154,6,167,0,0,0,0,73,69,78,68,174,66,96,130]) });
     if (/^\/api\/images\/[0-9a-f-]{36}$/.test(url.pathname) && method === 'GET') return route.fulfill({ status: 200, contentType: 'image/png', headers: { 'Cache-Control': 'private, no-store', 'X-Content-Type-Options': 'nosniff' }, body: new Uint8Array([137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,1,0,0,0,1,8,4,0,0,0,181,28,12,2,0,0,0,11,73,68,65,84,120,218,99,252,255,31,0,3,3,2,0,239,154,6,167,0,0,0,0,73,69,78,68,174,66,96,130]) });
@@ -1534,7 +1534,20 @@ export async function run(existingPage, bundlePath) {
     }
     if (url.pathname === '/api/notes') return ok({ notes: [] }, true);
     if (url.pathname === '/api/notifications' && method === 'PATCH') return ok({ success: true });
-    if (url.pathname === '/api/search' && method === 'GET') return ok({ results: [], charts: [] });
+    if (url.pathname === '/api/search' && method === 'GET') {
+      const q = url.searchParams.get('q') ?? '';
+      return ok({ results: q ? [] : [
+        { conversationId: 'alice-1', messageId: null, title: 'alice conversation 1', preview: '', hasAgentRun: false },
+        { conversationId: 'alice-agent', messageId: null, title: 'alice agent conversation', preview: '', hasAgentRun: true },
+      ], charts: [] });
+    }
+    if (url.pathname === '/api/search/arts' && method === 'GET') {
+      const q = url.searchParams.get('q') ?? '';
+      const items = !q || q.includes('六爻') || url.searchParams.has('since')
+        ? [{ id: 'liuyao-fixture', type: 'liuyao_divination', name: '乾为天', preview: '问题：事业', createdAt: '2026-10-24T03:20:00.000Z' }]
+        : [];
+      return ok({ items });
+    }
     if (url.pathname === '/api/records') {
       const category = url.searchParams.get('category');
       const filtered = records.filter(item => !category || item.category === category);
@@ -3616,14 +3629,14 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartInspect(true));
     await renderBarrier();
     check('Edited saved chart data invalidates manual coordinates on the same resource tab', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && await interactive.locator('.chart-cell-button[aria-pressed=true]').count() === 0);
-    // 「详细」视图展开每一步：读取命盘不再重复画同一张缩略图，真正排盘的步骤才有。
+    // 「详细」视图展开每一步：再次查看命盘是允许的，会多一个带缩略图的步骤。
     await page.evaluate(() => window.fixture.recordView('detailed'));
     await renderBarrier();
     await results.locator('.agent-step-chart').first().waitFor();
     const chartThumbs = await results.locator('.agent-step-chart').count();
     await page.evaluate(() => window.fixture.chartInspect());
     await renderBarrier();
-    check('Re-reading a chart adds a step but no second chart thumbnail', await results.locator('.agent-step-chart').count() === chartThumbs);
+    check('Re-reading a chart adds its own step and thumbnail', await results.locator('.agent-step-chart').count() > chartThumbs);
     await page.evaluate(() => window.fixture.recordView('normal'));
     await renderBarrier();
     await interactive.getByRole('button', { name: '关闭工作区', exact: true }).click();
@@ -3757,7 +3770,7 @@ export async function run(existingPage, bundlePath) {
       await dayunStep.locator('.agent-ws-timeline > li[aria-current="step"]').count() === 1 &&
       await dayunStep.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ }).count() === 0);
     // 其余步骤仍从聊天打开工作区；后面的面板断言用方法页。
-    await openProcessStep('加载方法或技能');
+    await openProcessStep('加载技能');
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('Desktop workspace is a complementary panel rather than a modal', await page.locator('aside#agent-workspace-panel').count() === 1 && await page.getByRole('dialog', { name: '工作区' }).count() === 0);
     // 拖拽 = 整块面板实时跟手：拖动中直接改 DOM 宽度，松手后提交为状态。
@@ -3851,7 +3864,7 @@ export async function run(existingPage, bundlePath) {
     check('Evidence numbers results, links only HTTP(S) sources and explains an empty search', await evidence.getByRole('link', { name: '庚金论' }).getAttribute('href') === 'https://example.com/gengjin' &&
       await evidence.getByRole('link', { name: '无效链接' }).count() === 0 && await evidence.locator('.agent-ws-source').first().getAttribute('data-evidence') === '1' &&
       await evidence.innerText().then(text => text.includes('知识库没有匹配的段落') && text.includes('检索「不存在的资料」没有找到相关段落')));
-    await openProcessStep('加载方法或技能');
+    await openProcessStep('加载技能');
     await workspacePanel.locator('[data-workspace-view="method"]').waitFor();
     check('A process step opens its versioned read-only method guide', await workspacePanel.innerText().then(text => /版本 \d+\.\d+\.\d+/.test(text) && text.includes('不增加任何执行权限') && text.includes('子平八字')));
     const hepanStep = await openCalculationStep('八字合盘');
@@ -3939,7 +3952,7 @@ export async function run(existingPage, bundlePath) {
     // The answer-side highlight commits one render after the source opens.
     await page.waitForFunction(cite => document.querySelector('[data-testid="agent-results"] .md-cite[data-cite="' + cite + '"]')?.getAttribute('data-active') === 'true', secondCite);
     check('A citation opens its source selected, with the answer paragraph that cites it', await workspacePanel.locator('[data-evidence="' + secondCite + '"]').innerText()
-      .then(text => text.includes('回答第 2 段引用') && text.includes('《子平真诠》论用神') && text.includes('知识库 · 命理古籍 · 语义检索命中')) &&
+      .then(text => text.includes('回答第 2 段用到') && text.includes('《子平真诠》论用神') && text.includes('知识库 · 命理古籍 · 语义检索命中')) &&
       await results.locator('.md-cite[data-cite="' + secondCite + '"]').getAttribute('data-active') === 'true');
     await workspacePanel.getByRole('button', { name: /^知识库 \d+$/ }).click();
     check('Filtering the evidence keeps only one kind of source', await workspacePanel.locator('[data-evidence][data-kind="web"]').count() === 0 &&
@@ -3985,7 +3998,7 @@ export async function run(existingPage, bundlePath) {
     // Code mode: a script is one step whose calls are its sub-steps; its page lists every call in order.
     await page.evaluate(() => window.fixture.codemodeScript());
     // The script follows the answer, so it opens a process group of its own; a settled task leaves it folded.
-    const scriptGroup = results.locator('.agent-activity-group').filter({ hasText: '已运行 1 个脚本' });
+    const scriptGroup = results.locator('.agent-activity-group').filter({ hasText: '运行 1 个脚本' });
     const scriptHeading = scriptGroup.locator('.agent-process-heading');
     await scriptHeading.waitFor();
     if (await scriptHeading.getAttribute('aria-expanded') !== 'true') await scriptHeading.click();
@@ -4103,6 +4116,38 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { window.fixture.sidebarSearch = 0; window.addEventListener('taibu:search', () => { window.fixture.sidebarSearch++; }); });
     await sidebar.getByRole('button', { name: '搜索', exact: true }).click();
     check('搜索 opens the global conversation search', await page.evaluate(() => window.fixture.sidebarSearch === 1));
+    const palette = page.locator('.app-modal.search-palette');
+    const searchGroups = palette.locator('.search-palette-group');
+    await searchGroups.filter({ hasText: '最近使用' }).waitFor();
+    await searchGroups.filter({ hasText: '记录' }).waitFor();
+    check('An empty search box recommends recent talks, arts, records and settings', await searchGroups.filter({ hasText: '最近使用' }).count() === 1
+      && await searchGroups.filter({ hasText: '占术' }).count() === 1
+      && await searchGroups.filter({ hasText: '记录' }).count() === 1
+      && await searchGroups.filter({ hasText: '设置' }).count() === 1);
+    const chatResult = palette.locator('.search-palette-row').filter({ hasText: 'alice conversation 1' });
+    const agentResult = palette.locator('.search-palette-row').filter({ hasText: 'alice agent conversation' });
+    check('Search results mark a plain chat with Chat and an Agent conversation with the Agent mark',
+      await chatResult.locator('[data-nav-icon="chat"]').count() === 1 && await agentResult.locator('[data-nav-icon="agent"]').count() === 1);
+    const searchBox = palette.getByLabel('搜索内容', { exact: true });
+    await searchBox.fill('六爻');
+    const artRow = palette.locator('.search-palette-row').filter({ hasText: '乾为天' });
+    await artRow.waitFor();
+    check('An art name lists its saved readings with the date on the title line and the question below', await artRow.isVisible()
+      && await artRow.locator('.search-palette-item-title').getByText('10-24', { exact: true }).isVisible()
+      && await artRow.getByText('问题：事业', { exact: true }).isVisible()
+      && await palette.getByRole('tab', { name: '占术', exact: true }).isVisible());
+    await searchBox.fill('10月');
+    await palette.locator('.search-palette-time').waitFor();
+    await artRow.waitFor();
+    check('A month in the box becomes a closable time condition', await palette.locator('.search-palette-time').innerText().then(text => text.includes('时间：2026-10'))
+      && await artRow.isVisible());
+    await palette.getByLabel('清除时间条件', { exact: true }).click();
+    check('Clearing the time condition leaves the remaining keyword', await searchBox.inputValue() === '');
+    await searchBox.fill('模型');
+    const settingRow = palette.locator('.search-palette-row').filter({ hasText: '自己的模型服务与密钥' });
+    await settingRow.waitFor();
+    check('Settings entries name their page and description', await settingRow.isVisible()
+      && await palette.getByText(/自己的模型服务与密钥/u).isVisible());
     await page.keyboard.press('Escape');
     for (const viewer of ['bob', null]) {
       await page.evaluate(id => window.fixtureAuth.change(id), viewer);

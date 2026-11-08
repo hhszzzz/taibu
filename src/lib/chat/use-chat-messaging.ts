@@ -5,6 +5,7 @@ import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { AIReasoningEffort, ChatAttachment, ChatMessage, ConversationListItem, Mention, AIMessageMetadata } from '@/types';
 import { extractPlainAttachment } from '@/lib/chat/composer-files';
 import { createConversation, deleteConversation, DEFAULT_CONVERSATION_TITLE } from '@/lib/chat/conversation';
+import { carryDraftWorkspace } from '@/lib/chat/workspace-persistence';
 import { buildDraftTitle } from '@/lib/chat/draft-title';
 import { isNearBottom } from '@/lib/chat/chat-scroll';
 import { chatStreamManager, ChatRunnerError, type ChatStreamStartResult, type ChatStreamTaskRunner } from '@/lib/chat/chat-stream-manager';
@@ -367,6 +368,12 @@ export function useChatMessaging({
         finally { setIsSendingToList(false); }
     };
 
+    /** 草稿和它发出的第一条消息属于同一段对话：把右侧工作区的打开状态与选中页带到正式会话 key。 */
+    const carryDraftWorkspaceState = (newId: string) => {
+        if (!userId || activeConversationIdRef.current) return;
+        carryDraftWorkspace(sessionStorage, userId, newId);
+    };
+
     /** A new conversation for a draft, with the sidebar, route and caches in step; null when it cannot be created. */
     const createDraftConversation = async (draftTitle: string, isCurrent: () => boolean) => {
         if (!userId) return null;
@@ -377,6 +384,7 @@ export function useChatMessaging({
         });
         if (!newId) { setPendingSidebarTitle(null); return null; }
         if (!isCurrent()) return null;
+        carryDraftWorkspaceState(newId);
         state.bumpConversationEpoch();
         activeConversationIdRef.current = newId;
         conversationValidatedRef.current = true;

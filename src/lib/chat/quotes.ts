@@ -45,7 +45,7 @@ const QUOTE_TOKEN_PREVIEW_CHARS = 24;
 export function messageQuoteToken(quote: Pick<MessageQuote, 'text'>): string {
     const line = clampMessageQuoteText(quote.text).replace(/\s+/gu, ' ');
     const preview = line.length > QUOTE_TOKEN_PREVIEW_CHARS ? `${line.slice(0, QUOTE_TOKEN_PREVIEW_CHARS)}…` : line;
-    return `@ 引用「${preview}」`;
+    return `@ 「${preview}」`;
 }
 
 /** 去掉草稿里所有引用 chip，只留用户自己写的正文。 */

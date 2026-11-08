@@ -58,7 +58,7 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
             return {
                 id: row.id,
                 type: 'hepan_chart',
-                name: `${typeName} - ${row.person1_name} × ${row.person2_name}`,
+                name: `${row.person1_name} × ${row.person2_name} · ${typeName}`,
                 preview,
                 createdAt: row.created_at ?? '',
                 hepanType: row.type as HepanType

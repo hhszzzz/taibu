@@ -34,7 +34,7 @@ export const meihuaProvider: DataSourceProvider<MeihuaRow> = {
     return (data || []).map((row: Record<string, unknown>) => ({
       id: String(row.id),
       type: 'meihua_divination' as const,
-      name: `梅花易数 · ${String(row.main_hexagram || '本卦')}`,
+      name: `${String(row.main_hexagram || '本卦')}${row.changed_hexagram ? ` → ${String(row.changed_hexagram)}` : ''}`,
       preview: typeof row.question === 'string' && row.question.trim() ? row.question : `${row.cast_datetime || ''}`,
       createdAt: String(row.created_at || ''),
     }));

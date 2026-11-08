@@ -665,7 +665,7 @@ export function ChatComposer({
         inputPlaceholder = agentMode ? '例如：我明年适合换工作吗？' : '问问命盘、运势，或最近困惑的事…';
         inputLabel = '描述你的问题';
     } else if (agentMode) {
-        inputPlaceholder = continuing && canMentionAnything ? '继续追问，或用 @ 引用命盘与知识库…' : continuing ? '继续追问，新任务会接续这次的上下文…' : '描述任务，或输入 @ 引用命盘与资料…';
+        inputPlaceholder = continuing && canMentionAnything ? '继续追问，或用 @ 提及六爻、八字等占术与资料…' : continuing ? '继续追问，新任务会接续这次的上下文…' : '描述任务，或输入 @ 提及六爻、八字等占术与资料…';
         inputLabel = '继续追问';
     } else { inputPlaceholder = '问问命盘、运势，或最近困惑的事…'; inputLabel = '输入消息'; }
 

@@ -60,7 +60,7 @@ export const qimenProvider: DataSourceProvider<QimenRow> = {
             return {
                 id: row.id,
                 type: 'qimen_chart' as const,
-                name: `奇门遁甲 - ${dunLabel}${row.ju_number}局`,
+                name: `${dunLabel}${row.ju_number}局`,
                 preview: row.question ? `问题：${row.question}` : `${dunLabel}${row.ju_number}局`,
                 createdAt: row.created_at,
             };

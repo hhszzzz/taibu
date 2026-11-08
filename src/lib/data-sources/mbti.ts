@@ -31,7 +31,7 @@ export const mbtiProvider: DataSourceProvider<MbtiRow> = {
         return (data || []).map((row) => ({
             id: row.id,
             type: 'mbti_reading',
-            name: `MBTI · ${row.mbti_type}`,
+            name: row.mbti_type,
             preview: `人格类型：${row.mbti_type}`,
             createdAt: row.created_at ?? '',
         }));

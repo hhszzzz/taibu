@@ -48,7 +48,7 @@ export const palmProvider: DataSourceProvider<PalmRow> = {
             return {
                 id: row.id,
                 type: 'palm_reading',
-                name: `手相分析 - ${handName ? `${handName} ${typeName}` : typeName}`,
+                name: handName ? `${handName} ${typeName}` : typeName,
                 preview: previewParts.length ? previewParts.join(' / ') : '手相分析记录',
                 createdAt: row.created_at ?? '',
             };

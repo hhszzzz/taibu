@@ -38,7 +38,7 @@ export const tarotProvider: DataSourceProvider<TarotRow> = {
             return {
                 id: row.id,
                 type: 'tarot_reading',
-                name: `塔罗 - ${spreadName}`,
+                name: spreadName,
                 preview: row.question ? `问题：${row.question}` : `牌阵：${spreadName}`,
                 createdAt: row.created_at ?? '',
             };

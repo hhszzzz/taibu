@@ -38,7 +38,7 @@ export const faceProvider: DataSourceProvider<FaceRow> = {
             return {
                 id: row.id,
                 type: 'face_reading',
-                name: `面相分析 - ${typeName}`,
+                name: typeName,
                 preview: row.analysis_type ? `类型：${typeName}` : '面相分析记录',
                 createdAt: row.created_at ?? '',
             };

@@ -89,7 +89,9 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
         if (!normalizedQuery) return dataSources;
         return dataSources.filter(item =>
             item.name.toLowerCase().includes(normalizedQuery) ||
-            (item.preview || '').toLowerCase().includes(normalizedQuery)
+            (item.preview || '').toLowerCase().includes(normalizedQuery) ||
+            // 名称只写具体内容后，仍可按占术名（六爻、八字…）找到该类的记录。
+            (TYPE_LABELS[item.type] || '').toLowerCase().includes(normalizedQuery)
         );
     }, [dataSources, normalizedQuery]);
 
@@ -129,9 +131,10 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
         });
 
         if (activeLevel === 'search') {
+            // 只写具体内容（卦象、局式、人名…），类型由图标表达，不重复占术名。
             const dataItems = filteredDataSources.map((i) => ({
                 key: `data-${i.id}`,
-                label: `@${TYPE_LABELS[i.type] || '数据'} · ${i.name}`,
+                label: `@${i.name}`,
                 hint: shouldShowHint(i) ? i.preview : '',
                 icon: TYPE_ICONS[i.type],
                 raw: i,
@@ -153,7 +156,7 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
             for (const type of ROOT_FORTUNE_TYPES) {
                 if (!enabled.has(type)) continue;
                 for (const item of filteredDataSources.filter(source => source.type === type)) {
-                    items.push({ key: `data-${item.id}`, label: TYPE_LABELS[type], hint: fortuneDate(item.name), icon: TYPE_ICONS[type], raw: item });
+                    items.push({ key: `data-${item.id}`, label: TYPE_LABELS[type], hint: fortuneDate(item.name) || item.name, icon: TYPE_ICONS[type], raw: item });
                 }
             }
             if (enabled.has('ming_record')) items.push(typeRow('ming_record'));

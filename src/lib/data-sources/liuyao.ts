@@ -56,7 +56,7 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
             return {
                 id: row.id,
                 type: 'liuyao_divination',
-                name: `六爻 - ${hexagramDisplay}`,
+                name: hexagramDisplay,
                 preview: row.question
                     ? `问题：${row.question}`
                     : `本卦：${baseName}${changedName ? ` / 变卦：${changedName}` : ''}`,

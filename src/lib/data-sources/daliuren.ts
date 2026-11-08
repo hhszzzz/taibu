@@ -36,7 +36,7 @@ export const daliurenProvider: DataSourceProvider<DaliurenRow> = {
         return (data || []).map((row) => ({
             id: row.id,
             type: 'daliuren_divination' as const,
-            name: `大六壬 · ${row.day_ganzhi}日`,
+            name: `${row.day_ganzhi}日`,
             preview: row.question || `${row.solar_date} 起课`,
             createdAt: row.created_at ?? '',
         }));

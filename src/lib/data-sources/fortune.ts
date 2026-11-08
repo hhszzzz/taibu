@@ -87,8 +87,8 @@ export const dailyFortuneProvider: DataSourceProvider<FortuneData> = {
         return [{
             id,
             type: 'daily_fortune',
-            name: `今日运势（${id}）`,
-            preview: '用于 @ 引用今日运势',
+            name: id,
+            preview: '今日运势',
             createdAt: now.toISOString()
         }];
     },
@@ -178,8 +178,8 @@ export const monthlyFortuneProvider: DataSourceProvider<FortuneData> = {
         return [{
             id: ym,
             type: 'monthly_fortune',
-            name: `本月运势（${ym}）`,
-            preview: '用于 @ 引用本月运势',
+            name: ym,
+            preview: '本月运势',
             createdAt
         }];
     },

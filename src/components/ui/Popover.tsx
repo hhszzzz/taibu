@@ -52,9 +52,10 @@ export function PopoverContent({
     sideOffset = 4,
     align = 'start',
     alignOffset = 0,
+    anchor,
     children,
     ...props
-}: PopoverPrimitive.Popup.Props & Pick<PopoverPrimitive.Positioner.Props, 'side' | 'sideOffset' | 'align' | 'alignOffset'>) {
+}: PopoverPrimitive.Popup.Props & Pick<PopoverPrimitive.Positioner.Props, 'side' | 'sideOffset' | 'align' | 'alignOffset' | 'anchor'>) {
     const container = useContext(PortalContainer);
     return (
         <PopoverPrimitive.Portal container={container ?? undefined}>
@@ -63,6 +64,7 @@ export function PopoverContent({
                 sideOffset={sideOffset}
                 align={align}
                 alignOffset={alignOffset}
+                anchor={anchor}
                 // 对话框本身就是滚动容器：浮层按视口定位，才不会被它的滚动偏移带跑。
                 positionMethod={container ? 'fixed' : 'absolute'}
                 className="z-[var(--z-popup)] outline-none"

@@ -3,7 +3,7 @@
 
 import { useMemo, useEffect, useState, type ReactNode } from 'react';
 import { BetaBadge } from '@/components/ui/BetaBadge';
-import { ChevronDown, Cpu, Info } from 'lucide-react';
+import { Check, ChevronDown, Cpu, Info } from 'lucide-react';
 import { KeyIcon } from '@/lib/navigation/nav-icons';
 import { SoundWaveLoader } from './SoundWaveLoader';
 import { Menu, MenuCheckboxItem, MenuContent, MenuGroup, MenuItem, MenuRadioGroup, MenuRadioItem, MenuSeparator, MenuSub, MenuSubContent, MenuSubTrigger, MenuTrigger } from './Menu';
@@ -249,23 +249,28 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         onReasoningEffortChange?.(effort);
         close();
     };
-    const modelRow = (model: ClientModelConfig) => <MenuRadioItem key={model.id} value={model.id} closeOnClick hideIndicator className="chat-model-option-row">
+    const modelRow = (model: ClientModelConfig) => {
+        let infoButton: HTMLButtonElement | null = null;
+        return <MenuRadioItem key={model.id} value={model.id} closeOnClick hideIndicator className="chat-model-option-row">
         <ModelIcon icon={model.icon} vendor={model.vendor} size={16} />
         <span className="chat-model-option-text" title={model.description || undefined}>
             <span className="chat-model-option-name">{model.name}{model.own && !model.own.ready && <span className="chat-model-badge" data-tone="warning">需填 Key</span>}</span>
             {model.description ? <span className="chat-model-option-desc">{model.description}</span> : null}
         </span>
-        {/* 详情弹层：点图标只开卡片，不选中这一行。 */}
+        {model.id === selectedModel && <Check className="chat-model-selected-check" size={14} aria-hidden="true" />}
+        {/* 详情弹层：点图标只开卡片，不选中这一行；卡片贴主菜单左侧展开，不盖住模型列表。 */}
         <Popover>
-            <PopoverTrigger className="chat-model-info" aria-label={`「${model.name}」的详情`}
+            <PopoverTrigger ref={node => { infoButton = node; }} className="chat-model-info" aria-label={`「${model.name}」的详情`}
                 onClick={event => event.stopPropagation()} onPointerDown={event => event.stopPropagation()}>
                 <Info size={13} aria-hidden="true" />
             </PopoverTrigger>
-            <PopoverContent side="right" align="start" sideOffset={8} className="chat-model-details-popover">
+            <PopoverContent side="left" align="start" sideOffset={8} className="chat-model-details-popover"
+                anchor={() => infoButton?.closest<HTMLElement>('.chat-model-menu') ?? null}>
                 <ModelDetails model={model} />
             </PopoverContent>
         </Popover>
     </MenuRadioItem>;
+    };
     return <div className={`flex items-center ${toolbarStyle ? 'chat-model-selector' : ''}`}>
         <Menu open={open} onOpenChange={setOpen}>
             {toolbarStyle ? <MenuTrigger disabled={locked} className="chat-model-trigger" data-model-trigger
@@ -293,7 +298,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                         <MenuSubTrigger className="chat-model-action chat-model-menu-row">
                             <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span>
                         </MenuSubTrigger>
-                        <MenuSubContent className="chat-model-menu chat-effort-menu" aria-label="努力程度">
+                        <MenuSubContent side="left" className="chat-model-menu chat-effort-menu" aria-label="努力程度">
                             <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，用量与费用也越高。</p>
                             <MenuRadioGroup value={effortChoice} onValueChange={value => {
                                 if (value === 'off') { onReasoningFromModelChange?.(false); onReasoningChange?.(false); close(); return; }
@@ -321,7 +326,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                     <MenuSubTrigger className="chat-model-action chat-model-menu-row" disabled={disabled || !models.length}>
                         <span>多模型协作<BetaBadge /></span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}
                     </MenuSubTrigger>
-                    <MenuSubContent className="chat-model-menu chat-collab-menu" aria-label="多模型协作">
+                    <MenuSubContent side="left" className="chat-model-menu chat-collab-menu" aria-label="多模型协作">
                         <p className="chat-collab-note">子模型可在个性化设置努力程度</p>
                         {models.filter(model => model.id !== current?.id).map(model => {
                             const checked = collaborators.some(member => member.model === model.id);

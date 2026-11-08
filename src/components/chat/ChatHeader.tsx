@@ -53,7 +53,7 @@ function RecordViewSubmenu({ recordView, defaultRecordView, onSelect, onSetDefau
     return (
         <MenuSub>
             <MenuSubTrigger>对话记录视图</MenuSubTrigger>
-            <MenuSubContent className="chat-header-submenu">
+            <MenuSubContent side="left" className="chat-header-submenu">
                 <MenuRadioGroup value={recordView} onValueChange={view => onSelect(view as ChatRecordView)}>
                     {CHAT_RECORD_VIEWS.map(view => (
                         <MenuRadioItem key={view} value={view} closeOnClick>{CHAT_RECORD_VIEW_LABELS[view]}</MenuRadioItem>
@@ -144,14 +144,11 @@ export function ChatHeader({
                         <MenuTrigger className="chat-title-button" title={title}>
                             <span>{title}</span><ChevronDown size={16} aria-hidden="true" />
                         </MenuTrigger>
-                        {/* 会话标题菜单 = claude 词表：重命名 R / 复制链接 C / 加入知识库 A / 对话记录视图 ▸ / 删除对话 D */}
+                        {/* 会话标题菜单 = claude 词表：重命名 R / 复制链接 C / 加入知识库 A / 删除对话 D；记录视图只在「更多」里。 */}
                         <MenuContent letterShortcuts className="chat-header-menu">
                             <MenuItem className="chat-header-menu-item" onClick={() => setRenaming(title)}>重命名<MenuShortcut>R</MenuShortcut></MenuItem>
                             <MenuItem className="chat-header-menu-item" onClick={() => { void copyConversationLink(); }}>复制链接<MenuShortcut>C</MenuShortcut></MenuItem>
                             {canUseKnowledgeBase && <MenuItem className="chat-header-menu-item" onClick={() => setKbOpen(true)}>加入知识库<MenuShortcut>A</MenuShortcut></MenuItem>}
-                            <MenuSeparator />
-                            <RecordViewSubmenu recordView={recordView} defaultRecordView={defaultRecordView}
-                                onSelect={selectRecordView} onSetDefault={makeRecordViewDefault} />
                             <MenuSeparator />
                             <MenuItem tone="danger" className="chat-header-menu-item" onClick={() => setDeleting(true)}>删除对话<MenuShortcut>D</MenuShortcut></MenuItem>
                         </MenuContent>
@@ -185,7 +182,7 @@ export function ChatHeader({
                         {conversationId ? (
                             <MenuSub>
                                 <MenuSubTrigger>导出选项</MenuSubTrigger>
-                                <MenuSubContent className="chat-header-submenu">
+                                <MenuSubContent side="left" className="chat-header-submenu">
                                     <MenuItem disabled={exportBusy !== null} onClick={() => { void downloadExport('md'); }}>{exportBusy === 'md' ? '正在导出…' : 'Markdown'}</MenuItem>
                                     <MenuItem disabled={exportBusy !== null} onClick={() => { void downloadExport('html'); }}>{exportBusy === 'html' ? '正在导出…' : 'HTML'}</MenuItem>
                                     <MenuSeparator />

@@ -93,7 +93,7 @@ function ModelDetails({ model }: { model: ClientModelConfig }) {
     );
 }
 
-/** 努力程度档位（claude 同构）；菜单只列出当前模型支持的档位，「推荐」标在模型的默认档上。 */
+/** 思考强度档位（claude 同构）；菜单只列出当前模型支持的档位，「推荐」标在模型的默认档上。 */
 const EFFORT_OPTIONS: Array<{ value: AIReasoningEffort; label: string; badge?: string; tone?: 'warning' }> = [
     { value: 'minimal', label: '最低' },
     { value: 'low', label: '低' },
@@ -226,7 +226,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
         if (!onCollaboratorsChange) return;
         const existing = collaborators.find(member => member.model === model.id);
         if (!existing && collaborationFull) return;
-        // 个性化里为该模型配置过的名称、角色、努力程度与分工作为模板；勾选只影响当前对话，不改设置。
+        // 个性化里为该模型配置过的名称、角色、思考强度与分工作为模板；勾选只影响当前对话，不改设置。
         const template = collaborationPreset.members.find(member => member.model === model.id);
         const ownEffort = model.own ? byokComposerEffort(model.own.defaultEffort) : null;
         const next = existing
@@ -296,9 +296,9 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 {reasoningSupported && (effortSupported
                     ? <MenuSub>
                         <MenuSubTrigger className="chat-model-action chat-model-menu-row">
-                            <span>努力程度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span>
+                            <span>思考强度</span><span className="chat-model-menu-value">{effortLabel(effectiveEffort, reasoningEnabled)}</span>
                         </MenuSubTrigger>
-                        <MenuSubContent side="left" className="chat-model-menu chat-effort-menu" aria-label="努力程度">
+                        <MenuSubContent side="left" sideOffset={8} className="chat-model-menu chat-effort-menu" aria-label="思考强度">
                             <p className="chat-model-note chat-model-effort-note">投入程度越高，回复越详尽，但耗时越长，用量与费用也越高。</p>
                             <MenuRadioGroup value={effortChoice} onValueChange={value => {
                                 if (value === 'off') { onReasoningFromModelChange?.(false); onReasoningChange?.(false); close(); return; }
@@ -320,14 +320,14 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                         <span>推理</span>
                     </MenuCheckboxItem>)}
                 {!reasoningSupported && onReasoningEffortChange && <MenuItem className="chat-model-action chat-model-menu-row" disabled>
-                    <span>努力程度</span><span className="chat-model-menu-value">不支持</span>
+                    <span>思考强度</span><span className="chat-model-menu-value">不支持</span>
                 </MenuItem>}
                 {onCollaboratorsChange && <MenuSub>
                     <MenuSubTrigger className="chat-model-action chat-model-menu-row" disabled={disabled || !models.length}>
                         <span>多模型协作<BetaBadge /></span>{collaborationEnabled && <span className="chat-model-menu-value">{subCollaborators.length}</span>}
                     </MenuSubTrigger>
-                    <MenuSubContent side="left" className="chat-model-menu chat-collab-menu" aria-label="多模型协作">
-                        <p className="chat-collab-note">子模型可在个性化设置努力程度</p>
+                    <MenuSubContent side="left" sideOffset={8} className="chat-model-menu chat-collab-menu" aria-label="多模型协作">
+                        <p className="chat-collab-note">子模型可在个性化设置思考强度</p>
                         {models.filter(model => model.id !== current?.id).map(model => {
                             const checked = collaborators.some(member => member.model === model.id);
                             // 右侧 = 个性化里为该模型注册的名称（如「专项分析」），未注册时不显示。

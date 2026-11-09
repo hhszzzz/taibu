@@ -38,7 +38,7 @@ function initialThinking(model: MemberModel | undefined): Pick<AgentCollaborator
 
 /**
  * 多模型协作成员模板（claude 把协作成员配置收进设置；模型菜单只保留勾选开关）。
- * 模板保存在本机（按用户隔离）：每个对话默认不协作，在模型菜单勾选某个模型时才套用它在这里的名称、角色、努力程度与分工。
+ * 模板保存在本机（按用户隔离）：每个对话默认不协作，在模型菜单勾选某个模型时才套用它在这里的名称、角色、思考强度与分工。
  * 角色由管理员提供，默认体系专家；角色指定了模型时由它代替这里的模型。
  */
 export function CollaborationSettings({ userId }: { userId: string }) {
@@ -199,9 +199,9 @@ function CollaboratorDialog({ member, editing, models, roles, rolesLoading, onCl
                     />
                 </div>
                 <div className="settings-field">
-                    <span>努力程度</span>
+                    <span>思考强度</span>
                     <Select
-                        ariaLabel="努力程度"
+                        ariaLabel="思考强度"
                         value={effort}
                         onChange={value => setDraft(value === 'off'
                             ? { ...draft, reasoning: false, reasoningEffort: null }

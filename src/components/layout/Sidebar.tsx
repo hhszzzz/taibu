@@ -295,7 +295,7 @@ function SidebarInner() {
                                     </span>
                                     <span>全部占术</span>
                                 </PopoverTrigger>
-                                <PopoverContent side="right" align="start" sideOffset={6} className="all-divinations-panel" aria-label="全部占术">
+                                <PopoverContent side="right" align="start" sideOffset={12} className="all-divinations-panel" aria-label="全部占术">
                                     <AllDivinationsPanel
                                         items={filteredNavItems}
                                         pins={pins}

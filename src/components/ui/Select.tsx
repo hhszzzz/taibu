@@ -32,6 +32,8 @@ export interface SelectProps<Value extends string | number> {
     disabled?: boolean;
     placeholder?: string;
     ariaLabel?: string;
+    /** 与触发器的对齐方式；弹窗内的行内下拉用 end，向左展开。 */
+    align?: 'start' | 'center' | 'end';
     className?: string;
     popupClassName?: string;
     hideIcon?: boolean;
@@ -51,6 +53,7 @@ export function Select<Value extends string | number>({
     disabled,
     placeholder = '请选择',
     ariaLabel,
+    align = 'start',
     className,
     popupClassName,
     hideIcon = false,
@@ -118,8 +121,11 @@ export function Select<Value extends string | number>({
             <SelectPrimitive.Portal container={portalContainer ?? undefined}>
                 <SelectPrimitive.Positioner
                     side="bottom"
-                    align="start"
+                    align={align}
                     sideOffset={4}
+                    // 对话框里开合的下拉留在对话框范围内：碰撞边界取对话框本身，留 8px 余地。
+                    collisionBoundary={portalContainer ?? undefined}
+                    collisionPadding={8}
                     alignItemWithTrigger={false}
                     // 对话框本身就是滚动容器：浮层按视口定位，才不会被对话框的滚动偏移带跑
                     // （absolute 首帧会按未滚动的坐标落一次，再把对话框横向顶出去）。

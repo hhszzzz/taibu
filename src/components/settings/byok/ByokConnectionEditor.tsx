@@ -167,8 +167,8 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
       return;
     }
     if (result.effort === 'rejected') patchModel(model.key, { defaultEffort: 'auto' });
-    const note = result.effort === 'accepted' && effort ? `，接受努力程度「${EFFORT_LABELS[effort]}」`
-      : result.effort === 'rejected' ? '；它不接受努力程度参数，默认已改为「模型默认」' : '';
+    const note = result.effort === 'accepted' && effort ? `，接受思考强度「${EFFORT_LABELS[effort]}」`
+      : result.effort === 'rejected' ? '；它不接受思考强度参数，默认已改为「模型默认」' : '';
     setModelTests(current => ({ ...current, [model.key]: { status: 'ok', reply: result.reply, note } }));
   };
 
@@ -405,7 +405,7 @@ export function ByokConnectionEditor({ saved, policy, userId, deviceKey, onDone,
                 </div>
                 <div className="byok-model-field byok-model-effort">
                   <span>默认思考</span>
-                  <Select<string> ariaLabel="默认努力程度" value={model.defaultEffort} className="h-8 rounded-lg"
+                  <Select<string> ariaLabel="默认思考强度" value={model.defaultEffort} className="h-8 rounded-lg"
                     title="选中这个模型时，输入框默认使用的思考档位"
                     options={[
                       ...levels.map(level => ({ value: level, label: EFFORT_LABELS[level] })),

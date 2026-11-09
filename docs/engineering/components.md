@@ -37,7 +37,7 @@
 
 已完成的关键收敛：
 
-- 浮层：原 `FloatingPanel` 已删除；聊天标题菜单、会话行菜单、筛选菜单、`+` 菜单及其子菜单、运行模式、模型/努力程度/协作、分享、用量、全部占术、视图选项全部改用共享 `Menu`/`Popover`，并保留 claude 字母快捷键（`letterShortcuts`）与对话框内 portal。
+- 浮层：原 `FloatingPanel` 已删除；聊天标题菜单、会话行菜单、筛选菜单、`+` 菜单及其子菜单、运行模式、模型/思考强度/协作、分享、用量、全部占术、视图选项全部改用共享 `Menu`/`Popover`，并保留 claude 字母快捷键（`letterShortcuts`）与对话框内 portal。
 - 表单：全站不再有原生 `<select>`、文本 `<input>` 或 `<textarea>`；设置/后台/表单统一 `Field + Input/Textarea/Select`，复选/单选使用共享控件。
 - 对话框：业务只通过 `Dialog` 打开，`Modal` 仅作为其内部的 top-layer 表面，不再由业务直接导入。结构化模式统一标题、说明、关闭键、页脚与 busy；`bare` 模式保留工作区/编辑器实测外壳，类型上必须传 `labelledBy`。现状是业务里的对话框全部使用 `bare`，结构化模式只有组件测试在用，`ConfirmDialog` 也仍是自有外壳——收敛方向见 §21。
 - 按钮：`src/components/ui` 之外不再有原生 `<button>`；通用动作、图标动作、菜单项进入 `Button`/`IconButton`/`MenuItem`，测量过的聊天几何与领域卡片使用 `Button unstyled` 保留专用样式类。

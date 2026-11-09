@@ -299,13 +299,13 @@
 .chat-model-details-grid dd { text-align: right; font-variant-numeric: tabular-nums; color: var(--foreground); }
 .chat-model-details-prices { display: flex; flex-direction: column; gap: 4px; border-top: 1px solid var(--border); padding-top: 8px; }
 .chat-model-details-label { font-size: calc(11 / 16 * 1rem); color: var(--foreground-tertiary); }
-/* claude 模型菜单：单行项（名称 + clay 勾），二级菜单行（努力程度）右侧当前值 + chevron。 */
+/* claude 模型菜单：单行项（名称 + clay 勾），二级菜单行（思考强度）右侧当前值 + chevron。 */
 .chat-model-menu-row { justify-content: space-between; }
 .chat-model-menu-row .beta-badge { margin-left: 6px; }
 .chat-model-badge { display: inline-flex; height: 18px; margin-left: 6px; align-items: center; padding: 0 6px; border-radius: 4px; background: var(--fill-field); font-size: calc(10 / 16 * 1rem); font-weight: 500; color: var(--foreground-secondary); }
 .chat-model-badge[data-tone="warning"] { background: color-mix(in srgb, var(--warning) 14%, transparent); color: var(--warning); }
 .chat-collab-menu { padding: 6px; }
-/* 小菜单只占内容宽度：运行模式、外部工具、多模型与努力程度都不铺满整栏。 */
+/* 小菜单只占内容宽度：运行模式、外部工具、多模型与思考强度都不铺满整栏。 */
 :is(.chat-plus-menu.chat-run-mode-menu, .chat-model-menu.chat-collab-menu, .chat-model-menu.chat-effort-menu) { width: max-content; min-width: 0; max-width: min(15rem, calc(100vw - 16px)); }
 /* 勾选键占右侧固定槽位：菜单收窄到内容宽度后，文字也不会压到勾。 */
 :is(.chat-run-mode-menu [role^="menuitem"], .chat-effort-menu [role^="menuitem"], .chat-collab-menu [role^="menuitem"]) { padding-right: 2.25rem; }

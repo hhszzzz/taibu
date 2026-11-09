@@ -132,7 +132,7 @@ test('a saved connection is checked like the settings page checks it', () => {
     [{ key: { store: 'yes' } }, /Key 设置/u],
     [{ protocol: 'anthropic', models: [{ modelId: 'gpt-image-1', usage: 'image' }] }, /Anthropic/u],
     [{ models: [{ modelId: 'a' }, { modelId: 'a' }] }, /重复/u],
-    [{ models: [{ modelId: 'a', defaultEffort: 'turbo' }] }, /默认努力程度/u],
+    [{ models: [{ modelId: 'a', defaultEffort: 'turbo' }] }, /默认思考强度/u],
     [{ models: [{ modelId: 'a', contextWindow: 10 }] }, /上下文/u],
     [{ models: [{ modelId: 'a', id: 'not-a-uuid' }] }, /模型标识/u],
     [{ models: Array.from({ length: 3 }, (_, index) => ({ modelId: `m${index}` })) }, /最多 2/u],

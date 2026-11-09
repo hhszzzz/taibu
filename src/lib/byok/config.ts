@@ -1,5 +1,5 @@
 /**
- * 自定义模型（BYOK）的约定，浏览器与服务端共用：连接与模型的形状、地址规则、努力程度语义、报错格式与管理端策略。
+ * 自定义模型（BYOK）的约定，浏览器与服务端共用：连接与模型的形状、地址规则、思考强度语义、报错格式与管理端策略。
  *
  * 一个连接是一个服务商地址（OpenAI 兼容或 Anthropic Messages）加若干模型；模型以 `byok:<模型行 ID>` 引用。
  * Key 默认只在用户浏览器里；连接打开「保存到本站」后才加密存库，该连接的调用改由本站服务器发起。
@@ -319,7 +319,7 @@ export function byokErrorHint(failure: ByokFailure, options: { browser?: boolean
   if (status === 404) return '地址或模型 ID 不对：检查接口地址（是否需要 /v1）与模型 ID。';
   if (status === 402) return '服务商账户余额不足。';
   if (status === 429) return '请求太频繁或额度已用完，稍后再试，或检查服务商的余额与限额。';
-  if (status === 400 || status === 422) return '请求被拒绝：模型可能不支持当前的努力程度、图片或工具；可以把努力程度改成「模型默认」，或换个模型。';
+  if (status === 400 || status === 422) return '请求被拒绝：模型可能不支持当前的思考强度、图片或工具；可以把思考强度改成「模型默认」，或换个模型。';
   if (status === 413) return '请求内容太长，超出了模型的上下文。';
   if (status >= 500) return '服务商暂时不可用，稍后再试。';
   return '检查接口地址、Key 与模型 ID。';
@@ -402,10 +402,10 @@ function parseModel(value: unknown, protocol: ByokProtocol): ByokModelInput {
     return { ...(id ? { id: id.toLowerCase() } : {}), modelId, displayName, usage, supportsVision: false, thinkingLevels: [], defaultEffort: 'auto', contextWindow: null, maxOutput: null };
   }
   const levels = Array.isArray(value.thinkingLevels) ? value.thinkingLevels : [];
-  if (levels.some(level => !AI_REASONING_EFFORTS.includes(level as AIReasoningEffort))) throw new ByokInputError(`「${modelId}」的努力程度无效`);
+  if (levels.some(level => !AI_REASONING_EFFORTS.includes(level as AIReasoningEffort))) throw new ByokInputError(`「${modelId}」的思考强度无效`);
   const thinkingLevels = AI_REASONING_EFFORTS.filter(level => levels.includes(level));
   const requested = value.defaultEffort === undefined ? defaultByokEffort(thinkingLevels) : value.defaultEffort;
-  if (!isByokDefaultEffort(requested)) throw new ByokInputError(`「${modelId}」的默认努力程度无效`);
+  if (!isByokDefaultEffort(requested)) throw new ByokInputError(`「${modelId}」的默认思考强度无效`);
   const defaultEffort = requested === 'auto' || requested === 'off' ? requested : clampByokLevel(thinkingLevels, requested);
   const contextWindow = capacity(value.contextWindow, `「${modelId}」的上下文`, BYOK_CONTEXT_RANGE);
   const maxOutput = capacity(value.maxOutput, `「${modelId}」的输出上限`, BYOK_OUTPUT_RANGE);

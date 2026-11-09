@@ -150,7 +150,7 @@ function parseProbe(value: unknown): ProbeRequest {
   const modelId = typeof input.modelId === 'string' ? input.modelId.trim() : '';
   if (action === 'chat' && (!modelId || modelId.length > BYOK_MODEL_ID_MAX)) throw new ByokInputError('请填写模型 ID');
   const effort = input.effort === undefined || input.effort === null ? null : input.effort;
-  if (effort !== null && !AI_REASONING_EFFORTS.includes(effort as AIReasoningEffort)) throw new ByokInputError('努力程度无效');
+  if (effort !== null && !AI_REASONING_EFFORTS.includes(effort as AIReasoningEffort)) throw new ByokInputError('思考强度无效');
   return {
     connectionId, protocol: input.protocol as ByokProtocol, baseUrl: normalizeByokAddress(address), apiKey, action, modelId,
     effort: effort as AIReasoningEffort | null,

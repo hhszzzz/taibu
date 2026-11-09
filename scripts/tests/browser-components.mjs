@@ -3126,14 +3126,14 @@ export async function run(existingPage, bundlePath) {
     await settingsTrigger.click();
     await modelSettings.waitFor();
     check('Models with only a reasoning switch do not offer unsupported effort levels', await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).count() === 1 &&
-      await modelSettings.getByRole('menuitem', { name: '努力程度', exact: true }).count() === 0);
+      await modelSettings.getByRole('menuitem', { name: '思考强度', exact: true }).count() === 0);
     await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).click();
     check('The reasoning switch turns on from the model menu', await modelSettings.getByRole('menuitemcheckbox', { name: '推理', exact: true }).getAttribute('aria-checked') === 'true');
     await modelSettings.getByRole('menuitemradio', { name: /^分析模型/u }).click();
     await settingsTrigger.click();
     await modelSettings.waitFor();
-    await modelSettings.getByRole('menuitem', { name: /^努力程度/ }).click();
-    const effortMenu = page.getByRole('menu', { name: '努力程度', exact: true });
+    await modelSettings.getByRole('menuitem', { name: /^思考强度/ }).click();
+    const effortMenu = page.getByRole('menu', { name: '思考强度', exact: true });
     await effortMenu.waitFor();
     check('Effort is a second-level menu with the five claude levels and a default', await effortMenu.getByRole('menuitemradio', { name: '低', exact: true }).count() === 1 &&
       await effortMenu.getByRole('menuitemradio', { name: '中等', exact: true }).count() === 1 &&
@@ -3145,7 +3145,7 @@ export async function run(existingPage, bundlePath) {
     await until(() => window.fixture.agentChat.state.reasoningEffort === 'max');
     await settingsTrigger.click();
     await modelSettings.waitFor();
-    check('The chosen effort level reads on the model menu row', await modelSettings.getByRole('menuitem', { name: /^努力程度/ }).innerText().then(text => text.includes('最高')));
+    check('The chosen effort level reads on the model menu row', await modelSettings.getByRole('menuitem', { name: /^思考强度/ }).innerText().then(text => text.includes('最高')));
     // 主模型不参与协作成员：切到第三个模型，再勾选分析/复核两个子模型。
     await modelSettings.getByRole('menuitemradio', { name: /^仅支持推理开关/u }).click();
     await settingsTrigger.click();
@@ -3790,10 +3790,9 @@ export async function run(existingPage, bundlePath) {
       if (await step.locator('.agent-step-row').getAttribute('aria-expanded') !== 'true') await step.locator('.agent-step-row').click();
       // 协作步骤展开后列出成员，不再有「在工作区查看」；协作总览从它自己的标签进入。
       if (tabName) { await workspacePanel.getByRole('tab', { name: tabName, exact: true }).click(); return; }
-      // 结构化结果（方法、记忆、资料…）就在步骤里，入口改成「查看…」；其余调用仍是「在工作区查看」。
+      // 展开后，打开工作区的入口在步骤行右侧。
       const open = step.getByRole('button', { name: /^(在工作区查看|查看盘面|查看详查)$/ });
       if (await open.count()) await open.click();
-      else await step.locator('.agent-step-structured-open').first().click();
     };
     const openTeamMember = async (name, memberName) => {
       const toggle = results.getByRole('button', { name: /任务过程/ });

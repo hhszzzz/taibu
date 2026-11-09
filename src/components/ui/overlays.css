@@ -81,7 +81,7 @@
     --border: var(--chat-border);
 }
 /* Sidebar "全部占术" flyout: the panel body owns its own spacing and scroll regions. */
-/* 全部占术浮层：贴住侧栏右缘（锚点按钮距边缘 8px，定位再 +2px，故补 6px）。 */
+/* 全部占术浮层：与侧栏右缘留 4px 间隙（按钮距边缘 8px，另补 4px）。 */
 .all-divinations-panel { display: flex; flex-direction: column; padding: 0; max-height: min(720px, var(--available-height, calc(100dvh - 16px))); overflow: hidden; border-radius: 10px; box-shadow: var(--shadow-panel-popover); }
 /* 账户菜单「帮助」二级：与一级菜单保持间距的独立浮层。 */
 .user-help-menu { min-width: 12rem; max-width: min(16rem, calc(100vw - 2rem)); }

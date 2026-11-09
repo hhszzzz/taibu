@@ -31,7 +31,8 @@ export const xiaoliurenProvider: DataSourceProvider<XiaoliurenRow> = {
         .select(['id', 'question', 'solar_datetime', 'lunar_month', 'lunar_day', 'is_leap_month', 'final_status', 'created_at'])
         .where('user_id', '=', userId), ctx, ['question']);
       if (!query) return [];
-      return query.orderBy('created_at', 'desc').limit(ctx?.limit ?? 50).execute();
+      return (ctx?.offset ? query.offset(ctx.offset) : query)
+        .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(ctx?.limit ?? 50).execute();
     });
     return (data || []).map((row: Record<string, unknown>) => ({
       id: String(row.id),

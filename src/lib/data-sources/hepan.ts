@@ -48,7 +48,8 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
                 .select(['id', 'type', 'person1_name', 'person2_name', 'compatibility_score', 'created_at'])
                 .where('user_id', '=', userId), ctx, ['person1_name', 'person2_name']);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return (data || []).map((row) => {
             const typeName = getHepanTypeName(row.type as HepanType);

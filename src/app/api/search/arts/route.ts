@@ -41,16 +41,15 @@ export async function GET(request: NextRequest) {
     const cached = cache.get(cacheKey);
     if (cached) return jsonOk(cached);
     try {
-        // Search the summaries the lists show (hexagram, spread, question, type…), not just one text column:
-        // recent rows per art are cheap and make every displayed name searchable, including records without text.
-        const result = await getUserDataSourcesWithErrors(auth.user.id, {
-            db: auth.db, limit: query ? 100 : 8, since: since ?? undefined, until: until ?? undefined,
-        }, types);
+        // Search the existing displayed summaries in pages, including derived hexagram/spread names.
+        // The limit applies to matches, so older saved readings remain searchable.
         const needle = query.toLowerCase();
-        const items = needle
-            ? result.items.filter((item) => `${DATA_SOURCE_SHORT_LABELS[item.type]} ${item.name} ${item.preview}`.toLowerCase().includes(needle))
-            : result.items;
-        const payload = { items: items.slice(0, query ? 60 : 12), errors: result.errors };
+        const result = await getUserDataSourcesWithErrors(auth.user.id, {
+            db: auth.db, limit: query ? 60 : 8, since: since ?? undefined, until: until ?? undefined,
+        }, types, needle
+            ? (item) => `${DATA_SOURCE_SHORT_LABELS[item.type]} ${item.name} ${item.preview}`.toLowerCase().includes(needle)
+            : undefined);
+        const payload = { items: result.items.slice(0, query ? 60 : 12), errors: result.errors };
         cache.set(cacheKey, payload);
         return jsonOk(payload);
     } catch (error) {

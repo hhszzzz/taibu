@@ -34,7 +34,8 @@ export const recordProvider: DataSourceProvider<RecordRow> = {
                 .select(['id', 'title', 'category', 'event_date', 'source_run_id', 'created_at'])
                 .where('user_id', '=', userId), ctx, ['title', 'content']);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return ((data || []) as Array<Pick<RecordRow, 'id' | 'title' | 'category' | 'event_date' | 'source_run_id' | 'created_at'>>).map(row => ({
             id: row.id,

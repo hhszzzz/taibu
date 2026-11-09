@@ -31,7 +31,8 @@ export const daliurenProvider: DataSourceProvider<DaliurenRow> = {
                 .select(['id', 'question', 'solar_date', 'day_ganzhi', 'hour_ganzhi', 'yue_jiang', 'created_at'])
                 .where('user_id', '=', userId), ctx, ['question']);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return (data || []).map((row) => ({
             id: row.id,

@@ -6,6 +6,8 @@ import type { DataSourceSummary, DataSourceType } from '@/lib/data-sources/types
 export type DataSourceQueryContext = {
     db?: ScopedDb;
     limit?: number;
+    /** Rows to skip in saved lists, ordered by created_at and id descending. */
+    offset?: number;
     maxTokens?: number;
     maxChars?: number;
     /** The model the text is for: its tokenizer family prices the budget. */

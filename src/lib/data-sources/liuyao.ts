@@ -45,7 +45,8 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
                 .select(['id', 'question', 'hexagram_code', 'changed_hexagram_code', 'created_at'])
                 .where('user_id', '=', userId), ctx, ['question']);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return (data || []).map((row) => {
             const baseHexagram = findHexagram(row.hexagram_code);

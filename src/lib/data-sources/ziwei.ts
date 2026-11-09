@@ -31,7 +31,8 @@ export const ziweiProvider: DataSourceProvider<ZiweiRow> = {
                 .select(['id', 'name', 'birth_date', 'created_at'])
                 .where('user_id', '=', userId), ctx, ['name']);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return (data || []).map((chart) => ({
             id: chart.id,

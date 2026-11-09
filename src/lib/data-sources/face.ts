@@ -31,7 +31,8 @@ export const faceProvider: DataSourceProvider<FaceRow> = {
                 .select(['id', 'analysis_type', 'created_at'])
                 .where('user_id', '=', userId), ctx, []);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return (data || []).map((row) => {
             const typeName = FACE_ANALYSIS_TYPES.find(t => t.id === row.analysis_type)?.name || row.analysis_type || '面相分析';

@@ -53,7 +53,8 @@ export const qimenProvider: DataSourceProvider<QimenRow> = {
                 .select(['id', 'question', 'dun_type', 'ju_number', 'created_at'])
                 .where('user_id', '=', userId), ctx, ['question']);
             if (!query) return [];
-            return query.orderBy('created_at', 'desc').limit(limit).execute();
+            return (ctx?.offset ? query.offset(ctx.offset) : query)
+                .orderBy('created_at', 'desc').orderBy('id', 'desc').limit(limit).execute();
         });
         return (data || []).map((row: { id: string; question: string | null; dun_type: string; ju_number: number; created_at: string }) => {
             const dunLabel = DUN_LABEL[row.dun_type] || row.dun_type;

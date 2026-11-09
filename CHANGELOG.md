@@ -2,6 +2,35 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.1.11 · 2026-11-09
+
+### 新功能与体验
+
+- **Agent · 盘面高亮跟随详查**：模型调用详查工具（某一年、某一宫、某一爻）时，工作区自动标出它查到的盘位；主任务的每次详查带引用编号，回答里的盘面依据可点开定位。去掉了单独的「定位」步骤，任务调用更少；旧对话里的定位步骤照旧显示。([b3cbb3c](https://github.com/hhszzzz/taibu/commit/b3cbb3c3))
+- **Agent · 指着看**：鼠标指向或键盘聚焦回答里的引用编号时，盘面临时只亮这条依据的位置，移开即恢复；盘面「N 处」清单里指着某一处，盘上也只亮这一处。([57ce43a](https://github.com/hhszzzz/taibu/commit/57ce43a2))
+- **Agent · 引用编号贯穿整个对话**：后续回答可以引用之前轮次查到的来源，编号不重复；较早的回答不会显示之后才出现的编号。([7834d4b](https://github.com/hhszzzz/taibu/commit/7834d4bf)) ([6388dac](https://github.com/hhszzzz/taibu/commit/6388dacf))
+- **Agent · 任务过程**：同一张盘的缩略图只在第一次出现时画，「查看 N 张命盘」按盘计数。([b3cbb3c](https://github.com/hhszzzz/taibu/commit/b3cbb3c3))
+- **定时任务**：需求按原文发送，不再需要 `{{date}}` 一类变量；每日早报不绑定命盘时用设置里的默认命盘，自定义任务不绑定就不带命盘。([425d15e](https://github.com/hhszzzz/taibu/commit/425d15ed)) ([8e5d433](https://github.com/hhszzzz/taibu/commit/8e5d4337))
+- **定时任务 · 页面与编辑**：任务卡片去掉重复信息，点名称直接打开对话，右上角显示已用 / 上限，运行历史改为弹窗。编辑器按「说明 → 重复 / 时间 → 高级」排列：重复新增「工作日」，每月几号、间隔与执行时间（15 分钟一档）都改为下拉；固定间隔从当前时刻起算；高级默认收起，模型默认选上次聊天用过的模型，思考强度可选，联网自动开启，时区取浏览器所在时区。([415b18d](https://github.com/hhszzzz/taibu/commit/415b18d5))
+- **Agent · 任务过程**：过程摘要按工具数统计（如「已调用 1 个工具」）；「查询当前时间」只留在过程里，不再进工作区；展开步骤后，打开工作区的入口就在步骤行右侧。未保存的成果标为「未保存」。([9bcc631](https://github.com/hhszzzz/taibu/commit/9bcc6312))
+- **聊天 · 提及**：输入框与已发送消息使用同一套提及样式——白底、logo 橙字，输入框里另加细描边便于分辨；追问命盘接在草稿同一行；答案下方重复的「参考了 N 个来源」去掉（联网搜索的来源仍按编号列出）。([9bcc631](https://github.com/hhszzzz/taibu/commit/9bcc6312))
+- **界面**：「努力程度」统一改称「思考强度」；二级菜单与主菜单、全部占术浮层与侧栏之间留出间距，弹窗内的下拉不再超出弹窗；浏览器标签统一为「太卜」。([71e3222](https://github.com/hhszzzz/taibu/commit/71e32224)) ([2f46ccf](https://github.com/hhszzzz/taibu/commit/2f46ccfa))
+- **搜索**：可按时间、占术和设置项找到已存的占术记录，更早的记录也能搜到；输入后结果不会被迟到的「最近使用」列表覆盖，方向键逐行移动。([c78f4f9](https://github.com/hhszzzz/taibu/commit/c78f4f90)) ([6979870](https://github.com/hhszzzz/taibu/commit/69798700)) ([cbcafbe](https://github.com/hhszzzz/taibu/commit/cbcafbe9))
+- **提及与引用占术记录**：聊天里可以按记录本身的内容 @ 或引用一条占术记录。([c06507c](https://github.com/hhszzzz/taibu/commit/c06507cc))
+- **Agent 会话入口**：从侧栏、搜索、通知、定时任务、记录等任何入口打开 Agent 会话，都直接进入 Agent 模式。([98219b5](https://github.com/hhszzzz/taibu/commit/98219b59)) ([85f537d](https://github.com/hhszzzz/taibu/commit/85f537da))
+- **侧栏**：置顶与最近对话在各处使用同一份列表。([0967b3a](https://github.com/hhszzzz/taibu/commit/0967b3a3))
+
+### 修复
+
+- **工作区**：在新对话里发出草稿时，已打开的工作区不再被关闭。([0ec8835](https://github.com/hhszzzz/taibu/commit/0ec8835c))
+- **菜单**：同一时间只高亮一行，子菜单在父菜单旁边打开。([8d2f611](https://github.com/hhszzzz/taibu/commit/8d2f611a))
+- **下拉框**：选中「未设置」「不指定」这类空值项时显示该项文字，不再显示占位提示。([bc81713](https://github.com/hhszzzz/taibu/commit/bc817131))
+- **用量记录**：成员的用量日志不再显示内部标识。([0364fc8](https://github.com/hhszzzz/taibu/commit/0364fc8d))
+
+### 升级须知
+
+无需手动操作：通知链接的数据库函数会在更新时自动刷新，没有新的迁移、配置或 npm 包版本变更。
+
 ## v1.1.10 · 2026-11-06
 
 ### 新功能与体验

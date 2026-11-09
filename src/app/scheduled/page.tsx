@@ -1,10 +1,7 @@
-import type { Metadata } from 'next';
 import { Suspense } from 'react';
 import { ScheduledTasksPage } from '@/components/scheduled/ScheduledTasksPage';
 import { LoginOverlay } from '@/components/auth/LoginOverlay';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
-
-export const metadata: Metadata = { title: '定时任务' };
 
 export default function ScheduledPage() {
   return (

@@ -3,11 +3,8 @@
  *
  * 阐述太卜服务的使用条款和条件
  */
-import type { Metadata } from 'next';
 import { LegalDocument, type LegalDocumentContent } from '@/components/common/LegalDocument';
 import { getSettingsCenterRouteTarget } from '@/lib/settings-center';
-
-export const metadata: Metadata = { title: '服务条款' };
 
 const TERMS_OF_SERVICE: LegalDocumentContent = {
     title: '服务条款',

@@ -3,11 +3,8 @@
  *
  * 阐述太卜如何收集、使用、保护用户个人信息
  */
-import type { Metadata } from 'next';
 import { LegalDocument, type LegalDocumentContent } from '@/components/common/LegalDocument';
 import { getSettingsCenterRouteTarget } from '@/lib/settings-center';
-
-export const metadata: Metadata = { title: '隐私政策' };
 
 const PRIVACY_POLICY: LegalDocumentContent = {
     title: '隐私政策',

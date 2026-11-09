@@ -3629,14 +3629,16 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.chartInspect(true));
     await renderBarrier();
     check('Edited saved chart data invalidates manual coordinates on the same resource tab', await interactive.locator('.agent-board-focus').getAttribute('data-chart-focus') === '' && await interactive.locator('.chart-cell-button[aria-pressed=true]').count() === 0);
-    // 「详细」视图展开每一步：再次查看命盘是允许的，会多一个带缩略图的步骤。
+    // 「详细」视图展开每一步：再次查看命盘照常多一步，但同一张盘只在第一次出现时画缩略图。
     await page.evaluate(() => window.fixture.recordView('detailed'));
     await renderBarrier();
     await results.locator('.agent-step-chart').first().waitFor();
     const chartThumbs = await results.locator('.agent-step-chart').count();
+    const chartSteps = await results.locator('.agent-step').count();
     await page.evaluate(() => window.fixture.chartInspect());
     await renderBarrier();
-    check('Re-reading a chart adds its own step and thumbnail', await results.locator('.agent-step-chart').count() > chartThumbs);
+    check('Re-reading a chart adds a step but no second chart thumbnail',
+      await results.locator('.agent-step').count() > chartSteps && await results.locator('.agent-step-chart').count() === chartThumbs);
     await page.evaluate(() => window.fixture.recordView('normal'));
     await renderBarrier();
     await interactive.getByRole('button', { name: '关闭工作区', exact: true }).click();

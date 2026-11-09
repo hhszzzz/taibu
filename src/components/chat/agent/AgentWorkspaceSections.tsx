@@ -26,7 +26,7 @@ export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIco
 };
 
 /** How a reading card names what became of it, and the state its badge is styled by. */
-const READING_BADGES = { 已保存: ['已保存', 'saved'], 暂存成果: ['未另存', 'cached'], 已存资料: ['已存资料', 'record'] } as const;
+const READING_BADGES = { 已保存: ['已保存', 'saved'], 暂存成果: ['未保存', 'cached'], 已存资料: ['已存资料', 'record'] } as const;
 
 export type WorkspaceRunInfo = Partial<Pick<AgentRunView, 'billing' | 'configuration' | 'createdAt'>>;
 

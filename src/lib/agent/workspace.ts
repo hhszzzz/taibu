@@ -204,6 +204,9 @@ export function buildAgentWorkspace({ parts, artifacts, attachmentIds }: { parts
         // A script's page lists its calls; each call shows where its family belongs, as the model's own calls do.
         add('tool:' + tool.id, { view: 'code', family, title: tool.title }, tool);
         break;
+      case 'time':
+        // 查时间只是过程里的一步，不是成果，不占工作区。
+        break;
       default:
         add('tool:' + tool.id, { view: 'tool', family, title: tool.title }, tool);
     }

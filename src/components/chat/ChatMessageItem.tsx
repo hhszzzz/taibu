@@ -8,23 +8,19 @@
 'use client';
 import { Fragment, memo, useState, useMemo, useCallback, useRef } from 'react';
 import { FileText, Globe, KeyRound } from 'lucide-react';
-import type { AIMessageMetadata, ChatMessage, InjectedSource, Mention } from '@/types';
+import type { AIMessageMetadata, ChatMessage, Mention } from '@/types';
 import type { MessageQuote } from '@/lib/chat/quotes';
-import { getEnabledDataSourceTypes } from '@/lib/data-sources/catalog';
 import { formatMentionsForDisplay } from '@/lib/format-mentions';
-import { getVisibleSourcePanelState, getVisibleWebSearch } from '@/lib/chat/feature-normalization';
-import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { getVisibleWebSearch } from '@/lib/chat/feature-normalization';
 import { extractMentionTokens, filterMentionsByTokens, removeMentionsByTokens } from '@/lib/mention-tokens';
 import { MarkdownContent, type MarkdownCitations } from '@/components/ui/MarkdownContent';
 import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
 import { ThinkingBlock } from '@/components/chat/ThinkingBlock';
 import { AgentMessage } from '@/components/chat/AgentMessage';
-import { SourcePanel } from '@/components/chat/SourcePanel';
 import { WebSearchSources } from '@/components/chat/WebSearchSources';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { MentionIcon } from '@/components/chat/mention/MentionIcon';
-import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { MessageActions } from './MessageActions';
 import { MessageQuoteCards } from './MessageQuotes';
@@ -71,7 +67,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
     const chartErrorToasted = useRef(new Set<string>());
     const [editSaving, setEditSaving] = useState(false);
     const [editError, setEditError] = useState<string | null>(null);
-    const [expandedSources, setExpandedSources] = useState<Record<string, boolean>>({});
     const editTextareaRef = useRef<HTMLTextAreaElement | null>(null);
     const editOverlayRef = useRef<HTMLDivElement | null>(null);
 
@@ -248,7 +243,9 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 {highlightedUserContentParts.map((part) => (
                                     part.kind === 'mention'
                                         ? (
-                                            <span key={`${part.start}-${part.end}`} className="chat-mention-chip" data-type={part.type}><MentionIcon type={part.type} size={13} />{part.value.slice(1)}</span>
+                                            <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}>
+                                                <span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}
+                                            </span>
                                         )
                                         : part.value
                                 ))}
@@ -322,13 +319,6 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                     ))}
                 </div>
             )}
-            {/* 来源面板 */}
-            <SourcePanelSection
-                message={message}
-                isCurrentStreaming={isCurrentStreaming}
-                expandedSources={expandedSources}
-                setExpandedSources={setExpandedSources}
-            />
             <WebSearchSection message={message} isCurrentStreaming={isCurrentStreaming} />
             {/* 操作按钮：Agent 消息放在依据同一行 */}
             {!message.agent && assistantActions}
@@ -342,53 +332,4 @@ function WebSearchSection({ message, isCurrentStreaming }: { message: ChatMessag
     // 与来源面板一样，回复结束后再展示
     if (isCurrentStreaming || message.agent || !search) return null;
     return <WebSearchSources search={search} />;
-}
-
-// 来源面板区域
-interface SourcePanelSectionProps {
-    message: ChatMessage;
-    isCurrentStreaming: boolean;
-    expandedSources: Record<string, boolean>;
-    setExpandedSources: React.Dispatch<React.SetStateAction<Record<string, boolean>>>;
-}
-
-function SourcePanelSection({
-    message,
-    isCurrentStreaming,
-    expandedSources,
-    setExpandedSources,
-}: SourcePanelSectionProps) {
-    const { knowledgeBaseEnabled } = useKnowledgeBaseFeatureEnabled();
-    const { isFeatureEnabled } = useFeatureToggles();
-    const meta = message.metadata as AIMessageMetadata | undefined;
-    const enabledDataSourceTypes = useMemo(
-        () => getEnabledDataSourceTypes(isFeatureEnabled),
-        [isFeatureEnabled],
-    );
-    const { visibleSources, showKnowledgeBaseMiss } = useMemo(
-        () => getVisibleSourcePanelState(meta, {
-            knowledgeBaseEnabled,
-            enabledDataSourceTypes,
-        }),
-        [enabledDataSourceTypes, knowledgeBaseEnabled, meta],
-    );
-
-    // 延迟到回复结束后再展示“参考了 n 个来源”，避免一开始就出现
-    if (isCurrentStreaming) return null;
-
-    if (!visibleSources.length && !showKnowledgeBaseMiss) return null;
-
-    const isExpanded = !!expandedSources[message.id];
-    if (showKnowledgeBaseMiss && !isCurrentStreaming) {
-        return (
-            <p className="chat-message-meta is-assistant is-after">本次未命中知识库</p>
-        );
-    }
-    return (
-        <SourcePanel
-            sources={visibleSources as InjectedSource[]}
-            isExpanded={isExpanded}
-            onToggle={() => setExpandedSources(prev => ({ ...prev, [message.id]: !isExpanded }))}
-        />
-    );
 }

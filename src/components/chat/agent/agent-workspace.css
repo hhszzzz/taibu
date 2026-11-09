@@ -423,7 +423,6 @@ button.agent-ws-row:hover { border-color: color-mix(in srgb, var(--accent) 45%, 
 @media (max-width: 640px) { .agent-todo-segments { display: none; } }
 /* Phones leave the list to the workspace sheet's 过程 (board "手机 · 任务对话"); without a workspace the bar stays. */
 @media (max-width: 767px) { .agent-todo-progress:has(.agent-todo-open) { display: none; } }
-.agent-step-open { flex-shrink: 0; align-self: flex-start; margin-top: 9px; }
 
 /* Narrow panels stack the two-column grids. */
 @container (max-width: 440px) {

@@ -2,7 +2,7 @@
 // 需要折叠状态与工作区上下文：步骤在转录内展开结果（详细视图另含参数），也可在工作区打开
 
 import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
-import { ChevronDown, ChevronRight, LoaderCircle, PanelRight, Pause } from 'lucide-react';
+import { ChevronDown, ChevronRight, LayoutDashboard, LoaderCircle, Pause } from 'lucide-react';
 import type { AgentMessageData, AgentPart } from '@/lib/agent/types';
 import { AGENT_SKILL_TOOLS, AGENT_SUBMIT_PLAN_TOOL, AGENT_TOOL_SEARCH_TOOL, AGENT_WEB_TOOLS, getAgentToolFamily, isAgentMemberTool } from '@/lib/agent/tool-catalog';
 import { getAgentToolQuestionIds } from '@/lib/agent/workspace';
@@ -60,14 +60,12 @@ export function AgentLiveStatus({ data }: { data: AgentMessageData }) {
 const previewLine = (text: string) => text.trim().split('\n', 1)[0].replace(/^#+\s*/u, '');
 
 /** 把只返回结构化数据的工具读成一句话或几行事实，不再统一写「已返回结构化结果」。 */
-function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: AgentPart[]; workspace: ReturnType<typeof useAgentResultWorkspace> }): ReactNode {
-    const open = (id: string) => workspace?.openResource(id);
+function StepStructured({ tool, parts }: { tool: AgentTool; parts: AgentPart[] }): ReactNode {
     if (tool.name === 'generate_image') {
         const generated = getAgentGeneratedImages(tool);
         return generated ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">生成 {generated.images.length} 张图片</p>
             <GeneratedImageGallery images={generated.images} label="生成的图片" />
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看图片</Button>}
         </div> : null;
     }
     // 已删除的定位工具：旧对话里的定位步骤照旧显示。
@@ -83,7 +81,6 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
             {focus.caption && <p className="agent-step-structured-lead">{focus.caption}</p>}
             <p className="agent-step-structured-fact">定位 {focus.targetIds.length} 处{focus.includeRelated ? ' · 含三方四正' : ''}</p>
             {labels.length > 0 && <ul className="agent-step-chips" aria-label="定位的位置">{labels.slice(0, 6).map(label => <li key={label}>{label}</li>)}{labels.length > 6 && <li>等 {labels.length} 处</li>}</ul>}
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看盘面</Button>}
         </div>;
     }
     if (tool.name === 'ask_user') {
@@ -91,14 +88,12 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
         return questions.length ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">向你确认 {questions.length} 项信息</p>
             <ul className="agent-step-structured-list">{questions.map(question => <li key={question.id}>{question.header ?? question.question}</li>)}</ul>
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看问题</Button>}
         </div> : null;
     }
     if (tool.name === 'remember_user_fact' || tool.name === 'read_user_memory') {
         const memories = getAgentMemories(tool);
         return memories?.length ? <div className="agent-step-structured">
             <ul className="agent-step-structured-list">{memories.map(memory => <li key={memory.id}><strong>{memory.title}</strong><span>{memory.content}</span></li>)}</ul>
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看记忆</Button>}
         </div> : null;
     }
     if (tool.name === 'list_user_data') {
@@ -106,28 +101,24 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
         return data ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">找到 {data.items.length} 份资料{data.errors.length ? ` · ${data.errors.length} 项暂不可读` : ''}</p>
             {data.items.length > 0 && <ul className="agent-step-structured-list">{data.items.slice(0, 6).map(item => <li key={item.type + item.id}><strong>{item.name}</strong><span>{getAgentDataTypeLabel(item.type)}</span></li>)}</ul>}
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open('data')}>查看资料</Button>}
         </div> : null;
     }
     if (tool.name === 'read_user_profile') {
         const profile = getAgentProfile(tool);
         return profile ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">{profile.identity ? `已读取个性化档案 · ${profile.identity}` : '已读取个性化档案'}</p>
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open('profile')}>查看档案</Button>}
         </div> : null;
     }
     if (tool.name === 'read_attachment') {
         const read = getAgentAttachmentRead(tool);
         return read ? <div className="agent-step-structured">
             <p className="agent-step-structured-fact">读取了 {read.name}{read.readUntil !== null && read.total !== null ? ` · ${read.readUntil} / ${read.total} 字` : ''}</p>
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看资料</Button>}
         </div> : null;
     }
     if (tool.name === 'read_user_data') {
         const input = tool.input && typeof tool.input === 'object' ? tool.input as Record<string, unknown> : {};
         return <div className="agent-step-structured">
             <p className="agent-step-structured-fact">读取了 1 份{getAgentDataTypeLabel(input.type)}</p>
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`tool:${tool.id}`)}>查看资料</Button>}
         </div>;
     }
     if (tool.name === AGENT_SKILL_TOOLS.load) {
@@ -135,7 +126,6 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
         const method = getAgentMethod(tool);
         if (method) return <div className="agent-step-structured">
             <p className="agent-step-structured-fact">{method.title} · 版本 {method.version}</p>
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open(`method:${method.id}`)}>查看方法</Button>}
         </div>;
         const skill = getAgentSkillLoad(tool);
         return skill ? <div className="agent-step-structured">
@@ -159,7 +149,6 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
                 </li>)}
                 {results.length > 4 && <li className="agent-step-more">等 {results.length} 条</li>}
             </ul>}
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open('evidence')}>查看依据</Button>}
         </div>;
     }
     // 工具搜索加载了哪些工具：写中文名，点名它们从下一次模型调用起可用。
@@ -179,7 +168,6 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
             {notes.notes.length > 0 && <ul className="agent-step-structured-list">{notes.notes.slice(0, 3).map((note, index) =>
                 // 同一天可以有多条笔记，日期不能单独作 key。
                 <li key={`${note.date}:${index}`}><strong>{note.date}{note.mood ? ` · ${note.mood}` : ''}</strong><span>{note.content}</span></li>)}</ul>}
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open('notes')}>查看笔记</Button>}
         </div> : null;
     }
     if (tool.name === 'search_conversations') {
@@ -188,7 +176,6 @@ function StepStructured({ tool, parts, workspace }: { tool: AgentTool; parts: Ag
             <p className="agent-step-structured-fact">{hits.length ? `找到 ${hits.length} 条以往对话` : '没有找到以往的对话'}</p>
             {hits.length > 0 && <ul className="agent-step-structured-list">{hits.slice(0, 3).map(hit =>
                 <li key={`${hit.conversationId}:${hit.messageId ?? ''}`}><strong>{hit.title}</strong><span>{hit.excerpt}</span></li>)}</ul>}
-            {workspace && <Button unstyled type="button" className="agent-step-structured-open" onClick={() => open('history')}>查看对话</Button>}
         </div> : null;
     }
     return null;
@@ -255,11 +242,6 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
     const workspace = useAgentResultWorkspace();
     const detailed = useTranscriptRecordView() === 'detailed';
     const state = describeAgentStep(tool, runStatus).status;
-    const openButton = (label: string) => workspace && <div className="agent-step-foot">
-        <Button unstyled type="button" className="agent-step-workspace" onClick={() => workspace.openResource(`tool:${tool.id}`)}>
-            <PanelRight size={13} aria-hidden="true" />{label}
-        </Button>
-    </div>;
     const script = getAgentScript(tool);
     // 脚本即调用参数：普通视图也给出脚本与它打印给模型的输出；脚本的各次调用在下方逐条列出。
     if (script) return <div className="agent-step-call">
@@ -271,7 +253,6 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 <StepFold><div className="agent-step-output agent-code" tabIndex={0} aria-label="脚本输出">{script.output}</div></StepFold>
             </StepPanel>
             : <p className="agent-step-empty">{state === 'running' ? '脚本运行中…' : '脚本没有输出。'}</p>}
-        {openButton('在工作区查看')}
     </div>;
     // 计划模式：计划正文按 Markdown 展示，决定只由行上的状态说明；工作区里是这一任务的全部计划版本。
     if (tool.name === AGENT_SUBMIT_PLAN_TOOL) {
@@ -281,22 +262,18 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 <div className="agent-step-output agent-step-markdown" tabIndex={0} aria-label="计划"><MarkdownContent content={draft.plan} className="chat-prose" /></div>
             </StepPanel>}
             {draft?.feedback && <p className="agent-step-empty">你的意见：{draft.feedback}</p>}
-            {openButton('查看计划')}
-        </div>;
+            </div>;
     }
     const canonical = tool.canonicalText?.trim() ? tool.canonicalText : null;
     const text = canonical ?? getAgentToolText(tool);
     const raw = tool.output === undefined ? null : tool.output;
     const members = isAgentMemberTool(tool.name) ? parallelAnalysisResults(tool.output) : [];
-    // 结构化结果（定位、提问、记忆、资料…）自己带「查看…」入口，不再重复「在工作区查看」。
-    const structured = members.length === 0 && state !== 'running' ? StepStructured({ tool, parts, workspace }) : null;
-    // 有规范文本时显示文本面板而不是结构化摘要，「查看…」入口改由正文底部给出。
-    const selfContained = members.length > 0 || (structured !== null && text === null);
+    // 结构化结果（定位、提问、记忆、资料…）在正文里给具体事实；打开工作区统一放在步骤行右侧。
+    const structured = members.length === 0 && state !== 'running' ? StepStructured({ tool, parts }) : null;
     const family = getAgentToolFamily(tool.name);
     const chart = family === 'chart' && state === 'completed' ? getAgentChart(tool) : null;
     // 推演结果只在这里展开：时间线、候选表等给结构化视图，规范文本仍可复制。
     const calculation = family === 'calculation' && state === 'completed' ? getAgentCalculation(tool) : null;
-    const openLabel = family === 'chart' ? '查看盘面' : family === 'drilldown' ? '查看详查' : '在工作区查看';
     return <div className="agent-step-call">
         {/* 详细视图 = 命令行：工具名是命令，参数是选项，按类别着色；普通视图不露参数键名。 */}
         {detailed && tool.input !== undefined && <StepPanel title="调用" kind="command" actions={copyAction(formatAgentValue(tool.input), '复制参数')}>
@@ -342,7 +319,6 @@ function AgentStepCall({ tool, runStatus, parts }: { tool: AgentTool; runStatus:
                 : state === 'running'
                     ? <p className="agent-step-empty">正在等待工具返回结果…</p>
                     : structured ?? <p className="agent-step-empty">{raw !== null ? '已返回结构化结果' : '该步骤没有返回详情。'}</p>)}
-        {!selfContained && !calculation && state !== 'failed' && openButton(openLabel)}
     </div>;
 }
 
@@ -354,18 +330,26 @@ function ToolStep({ tool, data, shownId, calls = [] }: { tool: AgentTool; data: 
     // 详细视图默认展开每一步的调用参数与结果；普通视图点击行才展开，等用户批准的计划例外——要批的就是这段正文。
     const awaitingPlan = tool.name === AGENT_SUBMIT_PLAN_TOOL && step.status === 'running';
     const details = disclosed ?? (detailed || step.status === 'failed' || awaitingPlan);
+    const workspace = useAgentResultWorkspace();
+    const family = getAgentToolFamily(tool.name);
+    const openLabel = family === 'chart' ? '查看盘面' : family === 'drilldown' ? '查看详查'
+        : tool.name === AGENT_SUBMIT_PLAN_TOOL ? '查看计划' : '在工作区查看';
     return <li className="agent-step" data-state={step.status} data-motion-key={tool.id}>
-        <Button unstyled type="button" className="agent-step-row" aria-current={shownId === tool.id || undefined}
-            aria-expanded={details} aria-controls={details ? id : undefined}
-            onClick={() => setDisclosed(!details)}>
-            <span className="agent-step-text">
-                <span className="agent-step-title">{getAgentToolTitle(tool)}</span>
-                {(step.summary || step.note) && <span className="agent-step-detail">
-                    {step.summary}{step.summary && step.note ? ' · ' : ''}{step.note && <span className="agent-step-note">{step.note}</span>}
-                </span>}
-                <ChevronRight size={12} aria-hidden="true" className={`agent-step-chevron${details ? ' rotate-90' : ''}`} />
-            </span>
-        </Button>
+        <div className="agent-step-row-wrap">
+            <Button unstyled type="button" className="agent-step-row" aria-current={shownId === tool.id || undefined}
+                aria-expanded={details} aria-controls={details ? id : undefined}
+                onClick={() => setDisclosed(!details)}>
+                <span className="agent-step-text">
+                    <span className="agent-step-title">{getAgentToolTitle(tool)}</span>
+                    {(step.summary || step.note) && <span className="agent-step-detail">
+                        {step.summary}{step.summary && step.note ? ' · ' : ''}{step.note && <span className="agent-step-note">{step.note}</span>}
+                    </span>}
+                    <ChevronRight size={12} aria-hidden="true" className={`agent-step-chevron${details ? ' rotate-90' : ''}`} />
+                </span>
+            </Button>
+            {details && workspace && family !== 'time' && family !== 'calculation' && <Button unstyled type="button" className="agent-step-open"
+                onClick={() => workspace.openResource(`tool:${tool.id}`)}><LayoutDashboard size={13} strokeWidth={1.8} aria-hidden="true" />{openLabel}</Button>}
+        </div>
         {/* 只有用户点开的正文才滑出；默认展开（详细视图、失败、待批计划）的正文随页面直接出现，不在每次挂载时重放。 */}
         {details && <div id={id} className="agent-step-body" data-tool-id={tool.id} data-disclosed={disclosed !== null || undefined}>
             <AgentStepCall tool={tool} runStatus={data.status} parts={data.parts} />

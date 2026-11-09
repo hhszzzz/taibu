@@ -279,6 +279,11 @@
 .agent-step { position: relative; min-width: 0; padding: 6px 12px; }
 .agent-step + .agent-step { border-top: var(--hairline) solid var(--hairline-color); }
 /* 步骤行 = 克隆站 TurnStatus：外层 6px 8px、内行 20px / r6、14px muted、行尾内联 12px chevron。 */
+.agent-step-row-wrap { position: relative; width: 100%; }
+/* 打开工作区的入口就放在步骤条上：浮在右端并随行垂直居中，不另占一行或一格。 */
+.agent-step-row-wrap:has(> .agent-step-open) .agent-step-text { padding-right: 78px; }
+.agent-step-open { position: absolute; right: 0; top: 0; height: 100%; display: inline-flex; align-items: center; gap: 4px; padding: 0 2px; font-size: calc(14 / 16 * 1rem); color: var(--foreground-tertiary); transition: color var(--duration-snap) var(--ease-out); }
+.agent-step-open:hover { color: var(--foreground-secondary); }
 .agent-step-row { display: flex; width: 100%; min-height: 20px; align-items: center; gap: 4px; padding: 0; color: var(--foreground-tertiary); font-size: calc(14 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); text-align: left; transition: color .12s; }
 .agent-step-row:hover { background: transparent; color: var(--foreground-secondary); }
 .agent-step-row[aria-current="true"] { color: var(--foreground-secondary); background: transparent; }

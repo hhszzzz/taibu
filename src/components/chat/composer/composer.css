@@ -72,13 +72,12 @@
 /* 追问建议：输入框为空时以幽灵文本出现，Tab 填入、回车直接发送。 */
 .chat-composer-suggestion { color: var(--foreground-tertiary); }
 .chat-composer-suggestion-key { margin-left: 6px; padding: 1px 4px; border-radius: 4px; background: var(--fill-field); font-family: inherit; font-size: calc(11 / 16 * 1rem); line-height: inherit; color: var(--foreground-tertiary); }
-.chat-mention-token { border-radius: 5px; background: var(--fill-field); color: var(--foreground-secondary); }
+.chat-mention-token { border-radius: 5px; background: var(--surface); color: var(--accent); }
+/* 输入框是白底，纯白 chip 看不出范围：用 1px 内描边 + 极淡底色圈出它；不占排版，输入框与浮层仍逐字对齐。 */
+.chat-composer-overlay .chat-mention-token { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 24%, transparent); }
 /* @ 以图标呈现：透明 @ 保留字宽，图标靠左贴合 chip，字宽推进与 textarea 一致。 */
 .chat-mention-at { position: relative; display: inline-block; color: transparent; }
-.chat-mention-at > svg { position: absolute; left: 0; top: 50%; width: 1.1em; height: 1.1em; transform: translateY(-50%); color: var(--foreground-secondary); }
-/* 已发送消息里的提及：图标 + 名称的中性 chip（claude 同款，不再用 @ 前缀） */
-.chat-mention-chip { display: inline-flex; align-items: center; gap: 7px; padding: 1px 5px; border-radius: 5px; background: var(--fill-field); color: var(--foreground-secondary); font-size: .92em; line-height: 1.45; vertical-align: baseline; }
-.chat-mention-chip > svg { flex-shrink: 0; color: var(--foreground-secondary); }
+.chat-mention-at > svg { position: absolute; left: 0; top: 50%; width: 1.1em; height: 1.1em; transform: translateY(-50%); color: var(--accent); }
 
 /* ---- Toolbar ---- */
 /* 工具簇：白壳第二行（+ 居左、发送群贴右），首屏与会话内一致。 */

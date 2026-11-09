@@ -4054,7 +4054,7 @@ export async function run(existingPage, bundlePath) {
     check('An opened script step shows the code the model wrote', await scriptStep.locator('.agent-step-script').innerText() === 'for (const birthYear of [1990, 1991]) await tools.bazi({ birthYear });');
     check('An opened script step shows what the script printed', await scriptStep.getByLabel('脚本输出').innerText().then(text => text.includes('1990: 己巳') && text.includes('1991: 庚午')));
     check('An opened script step lists its calls as sub-steps', await scriptStep.locator('ol[aria-label="脚本调用"] > .agent-step').count() === 2);
-    await scriptStep.locator('.agent-step-workspace').first().click();
+    await scriptStep.locator('.agent-step-row-wrap .agent-step-open').first().click();
     const scriptPage = workspacePanel.locator('[data-workspace-view="code"]');
     await scriptPage.waitFor();
     const scriptCalls = scriptPage.locator('.agent-ws-script-calls > li');
@@ -4664,13 +4664,13 @@ export async function run(existingPage, bundlePath) {
     check('Picked models keep the use their IDs suggest and a medium default effort',
       JSON.stringify(await modelIds.evaluateAll(inputs => inputs.map(input => input.value))) === JSON.stringify(['fixture-chat', 'gpt-image-1'])
       && JSON.stringify(await byokModels.getByRole('combobox', { name: '用途', exact: true }).allInnerTexts()) === JSON.stringify(['对话', '生图'])
-      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '中等');
+      && (await byokModels.getByRole('combobox', { name: '默认思考强度', exact: true }).innerText()).trim() === '中等');
     await byokModels.getByRole('button', { name: '测试「fixture-chat」', exact: true }).click();
     await byokModels.getByText(/^可用：回复「OK」/u).waitFor();
     const chatTests = providerRequests.filter(entry => entry.pathname === '/provider/chat/completions');
     check('A model that refuses effort levels answers without one, and its default becomes the model\'s own',
-      (await byokModels.getByText(/^可用：回复「OK」/u).innerText()).includes('它不接受努力程度参数，默认已改为「模型默认」')
-      && (await byokModels.getByRole('combobox', { name: '默认努力程度', exact: true }).innerText()).trim() === '模型默认'
+      (await byokModels.getByText(/^可用：回复「OK」/u).innerText()).includes('它不接受思考强度参数，默认已改为「模型默认」')
+      && (await byokModels.getByRole('combobox', { name: '默认思考强度', exact: true }).innerText()).trim() === '模型默认'
       && chatTests.length === 2 && chatTests[0].body.reasoning_effort === 'medium' && chatTests[1].body.reasoning_effort === undefined
       && chatTests.every(entry => entry.body.model === 'fixture-chat' && entry.body.temperature === undefined));
     await byokEditor.getByRole('button', { name: '添加', exact: true }).click();

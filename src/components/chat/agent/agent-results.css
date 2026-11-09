@@ -35,9 +35,9 @@
 .agent-board-tools { display: flex; flex-shrink: 0; align-items: center; gap: 2px; margin-left: auto; }
 .agent-board-tool { display: flex; width: 26px; height: 26px; align-items: center; justify-content: center; border: 0; border-radius: 6px; color: var(--foreground-secondary); }
 .agent-board-tool.has-label { width: auto; height: 28px; gap: 5px; padding: 0 9px; font-size: calc(13 / 16 * 1rem); white-space: nowrap; }
-.agent-board-tool.is-save { border: 1px solid var(--border-hover); }
+.agent-board-tool.is-save { border: 1px solid var(--border-hover); margin-left: 6px; }
 .agent-board-tool.is-save:hover:not(:disabled) { border-color: var(--accent); }
-.agent-board-tool.is-save.is-saved { border-color: transparent; background: transparent; }
+.agent-board-tool.is-save.is-saved { border-color: transparent; background: transparent; margin-left: 6px; }
 .agent-board-tool:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
 .agent-board-tool.is-viewing, .agent-board-tool.is-saved { color: var(--accent-hover); }
 .agent-board-tool:disabled { opacity: .5; cursor: default; background: transparent; }

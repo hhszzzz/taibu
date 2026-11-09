@@ -432,7 +432,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         }
         const token = chartAskToken(ask);
         const base = inputValue.replace(/\s*$/, '');
-        if (!base.includes(token)) onInputChange(base ? `${base}\n${token}` : token);
+        // 追加在现有草稿之后，同一行；不另起一行。
+        if (!base.includes(token)) onInputChange(base ? `${base} ${token}` : token);
         if (!isDesktopLayout()) closeWorkspace();
         focusComposer();
     };

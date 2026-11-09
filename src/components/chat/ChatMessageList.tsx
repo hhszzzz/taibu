@@ -23,7 +23,7 @@ interface ChatMessageListProps {
     onArchiveMessage?: (message: ChatMessage) => void;
     onQuoteMessage?: (quote: MessageQuote) => void;
     /** Evidence numbers stamped across the whole conversation, in transcript order. */
-    citationLabels?: MarkdownCitations['labels'];
+    citationLabels?: ReadonlyMap<string, MarkdownCitations['labels']>;
     disabled?: boolean;
 }
 
@@ -66,7 +66,7 @@ export function ChatMessageList({
                         onSwitchVersion={onSwitchVersion}
                         onArchiveMessage={onArchiveMessage}
                         onQuoteMessage={onQuoteMessage}
-                        citationLabels={citationLabels}
+                        citationLabels={citationLabels?.get(message.id)}
                     />
                 </div>
             ))}

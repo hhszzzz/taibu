@@ -59,7 +59,7 @@ import { useConversationList } from '@/lib/chat/ConversationListContext';
 import { ChatRecordViewContext, useChatRecordView } from '@/lib/chat/chat-record-view';
 import { setChatWorkspaceOpen } from '@/lib/chat/chat-sidebar';
 import { refreshAgentActivity } from '@/lib/agent/use-agent-activity';
-import { getConversationCitationLabels } from '@/lib/agent/evidence';
+import { getConversationCitationLabels, getConversationCitationLimits } from '@/lib/agent/evidence';
 import { isDesktopLayout } from '@/lib/hooks/useIsDesktopLayout';
 import type { CSSProperties } from 'react';
 import { CHAT_SHORTCUTS, isShortcutSheetKey, isWorkspaceToggleKey, modifierLabel, shouldStopOnEscape } from '@/lib/chat/chat-shortcuts';
@@ -230,7 +230,15 @@ export function ChatLayout(props: ChatLayoutProps) {
     // 依据编号按整个对话递增：后续回答可以引用之前轮次实际返回过的来源。
     // 内容不变时保持同一份 Map，流式输出期间已完成的段落不必重新解析。
     const citationLabelKey = useMemo(() => JSON.stringify([...getConversationCitationLabels(messages)]), [messages]);
-    const citationLabels = useMemo(() => new Map(JSON.parse(citationLabelKey) as Array<[number, string]>), [citationLabelKey]);
+    const citationLimitKey = useMemo(() => JSON.stringify(getConversationCitationLimits(messages)), [messages]);
+    // 每条回答只认它那时已有的编号，后来轮次的编号不显示成徽标。
+    const citationLabels = useMemo(() => {
+        const labels = JSON.parse(citationLabelKey) as Array<[number, string]>, byLimit = new Map<number, ReadonlyMap<number, string>>();
+        return new Map((JSON.parse(citationLimitKey) as Array<[string, number]>).map(([id, limit]) => {
+            if (!byLimit.has(limit)) byLimit.set(limit, new Map(labels.filter(([n]) => n <= limit)));
+            return [id, byLimit.get(limit)!];
+        }));
+    }, [citationLabelKey, citationLimitKey]);
     // 新消息淡入：按行号记住已出现的行，临时 id 换成正式 id、虚拟列表滚回视野时不再重放。
     // 新对话发出第一条消息后才拿到会话 ID：这一步仍是同一段对话，作用域沿用，第一轮的淡入不被打断。
     const [motionScope, setMotionScope] = useState(workspaceKey);

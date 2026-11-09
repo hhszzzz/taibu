@@ -90,6 +90,12 @@ export function getConversationCitationLabels(messages: readonly Pick<ChatMessag
   return labels;
 }
 
+/** Per message, the highest number used by it or before it: an answer cannot cite what a later turn found. */
+export function getConversationCitationLimits(messages: readonly Pick<ChatMessage, 'id' | 'agent'>[]): Array<[string, number]> {
+  let last = 0;
+  return messages.map(message => [message.id, last = getAgentEvidence(message.agent?.parts ?? [], last).at(-1)?.n ?? last]);
+}
+
 /** Numbers an answer may cite from one task's own parts; used by evidence summaries and tests. */
 export function getAgentCitationLabels(parts: readonly AgentPart[]): ReadonlyMap<number, string> {
   return new Map(getAgentEvidence(parts).filter(item => item.citable).map(item => [item.n, getAgentEvidenceTitle(item)]));

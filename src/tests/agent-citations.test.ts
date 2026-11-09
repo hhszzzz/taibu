@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import type { ChatMessage } from '../types';
 import type { AgentPart } from '../lib/agent/types';
 import { getCitedParagraphs, remarkCitations, splitCitations } from '../lib/chat/markdown-citations';
-import { countAgentEvidence, getAgentCitationBase, getAgentCitationLabels, getAgentEvidence, getConversationCitationLabels, nextAgentCitation } from '../lib/agent/evidence';
+import { countAgentEvidence, getAgentCitationBase, getAgentCitationLabels, getAgentEvidence, getConversationCitationLabels, getConversationCitationLimits, nextAgentCitation } from '../lib/agent/evidence';
 import { buildAgentWorkspace, parseAgentCitationTarget, resolveAgentWorkspaceLocation } from '../lib/agent/workspace';
 import { getAgentCitedParagraph } from '../components/chat/agent/presentation';
 
@@ -56,6 +56,10 @@ test('a later answer badges numbers from an earlier turn', () => {
     assert.deepEqual(found, [1, 2, 3, 4], 'numbers continue across turns and a later answer can cite every earlier source');
 });
 
+test('an earlier answer cannot badge numbers a later turn found', () => {
+    const messages = [{ ...answer([knowledge('earlier', [1, 2])], '首轮[1][2][3]。'), id: 'first' }, { id: 'plain', agent: undefined }, { ...answer([knowledge('late', [3])], '[3]'), id: 'second' }];
+    assert.deepEqual(getConversationCitationLimits(messages), [['first', 2], ['plain', 2], ['second', 3]]);
+});
 
 test('adjacent citations survive the reference link their numeric brackets parse as', () => {
     const processor = unified().use(remarkParse).use(remarkGfm).use(remarkCitations, { isKnown: known(1, 2, 3, 4) });

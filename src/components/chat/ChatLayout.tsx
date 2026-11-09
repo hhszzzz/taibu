@@ -319,7 +319,8 @@ export function ChatLayout(props: ChatLayoutProps) {
         ? [...props.agent.run.message.agent?.parts ?? []].reverse().find((part): part is Extract<AgentPart, { type: 'question' }> => part.type === 'question') : undefined;
     const hasWorkspace = isAgentMode || Boolean(latestAgentData);
     const workspaceOpen = hasWorkspace && openWorkspaceKey === workspaceKey;
-    const resultWorkspace = useMemo(() => ({ openResource, shown: workspaceOpen ? workspaceShown : null }), [openResource, workspaceOpen, workspaceShown]);
+    const [previewCite, setPreviewCite] = useState<number | null>(null);
+    const resultWorkspace = useMemo(() => ({ openResource, previewCite: setPreviewCite, shown: workspaceOpen ? workspaceShown : null }), [openResource, workspaceOpen, workspaceShown]);
     // The chat sidebar folds to its rail while the workspace is open beside the conversation.
     useEffect(() => {
         setChatWorkspaceOpen(workspaceOpen);
@@ -724,7 +725,7 @@ export function ChatLayout(props: ChatLayoutProps) {
                 entering={enteringKey === workspaceKey} leaving={!workspaceOpen}
                 data={latestAgentData} answers={questionAnswers} userId={userId}
                 onClose={closeWorkspace} onChartQuestion={askAboutChart} onShownChange={updateWorkspaceShown} requestedResource={resourceRequest?.scope === workspaceKey ? resourceRequest : undefined}
-                citedParagraph={citedParagraph} />}
+                citedParagraph={citedParagraph} previewCite={previewCite} />}
 
             {children}
             <ShortcutSheet open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />

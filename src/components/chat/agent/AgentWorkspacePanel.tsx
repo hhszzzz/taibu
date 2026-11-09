@@ -76,7 +76,7 @@ function readSavedWorkspace(workspaceKey: string): Partial<SavedWorkspace> {
 }
 
 /** One resource's view, chosen by its tool family. Any rendering error falls back to the tool's canonical text. */
-function ResourceView({ resource, model, data, answers, questionIds, userId, artifacts, numbers, followModel, live, namedToolId, cite, citedParagraph, draftScope, onOpen, onChartQuestion }: {
+function ResourceView({ resource, model, data, answers, questionIds, userId, artifacts, numbers, followModel, live, namedToolId, cite, previewCite, citedParagraph, draftScope, onOpen, onChartQuestion }: {
     resource: AgentWorkspaceResource; model: AgentWorkspaceModel; data?: AgentMessageData;
     answers: ReadonlyMap<string, AgentQuestionAnswer>; questionIds: ReadonlyMap<string, string>; userId: string | null;
     artifacts: AgentArtifact[];
@@ -86,7 +86,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
     /** The model is working, so the view may say whether it is being followed. */
     live: boolean;
     /** A call of this view the reader opened by name, from its step or a citation, while not following. */
-    namedToolId: string | null; cite: number | null;
+    namedToolId: string | null; cite: number | null; previewCite: number | null;
     citedParagraph?: (cite: number) => number | null;
     /** Owner and conversation of the answer panel's drafts; the task and question complete the key. */
     draftScope: string;
@@ -108,7 +108,10 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
             const pinned = opened?.reference === reference ? opened : null;
             const drilldowns = tools.filter(tool => getAgentToolFamily(tool.name) === 'drilldown');
             const drilldownList = <DrilldownList tools={drilldowns} runStatus={runStatus} onLocate={tool => onOpen('tool:' + tool.id)} />;
-            const focus = pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null);
+            const previewed = previewCite === null ? undefined : model.evidence.find(item => item.n === previewCite);
+            // 没有盘位的依据（只读了整张盘）不清空当前高亮。
+            const preview = previewed?.kind === 'chart' && previewed.focus.reference === reference && previewed.focus.targetIds.length ? previewed.focus : null;
+            const focus = preview ?? pinned ?? (reference ? getLatestChartFocus(model.tools, reference) : null);
             // The calculation that produced the reading, or the saved chart it read back.
             const source = tools.find(tool => isAgentChartTool(tool.name) && getAgentChart(tool)) ?? reading;
             // 旧对话里按宫位查看的结果只有定位目录、没有规范文本：盘面复制与兜底的文本取最近一次带规范文本的读取。
@@ -177,7 +180,7 @@ function ResourceView({ resource, model, data, answers, questionIds, userId, art
     return latest ? <ChartErrorBoundary resetKey={latest} fallback={<WorkspaceTextFallback tool={latest} note="这个视图暂时无法显示，已改为工具返回的规范文本。" />}>{body}</ChartErrorBoundary> : <>{body}</>;
 }
 
-export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, answers, userId, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph, entering = false, leaving = false }: {
+export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, answers, userId, onClose, workspaceKey, requestedResource, onChartQuestion, onShownChange, citedParagraph, previewCite = null, entering = false, leaving = false }: {
     workspaceKey: string;
     /** Opened just now by the reader or by the model's first board: slides in. Restored with its conversation: appears as is. */
     entering?: boolean;
@@ -196,6 +199,8 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
     /** Reports the tool view on screen so the chat can mark its step and result card. */
     onShownChange?: (shown: AgentWorkspaceShown | null) => void;
     /** The paragraph of the answer that cites a number, counted from 1. */
+    /** 回答里正被指着的编号：盘面临时只亮它的位置。 */
+    previewCite?: number | null;
     citedParagraph?: (cite: number) => number | null;
 }) {
     const desktop = useIsDesktopLayout();
@@ -515,7 +520,7 @@ export function AgentWorkspacePanel({ parts, artifacts, data, attachmentIds, ans
                 {/* 按资源建视图：换一个标签就是换一页，入场动效（.agent-panel-scroll > *）随之重放。 */}
                 {activeResource
                     ? <ResourceView key={activeResource.id} resource={activeResource} model={model} data={data} answers={answers ?? new Map()} questionIds={questionIds} userId={userId ?? null}
-                        artifacts={artifacts} numbers={numbers} followModel={following} live={working} namedToolId={inView(namedTool)} cite={activeCite} citedParagraph={citedParagraph}
+                        artifacts={artifacts} numbers={numbers} followModel={following} live={working} namedToolId={inView(namedTool)} cite={activeCite} previewCite={previewCite} citedParagraph={citedParagraph}
                         draftScope={workspaceKey} onOpen={open} onChartQuestion={onChartQuestion} />
                     : <WorkspaceOverview model={model} artifacts={artifacts} saved={saved} onOpen={open} />}
             </div>}

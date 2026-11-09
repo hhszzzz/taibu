@@ -12,6 +12,8 @@ export interface AgentWorkspaceShown {
 
 export interface AgentResultWorkspace {
     openResource: (id: string) => void;
+    /** 指着回答里的编号时，工作区的盘面临时只亮它的位置；离开时传 null。 */
+    previewCite?: (cite: number | null) => void;
     /** Absent or null while the workspace is closed or shows a section rather than a tool view. */
     shown?: AgentWorkspaceShown | null;
 }

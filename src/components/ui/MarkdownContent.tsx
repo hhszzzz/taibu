@@ -40,6 +40,8 @@ export interface MarkdownCitations {
     /** The number whose source is open, marked on its badges. */
     active?: number | null;
     onOpen?: (cite: number) => void;
+    /** Pointing at or focusing a badge previews its source; null when it leaves. */
+    onPreview?: (cite: number | null) => void;
 }
 
 interface MarkdownContentProps {
@@ -161,7 +163,9 @@ const MarkdownBlock = memo(function MarkdownBlock({ content, className, messageS
                 // Without a workspace to open the source in, the badge only names it.
                 if (!open) return <sup className="md-cite" data-cite={cite} title={label}>{cite}</sup>;
                 return <Button unstyled className="md-cite" data-cite={cite} data-active={citations.active === cite || undefined}
-                    aria-label={`依据 ${cite}：${label}`} title={label} onClick={() => open(cite)}>{cite}</Button>;
+                    aria-label={`依据 ${cite}：${label}`} title={label} onClick={() => open(cite)}
+                    onPointerEnter={() => citations.onPreview?.(cite)} onPointerLeave={() => citations.onPreview?.(null)}
+                    onFocus={() => citations.onPreview?.(cite)} onBlur={() => citations.onPreview?.(null)}>{cite}</Button>;
             },
         } satisfies Partial<Components> : {}),
     }), [textClass, citations]);

@@ -47,6 +47,9 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
   const chips = [...new Map(selected.map(target => [target.label, target.id])).entries()];
   const viewportRef = useRef<HTMLDivElement>(null);
   const [chipsOpen, setChipsOpen] = useState(false);
+  // 指着清单里的一处时，盘面只亮这一处，其余查看的位置先退后。
+  const [pointed, setPointed] = useState<string | null>(null);
+  const shown = useMemo(() => pointed && selected.some(target => target.id === pointed) ? selected.filter(target => target.id === pointed) : selected, [pointed, selected]);
   const first = selected[0];
   const scrollTarget = first?.kind === 'bazi_relation'
     ? targets.find(target => target.kind === 'bazi_cell' && first.relation.位置.some(cell => target.cell.柱 === cell.柱 && target.cell.部位 === cell.部位))?.id
@@ -134,11 +137,15 @@ export function AgentInteractiveChart({ value, tool, reference, focus, followMod
     {/* 有位置清单时，说明与清单一起收进「N 处」：收起只剩标题一行。 */}
     {chipsOpen && chips.length > 0 && <div className="agent-board-focus-detail">
       {caption && <p className="agent-board-caption">{caption}</p>}
-      <ul className="agent-board-chips" aria-label="盘面位置">{chips.map(([label, id]) => <li key={id}>{label}</li>)}</ul>
+      <ul className="agent-board-chips" aria-label="盘面位置" onPointerLeave={() => setPointed(null)}>{chips.map(([label, id]) => <li key={id}>
+        <Button unstyled type="button" className="agent-board-chip" aria-pressed={pointed === id} title="在盘面上只看这一处"
+          onPointerEnter={() => setPointed(id)} onFocus={() => setPointed(id)} onBlur={() => setPointed(null)}
+          onClick={() => setPointed(current => current === id ? null : id)}>{label}</Button>
+      </li>)}</ul>
     </div>}
     <div ref={viewportRef} className="agent-chart-scroll" tabIndex={0} aria-label={value.title + '内容'}>
       <ChartErrorBoundary resetKey={value.chart} fallback={<pre className="agent-board-fallback">{text ?? '命盘数据暂时无法显示'}</pre>}>
-        <CanonicalChartView value={value} targets={selected} includeRelated={related} onTargetSelect={onAsk ? askTarget : undefined} baziOverlay={baziOverlay} />
+        <CanonicalChartView value={value} targets={shown} includeRelated={related} onTargetSelect={onAsk ? askTarget : undefined} baziOverlay={baziOverlay} />
       </ChartErrorBoundary>
     </div>
     {value.kind === 'bazi' && !value.chart.干支关系明细 && <p className="agent-board-legacy">

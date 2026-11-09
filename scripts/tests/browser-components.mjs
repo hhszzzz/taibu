@@ -171,6 +171,7 @@ function AgentResultsProbe() {
   const [open, setOpen] = useState(false);
   const [request, setRequest] = useState(undefined);
   const [shown, setShown] = useState(null);
+  const [previewCite, setPreviewCite] = useState(null);
   const [bare, setBare] = useState(false);
   window.fixture.resultsWithoutWorkspace = setBare;
   // ChatLayout 通过 context 下发对话记录视图；夹具直接切换普通 / 详细。
@@ -247,6 +248,17 @@ function AgentResultsProbe() {
       ] },
       { type: 'text', id: 'cited-answer', text: '古籍说庚金刚健[' + (base + 1) + ']。\n\n用神专求月令[' + (base + 2) + ']，[' + (base + 9) + '] 不是本任务的依据。' }];
   });
+  // 一条带编号的盘面依据（月支）与引用它的回答：悬停编号时盘面临时只亮月支。
+  window.fixture.citedPosition = (on = true) => setParts(current => {
+    const previous = current.filter(part => !part.id.startsWith('cited-position'));
+    if (!on) return previous;
+    const base = getAgentEvidence(previous).at(-1)?.n ?? 0;
+    window.fixture.positionCite = base + 1;
+    return [...previous,
+      { type: 'tool', id: 'cited-position', name: 'focus_chart', title: '定位分析位置', status: 'completed',
+        output: { cite: base + 1, chartFocus: { version: 1, reference: 'bazi_chart:11111111-1111-4111-8111-111111111111', targetIds: ['bazi:cell:1:1'], includeRelated: false, caption: '月支' } } },
+      { type: 'text', id: 'cited-position-answer', text: '月支是提纲[' + (base + 1) + ']。' }];
+  });
   window.fixture.chartTool = kind => parts.find(tool => tool.name === kind).output.result;
   window.fixture.chartTargets = kind => getChartTargets(getAgentChart(parts.find(tool => tool.name === kind)));
   window.fixture.chartFocus = (kind, ids, caption, savedReference) => {
@@ -276,14 +288,16 @@ function AgentResultsProbe() {
     return [...previous.filter(tool => !tool.id.startsWith('drill-')), ...(on ? parts : [])];
   });
   window.fixture.traditionalTaiyi = () => setParts(previous => previous.filter(tool => tool.id !== 'inspect-taiyi').map(tool => tool.name === 'taiyi' ? TRADITIONAL_TAIYI_FIXTURE_PART : tool));
+  // Like ChatLayout: one context value per shown state, so pointing at a badge does not remount the answer.
+  const workspace = useMemo(() => ({ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); }, previewCite: setPreviewCite, shown: open ? shown : null }), [open, shown]);
   // Without a provider the message is what a reader sees outside the chat workspace.
   if (bare) return <section data-testid="agent-results"><AgentMessage data={data} /></section>;
-  return <section data-testid="agent-results"><ChatRecordViewContext.Provider value={recordView}><AgentResultContext.Provider value={{ openResource(id) { setRequest(previous => ({ id, version: (previous?.version ?? 0) + 1 })); setOpen(true); }, shown: open ? shown : null }}>
+  return <section data-testid="agent-results"><ChatRecordViewContext.Provider value={recordView}><AgentResultContext.Provider value={workspace}>
     <AgentMessage data={data} />
     <button onClick={() => { setRequest(previous => ({ id: 'chart:bazi', version: (previous?.version ?? 0) + 1 })); setOpen(true); }}>恢复已有成果标签</button>
     {open && <AgentWorkspacePanel workspaceKey={(user?.id ?? 'visitor') + ':ui-fixture'} artifacts={fixtureArtifacts} parts={parts} attachmentIds={[]} data={data}
       answers={answers} userId={user?.id ?? null} requestedResource={request} onShownChange={setShown} onChartQuestion={ask => { window.fixture.chartQuestion = ask; }} onClose={() => setOpen(false)}
-      citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} />}
+      citedParagraph={cite => getAgentCitedParagraph([{ agent: data, content: agentMessageContent(parts) }], cite)} previewCite={previewCite} />}
   </AgentResultContext.Provider></ChatRecordViewContext.Provider>
     {/* 右栏结构探针：隐藏渲染，只用于断言「固定宽度、无拖拽手柄」。 */}
     <div hidden data-testid="session-rail-probe"><SessionDetailsPanel data={data} /></div>
@@ -3520,6 +3534,32 @@ export async function run(existingPage, bundlePath) {
     await interactive.getByRole('button', { name: '展开查看的位置', exact: true }).click();
     check('A relation also becomes a chart question while the model focus stays authoritative', await interactive.locator('.agent-board-focus-detail').innerText().then(text => text.includes('模型查看日支')) &&
       await interactive.locator('.agent-board-chips li').allInnerTexts().then(texts => texts.length === 1 && texts[0] === '日柱地支 辰'));
+    // 指着清单里的一处时，盘面只亮这一处；离开后两处都回来。
+    await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1', 'bazi:cell:1:1'], '模型查看日支与月支'));
+    await interactive.locator('.agent-board-chip').nth(1).waitFor();
+    const pressedCells = () => interactive.locator('[data-chart-target^="bazi:cell:"][aria-pressed=true]').evaluateAll(nodes => nodes.map(node => node.dataset.chartTarget).sort());
+    await interactive.locator('.agent-board-chip').filter({ hasText: '月柱地支' }).hover();
+    await renderBarrier();
+    const pointedOnly = JSON.stringify(await pressedCells());
+    await page.mouse.move(0, 0);
+    await renderBarrier();
+    check('Pointing at one listed position lights only it on the board, and leaving restores them all',
+      pointedOnly === JSON.stringify(['bazi:cell:1:1']) && JSON.stringify(await pressedCells()) === JSON.stringify(['bazi:cell:1:1', 'bazi:cell:2:1']));
+    await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
+    await page.evaluate(() => window.fixture.citedPosition());
+    await page.evaluate(() => window.fixture.chartFocus('bazi', ['bazi:cell:2:1'], '模型查看日支'));
+    const positionCite = await page.evaluate(() => window.fixture.positionCite);
+    const positionBadge = page.locator('.md-cite[data-cite="' + positionCite + '"]').first();
+    await positionBadge.waitFor();
+    await interactive.locator('[data-chart-target="bazi:cell:2:1"][aria-pressed=true]').waitFor();
+    await positionBadge.hover();
+    await renderBarrier();
+    const previewed = JSON.stringify(await pressedCells());
+    await page.mouse.move(0, 0);
+    await renderBarrier();
+    check('Pointing at a cited number in the answer previews its positions on the board, and leaving restores the model focus',
+      previewed === JSON.stringify(['bazi:cell:1:1']) && JSON.stringify(await pressedCells()) === JSON.stringify(['bazi:cell:2:1']));
+    await page.evaluate(() => window.fixture.citedPosition(false));
     // 五行详查补进盘面：干支自坐与相邻天干画成线，通根与月令透出标在藏干旁并写出所指的天干。
     const wuxingFacts = await page.evaluate(() => {
       const result = window.fixture.baziDrilldownResult('bazi_wuxing');

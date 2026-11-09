@@ -56,7 +56,9 @@
 .agent-board-chips-toggle svg { transition: transform .12s var(--ease-out); }
 .agent-board-chips-toggle svg.is-open { transform: rotate(180deg); }
 .agent-board-chips { display: flex; flex-wrap: wrap; gap: 4px; margin: 0; padding: 0; list-style: none; }
-.agent-board-chips > li { padding: 1px 6px; border-radius: 4px; background: var(--fill-field); font-size: calc(11.5 / 16 * 1rem); line-height: 18px; color: var(--foreground-secondary); overflow-wrap: anywhere; }
+.agent-board-chips > li { display: flex; }
+.agent-board-chip { padding: 1px 6px; border-radius: 4px; background: var(--fill-field); font-size: calc(11.5 / 16 * 1rem); line-height: 18px; color: var(--foreground-secondary); overflow-wrap: anywhere; text-align: left; }
+.agent-board-chip:hover, .agent-board-chip[aria-pressed=true] { background: var(--fill-ghost-hover); color: var(--foreground); }
 /* While the model looks at positions the rest recede. A unit (palace, line, card, lesson…) carries
    data-chart-selected="true|false", a control aria-pressed, and palaces looked at alongside (三方四正)
    data-chart-related. A unit stays lit when it is looked at, holds something looked at, or sits inside

@@ -29,8 +29,8 @@ function useAnswerCitations(data: AgentMessageData, citationLabels?: MarkdownCit
   const workspace = useAgentResultWorkspace();
   const labels = useMemo(() => citationLabels ?? getAgentCitationLabels(data.parts), [citationLabels, data.parts]);
   const active = workspace?.shown?.cite ?? null;
-  const openResource = workspace?.openResource;
-  return useMemo(() => labels?.size ? { labels, active, onOpen: openResource && ((cite: number) => openResource(`cite:${cite}`)) } : undefined, [labels, active, openResource]);
+  const openResource = workspace?.openResource, previewCite = workspace?.previewCite;
+  return useMemo(() => labels?.size ? { labels, active, onOpen: openResource && ((cite: number) => openResource(`cite:${cite}`)), onPreview: previewCite } : undefined, [labels, active, openResource, previewCite]);
 }
 
 type ArchiveEntry = { id: string; kind: 'card'; card: AgentArchiveCard } | { id: string; kind: 'record'; record: AgentArchiveRecord };

@@ -12,19 +12,20 @@ import { Textarea } from '@/components/ui/Textarea';
 import { Button } from '@/components/ui/Button';
 import { IconButton } from '@/components/ui/IconButton';
 import { Switch } from '@/components/ui/Switch';
-import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { useId, useMemo, useState } from 'react';
-import { PenLine, Sunrise, X } from 'lucide-react';
+import { ChevronDown, X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { useToast } from '@/components/ui/Toast';
-import type { AIReasoningEffort } from '@/types';
+import { AI_REASONING_EFFORTS, type AIReasoningEffort } from '@/types';
 import type { AgentCollaborator } from '@/lib/chat/model-settings';
 import { useAvailableModels } from '@/lib/hooks/useAvailableModels';
+import { REASONING_EFFORT_LABELS } from '@/lib/chat/model-settings';
 import { useOwnModels } from '@/lib/byok/client';
 import { useUserCharts } from '@/lib/hooks/useUserCharts';
 import { listSavedBaziCharts } from '@/lib/user/charts-client';
 import { agentScheduleClient } from '@/lib/agent/schedules/client';
-import { browserTimeZone, timeZoneOptions } from '@/lib/timezones';
+import { browserTimeZone } from '@/lib/timezones';
+import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import {
   AGENT_SCHEDULE_INTERVAL_HOURS_MAX, AGENT_SCHEDULE_NAME_MAX, AGENT_SCHEDULE_PROMPT_MAX,
   AGENT_SCHEDULE_WEEKDAY_LABELS, DAILY_BRIEFING_PROMPT, defaultAgentScheduleOptions,
@@ -38,7 +39,7 @@ type Draft = {
   name: string;
   template: AgentScheduleTemplate;
   prompt: string;
-  kind: AgentScheduleKind;
+  kind: AgentScheduleKind | 'workdays';
   time: string;
   weekdays: number[];
   monthDay: string;
@@ -47,7 +48,6 @@ type Draft = {
   model: string;
   reasoning: boolean;
   reasoningEffort: AIReasoningEffort | null;
-  webEnabled: boolean;
   baziChartId: string;
   notify: boolean;
   knowledgeBaseIds: string[];
@@ -57,25 +57,48 @@ type Draft = {
 const CUSTOM: AgentScheduleTemplate = 'custom';
 const BRIEFING: AgentScheduleTemplate = 'daily_briefing';
 
-const TEMPLATES: ReadonlyArray<{ id: AgentScheduleTemplate; title: string; detail: string; icon: typeof PenLine }> = [
-  { id: CUSTOM, title: '自定义', detail: '从空白开始写要它做什么', icon: PenLine },
-  { id: BRIEFING, title: '每日早报', detail: '按绑定命盘生成当天运势与建议', icon: Sunrise },
+const TEMPLATES: ReadonlyArray<{ id: AgentScheduleTemplate; title: string }> = [
+  { id: CUSTOM, title: '自定义' },
+  { id: BRIEFING, title: '每日早报' },
 ];
 
-const KINDS: ReadonlyArray<{ value: AgentScheduleKind; label: string }> = [
+/** 时间下拉：每 15 分钟一档；已有任务的非整档时间原样保留为一项。 */
+function timeOfDayOptions(current: string): Array<{ value: string; label: string }> {
+  const options: Array<{ value: string; label: string }> = [];
+  for (let minutes = 0; minutes < 24 * 60; minutes += 15) {
+    const value = `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+    options.push({ value, label: value });
+  }
+  if (/^\d{2}:\d{2}$/u.test(current) && !options.some(option => option.value === current)) options.push({ value: current, label: current });
+  return options;
+}
+
+const WORKDAYS = [1, 2, 3, 4, 5];
+
+const MONTH_DAYS = Array.from({ length: 31 }, (_, index) => ({ value: String(index + 1), label: `${index + 1} 日` }));
+
+const INTERVAL_HOURS = Array.from({ length: AGENT_SCHEDULE_INTERVAL_HOURS_MAX }, (_, index) => ({ value: String(index + 1), label: `${index + 1} 小时` }));
+
+const KINDS: ReadonlyArray<{ value: AgentScheduleKind | 'workdays'; label: string }> = [
   { value: 'daily', label: '每天' },
+  { value: 'workdays', label: '工作日' },
   { value: 'weekly', label: '每周' },
   { value: 'monthly', label: '每月' },
   { value: 'interval', label: '固定间隔' },
 ];
+
+/** 旧模板末尾那句“附了命盘…不猜测”不再随早报发送，编辑时一并去掉。 */
+function trimBriefingPrompt(prompt: string): string {
+  return prompt.replace(/附了命盘就结合命盘，没有就给一般建议并说明；没有可用数据时如实说明，不猜测。/u, '').trim();
+}
 
 function draftFromSchedule(schedule: AgentScheduleView): Draft {
   const cadence = schedule.cadence;
   return {
     name: schedule.name,
     template: schedule.template,
-    prompt: schedule.prompt,
-    kind: cadence.kind,
+    prompt: schedule.template === BRIEFING ? trimBriefingPrompt(schedule.prompt) : schedule.prompt,
+    kind: cadence.kind === 'weekly' && WORKDAYS.length === cadence.weekdays.length && WORKDAYS.every(day => cadence.weekdays.includes(day)) ? 'workdays' : cadence.kind,
     time: cadence.time,
     weekdays: cadence.kind === 'weekly' ? cadence.weekdays : [1],
     monthDay: cadence.kind === 'monthly' ? String(cadence.day) : '1',
@@ -84,7 +107,6 @@ function draftFromSchedule(schedule: AgentScheduleView): Draft {
     model: schedule.options.model ?? '',
     reasoning: schedule.options.reasoning,
     reasoningEffort: schedule.options.reasoningEffort,
-    webEnabled: schedule.options.webEnabled,
     baziChartId: schedule.options.baziChartId ?? '',
     notify: schedule.options.notify,
     knowledgeBaseIds: schedule.options.knowledgeBaseIds,
@@ -98,19 +120,26 @@ function draftFromTemplate(template: AgentScheduleTemplate): Draft {
     return {
       name: '每日早报', template: BRIEFING, prompt: DAILY_BRIEFING_PROMPT,
       kind: 'daily', time: '08:00', weekdays: [1], monthDay: '1', intervalHours: '6',
-      timezone: browserTimeZone(), model: '', reasoning: false, reasoningEffort: null, webEnabled: false,
+      timezone: browserTimeZone(), model: '', reasoning: false, reasoningEffort: null,
       baziChartId: '', notify: true, knowledgeBaseIds: [], collaborators: [],
     };
   }
   return {
     name: '', template: CUSTOM, prompt: '', kind: 'daily', time: '08:00', weekdays: [1],
     monthDay: '1', intervalHours: '6', timezone: browserTimeZone(), model: '', reasoning: false,
-    reasoningEffort: null, webEnabled: true, baziChartId: '', notify: true,
+    reasoningEffort: null, baziChartId: '', notify: true,
     knowledgeBaseIds: [], collaborators: [],
   };
 }
 
+/** 固定间隔以当前时刻为锚，不让用户再选时间。 */
+function nowClock(): string {
+  const now = new Date();
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+}
+
 function cadenceOf(draft: Draft): AgentScheduleCadence {
+  if (draft.kind === 'workdays') return { kind: 'weekly', weekdays: [...WORKDAYS], time: draft.time };
   if (draft.kind === 'weekly') return { kind: 'weekly', weekdays: [...draft.weekdays].sort((a, b) => a - b), time: draft.time };
   if (draft.kind === 'monthly') return { kind: 'monthly', day: Number(draft.monthDay), time: draft.time };
   if (draft.kind === 'interval') return { kind: 'interval', hours: Number(draft.intervalHours), time: draft.time };
@@ -136,6 +165,7 @@ export function ScheduleEditor({
   const charts = useMemo(() => listSavedBaziCharts(chartsQuery.data), [chartsQuery.data]);
   const [draft, setDraft] = useState<Draft>(() => schedule ? draftFromSchedule(schedule) : draftFromTemplate(template ?? CUSTOM));
   const [saving, setSaving] = useState(false);
+  const [advancedOpen, setAdvancedOpen] = useState(false);
   const [error, setError] = useState('');
   const editing = Boolean(schedule);
   // 无人值守：自己的模型只列 Key 保存在本站的（由本站代为请求）。
@@ -145,11 +175,35 @@ export function ScheduleEditor({
   ];
   const patch = (value: Partial<Draft>) => setDraft(current => ({ ...current, ...value }));
   const noChart = draft.template === BRIEFING ? '默认命盘' : '不绑定';
+  // 没选模型时用上次在聊天里用过的模型（账户级缓存保存在本机）；缓存不可用时按平台默认。
+  const lastUsedModel = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    try {
+      const raw = JSON.parse(localStorage.getItem(`taibu.next-task:${userId}`) ?? 'null') as { model?: unknown } | null;
+      return typeof raw?.model === 'string' ? raw.model : '';
+    } catch { return ''; }
+  }, [userId]);
+  const preferredModel = models.some(item => item.value === lastUsedModel) ? lastUsedModel
+    : models.some(item => item.value === DEFAULT_MODEL_ID) ? DEFAULT_MODEL_ID : models[0]?.value ?? '';
+  const modelValue = draft.model || preferredModel;
+  // 思考强度与聊天里的模型菜单一致：已知模型只列它支持的档位，不知道时列出全部。
+  const effortLevels = useMemo(() => {
+    const model = (modelsQuery.data ?? []).find(item => item.id === modelValue)
+      ?? own.models.find(item => item.ref === modelValue);
+    return model?.thinkingLevels ?? [];
+  }, [modelValue, modelsQuery.data, own.models]);
+  const effortOptions = [
+    { value: '', label: '模型默认' },
+    ...AI_REASONING_EFFORTS.filter(level => !effortLevels.length || effortLevels.includes(level))
+      .map(level => ({ value: level as string, label: REASONING_EFFORT_LABELS[level] })),
+    { value: 'off', label: '关闭推理' },
+  ];
+  const effortValue = draft.reasoning ? draft.reasoningEffort ?? '' : 'off';
 
   const chooseTemplate = (next: AgentScheduleTemplate) => {
     if (editing) return;
     if (next === BRIEFING) {
-      patch({ template: next, name: '每日早报', prompt: DAILY_BRIEFING_PROMPT, kind: 'daily', webEnabled: false });
+      patch({ template: next, name: '每日早报', prompt: DAILY_BRIEFING_PROMPT, kind: 'daily' });
     } else {
       patch({ template: next });
     }
@@ -161,10 +215,10 @@ export function ScheduleEditor({
     try {
       const options: AgentScheduleOptions = {
         ...defaultAgentScheduleOptions(),
-        model: draft.model || null,
+        model: modelValue || null,
         reasoning: draft.reasoning,
         reasoningEffort: draft.reasoningEffort,
-        webEnabled: draft.webEnabled,
+        webEnabled: true,
         baziChartId: draft.baziChartId || null,
         notify: draft.notify,
         knowledgeBaseIds: draft.knowledgeBaseIds,
@@ -176,6 +230,8 @@ export function ScheduleEditor({
       });
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : '填写有误');
+      // 出错的多是需要填写的项：把高级展开，别让它在收起时看不见。
+      setAdvancedOpen(true);
       return;
     }
     setSaving(true);
@@ -192,147 +248,117 @@ export function ScheduleEditor({
     }
   };
 
-  const sectionHead = (title: string, detail?: string) => (
-    <div className="sched-section-head">
-      <h3>{title}</h3>
-      {detail && <p>{detail}</p>}
-    </div>
-  );
-
   return (
     <Dialog bare open={open} onClose={onClose} labelledBy={headingId} busy={saving} className="schedule-editor-dialog">
       <div className="sched-shell">
         <header className="sched-head">
-          <div className="sched-head-text">
-            <h2 id={headingId}>{editing ? '编辑定时任务' : '新建定时任务'}</h2>
-            <p>到点后 Agent 会按下面的内容运行，每一轮都会追加到绑定的对话。</p>
-          </div>
+          <h2 id={headingId}>{editing ? '编辑定时任务' : '新建定时任务'}</h2>
           <IconButton label="关闭" title="关闭" size="md" expand="none" className="rounded-lg" disabled={saving} onClick={onClose}><X size={16} aria-hidden="true" /></IconButton>
         </header>
 
         <div className="sched-body">
-          {!editing && <section className="sched-section">
-            {sectionHead('模板', '只决定初始内容，之后都可以改。')}
-            <div className="sched-templates" role="radiogroup" aria-label="任务模板">
-              {TEMPLATES.map(({ id, title, detail, icon: Icon }) => (
-                <Button unstyled key={id} type="button" role="radio" aria-checked={draft.template === id} className="sched-template"
-                  disabled={saving} onClick={() => chooseTemplate(id)}>
-                  <span className="sched-template-icon"><Icon size={16} aria-hidden="true" /></span>
-                  <span className="sched-template-text"><strong>{title}</strong><small>{detail}</small></span>
-                </Button>
-              ))}
-            </div>
-          </section>}
-
-          <section className="sched-section">
-            {sectionHead('内容')}
-            <label className="sched-field"><span>任务名称</span>
-              <Input className="sched-input" aria-label="任务名称" value={draft.name} maxLength={AGENT_SCHEDULE_NAME_MAX} disabled={saving}
-                placeholder="例如：每日早报" onChange={event => patch({ name: event.target.value })} />
-            </label>
-            <label className="sched-field"><span>要太卜做什么</span>
-              <Textarea className="sched-textarea" rows={5} value={draft.prompt} maxLength={AGENT_SCHEDULE_PROMPT_MAX}
-                disabled={saving} placeholder="例如：结合我的命盘，写一段今天的工作与生活提示。"
-                onChange={event => patch({ prompt: event.target.value })} />
-            </label>
+          <div className="sched-prompt-block">
+            <Textarea className="sched-prompt" rows={6} aria-label="要太卜做什么" value={draft.prompt} maxLength={AGENT_SCHEDULE_PROMPT_MAX}
+              disabled={saving} placeholder="说明…例如：结合我的命盘，每天早上给我今天的工作与生活提示。"
+              onChange={event => patch({ prompt: event.target.value })} />
             <p className="sched-hint">像平时聊天一样写需求即可；绑定命盘会像聊天里的资料引用一起交给太卜。</p>
-          </section>
+          </div>
 
-          <section className="sched-section">
-            {sectionHead('时间')}
-            <SegmentedControl
-              ariaLabel="执行频率"
-              mode="radio"
-              indicator={false}
-              value={draft.kind}
-              onChange={kind => patch({ kind })}
-              options={KINDS.map(kind => ({ value: kind.value, label: kind.label, disabled: saving }))}
-              className="sched-segmented h-auto"
-            />
-            <div className="sched-grid">
-              {draft.kind === 'monthly' && <label className="sched-field"><span>每月日期</span>
-                <span className="sched-with-unit">
-                  <Input className="sched-input" aria-label="每月日期" inputMode="numeric" value={draft.monthDay} disabled={saving}
-                    onChange={event => patch({ monthDay: event.target.value })} />
-                  <span>日</span>
-                </span>
-              </label>}
-              {draft.kind === 'interval' && <label className="sched-field"><span>间隔</span>
-                <span className="sched-with-unit">
-                  <Input className="sched-input" aria-label="间隔小时" inputMode="numeric" value={draft.intervalHours} disabled={saving}
-                    onChange={event => patch({ intervalHours: event.target.value })} />
-                  <span>小时</span>
-                </span>
-              </label>}
-              <label className="sched-field"><span>执行时间</span>
-                <Input className="sched-input" aria-label="执行时间" type="time" value={draft.time} disabled={saving}
-                  onChange={event => patch({ time: event.target.value })} />
-              </label>
-              <label className="sched-field"><span>时区</span>
-                <Select className="sched-select" ariaLabel="时区" value={draft.timezone} disabled={saving}
-                  onChange={timezone => patch({ timezone })}
-                  options={timeZoneOptions(draft.timezone).map(zone => ({ value: zone, label: zone }))} />
-              </label>
+          <div className="sched-group" role="group" aria-label="运行时间">
+            <div className="sched-row">
+              <span className="sched-row-label">重复</span>
+              <Select className="sched-row-select" align="end" ariaLabel="执行频率" value={draft.kind} disabled={saving}
+                onChange={kind => patch(kind === 'interval' ? { kind, time: nowClock() } : { kind })}
+                options={KINDS.map(kind => ({ value: kind.value, label: kind.label, disabled: saving }))} />
             </div>
+            {/* 时区取浏览器所在时区（新建时记下，编辑不改）：这里只选时刻；固定间隔从当前时刻起算，不选。 */}
+            {draft.kind !== 'interval' && <div className="sched-row">
+              <span className="sched-row-label">时间</span>
+              <Select className="sched-row-select" align="end" ariaLabel="执行时间" value={draft.time} disabled={saving}
+                onChange={time => patch({ time })} options={timeOfDayOptions(draft.time)} />
+            </div>}
             {draft.kind === 'weekly' ? (
-              <div className="sched-weekdays" role="group" aria-label="每周运行日">
-                {AGENT_SCHEDULE_WEEKDAY_LABELS.map((label, index) => {
-                  const day = index + 1;
-                  const on = draft.weekdays.includes(day);
-                  return <Button unstyled key={day} type="button" className="sched-day" aria-pressed={on} disabled={saving}
-                    onClick={() => patch({ weekdays: on ? draft.weekdays.filter(item => item !== day) : [...draft.weekdays, day] })}>{label}</Button>;
-                })}
+              <div className="sched-row sched-row-wrap">
+                <span className="sched-row-label">运行日</span>
+                <div className="sched-weekdays" role="group" aria-label="每周运行日">
+                  {AGENT_SCHEDULE_WEEKDAY_LABELS.map((label, index) => {
+                    const day = index + 1;
+                    const on = draft.weekdays.includes(day);
+                    return <Button unstyled key={day} type="button" className="sched-day" aria-pressed={on} disabled={saving}
+                      onClick={() => patch({ weekdays: on ? draft.weekdays.filter(item => item !== day) : [...draft.weekdays, day] })}>{label}</Button>;
+                  })}
+                </div>
               </div>
             ) : null}
-            {draft.kind === 'interval' ? <p className="sched-hint">间隔为 1–{AGENT_SCHEDULE_INTERVAL_HOURS_MAX} 小时，从执行时刻起循环。</p> : null}
-            {draft.kind === 'weekly' && draft.weekdays.length === 0 ? <p className="sched-hint" data-tone="warning">至少选择一天。</p> : null}
-          </section>
+            {draft.kind === 'monthly' ? (
+              <div className="sched-row">
+                <span className="sched-row-label">每月日期</span>
+                <Select className="sched-row-select" align="end" ariaLabel="每月日期" value={draft.monthDay} disabled={saving}
+                  onChange={monthDay => patch({ monthDay })} options={MONTH_DAYS} />
+              </div>
+            ) : null}
+            {draft.kind === 'interval' ? (
+              <div className="sched-row">
+                <span className="sched-row-label">间隔</span>
+                <Select className="sched-row-select" align="end" ariaLabel="间隔小时" value={draft.intervalHours} disabled={saving}
+                  onChange={intervalHours => patch({ intervalHours })} options={INTERVAL_HOURS} />
+              </div>
+            ) : null}
+            {draft.kind === 'weekly' && draft.weekdays.length === 0 ? <p className="sched-row-hint" data-tone="warning">至少选择一天。</p> : null}
+          </div>
 
-          <section className="sched-section">
-            {sectionHead('运行设置')}
-            <div className="sched-grid">
-              <label className="sched-field"><span>模型</span>
-                <Select className="sched-select" ariaLabel="模型" placeholder="跟随默认模型"
-                  value={draft.model || null} disabled={saving}
-                  onChange={model => patch({ model })}
-                  options={models} />
-              </label>
-              <label className="sched-field"><span>绑定命盘</span>
-                {/* 空值在 Base UI 里算未选、显示占位，所以占位与「不选」那一项同名。 */}
-                <Select className="sched-select" ariaLabel="绑定命盘" placeholder={noChart}
-                  value={draft.baziChartId} disabled={saving}
-                  onChange={baziChartId => patch({ baziChartId })}
-                  options={[{ value: '', label: noChart }, ...charts.map(chart => ({ value: chart.id, label: chart.name }))]} />
-              </label>
-            </div>
-            <p className="sched-hint">{draft.template === BRIEFING
-              ? '绑定的命盘按名称随消息附上；选「默认命盘」时，每次运行用「设置 › 命盘」里当时设为默认的那张。'
-              : '绑定的命盘按名称随消息附上；不绑定就不带命盘，和聊天里不 @ 一样。'}</p>
-            <p className="sched-hint">平台模型按实际用量从余额扣费，余额不足时跳过当次运行；自定义模型只能选 Key 保存在本站的，不计费，Key 不可用时跳过并通知。</p>
-            <div className="sched-toggles">
-              <div className="sched-toggle-row">
-                <div><span>推理</span><small>先思考再执行，适合需要分析的晨报与复盘</small></div>
-                <Switch aria-label="推理" checked={draft.reasoning} disabled={saving}
-                  onCheckedChange={checked => patch({ reasoning: checked })} />
+          <div className="sched-advanced">
+            <Button unstyled type="button" className="sched-advanced-toggle" aria-expanded={advancedOpen} onClick={() => setAdvancedOpen(open => !open)}>
+              <span>高级</span><ChevronDown size={15} className={advancedOpen ? 'is-open' : undefined} aria-hidden="true" />
+            </Button>
+            {advancedOpen ? <>
+              {!editing ? <div className="sched-group">
+                <div className="sched-row">
+                  <span className="sched-row-label">模板</span>
+                  <Select className="sched-row-select" align="end" ariaLabel="任务模板" value={draft.template} disabled={saving}
+                    onChange={chooseTemplate} options={TEMPLATES.map(item => ({ value: item.id, label: item.title }))} />
+                </div>
+              </div> : null}
+              <div className="sched-group">
+                <label className="sched-row">
+                  <span className="sched-row-label">任务名称</span>
+                  <Input className="sched-row-input" aria-label="任务名称" value={draft.name} maxLength={AGENT_SCHEDULE_NAME_MAX} disabled={saving}
+                    placeholder="例如：每日早报" onChange={event => patch({ name: event.target.value })} />
+                </label>
+                <div className="sched-row">
+                  <span className="sched-row-label">模型</span>
+                  <Select className="sched-row-select" align="end" ariaLabel="模型" placeholder="暂无可用模型"
+                    value={modelValue || null} disabled={saving} onChange={model => patch({ model })} options={models} />
+                </div>
+                <div className="sched-row">
+                  <span className="sched-row-label">思考强度</span>
+                  <Select className="sched-row-select" align="end" ariaLabel="思考强度" value={effortValue} disabled={saving}
+                    onChange={value => patch(value === 'off' ? { reasoning: false, reasoningEffort: null }
+                      : { reasoning: true, reasoningEffort: value ? value as AIReasoningEffort : null })}
+                    options={effortOptions} />
+                </div>
+                <div className="sched-row">
+                  <span className="sched-row-label">绑定命盘</span>
+                  <Select className="sched-row-select" align="end" ariaLabel="绑定命盘" placeholder={noChart}
+                    value={draft.baziChartId} disabled={saving}
+                    onChange={baziChartId => patch({ baziChartId })}
+                    options={[{ value: '', label: noChart }, ...charts.map(chart => ({ value: chart.id, label: chart.name }))]} />
+                </div>
               </div>
-              <div className="sched-toggle-row">
-                <div><span>联网</span><small>允许搜索与调用已接入的连接器</small></div>
-                <Switch aria-label="联网" checked={draft.webEnabled} disabled={saving}
-                  onCheckedChange={checked => patch({ webEnabled: checked })} />
+              <div className="sched-group">
+                <div className="sched-toggle-row">
+                  <div><span>完成后通知</span><small>任务结束或失败时推送一条通知</small></div>
+                  <Switch aria-label="完成后通知" checked={draft.notify} disabled={saving}
+                    onCheckedChange={checked => patch({ notify: checked })} />
+                </div>
               </div>
-              <div className="sched-toggle-row">
-                <div><span>完成后通知</span><small>任务结束或失败时推送一条通知</small></div>
-                <Switch aria-label="完成后通知" checked={draft.notify} disabled={saving}
-                  onCheckedChange={checked => patch({ notify: checked })} />
-              </div>
-            </div>
-          </section>
+            </> : null}
+          </div>
 
           {error ? <p role="alert" className="sched-error">{error}</p> : null}
         </div>
 
         <footer className="sched-foot">
-          <span className="sched-hint">保存后按设定时间运行</span>
           <div className="sched-actions">
             <Button variant="secondary" size="md" className="h-9 rounded-lg border-border-hover px-3.5 text-[13px]" disabled={saving} onClick={onClose}>取消</Button>
             <Button size="md" className="h-9 rounded-lg px-3.5 text-[13px]" loading={saving} loadingText={editing ? '保存' : '创建任务'} disabled={saving} onClick={() => { void save(); }}>
@@ -343,4 +369,5 @@ export function ScheduleEditor({
       </div>
     </Dialog>
   );
+
 }

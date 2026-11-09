@@ -260,4 +260,4 @@ export function formatAgentScheduleMoment(iso: string | null, timezone: string):
  * The built-in 每日早报 text: what the member wants, not which tools to call. The chart is not named here; it travels
  * with the message as a mention, the bound one or the member's default.
  */
-export const DAILY_BRIEFING_PROMPT = '生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。附了命盘就结合命盘，没有就给一般建议并说明；没有可用数据时如实说明，不猜测。';
+export const DAILY_BRIEFING_PROMPT = '生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。';

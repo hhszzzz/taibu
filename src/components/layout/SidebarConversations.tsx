@@ -169,7 +169,8 @@ export function SidebarConversations({ markers, withinModal = false }: SidebarCo
         const kept: ConversationListItem[] = [];
         let recents = 0;
         for (const conv of visibleConversations) {
-            if (pinnedSet.has(conv.id) || conv.id === activeId || needsAttention(conv.id)) { kept.push(conv); continue; }
+            // 定时任务的对话常驻：不占「查看更多」的条数，也不因列表截断而消失。
+            if (pinnedSet.has(conv.id) || conv.id === activeId || needsAttention(conv.id) || conv.isScheduled) { kept.push(conv); continue; }
             if (recents >= recentsLimit) continue;
             recents += 1;
             kept.push(conv);

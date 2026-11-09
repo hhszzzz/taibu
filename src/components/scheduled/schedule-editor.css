@@ -1,95 +1,82 @@
-/* 定时任务编辑器：分组表单、模板卡片与设置行，与设置中心同一套控件语言。 */
+/* 定时任务编辑器：大输入框 + 分组行（左标签、右控件）+ 高级折叠，与设置中心同一套控件语言。 */
 
 .app-modal.schedule-editor-dialog {
-    width: min(680px, calc(100vw - 32px));
+    width: min(640px, calc(100vw - 32px));
     max-height: min(88dvh, 920px);
     padding: 0;
     overflow: hidden;
     border: .5px solid var(--border-hover);
-    border-radius: 16px;
+    border-radius: 20px;
     background: var(--surface);
 }
 
 .sched-shell { display: flex; flex-direction: column; max-height: min(88dvh, 920px); }
 
-.sched-head { display: flex; align-items: flex-start; gap: 1rem; padding: 1.5rem 1.75rem 1.125rem; border-bottom: 1px solid var(--border); }
-.sched-head-text { flex: 1; min-width: 0; }
+.sched-head { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 1.25rem 1.5rem .5rem; }
 .sched-head h2 { font-family: var(--font-display); font-size: 1.25rem; font-weight: 400; color: var(--foreground); }
-.sched-head p { margin-top: .375rem; font-size: .8125rem; line-height: 1.55; color: var(--foreground-secondary); }
 
-.sched-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1.75rem; padding: 1.25rem 1.75rem 1.75rem; overflow-y: auto; }
+.sched-body { display: flex; flex: 1 1 auto; flex-direction: column; gap: 1.25rem; padding: .75rem 1.5rem 1.5rem; overflow-y: auto; }
+/* 滚动区域里的块不参与压缩：空间不够时滚动，而不是把分组压扁。 */
+.sched-body > * { flex: none; }
 
-.sched-section { display: flex; flex-direction: column; gap: .75rem; }
-.sched-section-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: .375rem .75rem; }
-.sched-section-head h3 { font-size: .8125rem; font-weight: 600; color: var(--foreground); }
-.sched-section-head p { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+/* 说明：整块输入，不另加标签 */
+.sched-prompt-block { display: flex; flex-direction: column; gap: .5rem; }
+.sched-prompt { min-height: 10rem; padding: .875rem 1rem; border-radius: 14px; font-size: .9375rem; line-height: 1.6; resize: vertical; }
 
-/* 模板卡片 */
-.sched-templates { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .625rem; }
-.sched-template { display: flex; align-items: flex-start; gap: .625rem; padding: .75rem .875rem; border: 1px solid var(--border); border-radius: .75rem; background: var(--background); text-align: left; transition: border-color .15s, background-color .15s; }
-.sched-template:hover:not(:disabled) { border-color: var(--border-hover); }
-.sched-template[aria-checked=true] { border-color: color-mix(in srgb, var(--accent) 55%, transparent); background: color-mix(in srgb, var(--accent) 7%, transparent); }
-.sched-template:disabled { opacity: .6; }
-.sched-template-icon { display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; width: 1.75rem; height: 1.75rem; border-radius: .5rem; background: var(--fill-field); color: var(--foreground-secondary); }
-.sched-template[aria-checked=true] .sched-template-icon { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent); }
-.sched-template-text { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
-.sched-template-text strong { font-size: .875rem; font-weight: 500; color: var(--foreground); }
-.sched-template-text small { font-size: .75rem; line-height: 1.45; color: var(--foreground-tertiary); }
+/* 分组卡片：行之间只留发丝线 */
+.sched-group { display: flex; flex-direction: column; overflow: hidden; border: 1px solid var(--border); border-radius: 14px; background: var(--background); }
+.sched-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3rem; padding: .375rem .5rem .375rem 1rem; }
+.sched-row + .sched-row { border-top: 1px solid var(--border); }
+.sched-row-wrap { flex-wrap: wrap; }
+.sched-row-label { flex-shrink: 0; font-size: .875rem; color: var(--foreground); }
+.sched-row-fields { display: flex; min-width: 0; align-items: center; justify-content: flex-end; gap: .25rem; }
 
-/* 字段 */
-.sched-field { display: flex; flex-direction: column; gap: .375rem; min-width: 0; }
-.sched-field > span:first-child { font-size: .75rem; font-weight: 500; color: var(--foreground-secondary); }
-.sched-input, .sched-textarea, .sched-select {
-    width: 100%; border: 1px solid var(--border-hover); border-radius: .5rem; background: var(--background);
-    font-size: .875rem; color: var(--foreground);
-}
-.sched-input, .sched-select { height: 2.25rem; padding: 0 .75rem; }
-.sched-textarea { padding: .625rem .75rem; line-height: 1.6; resize: vertical; }
-.sched-input:focus-visible, .sched-textarea:focus-visible, .sched-select:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
-.sched-input:disabled, .sched-textarea:disabled, .sched-select:disabled { cursor: not-allowed; opacity: .6; }
-.sched-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .75rem 1rem; }
-.sched-with-unit { position: relative; display: block; }
-.sched-with-unit > span { position: absolute; top: 50%; right: .75rem; transform: translateY(-50%); font-size: .75rem; color: var(--foreground-tertiary); pointer-events: none; }
-.sched-with-unit > .sched-input { padding-right: 2.5rem; }
+/* 行内控件：去掉输入框边框，只留悬停与聚焦提示 */
+.sched-row-select { width: auto; max-width: 20rem; height: 2.25rem; border: 0; background: transparent; padding: 0 .5rem; font-size: .875rem; color: var(--foreground-secondary); text-align: right; }
+.sched-row-select:hover { border: 0; background: var(--fill-ghost-hover); color: var(--foreground); }
+.sched-row-input { width: 12rem; max-width: 45vw; height: 2.25rem; border: 0; background: transparent; padding: 0 .5rem; font-size: .875rem; color: var(--foreground-secondary); text-align: right; }
+.sched-row-input:hover { border: 0; background: var(--fill-ghost-hover); }
+.sched-row-input:focus-visible, .sched-row-select:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--background); }
+.sched-row-hint { margin: 0; padding: 0 1rem .625rem; font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+.sched-row-hint[data-tone=warning] { color: var(--danger); }
 
-/* 频率分段 */
-.sched-segmented { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; padding: 2px; border-radius: .75rem; background: var(--background-secondary); }
-.sched-segmented > button { height: 2rem; border-radius: .625rem; font-size: .8125rem; color: var(--foreground-secondary); }
-.sched-segmented > button:hover:not([aria-checked=true]):not(:disabled) { color: var(--foreground); }
-.sched-segmented > button[aria-checked=true] { background: var(--surface); font-weight: 500; color: var(--foreground); box-shadow: 0 1px 2px rgb(0 0 0 / .08); }
-.sched-segmented > button:disabled { opacity: .6; }
 
 /* 星期 */
-.sched-weekdays { display: flex; flex-wrap: wrap; gap: .375rem; }
+.sched-weekdays { display: flex; flex-wrap: wrap; gap: .375rem; padding: .375rem 0; }
 .sched-day { min-width: 2.5rem; height: 2rem; padding: 0 .5rem; border: 1px solid var(--border); border-radius: .5rem; font-size: .8125rem; color: var(--foreground-secondary); }
 .sched-day:hover:not(:disabled) { border-color: var(--border-hover); color: var(--foreground); }
 .sched-day[aria-pressed=true] { border-color: transparent; background: var(--accent); color: var(--on-accent); }
 
+/* 高级：折叠开关 + 其下的分组 */
+.sched-advanced { display: flex; flex-direction: column; gap: 1rem; }
+.sched-advanced-toggle { display: inline-flex; align-self: flex-start; align-items: center; gap: 4px; padding: 0 .25rem; font-size: .875rem; color: var(--foreground-secondary); }
+.sched-advanced-toggle:hover { color: var(--foreground); }
+.sched-advanced-toggle svg { transition: transform .12s var(--ease-out); }
+.sched-advanced-toggle svg.is-open { transform: rotate(180deg); }
+
 /* 说明 */
-.sched-hint { font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
+.sched-hint { margin: 0; padding: 0 .25rem; font-size: .75rem; line-height: 1.5; color: var(--foreground-tertiary); }
 .sched-hint[data-tone=warning] { color: var(--danger); }
 
-/* 运行设置：开关行 */
-.sched-toggles { display: flex; flex-direction: column; }
-.sched-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .625rem 0; border-bottom: 1px solid var(--fill-field); }
-.sched-toggle-row:last-child { border-bottom: 0; padding-bottom: 0; }
+/* 运行设置：开关行与分组行同一套节奏 */
+.sched-toggle-row { display: flex; align-items: center; justify-content: space-between; gap: 1rem; min-height: 3rem; padding: .5rem 1rem; }
+.sched-toggle-row + .sched-toggle-row { border-top: 1px solid var(--border); }
 .sched-toggle-row > div { display: flex; flex-direction: column; gap: .125rem; min-width: 0; }
 .sched-toggle-row > div > span { font-size: .875rem; color: var(--foreground); }
 .sched-toggle-row small { font-size: .75rem; line-height: 1.45; color: var(--foreground-tertiary); }
 
 .sched-error { padding: .625rem .75rem; border-radius: .5rem; background: color-mix(in srgb, var(--danger) 8%, transparent); font-size: .8125rem; color: var(--danger); }
 
-/* 底部操作 */
-.sched-foot { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: .875rem 1.75rem; border-top: 1px solid var(--border); background: var(--surface); }
+/* 底部操作：右对齐 */
+.sched-foot { display: flex; align-items: center; justify-content: flex-end; gap: 1rem; padding: .75rem 1.5rem 1.25rem; }
 .sched-actions { display: flex; gap: .5rem; }
 
 @media (max-width: 639px) {
     .app-modal.schedule-editor-dialog { width: 100vw; max-height: 100dvh; height: 100dvh; border-radius: 0; }
     .sched-shell { max-height: 100dvh; height: 100dvh; }
     .sched-head, .sched-body, .sched-foot { padding-right: 1rem; padding-left: 1rem; }
-    .sched-templates, .sched-grid { grid-template-columns: minmax(0, 1fr); }
-    .sched-segmented { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-    .sched-foot .sched-hint { display: none; }
+    .sched-row-input { width: 9rem; }
+    .sched-row-select { max-width: 9rem; }
     .sched-actions { width: 100%; }
     .sched-actions > button { flex: 1; }
 }

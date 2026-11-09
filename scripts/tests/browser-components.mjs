@@ -1257,7 +1257,7 @@ export async function run(existingPage, bundlePath) {
     created_at: '2026-01-01', updated_at: '2026-01-01', source_type: 'chat',
     // 会话分类（视图列 has_agent_run）：夹具页面以 Agent 方式运行，列表里的会话按 Agent 会话提供。
     has_agent_run: true,
-    // 第二行绑定了一个定时任务（视图列 is_scheduled），最近列表显示时钟标记。
+    // 第二行绑定了一个定时任务（视图列 is_scheduled）：不进「最近使用」。
     is_scheduled: user === 'alice' && index === 1,
   }))]));
   // Playwright's service-worker interception reads navigator.serviceWorker in every frame; a
@@ -4084,15 +4084,17 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixture.mount.results(false));
 
     // Chat sidebar: dated conversations with task markers, notices read on open, folding to the rail.
-    const sidebarIds = [1, 2, 3, 4].map(n => '5a1d0000-0000-4000-8000-00000000000' + n);
+    const sidebarIds = [1, 2, 3, 4, 5].map(n => '5a1d0000-0000-4000-8000-00000000000' + n);
     const sidebarNotice = '5a1d0000-0000-4000-8000-0000000000b1';
     rows.alice = [['明年适合换工作吗？', 0], ['我的日主适合什么颜色', 0], ['和女朋友合盘，明年适合结婚吗', 1], ['梦见掉牙是什么意思', 40]].map(([title, days], index) => {
       const at = new Date(Date.now() - days * 86400000).toISOString();
-      // has_agent_run：这三条都挂着 Agent 任务，列表在 Agent 方式下要能看见它们。
-      return { id: sidebarIds[index], user_id: 'alice', title, created_at: at, updated_at: at, source_type: 'chat', has_agent_run: true, is_scheduled: index === 1 };
+      // has_agent_run：这几条都挂着 Agent 任务，列表在 Agent 方式下要能看见它们。
+      return { id: sidebarIds[index], user_id: 'alice', title, created_at: at, updated_at: at, source_type: 'chat', has_agent_run: true };
     });
+    // 第五条绑定了一个定时任务（视图列 is_scheduled）：不进「最近使用」。
+    rows.alice.push({ id: sidebarIds[4], user_id: 'alice', title: '定时 · 每日早报', created_at: new Date().toISOString(), updated_at: new Date().toISOString(), source_type: 'chat', has_agent_run: true, is_scheduled: true });
     await page.getByRole('button', { name: 'Refresh actual list' }).click();
-    await until(id => window.fixture.list().length === 4 && window.fixture.list()[0].id === id, sidebarIds[0]);
+    await until(id => window.fixture.list().length === 5 && window.fixture.list()[0].id === id, sidebarIds[0]);
     await page.evaluate(([ids, notice]) => {
       window.fixtureAgentIO.activity = { runs: [{ runId: '5a1d0000-0000-4000-8000-0000000000a1', conversationId: ids[0], status: 'running' }, { runId: '5a1d0000-0000-4000-8000-0000000000a2', conversationId: ids[2], status: 'awaiting_input' }],
         notices: [{ id: notice, conversationId: ids[1], status: 'completed' }] };
@@ -4121,7 +4123,7 @@ export async function run(existingPage, bundlePath) {
     check('Sidebar rows mark a running task and a waiting question; finished answers only toast', await sidebarRow('明年适合换工作吗？').getByRole('img', { name: 'Agent 正在执行' }).count() === 1 &&
       await sidebarRow('和女朋友合盘').getByText('待回答', { exact: true }).count() === 1 && await sidebarRow('我的日主适合什么颜色').locator('.chat-nav-marker').count() === 0 &&
       await sidebarRow('梦见掉牙').locator('.chat-nav-marker').count() === 0);
-    check('A scheduled conversation carries a clock marker and the sidebar offers 定时任务', await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '定时任务' }).count() === 1 &&
+    check('A scheduled conversation stays in 最近使用 with a clock mark and the sidebar offers 定时任务', await sidebarRow('定时 · 每日早报').getByRole('img', { name: '定时任务' }).count() === 1 &&
       await sidebar.getByRole('link', { name: '定时任务', exact: true }).getAttribute('href') === '/scheduled');
     check('On the new-chat page 新聊天 is the current item', await sidebar.getByRole('link', { name: '新聊天' }).getAttribute('aria-current') === 'page' &&
       await sidebar.getByRole('button', { name: '搜索', exact: true }).count() === 1);
@@ -4153,7 +4155,7 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => { history.pushState(null, '', '/bazi'); window.dispatchEvent(new Event('fixture:navigate')); });
     await page.waitForFunction(() => window.location.pathname === '/bazi');
     await sidebar.getByText('最近使用', { exact: true }).waitFor();
-    check('占术路由下侧栏是同一套「最近使用」列表，行与 /chat 完全同款', await sidebar.locator('.chat-nav-row').count() === 4 &&
+    check('占术路由下侧栏是同一套「最近使用」列表，行与 /chat 完全同款', await sidebar.locator('.chat-nav-row').count() === 5 &&
       await sidebarRow('明年适合换工作吗？').locator('.chat-nav-row-link').count() === 1 &&
       await sidebarRow('明年适合换工作吗？').getByRole('link').getAttribute('href') === '/chat?id=' + sidebarIds[0] + '&mode=agent' &&
       await sidebar.locator('.chat-nav-row[data-active]').count() === 0);
@@ -4284,10 +4286,9 @@ export async function run(existingPage, bundlePath) {
     });
     const scheduled = page.getByTestId('scheduled-page');
     await scheduled.getByText('每日早报', { exact: true }).first().waitFor();
-    check('The scheduled page lists cadence, next run, the request and the bound conversation',
-      await scheduled.getByText('每天 08:00 · Asia/Shanghai', { exact: true }).count() === 1 &&
-      await scheduled.getByText('结合我的命盘，看今天的黄历宜忌并给建议。', { exact: true }).count() === 1 &&
-      await scheduled.getByRole('link', { name: '打开对话' }).getAttribute('href') === '/chat?id=alice-1&mode=agent');
+    check('The scheduled page lists cadence, next run and the bound conversation',
+      await scheduled.getByText(/每天 08:00 · 下一次 10-29 08:00/u).count() === 1 &&
+      await scheduled.getByRole('link', { name: '每日早报', exact: true }).getAttribute('href') === '/chat?id=alice-1&mode=agent');
     await scheduled.getByRole('button', { name: '暂停', exact: true }).click();
     await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'PATCH' && item.url === '/api/agent/schedules/schedule-1' && item.body?.enabled === false));
     await scheduled.getByText('已暂停', { exact: true }).first().waitFor();
@@ -4295,45 +4296,57 @@ export async function run(existingPage, bundlePath) {
 
     await scheduled.getByRole('button', { name: '编辑', exact: true }).click();
     const scheduleEditor = page.locator('dialog[open]');
+    await scheduleEditor.getByRole('button', { name: '高级', exact: true }).click();
     check('A briefing without a bound chart takes the default chart each run',
-      (await scheduleEditor.getByLabel('绑定命盘').innerText()).includes('默认命盘') &&
-      await scheduleEditor.getByText(/每次运行用「设置 › 命盘」里当时设为默认的那张/u).count() === 1);
-    await scheduleEditor.getByLabel('执行时间').fill('09:30');
+      (await scheduleEditor.getByLabel('绑定命盘').innerText()).includes('默认命盘'));
+    // 时间是 15 分钟一档的下拉；在夹具里直接点选项（浮层可能超出夹具视口）。
+    await scheduleEditor.getByLabel('执行时间').click();
+    await page.getByRole('option', { name: '09:30', exact: true }).evaluate(el => el.click());
     await scheduleEditor.getByRole('button', { name: '保存', exact: true }).click();
     await scheduleEditor.waitFor({ state: 'hidden' });
-    await scheduled.getByText('每天 09:30 · Asia/Shanghai', { exact: true }).waitFor();
-    check('Editing the time saves the daily cadence', await scheduled.getByText('每天 09:30 · Asia/Shanghai', { exact: true }).count() === 1 &&
+    // 任务此前已暂停：卡片只显示节奏，不显示下一次。
+    await scheduled.getByText('每天 09:30', { exact: true }).waitFor();
+    check('Editing the time saves the daily cadence', await scheduled.getByText('每天 09:30', { exact: true }).count() === 1 &&
       await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'PATCH' && item.body?.cadence?.time === '09:30')));
 
     await scheduled.getByRole('button', { name: '新建定时任务', exact: true }).click();
     const createEditor = page.locator('dialog[open]');
+    await createEditor.getByRole('button', { name: '高级', exact: true }).click();
     await createEditor.getByLabel('任务名称').fill('周末整理');
     check('The editor asks for the request in plain language, with no tool names or template variables',
-      await createEditor.getByText('要太卜做什么', { exact: true }).count() === 1 &&
+      await createEditor.getByLabel('要太卜做什么').count() === 1 &&
       await createEditor.getByText(/绑定命盘会像聊天里的资料引用一起交给太卜/u).count() === 1 &&
       await createEditor.getByText(/\{\{/u).count() === 0 &&
       await createEditor.getByRole('button', { name: /\{\{/u }).count() === 0);
     check('A custom schedule brings no chart unless one is chosen',
-      (await createEditor.getByLabel('绑定命盘').innerText()).includes('不绑定') &&
-      await createEditor.getByText(/不绑定就不带命盘/u).count() === 1);
+      (await createEditor.getByLabel('绑定命盘').innerText()).includes('不绑定'));
     await createEditor.getByLabel('要太卜做什么').fill('整理本周记录并列出下周重点。');
-    await createEditor.getByRole('radio', { name: '每周', exact: true }).click();
-    await createEditor.getByRole('button', { name: '周一', exact: true }).click();
-    await createEditor.getByRole('button', { name: '周六', exact: true }).click();
-    await createEditor.getByLabel('执行时间').fill('20:00');
+    // 重复选「固定间隔」：不再让用户选时间，从当前时刻起算。
+    await createEditor.getByLabel('执行频率').click();
+    await page.getByRole('option', { name: '固定间隔', exact: true }).click({ force: true });
+    check('An interval schedule anchors at the current time and hides the time row',
+      await createEditor.getByLabel('执行时间').count() === 0 && await createEditor.getByLabel('间隔小时').count() === 1);
+    // 重复选「工作日」：按周一到周五运行。
+    await createEditor.getByLabel('执行频率').click();
+    await page.getByRole('option', { name: '工作日', exact: true }).click({ force: true });
+    check('A workday schedule runs Monday through Friday',
+      await createEditor.locator('.sched-weekdays').count() === 0 && await createEditor.getByLabel('执行时间').count() === 1);
+    await createEditor.getByLabel('执行时间').click();
+    await page.getByRole('option', { name: '20:00', exact: true }).evaluate(el => el.click());
     await createEditor.getByRole('button', { name: '创建任务', exact: true }).click();
     await createEditor.waitFor({ state: 'hidden' });
     await scheduled.getByText('周末整理', { exact: true }).waitFor();
     check('A custom schedule is created with weekly weekdays', await scheduled.getByText('周末整理', { exact: true }).count() === 1 &&
-      await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url === '/api/agent/schedules' && item.body?.cadence?.kind === 'weekly' && item.body?.cadence?.weekdays?.join() === '6' && item.body?.options?.baziChartId === null)));
+      await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url === '/api/agent/schedules' && item.body?.cadence?.kind === 'weekly' && item.body?.cadence?.weekdays?.join() === '1,2,3,4,5' && item.body?.options?.baziChartId === null)));
 
     const weeklyRow = scheduled.locator('[data-schedule-id]').filter({ hasText: '周末整理' });
     await weeklyRow.getByRole('button', { name: '立即运行', exact: true }).click();
     await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url.endsWith('/run')));
     await weeklyRow.getByRole('button', { name: '运行历史', exact: true }).click();
-    await scheduled.getByText('运行历史 · 周末整理', { exact: true }).waitFor();
-    await scheduled.getByText('运行中', { exact: true }).first().waitFor();
-    check('Run now records history and shows it on the page', await scheduled.getByText('运行中', { exact: true }).count() >= 1);
+    const runHistory = page.getByRole('dialog', { name: '运行历史 · 周末整理' });
+    await runHistory.waitFor();
+    await runHistory.getByText('运行中', { exact: true }).first().waitFor();
+    check('Run now records history in a dialog', await runHistory.getByText('运行中', { exact: true }).count() >= 1);
     await page.evaluate(() => window.fixture.mount.scheduled(false));
 
     // Phones: ≡ in the conversation header opens the same sidebar as a drawer in the top layer.

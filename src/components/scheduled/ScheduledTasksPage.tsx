@@ -19,7 +19,7 @@ import { ScheduleEditor } from '@/components/scheduled/ScheduleEditor';
 import { agentScheduleClient, type AgentScheduleAllowance } from '@/lib/agent/schedules/client';
 import {
   AGENT_SCHEDULE_RUN_STATUS_LABELS, AGENT_SCHEDULE_SKIP_REASON_LABELS, AGENT_SCHEDULE_STATUS_LABELS,
-  describeAgentScheduleCadence, previewAgentSchedulePrompt, formatAgentScheduleMoment,
+  describeAgentScheduleCadence, formatAgentScheduleMoment,
   type AgentScheduleRunView, type AgentScheduleStatus, type AgentScheduleTemplate, type AgentScheduleView,
 } from '@/lib/agent/schedules/config';
 import { conversationHref } from '@/lib/chat/conversation-href';
@@ -186,11 +186,11 @@ export function ScheduledTasksPage() {
                         : schedule.conversationId ? '已暂停' : '绑定的对话已删除，请删除后重建'}
                       {schedule.lastRunAt ? ` · 上次：${formatAgentScheduleMoment(schedule.lastRunAt, schedule.timezone)}` : ''}
                     </p>
-                    <p className="mt-2 line-clamp-2 text-xs text-foreground-tertiary">{previewAgentSchedulePrompt(schedule.prompt)}</p>
+                    <p className="mt-2 line-clamp-2 text-xs text-foreground-tertiary">{schedule.prompt}</p>
                   </div>
                   <div className="flex flex-wrap items-center gap-2">
                     {schedule.conversationId ? (
-                      <Link href={conversationHref({ id: schedule.conversationId, agentNotice: true })} className={buttonVariants({ variant: 'ghost' })}>打开对话</Link>
+                      <Link href={conversationHref({ id: schedule.conversationId, hasAgentRun: true })} className={buttonVariants({ variant: 'ghost' })}>打开对话</Link>
                     ) : null}
                     <Button variant="ghost" disabled={busyId === schedule.id} onClick={() => { void toggle(schedule); }}>
                       {schedule.enabled ? <Pause size={14} aria-hidden="true" /> : <Play size={14} aria-hidden="true" />}

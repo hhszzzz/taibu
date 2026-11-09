@@ -4,13 +4,6 @@ import { randomUUID } from 'node:crypto';
 const quote = value => `'${String(value).replaceAll("'", "''")}'`;
 const json = value => `${quote(JSON.stringify(value))}::jsonb`;
 
-/** The wording the retired go-live migration inserted; legacy rows are still previewed and expanded. */
-const LEGACY_DAILY_BRIEFING_PROMPT = [
-  '今天是 {{date}}（{{weekday}}），时区 {{timezone}}。',
-  '请生成今日早报：先调用 almanac 查询今天的黄历宜忌、冲煞与吉时；再读取八字命盘{{chart}}的当日运势；最后用简洁中文给出今日宜忌、总体提示、工作与生活建议，以及两到三条行动事项。',
-  '没有命盘时清楚说明，只给一般建议。结论以工具返回的数据为依据，不猜测、不夸大。',
-].join('\n');
-
 export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner, adminId }) {
   const owner = randomUUID(), other = randomUUID();
   await sql(`INSERT INTO identity.users(id) VALUES(${quote(owner)}),(${quote(other)});`);
@@ -251,44 +244,5 @@ export async function agentSchedulesDatabaseContracts(t, { sql, asActor, asOwner
     assert.equal(await asActor(other, 'SELECT count(*) FROM public.agent_schedule_runs;'), '0');
     assert.equal(await admin('SELECT count(*) >= 1 FROM public.agent_schedules;'), 't');
     await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
-  });
-
-  await t.test('the go-live migration turns each enabled briefing into one schedule', async () => {
-    const legacy = randomUUID(), chartId = randomUUID();
-    await sql(`INSERT INTO identity.users(id) VALUES(${quote(legacy)});`);
-    await asOwner(`INSERT INTO public.bazi_charts(id,user_id,name,birth_date) VALUES(${quote(chartId)},${quote(legacy)},'早报命盘','1990-01-01');
-      ALTER TABLE public.user_settings ADD COLUMN IF NOT EXISTS daily_briefing_settings jsonb NOT NULL DEFAULT '{}'::jsonb;
-      ALTER TABLE public.reminder_subscriptions DROP CONSTRAINT IF EXISTS reminder_subscription_type;
-      ALTER TABLE public.reminder_subscriptions ADD CONSTRAINT reminder_subscription_type CHECK (reminder_type = ANY (ARRAY['solar_term','fortune','key_date','daily_briefing']));
-      INSERT INTO public.user_settings(user_id,daily_briefing_settings,default_bazi_chart_id) VALUES(${quote(legacy)},'{"timezone":"America/New_York","time":"07:15"}',${quote(chartId)});
-      INSERT INTO public.reminder_subscriptions(user_id,reminder_type,enabled) VALUES(${quote(legacy)},'daily_briefing',true);`);
-    const prompt = LEGACY_DAILY_BRIEFING_PROMPT.replace('{{chart}}', '（用户默认命盘；没有命盘时说明）');
-    await asOwner(`WITH candidates AS (
-        SELECT s.user_id,
-          coalesce(nullif(btrim(u.daily_briefing_settings->>'timezone'),''),'Asia/Shanghai') AS zone,
-          CASE WHEN u.daily_briefing_settings->>'time' ~ '^([01][0-9]|2[0-3]):[0-5][0-9]$' THEN (u.daily_briefing_settings->>'time')::time ELSE time '08:00' END AS delivery_time,
-          u.default_bazi_chart_id AS chart_id
-        FROM public.reminder_subscriptions s
-        LEFT JOIN public.user_settings u ON u.user_id=s.user_id
-        WHERE s.reminder_type='daily_briefing' AND s.enabled
-      ), created AS (
-        INSERT INTO public.conversations(user_id,title,messages)
-        SELECT c.user_id,'定时 · 每日早报','[]'::jsonb FROM candidates c
-        RETURNING id,user_id
-      )
-      INSERT INTO public.agent_schedules(user_id,name,template,prompt,cadence,timezone,conversation_id,options,enabled,next_run_at)
-      SELECT c.user_id,'每日早报','daily_briefing',${quote(prompt)},
-        jsonb_build_object('kind','daily','time',to_char(c.delivery_time,'HH24:MI')),
-        c.zone,cc.id,jsonb_build_object('notify',true,'webEnabled',false,'baziChartId',c.chart_id),true,
-        public.agent_next_run_at(jsonb_build_object('kind','daily','time',to_char(c.delivery_time,'HH24:MI')),c.zone,now())
-      FROM candidates c JOIN created cc ON cc.user_id=c.user_id;`);
-    const migrated = JSON.parse(await asOwner(`SELECT coalesce(jsonb_agg(jsonb_build_object('template',template,'timezone',timezone,'cadence',cadence,'options',options,'conversation',conversation_id)),'[]') FROM public.agent_schedules WHERE user_id=${quote(legacy)};`));
-    assert.equal(migrated.length, 1);
-    assert.equal(migrated[0].template, 'daily_briefing');
-    assert.equal(migrated[0].timezone, 'America/New_York');
-    assert.deepEqual(migrated[0].cadence, { kind: 'daily', time: '07:15' });
-    assert.equal(migrated[0].options.baziChartId, chartId);
-    assert.equal(await asActor(legacy, `SELECT title FROM public.conversations WHERE id=${quote(migrated[0].conversation)};`), '定时 · 每日早报');
-    await asOwner(`DELETE FROM public.agent_schedules WHERE user_id=${quote(legacy)}; DELETE FROM public.conversations WHERE user_id=${quote(legacy)}; DELETE FROM public.user_settings WHERE user_id=${quote(legacy)}; DELETE FROM public.reminder_subscriptions WHERE user_id=${quote(legacy)}; DELETE FROM public.bazi_charts WHERE id=${quote(chartId)};`);
   });
 }

@@ -214,54 +214,6 @@ export function parseAgentScheduleInput(value: unknown): AgentScheduleInput {
   return { name, template, prompt, cadence, timezone: input.timezone as string, options: normalizeAgentScheduleOptions(input.options) };
 }
 
-type LocalScheduleParts = { date: string; time: string; weekday: string };
-
-/** Calendar fields of an instant in a schedule's zone; used to fill {{date}}-style variables. */
-export function agentScheduleLocalParts(now: Date, timezone: string): LocalScheduleParts {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit',
-    hour: '2-digit', minute: '2-digit', hour12: false, weekday: 'short',
-  });
-  const parts = formatter.formatToParts(now);
-  const value = (type: string) => parts.find(part => part.type === type)?.value ?? '';
-  const weekdayIndex = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].indexOf(value('weekday'));
-  return {
-    date: `${value('year')}-${value('month')}-${value('day')}`,
-    time: `${value('hour') === '24' ? '00' : value('hour')}:${value('minute')}`,
-    weekday: AGENT_SCHEDULE_WEEKDAY_LABELS[weekdayIndex] ?? '',
-  };
-}
-
-/**
- * A scheduled occurrence is one ordinary Agent message. New prompts contain no
- * placeholders: the task's timezone and bound chart travel with the message,
- * and the Agent uses its own time tool. Only legacy {{…}} tokens are expanded,
- * from the occurrence instant so a retry hashes to the same request.
- */
-export function expandAgentSchedulePrompt(
-  prompt: string,
-  context: { scheduledFor: string | Date; timezone: string; name?: string },
-): string {
-  const parts = agentScheduleLocalParts(context.scheduledFor instanceof Date ? context.scheduledFor : new Date(context.scheduledFor), context.timezone);
-  return prompt
-    .replaceAll('{{date}}', parts.date)
-    .replaceAll('{{time}}', parts.time)
-    .replaceAll('{{weekday}}', parts.weekday)
-    .replaceAll('{{timezone}}', context.timezone)
-    .replaceAll('{{name}}', context.name ?? '');
-}
-
-/** 旧任务留下的变量在卡片上的中文写法。 */
-const PROMPT_VARIABLE_WORDS: Record<string, string> = { date: '当天', weekday: '当天', time: '计划时刻', timezone: '本地时区', name: '任务名' };
-
-/** Plain-language preview: a saved legacy prompt never shows its raw variables on the task card. */
-export function previewAgentSchedulePrompt(prompt: string): string {
-  return prompt
-    .replace(/\{\{(\w+)\}\}/gu, (token, key: string) => PROMPT_VARIABLE_WORDS[key] ?? token)
-    .replace(/\s+/gu, ' ')
-    .trim();
-}
-
 export function describeAgentScheduleCadence(cadence: AgentScheduleCadence): string {
   if (cadence.kind === 'daily') return `每天 ${cadence.time}`;
   if (cadence.kind === 'weekly') {
@@ -304,19 +256,8 @@ export function formatAgentScheduleMoment(iso: string | null, timezone: string):
   }
 }
 
-/** The built-in 每日早报 text: what the member wants, not which tools to call. */
-export function dailyBriefingPrompt(chartId: string | null): string {
-  return chartId
-    ? '结合绑定命盘，生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。没有可用数据时如实说明，不猜测。'
-    : '生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。没有设置默认命盘时给一般建议并说明原因，不猜测。';
-}
-
-export function dailyBriefingScheduleDefaults(chartId: string | null): Pick<AgentScheduleInput, 'name' | 'template' | 'prompt' | 'cadence' | 'options'> {
-  return {
-    name: '每日早报',
-    template: 'daily_briefing',
-    prompt: dailyBriefingPrompt(chartId),
-    cadence: { kind: 'daily', time: '08:00' },
-    options: { ...defaultAgentScheduleOptions(), webEnabled: false, baziChartId: chartId },
-  };
-}
+/**
+ * The built-in 每日早报 text: what the member wants, not which tools to call. The chart is not named here; it travels
+ * with the message as a mention, the bound one or the member's default.
+ */
+export const DAILY_BRIEFING_PROMPT = '生成今天的运势早报：黄历宜忌、总体提示，以及工作、生活各两到三条具体建议。附了命盘就结合命盘，没有就给一般建议并说明；没有可用数据时如实说明，不猜测。';

@@ -27,7 +27,7 @@ import { agentScheduleClient } from '@/lib/agent/schedules/client';
 import { browserTimeZone, timeZoneOptions } from '@/lib/timezones';
 import {
   AGENT_SCHEDULE_INTERVAL_HOURS_MAX, AGENT_SCHEDULE_NAME_MAX, AGENT_SCHEDULE_PROMPT_MAX,
-  AGENT_SCHEDULE_WEEKDAY_LABELS, dailyBriefingPrompt, defaultAgentScheduleOptions,
+  AGENT_SCHEDULE_WEEKDAY_LABELS, DAILY_BRIEFING_PROMPT, defaultAgentScheduleOptions,
   parseAgentScheduleInput,
   type AgentScheduleCadence, type AgentScheduleKind, type AgentScheduleOptions, type AgentScheduleTemplate,
   type AgentScheduleView,
@@ -92,19 +92,20 @@ function draftFromSchedule(schedule: AgentScheduleView): Draft {
   };
 }
 
-function draftFromTemplate(template: AgentScheduleTemplate, defaultChartId: string | null): Draft {
+/** 不选命盘时：早报每次运行取设置里当时的默认命盘，自定义任务不带命盘。 */
+function draftFromTemplate(template: AgentScheduleTemplate): Draft {
   if (template === BRIEFING) {
     return {
-      name: '每日早报', template: BRIEFING, prompt: dailyBriefingPrompt(defaultChartId),
+      name: '每日早报', template: BRIEFING, prompt: DAILY_BRIEFING_PROMPT,
       kind: 'daily', time: '08:00', weekdays: [1], monthDay: '1', intervalHours: '6',
       timezone: browserTimeZone(), model: '', reasoning: false, reasoningEffort: null, webEnabled: false,
-      baziChartId: defaultChartId ?? '', notify: true, knowledgeBaseIds: [], collaborators: [],
+      baziChartId: '', notify: true, knowledgeBaseIds: [], collaborators: [],
     };
   }
   return {
     name: '', template: CUSTOM, prompt: '', kind: 'daily', time: '08:00', weekdays: [1],
     monthDay: '1', intervalHours: '6', timezone: browserTimeZone(), model: '', reasoning: false,
-    reasoningEffort: null, webEnabled: true, baziChartId: defaultChartId ?? '', notify: true,
+    reasoningEffort: null, webEnabled: true, baziChartId: '', notify: true,
     knowledgeBaseIds: [], collaborators: [],
   };
 }
@@ -133,8 +134,7 @@ export function ScheduleEditor({
   const modelsQuery = useAvailableModels(userId);
   const own = useOwnModels(userId);
   const charts = useMemo(() => listSavedBaziCharts(chartsQuery.data), [chartsQuery.data]);
-  const defaultChartId = chartsQuery.data?.defaultChartIds?.bazi ?? null;
-  const [draft, setDraft] = useState<Draft>(() => schedule ? draftFromSchedule(schedule) : draftFromTemplate(template ?? CUSTOM, defaultChartId));
+  const [draft, setDraft] = useState<Draft>(() => schedule ? draftFromSchedule(schedule) : draftFromTemplate(template ?? CUSTOM));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const editing = Boolean(schedule);
@@ -144,11 +144,12 @@ export function ScheduleEditor({
     ...own.models.filter(model => model.usage === 'chat' && model.serverKey).map(model => ({ value: model.ref, label: `${model.displayName}（自定义）` })),
   ];
   const patch = (value: Partial<Draft>) => setDraft(current => ({ ...current, ...value }));
+  const noChart = draft.template === BRIEFING ? '默认命盘' : '不绑定';
 
   const chooseTemplate = (next: AgentScheduleTemplate) => {
     if (editing) return;
     if (next === BRIEFING) {
-      patch({ template: next, name: '每日早报', prompt: dailyBriefingPrompt(draft.baziChartId || null), kind: 'daily', webEnabled: false });
+      patch({ template: next, name: '每日早报', prompt: DAILY_BRIEFING_PROMPT, kind: 'daily', webEnabled: false });
     } else {
       patch({ template: next });
     }
@@ -297,15 +298,16 @@ export function ScheduleEditor({
                   options={models} />
               </label>
               <label className="sched-field"><span>绑定命盘</span>
-                <Select className="sched-select" ariaLabel="绑定命盘" placeholder="默认命盘"
-                  value={draft.baziChartId || null} disabled={saving}
-                  onChange={baziChartId => patch(draft.template === BRIEFING && draft.prompt === dailyBriefingPrompt(draft.baziChartId || null)
-                    ? { baziChartId, prompt: dailyBriefingPrompt(baziChartId) }
-                    : { baziChartId })}
-                  options={charts.map(chart => ({ value: chart.id, label: chart.name }))} />
+                {/* 空值在 Base UI 里算未选、显示占位，所以占位与「不选」那一项同名。 */}
+                <Select className="sched-select" ariaLabel="绑定命盘" placeholder={noChart}
+                  value={draft.baziChartId} disabled={saving}
+                  onChange={baziChartId => patch({ baziChartId })}
+                  options={[{ value: '', label: noChart }, ...charts.map(chart => ({ value: chart.id, label: chart.name }))]} />
               </label>
             </div>
-            <p className="sched-hint">绑定命盘按名称随消息附上，不需要填写编号；「默认命盘」是在「设置 › 命盘」里设为默认的那张。</p>
+            <p className="sched-hint">{draft.template === BRIEFING
+              ? '绑定的命盘按名称随消息附上；选「默认命盘」时，每次运行用「设置 › 命盘」里当时设为默认的那张。'
+              : '绑定的命盘按名称随消息附上；不绑定就不带命盘，和聊天里不 @ 一样。'}</p>
             <p className="sched-hint">平台模型按实际用量从余额扣费，余额不足时跳过当次运行；自定义模型只能选 Key 保存在本站的，不计费，Key 不可用时跳过并通知。</p>
             <div className="sched-toggles">
               <div className="sched-toggle-row">

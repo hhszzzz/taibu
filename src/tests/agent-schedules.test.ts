@@ -4,7 +4,7 @@ import type { TestContext } from 'node:test';
 import type { ScopedDb } from '../lib/db/context.server';
 import type { AgentRunRow } from '../lib/agent/store.server';
 import {
-  agentScheduleLocalParts, dailyBriefingScheduleDefaults, expandAgentSchedulePrompt, previewAgentSchedulePrompt,
+  DAILY_BRIEFING_PROMPT,
   normalizeAgentScheduleCadence, normalizeAgentScheduleLimits, normalizeAgentScheduleOptions,
   parseAgentScheduleInput,
 } from '../lib/agent/schedules/config';
@@ -49,31 +49,6 @@ test('schedule options keep only known fields and fall back safely', () => {
   assert.deepEqual(normalizeAgentScheduleLimits('bad'), { limit: 20 });
 });
 
-test('prompt variables only remain for legacy tasks and never appear raw on a card', () => {
-  const content = expandAgentSchedulePrompt('{{date}} {{weekday}} {{time}} {{timezone}} {{name}} {{unknown}}', {
-    scheduledFor: '2026-10-29T00:00:00Z', timezone: 'Asia/Shanghai', name: '早报',
-  });
-  assert.equal(content, '2026-10-29 周四 08:00 Asia/Shanghai 早报 {{unknown}}');
-  assert.deepEqual(agentScheduleLocalParts(new Date('2026-03-08T04:30:00Z'), 'America/New_York'), { date: '2026-03-07', time: '23:30', weekday: '周六' });
-  assert.equal(previewAgentSchedulePrompt('今天是 {{date}}（{{weekday}}），看黄历。'), '今天是 当天（当天），看黄历。');
-  assert.equal(previewAgentSchedulePrompt('整理  {{name}}  的重点'), '整理 任务名 的重点');
-  assert.equal(previewAgentSchedulePrompt('{{unknown}} 保持原样'), '{{unknown}} 保持原样');
-});
-
-test('the daily briefing template is a plain request with no tools, IDs or variables', () => {
-  const template = dailyBriefingScheduleDefaults(null);
-  assert.equal(template.template, 'daily_briefing');
-  assert.deepEqual(template.cadence, { kind: 'daily', time: '08:00' });
-  assert.equal(template.options.baziChartId, null);
-  const bound = dailyBriefingScheduleDefaults('22222222-2222-4222-8222-222222222222');
-  for (const prompt of [template.prompt, bound.prompt]) {
-    assert.doesNotMatch(prompt, /almanac|current_time|read_user_data|bazi_chart|\{\{|工具|ID|时区/u);
-    assert.match(prompt, /今天的运势早报/u);
-  }
-  assert.match(bound.prompt, /绑定命盘/u);
-  assert.doesNotMatch(bound.prompt, /22222222-2222-4222-8222-222222222222/u);
-});
-
 type SettleCall = { runId: string; status: string; values: Record<string, unknown> };
 
 function scheduleFixture(overrides: Record<string, unknown> = {}) {
@@ -82,7 +57,7 @@ function scheduleFixture(overrides: Record<string, unknown> = {}) {
     user_id: 'user-1',
     name: '晨间整理',
     template: 'custom',
-    prompt: '整理 {{date}}（{{weekday}}）的重点。',
+    prompt: '整理今天的重点。',
     cadence: { kind: 'daily', time: '08:00' },
     timezone: 'Asia/Shanghai',
     conversation_id: '44444444-4444-4444-8444-444444444444',
@@ -105,7 +80,7 @@ function mockScheduleDb(
   schedule: Record<string, unknown>,
   settled: SettleCall[],
   claims: Record<string, unknown>[],
-  options: { agentRunStatus?: string; order?: string[]; createError?: Error } = {},
+  options: { agentRunStatus?: string; order?: string[]; createError?: Error; rows?: Record<string, unknown> } = {},
 ) {
   return {
     scope: { kind: 'system' },
@@ -117,7 +92,7 @@ function mockScheduleDb(
           async executeTakeFirst() {
             if (table === 'agent_schedules') return schedule;
             if (table === 'agent_runs' && options.agentRunStatus) return { status: options.agentRunStatus };
-            return undefined;
+            return options.rows?.[table];
           },
           async execute() { return []; },
         };
@@ -185,7 +160,7 @@ function mockRuntime(
   return { submitted };
 }
 
-test('a due occurrence submits the expanded prompt into the bound conversation and marks the run running', async (t) => {
+test('a due occurrence submits the prompt as written into the bound conversation and marks the run running', async (t) => {
   const settled: SettleCall[] = [];
   const order: string[] = [];
   const db = mockScheduleDb(scheduleFixture(), settled, [claimFixture()], { order });
@@ -202,11 +177,30 @@ test('a due occurrence submits the expanded prompt into the bound conversation a
   const body = call.body as { conversationId: string; clientRequestId: string; message: { content: string }; model?: string; webEnabled: boolean };
   assert.equal(body.conversationId, '44444444-4444-4444-8444-444444444444');
   assert.equal(body.clientRequestId, 'schedule:55555555-5555-4555-8555-555555555555');
-  assert.equal(body.message.content, '整理 2026-10-29（周四）的重点。');
+  assert.equal(body.message.content, '整理今天的重点。');
   assert.equal(body.model, 'fixture');
   assert.equal(body.webEnabled, false);
   assert.equal(call.runId, settled[0].values.p_agent_run_id);
   assert.deepEqual(settled.map(item => item.status), ['running']);
+});
+
+test('only the daily briefing brings the default chart; any other task brings a chart only when one is bound', async (t) => {
+  const chart = '22222222-2222-4222-8222-222222222222';
+  const rows = { user_settings: { default_bazi_chart_id: chart }, bazi_charts: { id: chart, name: '本人' } };
+  const submit = async (overrides: Record<string, unknown>) => {
+    const runtime = mockRuntime(t);
+    const { processAgentSchedules } = require('../lib/agent/schedules/runner.server') as typeof import('../lib/agent/schedules/runner.server');
+    await processAgentSchedules({ db: mockScheduleDb(scheduleFixture(overrides), [], [claimFixture()], { rows }) });
+    return runtime.submitted[0].body as { message: { content: string }; mentions: Array<{ type: string; id: string }> };
+  };
+  const briefing = await submit({ template: 'daily_briefing', prompt: DAILY_BRIEFING_PROMPT });
+  assert.deepEqual(briefing.mentions.map(mention => [mention.type, mention.id]), [['bazi_chart', chart]]);
+  assert.ok(briefing.message.content.startsWith(DAILY_BRIEFING_PROMPT + ' '), 'the chart is named after the request, as an @ in chat');
+  const custom = await submit({});
+  assert.deepEqual(custom.mentions, []);
+  assert.equal(custom.message.content, '整理今天的重点。');
+  const bound = await submit({ options: { ...scheduleFixture().options, baziChartId: chart } });
+  assert.deepEqual(bound.mentions.map(mention => mention.id), [chart]);
 });
 
 test('a run the worker finishes before the link commits is settled from its status', async (t) => {

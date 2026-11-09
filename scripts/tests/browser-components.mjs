@@ -4201,7 +4201,7 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => {
       window.fixtureAgentIO.schedules = [{
         id: 'schedule-1', userId: 'alice', name: '每日早报', template: 'daily_briefing',
-        prompt: '今天是 {{date}}，先查黄历再给建议。', cadence: { kind: 'daily', time: '08:00' }, timezone: 'Asia/Shanghai',
+        prompt: '结合我的命盘，看今天的黄历宜忌并给建议。', cadence: { kind: 'daily', time: '08:00' }, timezone: 'Asia/Shanghai',
         conversationId: 'alice-1', options: { model: null, reasoning: false, reasoningEffort: null, webEnabled: false, knowledgeBaseIds: [], baziChartId: null, collaborators: [], notify: true },
         enabled: true, nextRunAt: '2026-10-29T00:00:00Z', lastRunAt: null, lastStatus: null, consecutiveFailures: 0,
         createdAt: '2026-10-28T00:00:00Z', updatedAt: '2026-10-28T00:00:00Z',
@@ -4210,9 +4210,9 @@ export async function run(existingPage, bundlePath) {
     });
     const scheduled = page.getByTestId('scheduled-page');
     await scheduled.getByText('每日早报', { exact: true }).first().waitFor();
-    check('The scheduled page lists cadence, next run and the bound conversation, previewing a legacy prompt without raw variables',
+    check('The scheduled page lists cadence, next run, the request and the bound conversation',
       await scheduled.getByText('每天 08:00 · Asia/Shanghai', { exact: true }).count() === 1 &&
-      await scheduled.getByText('今天是 当天，先查黄历再给建议。', { exact: true }).count() === 1 &&
+      await scheduled.getByText('结合我的命盘，看今天的黄历宜忌并给建议。', { exact: true }).count() === 1 &&
       await scheduled.getByRole('link', { name: '打开对话' }).getAttribute('href') === '/chat?id=alice-1&mode=agent');
     await scheduled.getByRole('button', { name: '暂停', exact: true }).click();
     await until(() => window.fixtureAgentIO.requests.some(item => item.method === 'PATCH' && item.url === '/api/agent/schedules/schedule-1' && item.body?.enabled === false));
@@ -4221,6 +4221,9 @@ export async function run(existingPage, bundlePath) {
 
     await scheduled.getByRole('button', { name: '编辑', exact: true }).click();
     const scheduleEditor = page.locator('dialog[open]');
+    check('A briefing without a bound chart takes the default chart each run',
+      (await scheduleEditor.getByLabel('绑定命盘').innerText()).includes('默认命盘') &&
+      await scheduleEditor.getByText(/每次运行用「设置 › 命盘」里当时设为默认的那张/u).count() === 1);
     await scheduleEditor.getByLabel('执行时间').fill('09:30');
     await scheduleEditor.getByRole('button', { name: '保存', exact: true }).click();
     await scheduleEditor.waitFor({ state: 'hidden' });
@@ -4236,6 +4239,9 @@ export async function run(existingPage, bundlePath) {
       await createEditor.getByText(/绑定命盘会像聊天里的资料引用一起交给太卜/u).count() === 1 &&
       await createEditor.getByText(/\{\{/u).count() === 0 &&
       await createEditor.getByRole('button', { name: /\{\{/u }).count() === 0);
+    check('A custom schedule brings no chart unless one is chosen',
+      (await createEditor.getByLabel('绑定命盘').innerText()).includes('不绑定') &&
+      await createEditor.getByText(/不绑定就不带命盘/u).count() === 1);
     await createEditor.getByLabel('要太卜做什么').fill('整理本周记录并列出下周重点。');
     await createEditor.getByRole('radio', { name: '每周', exact: true }).click();
     await createEditor.getByRole('button', { name: '周一', exact: true }).click();
@@ -4245,7 +4251,7 @@ export async function run(existingPage, bundlePath) {
     await createEditor.waitFor({ state: 'hidden' });
     await scheduled.getByText('周末整理', { exact: true }).waitFor();
     check('A custom schedule is created with weekly weekdays', await scheduled.getByText('周末整理', { exact: true }).count() === 1 &&
-      await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url === '/api/agent/schedules' && item.body?.cadence?.kind === 'weekly' && item.body?.cadence?.weekdays?.join() === '6')));
+      await page.evaluate(() => window.fixtureAgentIO.requests.some(item => item.method === 'POST' && item.url === '/api/agent/schedules' && item.body?.cadence?.kind === 'weekly' && item.body?.cadence?.weekdays?.join() === '6' && item.body?.options?.baziChartId === null)));
 
     const weeklyRow = scheduled.locator('[data-schedule-id]').filter({ hasText: '周末整理' });
     await weeklyRow.getByRole('button', { name: '立即运行', exact: true }).click();

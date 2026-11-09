@@ -11,7 +11,6 @@ import { isFreeTextModel } from '@/lib/billing/pricing';
 import type { Mention } from '@/types';
 import { buildMentionToken } from '@/lib/mention-tokens';
 import { AgentApiError, submitAgentTask, type AgentSubmitBody } from '../submit.server';
-import { expandAgentSchedulePrompt } from './config';
 import {
   AgentScheduleError, toAgentScheduleRunView, toAgentScheduleView,
   type AgentScheduleRunRow,
@@ -53,11 +52,15 @@ async function knowledgeMentions(db: ScopedDb, userId: string, ids: string[]): P
   return rows.map((row) => ({ type: 'knowledge_base' as const, id: row.id, name: row.name, preview: '' }));
 }
 
-/** The bound chart, or the member's current default, as an ordinary message mention. */
-async function chartMention(db: ScopedDb, userId: string, chartId: string | null): Promise<Mention | null> {
-  const settings = chartId ? null : await db.tx((trx) => trx.selectFrom('user_settings')
+/**
+ * The chart a run brings along, as an ordinary message mention: the bound one; without one, the 每日早报 takes the
+ * member's current default and any other task brings none, as a chat message without an @.
+ */
+async function chartMention(db: ScopedDb, schedule: ScheduleView): Promise<Mention | null> {
+  const { userId, options: { baziChartId } } = schedule;
+  const settings = baziChartId || schedule.template !== 'daily_briefing' ? null : await db.tx((trx) => trx.selectFrom('user_settings')
     .select('default_bazi_chart_id').where('user_id', '=', userId).executeTakeFirst());
-  const id = chartId ?? settings?.default_bazi_chart_id ?? null;
+  const id = baziChartId ?? settings?.default_bazi_chart_id ?? null;
   if (!id) return null;
   const row = await db.tx((trx) => trx.selectFrom('bazi_charts').select(['id', 'name'])
     .where('id', '=', id).where('user_id', '=', userId).executeTakeFirst());
@@ -128,14 +131,11 @@ async function executeRun(db: ScopedDb, schedule: ScheduleView, run: RunView): P
       await settle(db, run.id, 'skipped', { skipReason: blocked.reason, error: blocked.message });
       return 'skipped';
     }
-    const content = expandAgentSchedulePrompt(schedule.prompt, {
-      scheduledFor: run.scheduledFor, timezone: schedule.timezone, name: schedule.name,
-    });
-    const chart = await chartMention(db, schedule.userId, schedule.options.baziChartId);
+    const chart = await chartMention(db, schedule);
     const knowledge = await knowledgeMentions(db, schedule.userId, schedule.options.knowledgeBaseIds);
     const mentions = chart ? [...knowledge, chart] : knowledge;
     // 像输入框里 @ 资料一样把名称写进这条自动消息；资料仍由普通提交路径解析。
-    const message = mentions.length ? [content.trimEnd(), ...mentions.map(buildMentionToken)].join(' ') : content;
+    const message = mentions.length ? [schedule.prompt.trimEnd(), ...mentions.map(buildMentionToken)].join(' ') : schedule.prompt;
     const body: AgentSubmitBody = {
       conversationId: schedule.conversationId,
       clientRequestId: `schedule:${run.id}`,

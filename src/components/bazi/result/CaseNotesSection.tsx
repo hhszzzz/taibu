@@ -383,7 +383,7 @@ function ElementsPreferences({ profile, setProfile }: { profile: BaziCaseProfile
 function AgentSourceBadge({ source, label, title }: { source: BaziCaseSource; label: string; title: string }) {
     const className = 'shrink-0 rounded border border-accent/30 bg-accent/10 px-1.5 py-0.5 text-[10px] font-medium text-accent';
     return source.conversationId
-        ? <Link href={conversationHref({ id: source.conversationId, agentNotice: true })} className={`${className} hover:bg-accent/20`} title={title}>{label}</Link>
+        ? <Link href={conversationHref({ id: source.conversationId, hasAgentRun: true })} className={`${className} hover:bg-accent/20`} title={title}>{label}</Link>
         : <span className={className}>{label}</span>;
 }
 

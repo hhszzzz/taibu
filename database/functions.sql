@@ -830,7 +830,7 @@ BEGIN
     IF v_title IS NOT NULL AND coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=s.user_id),true) THEN
       INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)
         VALUES(s.user_id,'system',v_title,left(v_content,500),
-          CASE WHEN s.conversation_id IS NULL THEN '/scheduled' ELSE '/chat?id='||s.conversation_id::text END,
+          CASE WHEN s.conversation_id IS NULL THEN '/scheduled' ELSE '/chat?id='||s.conversation_id::text||'&mode=agent' END,
           'schedule:'||r.id::text,
           jsonb_build_object('kind','schedule','scheduleId',s.id,'scheduleRunId',r.id,'conversationId',s.conversation_id,'status',CASE WHEN p_status='skipped' THEN 'skipped' ELSE p_status END))
         ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
@@ -1315,7 +1315,7 @@ BEGIN
   heading:=CASE NEW.status WHEN 'completed' THEN '太卜任务完成' WHEN 'failed' THEN '太卜任务未完成' ELSE '太卜需要你补充信息' END;
   target_message:=NEW.public_message->>'id';
   INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)
-    VALUES(NEW.user_id,'system',heading,coalesce(NEW.input->>'title','打开对话查看任务'),'/chat?id='||NEW.conversation_id::text||'&message='||coalesce(target_message,''),event,jsonb_build_object('kind','agent','conversationId',NEW.conversation_id,'messageId',target_message,'questionId',NEW.checkpoint->>'questionId','status',NEW.status))
+    VALUES(NEW.user_id,'system',heading,coalesce(NEW.input->>'title','打开对话查看任务'),'/chat?id='||NEW.conversation_id::text||'&mode=agent&message='||coalesce(target_message,''),event,jsonb_build_object('kind','agent','conversationId',NEW.conversation_id,'messageId',target_message,'questionId',NEW.checkpoint->>'questionId','status',NEW.status))
     ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
   RETURN NEW;
 END;

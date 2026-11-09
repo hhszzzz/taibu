@@ -76,7 +76,7 @@ function RecordCard({
                     ) : null}
                     {record.source_run_id ? (
                         record.source_conversation_id ? (
-                            <Link href={conversationHref({ id: record.source_conversation_id, agentNotice: true })} className={`${META_CHIP_CLASS} bg-background-secondary text-foreground-secondary hover:text-foreground`} title="由 Agent 在对话中记入，打开那次对话；改动后不再标记">
+                            <Link href={conversationHref({ id: record.source_conversation_id, hasAgentRun: true })} className={`${META_CHIP_CLASS} bg-background-secondary text-foreground-secondary hover:text-foreground`} title="由 Agent 在对话中记入，打开那次对话；改动后不再标记">
                                 <Sparkles className="h-3 w-3" aria-hidden="true" />Agent 记录
                             </Link>
                         ) : (

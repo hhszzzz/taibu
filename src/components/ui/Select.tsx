@@ -59,6 +59,8 @@ export function Select<Value extends string | number>({
     'aria-invalid': invalid,
 }: SelectProps<Value>) {
     const triggerRef = useRef<HTMLButtonElement | null>(null);
+    // Base UI 把空字符串当成未选：选中空值项（「未设置」一类）时，用它的文字代替占位。
+    const emptyLabel = value === '' ? options.find(option => option.value === '')?.label : undefined;
     const [portalContainer, setPortalContainer] = useState<HTMLElement | null>(null);
 
     // 弹层获得焦点时浏览器会把它滚进视野，在对话框里会顺带把整块内容往上推。触发器本来就看得见时，开合的两帧内把滚动位置顶回去；
@@ -106,10 +108,11 @@ export function Select<Value extends string | number>({
                 className={cn(
                     'group flex h-[2.375rem] w-full min-w-0 items-center justify-between gap-2 rounded-xl px-3 text-left text-sm data-placeholder:text-foreground-tertiary',
                     fieldClass,
+                    emptyLabel !== undefined && 'data-placeholder:text-foreground',
                     className,
                 )}
             >
-                <SelectPrimitive.Value placeholder={placeholder} className="min-w-0 flex-1 truncate" />
+                <SelectPrimitive.Value placeholder={emptyLabel ?? placeholder} className="min-w-0 flex-1 truncate" />
                 {hideIcon ? null : <SelectPrimitive.Icon><ChevronDown className="h-4 w-4 shrink-0 text-foreground-tertiary transition-transform duration-[var(--duration-base)] ease-[var(--ease-snap)] group-data-popup-open:rotate-180" aria-hidden="true" /></SelectPrimitive.Icon>}
             </SelectPrimitive.Trigger>
             <SelectPrimitive.Portal container={portalContainer ?? undefined}>

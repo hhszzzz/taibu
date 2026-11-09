@@ -1536,7 +1536,9 @@ export async function run(existingPage, bundlePath) {
     if (url.pathname === '/api/notifications' && method === 'PATCH') return ok({ success: true });
     if (url.pathname === '/api/search' && method === 'GET') {
       const q = url.searchParams.get('q') ?? '';
-      return ok({ results: q ? [] : [
+      return ok({ results: q ? q === '六爻' ? [
+        { conversationId: 'alice-search-match', messageId: null, title: '六爻相关对话', preview: '', hasAgentRun: false },
+      ] : [] : [
         { conversationId: 'alice-1', messageId: null, title: 'alice conversation 1', preview: '', hasAgentRun: false },
         { conversationId: 'alice-agent', messageId: null, title: 'alice agent conversation', preview: '', hasAgentRun: true },
       ], charts: [] });
@@ -4130,6 +4132,14 @@ export async function run(existingPage, bundlePath) {
     const agentResult = palette.locator('.search-palette-row').filter({ hasText: 'alice agent conversation' });
     check('Search results mark a plain chat with Chat and an Agent conversation with the Agent mark',
       await chatResult.locator('[data-nav-icon="chat"]').count() === 1 && await agentResult.locator('[data-nav-icon="agent"]').count() === 1);
+    const searchRows = palette.locator('.search-palette-row');
+    check('Empty search highlights the first visible recent conversation', await searchRows.first().getAttribute('data-active') === 'true');
+    for (let index = 1; index <= 2; index++) {
+      await page.keyboard.press('ArrowDown');
+      check(`Search ArrowDown follows visible row ${index + 1}`, await searchRows.nth(index).getAttribute('data-active') === 'true');
+    }
+    await page.keyboard.press('ArrowUp');
+    check('Search ArrowUp returns to the preceding visible row', await searchRows.nth(1).getAttribute('data-active') === 'true');
     const searchBox = palette.getByLabel('搜索内容', { exact: true });
     await searchBox.fill('六爻');
     const artRow = palette.locator('.search-palette-row').filter({ hasText: '乾为天' });
@@ -4138,6 +4148,28 @@ export async function run(existingPage, bundlePath) {
       && await artRow.locator('.search-palette-item-title').getByText('10-24', { exact: true }).isVisible()
       && await artRow.getByText('问题：事业', { exact: true }).isVisible()
       && await palette.getByRole('tab', { name: '占术', exact: true }).isVisible());
+    for (const pathname of ['/api/search', '/api/search/arts', '/api/records']) {
+      await searchBox.fill('');
+      await searchGroups.filter({ hasText: '最近使用' }).waitFor();
+      await page.keyboard.press('Escape');
+      await palette.waitFor({ state: 'detached' });
+      await page.evaluate(pathname => {
+        window.fixtureNetwork.jsonGate = { pathname, intercepted: false };
+        window.dispatchEvent(new Event('taibu:search'));
+      }, pathname);
+      await until(() => window.fixtureNetwork.jsonGate.intercepted);
+      await searchBox.fill('六爻');
+      await artRow.waitFor();
+      const matchingConversation = searchRows.filter({ hasText: '六爻相关对话' });
+      const recordGroup = palette.locator('.search-palette-group-block').filter({ has: page.locator('.search-palette-group').filter({ hasText: /^记录$/ }) });
+      await matchingConversation.waitFor();
+      await recordGroup.waitFor();
+      await page.evaluate(() => { window.fixtureNetwork.jsonGate.release(); window.fixtureNetwork.jsonGate = null; });
+      await renderBarrier();
+      check(`Late empty-query JSON from ${pathname} cannot replace the typed search`,
+        await artRow.isVisible() && await matchingConversation.isVisible() && await recordGroup.isVisible()
+          && await palette.getByRole('status').count() === 0 && await searchBox.inputValue() === '六爻');
+    }
     await searchBox.fill('10月');
     await palette.locator('.search-palette-time').waitFor();
     await artRow.waitFor();

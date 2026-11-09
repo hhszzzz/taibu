@@ -129,23 +129,23 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
     }, []);
     // 空查询也要有推荐：最近对话、最近占术记录与常用设置，打开即可选择。
     useEffect(() => {
-        if (!open || !userId) return;
+        if (!open || !userId || query.trim()) return;
         const controller = new AbortController();
         const signal = withSearchTimeout(controller.signal);
         void requestBrowserJson<{ results: Result[] }>('/api/search?q=', { signal })
             .then(response => {
                 if (controller.signal.aborted) return;
-                setResult(previous => previous?.query === '' && previous.results.length ? previous : { owner: userId, query: '', results: response.data?.results ?? [] });
+                setResult({ owner: userId, query, results: response.data?.results ?? [] });
             })
             .catch(() => { /* 最近列表失败时仅省略分组 */ });
         void requestBrowserJson<{ items?: ArtResult[] }>('/api/search/arts?q=', { signal })
-            .then(response => { if (!controller.signal.aborted) setArts({ owner: userId, query: '', results: response.data?.items ?? [] }); })
-            .catch(() => { if (!controller.signal.aborted) setArts({ owner: userId, query: '', results: [] }); });
+            .then(response => { if (!controller.signal.aborted) setArts({ owner: userId, query, results: response.data?.items ?? [] }); })
+            .catch(() => { if (!controller.signal.aborted) setArts({ owner: userId, query, results: [] }); });
         void requestBrowserJson<{ records?: RecordResult[] }>('/api/records?pageSize=8', { signal })
-            .then(response => { if (!controller.signal.aborted) setRecords({ owner: userId, query: '', results: response.data?.records ?? [] }); })
-            .catch(() => { if (!controller.signal.aborted) setRecords({ owner: userId, query: '', results: [] }); });
+            .then(response => { if (!controller.signal.aborted) setRecords({ owner: userId, query, results: response.data?.records ?? [] }); })
+            .catch(() => { if (!controller.signal.aborted) setRecords({ owner: userId, query, results: [] }); });
         return () => controller.abort();
-    }, [open, userId]);
+    }, [open, query, userId]);
     useEffect(() => {
         if (!open || !query.trim() || !userId) return;
         const controller = new AbortController();
@@ -222,8 +222,10 @@ export function ConversationSearchHost({ userId }: { userId: string | null }) {
                 icon: <Icon size={18} aria-hidden="true" />, item,
             };
         });
-        return [...artEntries, ...conversationEntries, ...recordEntries, ...settingEntries];
-    }, [filter, conversations, recordResults, artResults, settingResults, featureTogglesLoaded, isFeatureEnabled]);
+        return recentOnly
+            ? [...conversationEntries, ...artEntries, ...recordEntries, ...settingEntries]
+            : [...artEntries, ...conversationEntries, ...recordEntries, ...settingEntries];
+    }, [filter, conversations, recordResults, artResults, settingResults, featureTogglesLoaded, isFeatureEnabled, recentOnly]);
 
     /** 已存占术记录先取回详情再跳转：结果页只认会话缓存，直接带 id 会被送回首页。 */
     const openArt = useCallback(async (item: ArtResult) => {

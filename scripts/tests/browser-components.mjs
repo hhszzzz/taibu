@@ -374,7 +374,8 @@ function RoundsProbe() {
 
 // Chat polish (1.A): inline edit box keys, fork guard, code block header and link targets on real ChatMessageList.
 const POLISH_MESSAGES = [
-  { id: 'polish-u1', role: 'user', content: '第一问', createdAt: ROUND_START },
+  { id: 'polish-u1', role: 'user', content: '第一问 @ 资料甲', createdAt: ROUND_START,
+    mentions: [{ type: 'knowledge_base', id: 'kb-1', name: '资料甲', preview: '' }] },
   { id: 'polish-a1', role: 'assistant', content: '见 [外链](https://example.com/a) 与 [站内](/records)。\n\n\`\`\`ts\nconst answer = 42;\n\`\`\`', createdAt: ROUND_START,
     metadata: { sources: [], webSearch: { status: 'ok', sources: [
       { title: '  黄历\n说明  ', url: 'https://example.com/almanac' },
@@ -554,6 +555,14 @@ function GuestComposerProbe() {
     <output data-testid="guest-login">{loginAsked}</output>
   </section>;
 }
+// Agent 模式的输入框：`+` 菜单里的内置技能与连接器。
+function AgentComposerProbe() {
+  const [value, setValue] = useState('');
+  return <section data-testid="agent-composer">
+    <ChatComposer draftKey="agent-composer-fixture" agentMode inputValue={value} onInputChange={setValue} onSend={() => {}} isLoading={false}
+      userId="alice" disabled={false} />
+  </section>;
+}
 // 平台模型目录为空时，模型菜单仍要能打开并给出自带 API 的入口（跳到设置页的自定义模型）。
 function ModelSelectorProbe() {
   const [model, setModel] = useState('fixture-analysis');
@@ -702,6 +711,7 @@ function Shell() {
   const [skillCommandsMounted, setSkillCommandsMounted] = useState(false);
   const [imageComposerMounted, setImageComposerMounted] = useState(false);
   const [guestComposerMounted, setGuestComposerMounted] = useState(false);
+  const [agentComposerMounted, setAgentComposerMounted] = useState(false);
   const [modelSelectorMounted, setModelSelectorMounted] = useState(false);
   const [scheduledMounted, setScheduledMounted] = useState(false);
   const [castMounted, setCastMounted] = useState(null);
@@ -731,7 +741,7 @@ function Shell() {
     records: setRecordsMounted, picker: setPickerOpen, selected: setSelectedMounted, agent: setAgentMounted, question: setQuestionMounted, results: setResultsMounted, sidebar: setSidebarMounted, phoneDrawer: setPhoneDrawerMounted, menu: setMenuMounted, rounds: setRoundsMounted, polish: setPolishMounted,
     snapshot: setSnapshotMounted, share: setShareMounted, tarot: setTarotMounted, qimen: setQimenMounted, activity: setActivityMounted,
     annual: setAnnualMounted, community: setCommunityMounted, post: setPostMounted, cast: setCastMounted, skillCommands: setSkillCommandsMounted, imageComposer: setImageComposerMounted, scheduled: setScheduledMounted,
-    guestComposer: setGuestComposerMounted, modelSelector: setModelSelectorMounted,
+    guestComposer: setGuestComposerMounted, agentComposer: setAgentComposerMounted, modelSelector: setModelSelectorMounted,
     visualization: setVisualizationMounted, quote: setQuoteMounted, casting: setCastingMounted, uiPrimitives: setUiPrimitivesMounted };
   window.fixture.chartKey = queryKeys.userCharts;
   window.fixture.chartClient = chartClient;
@@ -807,6 +817,7 @@ function Shell() {
     {skillCommandsMounted && <SkillCommandsProbe />}
     {imageComposerMounted && <ImageComposerProbe />}
     {guestComposerMounted && <GuestComposerProbe />}
+    {agentComposerMounted && <AgentComposerProbe />}
     {modelSelectorMounted && <ModelSelectorProbe />}
     {scheduledMounted && <section data-testid="scheduled-page"><ScheduledTasksPage /></section>}
     {selectedMounted && <SelectedChartProbe />}
@@ -964,7 +975,20 @@ export async function build(outputDirectory) {
           export const authClient = {};
         `;
         if (args.path.endsWith('/ChatTaskToastBridge')) contents = 'export function ChatTaskToastBridge() { return null; }';
-        if (args.path.endsWith('/AnnouncementPopupHost')) contents = 'export function AnnouncementPopupHost({ children }) { return children; } export function useAnnouncementCenterSafe() { return { openAnnouncementCenter() { window.fixture.announcementCenter = (window.fixture.announcementCenter ?? 0) + 1; }, closeAnnouncementCenter() {}, announcementPromptCount: 0 }; }';
+        if (args.path.endsWith('/AnnouncementPopupHost')) contents = `
+          export function AnnouncementPopupHost({ children }) { return children; }
+          export function useAnnouncementCenterSafe() { return {
+            supportsNotifications: false,
+            defaultTab: 'notifications',
+            unseenAnnouncement: null,
+            unseenAnnouncementKey: null,
+            openNotifications() { window.fixture.notificationPanel = (window.fixture.notificationPanel ?? 0) + 1; },
+            openAnnouncement() {},
+            markAnnouncementSeen() {},
+            registerBell() { return () => {}; },
+          }; }
+          export function notificationsHref(tab) { return tab === 'announcements' ? '/user/notifications?tab=announcements' : '/user/notifications'; }
+        `;
         if (args.path.endsWith('/useFeatureToggles')) contents = "const disabledIds = () => window.fixtureFeatures?.disabled ?? []; const isEnabled = id => !disabledIds().includes(id); export function useFeatureToggles() { return { loaded: true, isLoading: false, isFeatureEnabled: isEnabled }; }";
         if (args.path.endsWith('/useCurrentUserProfile')) contents = "import { useSessionSafe } from '@/lib/hooks/session-context'; export function useCurrentUserProfile() { const {user} = useSessionSafe(); return { profile: user ? { is_admin: user.id === 'alice' } : null, loading: false, error: null }; }";
         if (args.path.endsWith('/AuthModal')) contents = 'export function AuthModal() { return null; }';
@@ -1028,6 +1052,7 @@ export async function run(existingPage, bundlePath) {
         if (url.pathname === '/api/agent/status') return Response.json({ enabled: true, ready: true, webAvailable: false, codeModeAvailable: true, planModeAvailable: true });
         if (url.pathname === '/api/agent/activity') return Response.json(agentIO.activity ?? { runs: [], notices: [] });
         if (url.pathname === '/api/agent/skills') return Response.json({ skills: agentIO.skills ?? [] });
+        if (url.pathname === '/api/agent/connectors') return Response.json({ connectors: [{ id: 'connector-platform', name: '平台笔记', description: '读写平台笔记。', scope: 'platform' }] });
         // The roles a member may give a collaboration member, as an administrator set them up.
         if (url.pathname === '/api/agent/profiles') return Response.json({ profiles: [
           { name: 'specialist', displayName: '体系专家', description: '用所给体系的 Core 工具与方法分析。', model: null, modes: ['parallel', 'background'] },
@@ -1541,6 +1566,7 @@ export async function run(existingPage, bundlePath) {
       const all = histories[user] ?? [];
       return ok({ items: all.slice(offset, offset + limit), pagination: { hasMore: offset + limit < all.length, nextOffset: offset + limit < all.length ? offset + limit : null } }, true);
     }
+    if (url.pathname === '/api/announcements' && method === 'GET') return ok({ announcements: [], pagination: { hasMore: false, nextOffset: null } });
     if (url.pathname === '/api/notes' && method === 'POST') {
       const body = request.postDataJSON();
       return ok({ id: 'fixture-note', user_id: 'alice', note_date: body.note_date, content: body.content, mood: body.mood,
@@ -2623,6 +2649,35 @@ export async function run(existingPage, bundlePath) {
     check('The login prompt asks the page to open the auth dialog', true);
     await page.evaluate(() => window.fixture.mount.guestComposer(false));
 
+    // Agent 的 + 菜单：内置技能只有太卜占术一条只读行，管理员连接器标「内置」。
+    await page.evaluate(() => { window.fixtureAgentIO.skills = [{ name: 'case-review', description: '复盘案例', scope: 'user' }]; window.fixture.mount.agentComposer(true); });
+    const agentComposer = page.getByTestId('agent-composer');
+    await agentComposer.getByRole('button', { name: '添加图片或文本资料' }).click();
+    const agentPlusMenu = page.getByRole('menu', { name: '添加图片或文本资料' });
+    await agentPlusMenu.waitFor();
+    await agentPlusMenu.getByRole('menuitem').filter({ hasText: '技能' }).click();
+    const agentSkillsMenu = page.getByRole('menu', { name: '技能', exact: true });
+    await agentSkillsMenu.waitFor();
+    check('The + skills menu lists the one built-in skill as an always-on row, not a method command',
+      await agentSkillsMenu.getByRole('list', { name: '内置技能' }).getByText('太卜占术', { exact: true }).isVisible()
+      && await agentSkillsMenu.getByText('子平八字', { exact: true }).count() === 0
+      && await agentSkillsMenu.getByRole('menuitem').filter({ hasText: '太卜占术' }).count() === 0
+      && await agentSkillsMenu.getByRole('menuitem').filter({ hasText: 'case-review' }).count() === 1);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await agentPlusMenu.waitFor({ state: 'hidden' });
+    await agentComposer.getByRole('button', { name: '添加图片或文本资料' }).click();
+    await agentPlusMenu.waitFor();
+    await agentPlusMenu.getByRole('menuitem').filter({ hasText: '连接器' }).click();
+    const agentConnectorsMenu = page.getByRole('menu', { name: '连接器', exact: true });
+    await agentConnectorsMenu.waitFor();
+    check('An admin-added connector reads as built-in, not platform', await agentConnectorsMenu.getByText('内置', { exact: true }).isVisible()
+      && await agentConnectorsMenu.getByText('平台', { exact: true }).count() === 0);
+    await page.keyboard.press('Escape');
+    await page.keyboard.press('Escape');
+    await agentPlusMenu.waitFor({ state: 'hidden' });
+    await page.evaluate(() => window.fixture.mount.agentComposer(false));
+
     // 平台没有可用模型时，模型菜单仍要能打开，并保留自带 API 的入口。
     await page.evaluate(() => { window.fixture.emptyModels = true; window.fixture.client.removeQueries({ queryKey: ['models'] }); window.fixture.mount.modelSelector(true); });
     await page.waitForFunction(() => document.querySelector('[data-testid="model-selector"] [data-model-trigger]')?.innerText.includes('暂无可用模型'));
@@ -2961,16 +3016,16 @@ export async function run(existingPage, bundlePath) {
     const recordPanel = page.getByTestId('records');
     await page.evaluate(() => window.fixture.mount.records(true));
     await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).waitFor();
-    const recordCategories = recordPanel.getByRole('group', { name: '分类', exact: true });
+    const recordCategories = recordPanel.getByRole('radiogroup', { name: '分类', exact: true });
     const oldRecordFilter = holdNext('/api/records', 'GET');
-    await recordCategories.getByRole('button', { name: '通用', exact: true }).click();
+    await recordCategories.getByRole('radio', { name: '通用', exact: true }).click();
     await intercepted(oldRecordFilter);
-    await recordCategories.getByRole('button', { name: '人生事件', exact: true }).click();
+    await recordCategories.getByRole('radio', { name: '事件', exact: true }).click();
     await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).waitFor();
     await release(oldRecordFilter);
     check('Rapid actual record filters cannot render older response under the new filter',
-      await recordCategories.getByRole('button', { name: '人生事件', exact: true }).getAttribute('aria-pressed') === 'true' &&
-      await recordCategories.getByRole('button', { name: '通用', exact: true }).getAttribute('aria-pressed') === 'false' &&
+      await recordCategories.getByRole('radio', { name: '事件', exact: true }).getAttribute('aria-checked') === 'true' &&
+      await recordCategories.getByRole('radio', { name: '通用', exact: true }).getAttribute('aria-checked') === 'false' &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'General saved record', exact: true }).count() === 0);
     const oldRecordRefresh = holdNext('/api/records', 'GET');
@@ -2983,26 +3038,31 @@ export async function run(existingPage, bundlePath) {
     check('Records archive refresh B survives older refresh A without reloading the page',
       await recordPanel.getByRole('heading', { name: 'Event refreshed record', exact: true }).isVisible() &&
       await recordPanel.getByRole('heading', { name: 'Event saved record', exact: true }).count() === 0);
-    const eventCard = recordPanel.getByRole('listitem').filter({ has: page.getByRole('heading', { name: 'Event refreshed record', exact: true }) });
-    check('Record actions are visible, labelled buttons rather than hover-only icons',
-      await eventCard.getByRole('button', { name: '置顶', exact: true }).getAttribute('aria-pressed') === 'false' &&
-      await eventCard.getByRole('button', { name: '编辑记录', exact: true }).isVisible() &&
-      await eventCard.getByRole('button', { name: '删除记录', exact: true }).isVisible());
+    const eventRow = page.getByRole('heading', { name: 'Event refreshed record', exact: true }).locator('..');
+    await eventRow.getByRole('button', { name: '记录操作', exact: true }).click();
+    const recordMenu = page.getByRole('menu');
+    await recordMenu.waitFor();
+      check('Record actions live in a labelled ⋯ menu instead of four visible icons',
+      (await recordMenu.getByRole('menuitem').allInnerTexts()).map(text => text.trim()).join('|') === '置顶|编辑|加入知识库|删除');
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
     const noteInput = recordPanel.getByLabel('今日小记内容', { exact: true });
     const notePosts = () => requests.filter(item => item.pathname === '/api/notes' && item.method === 'POST');
     await noteInput.fill('拼音');
     await noteInput.dispatchEvent('keydown', { key: 'Enter', code: 'Enter', isComposing: true, bubbles: true, cancelable: true });
-    await recordPanel.getByRole('button', { name: '焦虑', exact: true }).click();
+    await recordPanel.getByRole('button', { name: '心情：平静', exact: true }).click();
+    await page.getByRole('menuitemradio', { name: '焦虑', exact: true }).click();
     check('Enter that confirms an IME candidate does not send the daily note',
       notePosts().length === 0 && await noteInput.inputValue() === '拼音' &&
-      await recordPanel.getByRole('button', { name: '焦虑', exact: true }).getAttribute('aria-pressed') === 'true');
+      await recordPanel.getByRole('button', { name: '心情：焦虑', exact: true }).count() === 1);
     const noteSaved = page.waitForResponse(response => response.request().method() === 'POST' && new URL(response.url()).pathname === '/api/notes');
     await noteInput.press('Enter');
     await noteSaved;
-    const notesDate = new URLSearchParams(requests.filter(item => item.pathname === '/api/notes' && item.method === 'GET').at(-1)?.search).get('date');
-    check('A plain Enter sends the note with the same local date the list reads',
+    const lastNotesQuery = new URLSearchParams(requests.filter(item => item.pathname === '/api/notes' && item.method === 'GET').at(-1)?.search);
+    const rangeEnd = lastNotesQuery.get('endDate');
+    check('A plain Enter sends the note with the same local date the notes range ends on',
       notePosts().length === 1 && notePosts()[0].body?.content === '拼音' && notePosts()[0].body?.mood === 'anxious' &&
-      !!notesDate && notePosts()[0].body?.note_date === notesDate);
+      !!lastNotesQuery.get('startDate') && !!rangeEnd && notePosts()[0].body?.note_date === rangeEnd);
     await page.evaluate(() => window.fixture.mount.records(false));
 
     await page.evaluate(() => window.fixture.mount.question(true));
@@ -4145,8 +4205,10 @@ export async function run(existingPage, bundlePath) {
     check('Opening a conversation reads its unread task notice and clears the dot', noticeRead?.body?.action === 'mark-selected' && noticeRead.body.ids.join() === sidebarNotice &&
       await sidebarRow('我的日主适合什么颜色').getByRole('img', { name: '任务已完成，有新回答' }).count() === 0 &&
       await sidebarRow('我的日主适合什么颜色').getByRole('link').getAttribute('aria-current') === 'page');
-    await sidebar.getByRole('button', { name: '打开公告中心' }).click();
-    check('The sidebar keeps the announcement center entry', await page.evaluate(() => window.fixture.announcementCenter === 1));
+    await sidebar.getByRole('button', { name: /^通知与公告/ }).click();
+    check('The sidebar bell opens the anchored notification panel', await page.getByRole('heading', { name: '公告', exact: true }).count() === 1);
+    await page.keyboard.press('Escape');
+    await page.waitForTimeout(200);
     check('The chat route shows the site sidebar without the old fold rail', await sidebar.getByRole('button', { name: '收起侧栏' }).count() === 0 &&
       await page.locator('.chat-nav.is-rail').count() === 0);
     // An art-of-divination route renders the same sidebar list; its rows must be the
@@ -4469,9 +4531,12 @@ export async function run(existingPage, bundlePath) {
     check('Code blocks show their language and copy the code with a check mark', (await codeHead.innerText()).trim() === 'ts' &&
       JSON.stringify(await page.evaluate(() => window.fixture.copied)) === JSON.stringify(['const answer = 42;']));
     const firstUser = polish.locator('[data-message-id="polish-u1"]');
+    check('Message mentions keep one chip style and name their type on hover',
+      await firstUser.locator('.chat-mention-token[data-type="knowledge_base"]').getAttribute('title') === '知识库');
     await firstUser.getByRole('button', { name: '编辑消息', exact: true }).click();
     const editBox = polish.locator('.chat-user-edit');
     const editInput = editBox.getByRole('textbox', { name: '编辑消息内容', exact: true });
+    check('The inline edit box draws mentions with the same chip', await editBox.locator('.chat-mention-token[data-type="knowledge_base"]').count() === 1);
     await editInput.press('Escape');
     check('Esc cancels the inline edit', await editBox.count() === 0);
     await firstUser.getByRole('button', { name: '编辑消息', exact: true }).click();
@@ -4527,6 +4592,11 @@ export async function run(existingPage, bundlePath) {
     await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
     await page.evaluate(() => { history.replaceState(null, '', '#settings/connectors'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     await page.getByText(/^已启用 0 \/ 3 个连接器/).waitFor();
+    const builtinConnectors = page.getByRole('list', { name: '内置连接器' });
+    await builtinConnectors.getByText('平台笔记').first().waitFor();
+    check('Settings lists admin-added connectors read-only, like built-in skills',
+      await builtinConnectors.getByText('读写平台笔记。', { exact: true }).isVisible()
+      && await builtinConnectors.getByRole('button').count() === 0);
     await page.getByRole('button', { name: '添加连接器' }).click();
     const connectorDialog = page.getByRole('dialog', { name: '添加连接器' });
     await connectorDialog.getByLabel('名称', { exact: true }).fill('我的笔记');
@@ -4566,6 +4636,13 @@ export async function run(existingPage, bundlePath) {
     // Skills: a member uploads a folder holding SKILL.md and the files beside it; the folder itself is the skill.
     await page.evaluate(() => { history.replaceState(null, '', '#settings/skills'); window.dispatchEvent(new HashChangeEvent('hashchange')); });
     await page.getByText('已启用 0 / 3 个技能', { exact: true }).waitFor();
+    const builtinSkill = page.getByRole('list', { name: '内置技能' }).getByRole('listitem');
+    check('Settings shows the built-in skill as one read-only card without method texts',
+      await builtinSkill.getByText('太卜占术').first().isVisible()
+      && await builtinSkill.getByText('taibu-divination', { exact: true }).isVisible()
+      && await builtinSkill.getByText('官方', { exact: true }).isVisible()
+      && await builtinSkill.getByRole('button').count() === 0
+      && await page.getByRole('list', { name: '太卜占术的方法' }).count() === 0);
     const skillFolders = await mkdtemp(resolve(tmpdir(), 'taibu-skills-'));
     const skillFolder = resolve(skillFolders, 'case-review');
     await mkdir(skillFolder, { recursive: true });
@@ -4612,15 +4689,23 @@ export async function run(existingPage, bundlePath) {
     check('A closed skills policy says so and offers no way to add', await page.getByRole('button', { name: '添加技能' }).isDisabled());
     await page.evaluate(() => window.fixtureAuth.change('alice')); await renderBarrier();
     // The slash menu reads the skills the member can call, as /api/agent/skills lists the saved ones.
-    await page.evaluate(skills => { window.fixtureAgentIO.skills = skills; }, skillsByUser.alice.map(({ name, description }) => ({ name, description, scope: 'user' })));
+    await page.evaluate(skills => { window.fixtureAgentIO.skills = skills; window.fixtureAgentIO.requests = []; }, skillsByUser.alice.map(({ name, description }) => ({ name, description, scope: 'user' })));
     await page.evaluate(() => { history.replaceState(null, '', '/chat'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.skillCommands(true); });
     const commandInput = page.getByLabel('命令输入夹具');
     await commandInput.fill('/skill');
     await page.getByRole('button', { name: /\/skill:case-review/u }).waitFor();
-    await commandInput.press('Enter');
+    await commandInput.press('Tab');
     await until(() => document.querySelector('[aria-label="命令输入夹具"]')?.value === '/skill:case-review ');
-    check('Agent mode\'s slash menu offers the member\'s skills and fills in /skill:名称',
+    check('Agent mode\'s slash menu offers the member\'s skills and Tab fills in /skill:名称',
       await page.evaluate(() => window.fixtureAgentIO.requests.filter(request => request.url === '/api/agent/skills').length) === 1);
+    await commandInput.fill('/skills');
+    const skillsCommand = page.getByRole('button', { name: /\/skills/u });
+    await skillsCommand.waitFor();
+    const skillsCommandVisible = await skillsCommand.isVisible();
+    await commandInput.fill('/mcp');
+    const mcpCommand = page.getByRole('button', { name: /\/mcp/u });
+    await mcpCommand.waitFor();
+    check('The slash menu also offers /skills and /mcp as management entries', skillsCommandVisible && await mcpCommand.isVisible());
     await page.evaluate(() => window.fixture.mount.skillCommands(false));
 
     // Own models: the address shows the request it resolves to, a connection test offers the address the provider answers
@@ -4775,11 +4860,11 @@ export async function run(existingPage, bundlePath) {
     check('Qimen does not inherit another account’s saved chart ID', await page.evaluate(() => JSON.parse(sessionStorage.getItem('qimen_result')).recordOwnerId === 'bob'));
     await page.evaluate(() => window.fixture.mount.qimen(false));
     await page.evaluate(() => { window.fixtureAuth.change('alice'); history.replaceState(null, '', '/records?id=record-general'); window.dispatchEvent(new Event('fixture:navigate')); window.fixture.mount.records(true); });
-    await until(() => document.querySelector('input[placeholder="例如：九月面试结果与卦象一致"]')?.value === 'General saved record');
+    await page.getByRole('dialog').getByRole('heading', { name: 'General saved record', exact: true }).waitFor();
     await page.evaluate(() => { history.pushState(null, '', '/records?id=record-event'); window.dispatchEvent(new Event('fixture:navigate')); });
     const currentEventTitle = records.find(record => record.id === 'record-event').title;
-    await page.waitForFunction(title => document.querySelector('input[placeholder="例如：九月面试结果与卦象一致"]')?.value === title, currentEventTitle);
-    check('A second records deep link replaces the editor while the page stays mounted', await page.getByRole('dialog').getByLabel('标题', { exact: true }).inputValue() === currentEventTitle);
+    await page.getByRole('dialog').getByRole('heading', { name: currentEventTitle, exact: true }).waitFor();
+    check('A second records deep link replaces the open detail while the page stays mounted', await page.getByRole('dialog').getByRole('heading', { name: 'General saved record', exact: true }).count() === 0);
     await page.evaluate(() => window.fixture.mount.records(false));
 
     const oldAnnual = holdNext('/api/annual-report', 'GET');

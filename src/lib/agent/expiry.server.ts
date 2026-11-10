@@ -10,8 +10,9 @@ export type AwaitingExpirySummary = { nudged: number; cancelled: number; failed:
 
 /** `AGENT_ASK_TIMEOUT_MINUTES`: 0 disables the sweep, anything invalid falls back to the default. */
 export function agentAskTimeoutMinutes(raw = process.env.AGENT_ASK_TIMEOUT_MINUTES): number {
-  if (raw === undefined || raw === '') return AGENT_ASK_TIMEOUT_DEFAULT_MINUTES;
-  const value = Number(raw);
+  const text = raw?.trim() ?? '';
+  if (!text) return AGENT_ASK_TIMEOUT_DEFAULT_MINUTES;
+  const value = Number(text);
   if (!Number.isSafeInteger(value) || value < 0) return AGENT_ASK_TIMEOUT_DEFAULT_MINUTES;
   return value;
 }

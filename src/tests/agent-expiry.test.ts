@@ -8,6 +8,7 @@ test('the ask timeout defaults to five minutes and treats zero as off', () => {
   const { agentAskTimeoutMinutes } = load();
   assert.equal(agentAskTimeoutMinutes(undefined), 5);
   assert.equal(agentAskTimeoutMinutes(''), 5);
+  assert.equal(agentAskTimeoutMinutes('   '), 5);
   assert.equal(agentAskTimeoutMinutes('30'), 30);
   assert.equal(agentAskTimeoutMinutes('0'), 0);
   assert.equal(agentAskTimeoutMinutes('abc'), 5);

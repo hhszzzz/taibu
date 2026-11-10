@@ -676,7 +676,7 @@ export async function createAgentTools(
   tools.push(
     wrap(
       "ask_user",
-      "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据。每题给 header 短标签（2–6 字，如“出生时间”）；question 首行是问题，其后可写一行填写提示",
+      "缺少必要信息时向用户提出问题并暂停任务；不能猜测出生数据。用户已跳过、拒绝或超时未回答的同一项不要重复询问：按方法中的降级路径继续，或说明缺少该项导致哪些内容无法分析。每题给 header 短标签（2–6 字，如“出生时间”）；question 首行是问题，其后可写一行填写提示",
       obj({ question: opt(str({ minLength: 1 })), questions: opt(arr(obj({ id: str(), question: str(), header: opt(str({ description: "问题导航中的短标签，2–6 个字" })), options: opt(arr(obj({ id: str(), label: str() }, { open: true }))), multiple: opt(bool()), allowCustom: opt(bool()), allowSkip: opt(bool()) }, { open: true }), { minItems: 1, maxItems: 10 })) }, { open: true }),
       async (args) => {
         const questions = normalizeQuestions(args.questions, args.question);

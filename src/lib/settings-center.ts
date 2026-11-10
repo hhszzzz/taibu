@@ -70,7 +70,7 @@ const SETTINGS_CENTER_TAB_META: Record<SettingsCenterTab, Omit<SettingsCenterTab
   'usage-log': { id: 'usage-log', label: '用量日志', group: 'account', beta: true, description: '每次模型调用的用量与费用（自带密钥的调用也记一条），以及充值、兑换、订阅等资金变动。' },
   shares: { id: 'shares', label: '分享链接', group: 'account', description: '你公开分享过的对话。删除后原链接立即失效。' },
   help: { id: 'help', label: '帮助', group: 'account', description: '常见问题与联系方式。' },
-  personalization: { id: 'personalization', label: '个性化', group: 'extensions', description: '这些偏好会带入 AI 对话与结果页解读。' },
+  personalization: { id: 'personalization', label: '个性化', group: 'extensions', description: '这些偏好会带入 AI 解读。' },
   byok: { id: 'byok', label: '自定义模型', group: 'extensions', description: '接入自己的模型服务，在对话、识图、生图、多模型协作和定时任务中使用，不消耗本站余额。' },
   charts: { id: 'charts', label: '命盘', group: 'extensions', description: '保存过的命盘都在这里。默认八字命盘会用于日运、月运和每日早报。' },
   'knowledge-base': { id: 'knowledge-base', label: '知识库', group: 'extensions', description: '把命盘、解读和资料归档到知识库，AI 对话时可以检索引用。' },

@@ -14,7 +14,6 @@ import {
   type FortuneDimensionKey,
 } from '@/lib/visualization/dimensions';
 import { clearLocalVisualizationSettings, readLocalVisualizationSettings, type VisualizationChartStyle } from '@/lib/visualization/settings';
-import { VISUALIZATION_OUTPUT_ENABLED } from '@/lib/visualization/output-switch';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useToast } from '@/components/ui/Toast';
@@ -356,20 +355,16 @@ function AccountAISettingsPanel() {
             />
           </div>
 
-          <div className="settings-field-block">
-            <div className="settings-inline-row settings-inline-row-stacked">
-              <span>命盘注入详细级别</span>
-              <SegmentedChoice
-                ariaLabel="命盘注入详细级别"
-                value={chartPromptDetailLevel}
-                onChange={handleChartPromptDetailLevelChange}
-                options={CHART_PROMPT_DETAIL_OPTIONS_UI}
-                maxWidth={216}
-              />
-            </div>
-            <p className="settings-help">
-              控制对话中注入的命盘信息量；完整档包含最多细节。
-            </p>
+          <div className="settings-inline-row settings-inline-row-stacked">
+            <span>命盘注入详细级别</span>
+            <SegmentedChoice
+              ariaLabel="命盘注入详细级别"
+              value={chartPromptDetailLevel}
+              onChange={handleChartPromptDetailLevelChange}
+              options={CHART_PROMPT_DETAIL_OPTIONS_UI}
+              maxWidth={216}
+            />
+            <p className="settings-help">控制对话中注入的命盘信息量；完整档包含最多细节。</p>
           </div>
 
           <div className="settings-field-block">
@@ -395,9 +390,6 @@ function AccountAISettingsPanel() {
         </div>
 
         <div className="settings-form-body">
-          {!VISUALIZATION_OUTPUT_ENABLED && (
-            <p className="settings-help">图表输出已全局暂停，以下偏好目前只影响文字分析中的关注维度。</p>
-          )}
           <div className="settings-inline-row">
             <span>启用可视化偏好</span>
             <SettingsSwitch

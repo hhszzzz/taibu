@@ -8,7 +8,6 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import './settings-page.css';
 import {
-  LockKeyhole,
   ArrowLeft,
   ChevronRight,
   Menu,
@@ -266,7 +265,7 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
       </div>
       <nav aria-label="设置分类" className="settings-sidebar-nav">
         {(['account', 'extensions', 'management'] as const).map(group => {
-          const items = tabs.filter(tab => tab.group === group);
+          const items = tabs.filter(tab => tab.group === group && !tab.disabled);
           if (!items.length) return null;
           return <div className="settings-nav-group" key={group}>
             <h2>{SETTINGS_CENTER_GROUP_LABELS[group]}</h2>
@@ -276,11 +275,9 @@ export function SettingsCenterPage({ children }: { children: React.ReactNode }) 
                 const href = isAdminSubtabOwner(tab.id)
                   ? getSettingsCenterRouteTarget(tab.id, { subpath: resolveAdminSubTab(tab.id, activeSubpath) })
                   : getSettingsCenterRouteTarget(tab.id);
-                const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span className="settings-nav-label">{tab.label}{tab.beta ? <BetaBadge /> : null}</span>{tab.disabled ? <LockKeyhole size={14} /> : <ChevronRight size={14} className="settings-nav-chevron" />}</>;
+                const content = <><Icon size={SETTINGS_CENTER_ICON_SIZES.sidebar} className="shrink-0" /><span className="settings-nav-label">{tab.label}{tab.beta ? <BetaBadge /> : null}</span><ChevronRight size={14} className="settings-nav-chevron" /></>;
                 return <div className="settings-nav-entry" key={tab.id}>
-                  {tab.disabled
-                    ? <Button unstyled type="button" disabled={tab.disabled} aria-disabled={tab.disabled} className="settings-nav-item cursor-not-allowed">{content}</Button>
-                    : <Link href={href} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>}
+                  <Link href={href} aria-current={tab.id === displayTab ? 'page' : undefined} className="settings-nav-item" onClick={() => setMobileNavigation(false)}>{content}</Link>
                   {isAdminSubtabOwner(tab.id) && tab.id === displayTab && <div className="settings-nav-sub" role="group" aria-label={`${tab.label}子页`}>
                     {getAdminSubTabs(tab.id).map(sub => <Link
                       key={sub.id}

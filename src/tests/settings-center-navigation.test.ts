@@ -188,15 +188,16 @@ test('settings panels retain route boundaries, payment results and private accou
   assert.equal(userMenuSource.includes('{user.email}'), false);
 });
 
-test('settings page renders disabled categories as locked non-clickable controls and falls back after flags load', () => {
+test('settings page hides disabled categories and falls back after flags load', () => {
   const hostSource = readFileSync(resolve(process.cwd(), 'src/components/settings/SettingsCenterPage.tsx'), 'utf8');
 
   assert.equal(hostSource.includes('loaded: featureTogglesLoaded'), true);
   assert.equal(hostSource.includes("router.replace(getSettingsCenterRouteTarget('general'))"), true);
-  assert.equal(hostSource.includes('disabled={tab.disabled}'), true);
-  assert.equal(hostSource.includes('aria-disabled={tab.disabled}'), true);
-  assert.equal(hostSource.includes('cursor-not-allowed'), true);
-  assert.equal(hostSource.includes('LockKeyhole'), true);
+  assert.equal(hostSource.includes('!tab.disabled'), true);
+  assert.equal(hostSource.includes('disabled={tab.disabled}'), false);
+  assert.equal(hostSource.includes('aria-disabled={tab.disabled}'), false);
+  assert.equal(hostSource.includes('cursor-not-allowed'), false);
+  assert.equal(hostSource.includes('LockKeyhole'), false);
   assert.equal(hostSource.includes('border-amber-400/60'), false);
   assert.equal(hostSource.includes('bg-amber-500/5'), false);
   assert.equal(hostSource.includes('rounded-md border border-border px-1.5 py-0.5 text-[10px] text-foreground/50'), false);

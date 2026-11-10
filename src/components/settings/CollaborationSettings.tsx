@@ -82,8 +82,7 @@ export function CollaborationSettings({ userId }: { userId: string }) {
             <p>为常用模型预设名称、角色和分工。</p>
         </div>
         <div className="settings-form-body">
-          <div className="settings-inline-row settings-inline-row-top">
-            <p className="settings-help">每个对话默认不协作；在输入框的模型菜单里勾选模型后才会启用，这里的预设会在勾选时自动套用。主模型不占成员名额；每位成员的模型调用按各自用量计费。</p>
+          <div className="flex justify-end">
             <Button variant="secondary" size="lg" disabled={preset.members.length >= MAX_MEMBERS}
                 onClick={() => setEditor({ index: null, member: member(preset.members.length) })}>
                 <Plus size={14} aria-hidden="true" />添加成员
@@ -116,7 +115,6 @@ export function CollaborationSettings({ userId }: { userId: string }) {
               })}
             </ul>
           ) : null}
-          <p className="settings-help">成员会同时收到已确认资料与实际工具结果，不自行猜测。</p>
         </div>
         {editor ? <CollaboratorDialog
           key={editor.member.id}

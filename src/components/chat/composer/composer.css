@@ -94,6 +94,11 @@
     .chat-composer-dock:not(.is-hero) .chat-composer-statusbar { position: relative; z-index: 0; margin: 0 -8px 0; padding: 8px 16px 0; background: var(--background); }
 }
 .chat-composer-statusbar > * { flex-shrink: 0; }
+/* 状态行下方的新功能提示：与状态行同一列，右端对齐模型键的内边距。 */
+.chat-composer-statusbar-stack { position: relative; display: flex; flex-direction: column; min-width: 0; }
+.chat-composer-statusbar-stack > .feature-tip.is-line { max-width: calc(100% - 16px); margin: 4px 8px 2px; }
+/* 无可用模型时的气泡：排在状态行下方，右端与模型键对齐。 */
+.chat-composer-statusbar-stack > .chat-composer-model-tip.is-bubble { margin: 6px 8px 0; }
 /* chin 中央免责声明（claude 实测：会话内 chin 中央的 muted 一行；hero 与窄屏不显示）。
    绝对居中于输入框列，不受左右两侧控件宽度影响。 */
 .chat-composer-disclaimer { position: absolute; left: 50%; top: 8px; transform: translateX(-50%); color: var(--foreground-tertiary); white-space: nowrap; pointer-events: none; }

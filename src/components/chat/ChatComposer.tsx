@@ -849,6 +849,7 @@ export function ChatComposer({
                     agentMode={agentMode}
                     disabled={disabled}
                     userId={userId}
+                    onLoginRequired={requireLogin}
                     selectedModel={selectedModel}
                     onModelChange={onModelChange}
                     reasoningEnabled={reasoningEnabled}

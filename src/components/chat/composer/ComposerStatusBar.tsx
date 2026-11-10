@@ -9,7 +9,9 @@
  */
 'use client';
 
+import { useState } from 'react';
 import { ModelSelector } from '@/components/ui/ModelSelector';
+import { FeatureTip } from '@/components/ui/FeatureTip';
 import { AgentModeMenu } from '@/components/chat/composer/AgentModeMenu';
 import { AgentApprovalMenu } from '@/components/chat/composer/AgentApprovalMenu';
 import { AgentContextMeter } from '@/components/chat/agent/AgentContextUsage';
@@ -28,45 +30,57 @@ export interface ComposerStatusBarProps extends ModelSettingsProps {
     contextData?: AgentMessageData;
     /** 点开上下文弹层里的技能或方法卡。 */
     onOpenContextResource?: (id: string) => void;
+    /** 未登录时点自带模型入口：走登录提示。 */
+    onLoginRequired?: () => void;
 }
 
 export function ComposerStatusBar(props: ComposerStatusBarProps) {
     const { agentMode, disabled, userId } = props;
+    const [ownModelCta, setOwnModelCta] = useState(false);
 
     return (
-        <div className="chat-composer-toolbar chat-composer-statusbar">
-            {/* 运行模式固定在 chin 行左端（原「+」的位置）：一个按钮打开弹窗选择默认 / 计划 / 代码。
-                管理员把计划与代码都关掉后不再显示入口。 */}
-            {agentMode && props.onPlanModeChange && props.onCodeModeChange
-                && (props.planModeAvailable === true || props.codeModeAvailable === true) && (
-                <AgentModeMenu
-                    planMode={!!props.planMode}
-                    codeMode={!!props.codeMode}
-                    planModeAvailable={props.planModeAvailable === true}
-                    codeModeAvailable={props.codeModeAvailable === true}
-                    disabled={disabled}
-                    onPlanModeChange={props.onPlanModeChange}
-                    onCodeModeChange={props.onCodeModeChange}
-                />
+        <div className="chat-composer-statusbar-stack">
+            <div className="chat-composer-toolbar chat-composer-statusbar">
+                {/* 运行模式固定在 chin 行左端（原「+」的位置）：一个按钮打开弹窗选择默认 / 计划 / 代码。
+                    管理员把计划与代码都关掉后不再显示入口。 */}
+                {agentMode && props.onPlanModeChange && props.onCodeModeChange
+                    && (props.planModeAvailable === true || props.codeModeAvailable === true) && (
+                    <AgentModeMenu
+                        planMode={!!props.planMode}
+                        codeMode={!!props.codeMode}
+                        planModeAvailable={props.planModeAvailable === true}
+                        codeModeAvailable={props.codeModeAvailable === true}
+                        disabled={disabled}
+                        onPlanModeChange={props.onPlanModeChange}
+                        onCodeModeChange={props.onCodeModeChange}
+                    />
+                )}
+                {/* 外部工具的同意方式：自动 / 手动 / 全部允许。 */}
+                {agentMode && props.onApprovalChange && (
+                    <AgentApprovalMenu value={props.approval ?? 'auto'} disabled={disabled} onChange={props.onApprovalChange} />
+                )}
+                <span className="chat-toolbar-spacer" />
+                {/* chin 中央免责声明：仅普通 chat 模式显示（Agent 模式不显示），hero 也不显示 */}
+                {!agentMode && <span className="chat-composer-disclaimer">理性看待玄学</span>}
+                <span className="chat-toolbar-spacer" />
+                <ModelSelector selectedModel={props.selectedModel} onModelChange={props.onModelChange}
+                    reasoningEnabled={props.reasoningEnabled} onReasoningChange={props.onReasoningChange}
+                    reasoningEffort={props.reasoningEffort} onReasoningEffortChange={props.onReasoningEffortChange}
+                    reasoningFromModel={props.reasoningFromModel} onReasoningFromModelChange={props.onReasoningFromModelChange}
+                    collaborators={agentMode ? props.collaborators : undefined} onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
+                    codeMode={agentMode ? props.codeMode : undefined} onCodeModeChange={agentMode ? props.onCodeModeChange : undefined}
+                    planMode={agentMode ? props.planMode : undefined} onPlanModeChange={agentMode ? props.onPlanModeChange : undefined}
+                    ownModelsEntry userId={userId} disabled={disabled} toolbarStyle onEmptyChange={setOwnModelCta}
+                    onLoginRequired={props.onLoginRequired} />
+                {/* 上下文环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
+                <AgentContextMeter data={props.contextData} onOpen={props.onOpenContextResource} />
+            </div>
+            {ownModelCta && (
+                <FeatureTip variant="bubble" className="chat-composer-model-tip" side="bottom" align="end"
+                    storageKey={`taibu:feature-tip:${userId ?? 'anon'}:byok-no-model`} dismissible={false}>
+                    还没有可用模型？可以使用自己的模型 API。
+                </FeatureTip>
             )}
-            {/* 外部工具的同意方式：自动 / 手动 / 全部允许。 */}
-            {agentMode && props.onApprovalChange && (
-                <AgentApprovalMenu value={props.approval ?? 'auto'} disabled={disabled} onChange={props.onApprovalChange} />
-            )}
-            <span className="chat-toolbar-spacer" />
-            {/* chin 中央免责声明：仅普通 chat 模式显示（Agent 模式不显示），hero 也不显示 */}
-            {!agentMode && <span className="chat-composer-disclaimer">理性看待玄学</span>}
-            <span className="chat-toolbar-spacer" />
-            <ModelSelector selectedModel={props.selectedModel} onModelChange={props.onModelChange}
-                reasoningEnabled={props.reasoningEnabled} onReasoningChange={props.onReasoningChange}
-                reasoningEffort={props.reasoningEffort} onReasoningEffortChange={props.onReasoningEffortChange}
-                reasoningFromModel={props.reasoningFromModel} onReasoningFromModelChange={props.onReasoningFromModelChange}
-                collaborators={agentMode ? props.collaborators : undefined} onCollaboratorsChange={agentMode ? props.onCollaboratorsChange : undefined}
-                codeMode={agentMode ? props.codeMode : undefined} onCodeModeChange={agentMode ? props.onCodeModeChange : undefined}
-                planMode={agentMode ? props.planMode : undefined} onPlanModeChange={agentMode ? props.onPlanModeChange : undefined}
-                ownModelsEntry userId={userId} disabled={disabled} toolbarStyle />
-            {/* 上下文环排在模型键之后（claude /code 实测：模型 → 环收尾在行尾） */}
-            <AgentContextMeter data={props.contextData} onOpen={props.onOpenContextResource} />
         </div>
     );
 }

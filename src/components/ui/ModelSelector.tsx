@@ -13,6 +13,7 @@ import { useToast } from './Toast';
 import { ByokKeyDialog } from '@/components/byok/ByokKeyDialog';
 import { DEFAULT_MODEL_ID } from '@/lib/ai/ai-config';
 import { useAvailableModels, type AvailableModel } from '@/lib/hooks/useAvailableModels';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
 import { ownModelChoice, useOwnModels, type OwnModel } from '@/lib/byok/client';
 import { byokComposerEffort, isByokRef } from '@/lib/byok/config';
 import { BYOK_KEY_REQUEST_EVENT } from '@/lib/byok/key-request';
@@ -43,6 +44,10 @@ interface ModelSelectorProps extends ModelSettingsProps {
     extra?: ReactNode;
     /** Offers 「使用自己的模型 API」, which opens the own-model settings. */
     ownModelsEntry?: boolean;
+    /** True when the lists settled with nothing selectable and the own-model API is available. */
+    onEmptyChange?: (empty: boolean) => void;
+    /** A guest picking the own-model entry: ask them to sign in first. */
+    onLoginRequired?: () => void;
 }
 
 /** `1M` / `128K` / `8,000`: how a capacity reads in the model details. */
@@ -137,11 +142,12 @@ function groupByConnection(models: ClientModelConfig[]) {
 
 export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange, reasoningEnabled = false, onReasoningChange,
     reasoningEffort, onReasoningEffortChange, reasoningFromModel = false, onReasoningFromModelChange, collaborators = [], onCollaboratorsChange, extra, ownModelsEntry = false,
-    userId, disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
+    onEmptyChange, onLoginRequired, userId, disabled = false, compact = false, toolbarStyle = false }: ModelSelectorProps) {
     const [open, setOpen] = useState(false);
     const { showToast } = useToast();
     const query = useAvailableModels(userId ?? null, { enabled: !!onModelChange });
     const own = useOwnModels(onModelChange ? userId : null);
+    const features = useFeatureToggles();
     const platformModels = useMemo(() => (query.data ?? []) as ClientModelConfig[], [query.data]);
     // 平台模型在上，自己的对话模型按连接分组排在后面。
     const ownChoices = useMemo<ClientModelConfig[]>(() => own.models.filter(model => model.usage === 'chat').map(ownModelChoice), [own.models]);
@@ -152,6 +158,14 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     const [keyModel, setKeyModel] = useState<OwnModel | null>(null);
     // A missing own model may only still be loading, or its list failed to load: it is replaced once its absence is known.
     const listsSettled = !query.isLoading && !own.loading && !own.failed;
+    // Nothing to pick and the member can bring their own key: the trigger itself becomes the BYOK entry.
+    // Guests see the same entry when the feature is on; it asks them to sign in first.
+    const byokEntry = own.enabled || (!userId && features.isFeatureEnabled('byok'));
+    const byokEntryPending = !userId && features.isLoading;
+    const emptyForOwnApi = listsSettled && !byokEntryPending && !query.error && byokEntry && models.length === 0;
+    // While nothing is selectable, both lists decide the empty state; a settled platform model never waits for BYOK.
+    const emptyLoading = query.isLoading || (!models.length && (own.loading || byokEntryPending));
+    useEffect(() => { onEmptyChange?.(emptyForOwnApi); }, [emptyForOwnApi, onEmptyChange]);
     useEffect(() => {
         if (!models.length || !onModelChange || !listsSettled) return;
         if (models.some(model => model.id === selectedModel)) return;
@@ -196,10 +210,15 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     }, [current, reasoningEnabled, reasoningEffort, reasoningFromModel, onReasoningChange, onReasoningEffortChange]);
     if (!onModelChange && !onReasoningChange) return null;
     // 没有平台模型时仍然可以打开菜单：自己的模型不依赖平台模型目录。
-    const locked = disabled || query.isLoading;
+    const locked = disabled || emptyLoading;
     const summary = reasoningSummary(current, reasoningEnabled, reasoningEffort, !!onReasoningEffortChange);
-    const label = `选择模型：${current?.name ?? '暂无可用模型'}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
+    const emptyLabel = emptyLoading ? '正在加载模型' : emptyForOwnApi ? '使用自己的模型 API' : '暂无可用模型';
+    const label = `选择模型：${current?.name ?? emptyLabel}${toolbarStyle && summary ? ` · ${summary}` : ''}`;
     const close = () => setOpen(false);
+    const openOwnModelSettings = () => {
+        if (!userId) { onLoginRequired?.(); return; }
+        openSettingsCenter('byok');
+    };
     /** Own models start at their own default effort; one without a key on this device asks for it first. */
     const applyModel = (model: ClientModelConfig) => {
         onModelChange?.(model.id);
@@ -272,18 +291,24 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
     </MenuRadioItem>;
     };
     return <div className={`flex items-center ${toolbarStyle ? 'chat-model-selector' : ''}`}>
-        <Menu open={open} onOpenChange={setOpen}>
+        <Menu open={open} onOpenChange={next => {
+            // No models at all: the trigger is a shortcut to the own-model settings instead of an empty menu.
+            if (next && emptyForOwnApi) { openOwnModelSettings(); return; }
+            setOpen(next);
+        }}>
             {toolbarStyle ? <MenuTrigger disabled={locked} className="chat-model-trigger" data-model-trigger
                 aria-label={label}>
-                {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? <ModelIcon icon={current.icon} vendor={current.vendor} size={16} /> : null}
-                <span className="chat-model-name">{current?.name ?? (query.isLoading ? '正在加载模型' : '暂无可用模型')}</span>
+                {emptyLoading ? <SoundWaveLoader variant="inline" /> : current ? <ModelIcon icon={current.icon} vendor={current.vendor} size={16} />
+                    : emptyForOwnApi ? <KeyIcon size={16} /> : null}
+                <span className="chat-model-name">{current?.name ?? emptyLabel}</span>
                 {summary && <span className="chat-model-hint">{summary}</span>}
                 <ChevronDown size={14} aria-hidden="true" />
             </MenuTrigger> : <MenuTrigger disabled={locked} data-model-trigger
                 className={`chat-model-picker flex items-center gap-1.5 rounded-xl px-2 transition-colors ${compact ? 'py-1 text-xs' : 'h-9 text-sm'} ${locked ? 'cursor-not-allowed opacity-50' : 'text-foreground-secondary hover:text-foreground'}`}
                 aria-label={label}>
-                {query.isLoading ? <SoundWaveLoader variant="inline" /> : current ? <ModelIcon icon={current.icon} vendor={current.vendor} /> : <Cpu size={16} />}
-                <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? '暂无可用模型'}</span>
+                {emptyLoading ? <SoundWaveLoader variant="inline" /> : current ? <ModelIcon icon={current.icon} vendor={current.vendor} />
+                    : emptyForOwnApi ? <KeyIcon size={16} /> : <Cpu size={16} />}
+                <span className={`chat-model-name truncate ${compact ? 'max-w-[104px]' : 'max-w-[125px]'}`}>{current?.name ?? emptyLabel}</span>
                 <ChevronDown size={16} className={open ? 'rotate-180' : undefined} />
             </MenuTrigger>}
             <MenuContent side="top" align={toolbarStyle ? 'end' : 'start'} sideOffset={6} className="chat-model-menu" aria-label="模型与分析设置">
@@ -291,7 +316,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                     {platformModels.map(modelRow)}
                     {ownGroups.map(group => <MenuGroup key={group.id} label={group.name}>{group.models.map(modelRow)}</MenuGroup>)}
                 </MenuRadioGroup>
-                {!models.length && !query.isLoading && <p className="chat-model-note">暂无可用模型。</p>}
+                {!models.length && !emptyLoading && <p className="chat-model-note">{emptyForOwnApi ? '没有可用的平台模型，可使用自己的模型 API。' : '暂无可用模型。'}</p>}
                 {reasoningSupported && <MenuSeparator className="chat-model-separator" />}
                 {reasoningSupported && (effortSupported
                     ? <MenuSub>
@@ -348,7 +373,7 @@ export function ModelSelector({ selectedModel = DEFAULT_MODEL_ID, onModelChange,
                 {extra}
                 {ownModelsEntry && own.enabled && <>
                     <MenuSeparator className="chat-model-separator" />
-                    <MenuItem className="chat-model-action" onClick={() => { close(); openSettingsCenter('byok'); }}><KeyIcon size={16} />使用自己的模型 API</MenuItem>
+                    <MenuItem className="chat-model-action" onClick={() => { close(); openOwnModelSettings(); }}><KeyIcon size={16} />使用自己的模型 API</MenuItem>
                 </>}
                 {query.error && <p className="chat-model-note" role="alert">{query.error instanceof Error ? query.error.message : '模型列表加载失败'}</p>}
             </MenuContent>

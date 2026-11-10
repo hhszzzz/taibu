@@ -1,0 +1,125 @@
+/* 通用功能提示：一行弱提示或浮层卡片。位置由调用方决定。 */
+.feature-tip {
+    display: inline-flex;
+    max-width: 100%;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px 2px 2px;
+    color: var(--foreground-secondary);
+    font-size: calc(12.5 / 16 * 1rem);
+    line-height: calc(20 / 16 * 1rem);
+}
+.feature-tip.align-start { align-self: flex-start; }
+.feature-tip.align-center { align-self: center; }
+.feature-tip.align-end { align-self: flex-end; }
+.feature-tip.is-floating { position: absolute; z-index: 40; width: max-content; }
+.feature-tip.is-floating.side-top { bottom: calc(100% + 6px); }
+.feature-tip.is-floating.side-bottom { top: calc(100% + 6px); }
+.feature-tip.is-floating.side-left { right: calc(100% + 8px); }
+.feature-tip.is-floating.side-right { left: calc(100% + 8px); }
+.feature-tip.is-floating.side-top.align-start, .feature-tip.is-floating.side-bottom.align-start { left: 0; }
+.feature-tip.is-floating.side-top.align-center, .feature-tip.is-floating.side-bottom.align-center { left: 50%; transform: translateX(-50%); }
+.feature-tip.is-floating.side-top.align-end, .feature-tip.is-floating.side-bottom.align-end { right: 0; }
+.feature-tip.is-floating.side-left.align-start, .feature-tip.is-floating.side-right.align-start { top: 0; }
+.feature-tip.is-floating.side-left.align-center, .feature-tip.is-floating.side-right.align-center { top: 50%; transform: translateY(-50%); }
+.feature-tip.is-floating.side-left.align-end, .feature-tip.is-floating.side-right.align-end { bottom: 0; }
+.feature-tip-icon { display: inline-flex; flex: none; color: var(--foreground-tertiary); }
+.feature-tip-text { min-width: 0; }
+.feature-tip-action {
+    flex: none;
+    padding: 0 4px;
+    border-radius: 4px;
+    color: var(--accent);
+    font-weight: 500;
+}
+.feature-tip-action:hover { text-decoration: underline; }
+.feature-tip-close {
+    display: inline-flex;
+    flex: none;
+    width: 20px;
+    height: 20px;
+    align-items: center;
+    justify-content: center;
+    border-radius: 4px;
+    color: var(--foreground-tertiary);
+}
+.feature-tip-close:hover { background: var(--fill-ghost-hover); color: var(--foreground); }
+
+/* ---- 浮层卡片 ---- */
+.feature-tip.is-card {
+    display: flex;
+    width: min(300px, calc(100vw - 32px));
+    flex-direction: column;
+    align-items: stretch;
+    gap: 6px;
+    padding: 12px;
+    border-radius: 14px;
+    background: var(--chat-raised);
+    color: var(--foreground);
+    box-shadow: 0 0 0 1px var(--border), 0 12px 32px hsl(from var(--neutral-900) h s l / 12%);
+    font-size: calc(12.5 / 16 * 1rem);
+    line-height: calc(20 / 16 * 1rem);
+    animation: feature-tip-in .18s var(--ease-out) backwards;
+}
+.feature-tip-card-head { display: flex; min-width: 0; align-items: center; gap: 8px; }
+.feature-tip-card-head .feature-tip-close { margin-left: auto; }
+.feature-tip-card-icon {
+    display: inline-flex;
+    width: 26px;
+    height: 26px;
+    flex: none;
+    align-items: center;
+    justify-content: center;
+    border-radius: 8px;
+    background: var(--accent-light);
+    color: var(--accent);
+}
+.feature-tip-card-title { min-width: 0; overflow: hidden; color: var(--foreground); font-size: calc(13.5 / 16 * 1rem); font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.feature-tip.is-card .feature-tip-text { color: var(--foreground-secondary); line-height: calc(20 / 16 * 1rem); }
+.feature-tip-card-action {
+    align-self: flex-end;
+    height: 28px;
+    margin-top: 2px;
+    padding: 0 12px;
+    border-radius: 8px;
+    background: var(--accent);
+    color: var(--on-accent);
+    font-size: calc(12.5 / 16 * 1rem);
+    font-weight: 600;
+}
+.feature-tip-card-action:hover { background: var(--accent-hover); }
+@keyframes feature-tip-in { from { opacity: 0; transform: translateY(4px); } }
+@media (prefers-reduced-motion: reduce) { .feature-tip.is-card { animation: none; } }
+
+/* ---- 只有文字的尖角气泡 ---- */
+.feature-tip.is-bubble {
+    position: relative;
+    display: flex;
+    width: max-content;
+    max-width: min(280px, calc(100vw - 32px));
+    padding: 9px 12px;
+    border-radius: 12px;
+    background: var(--chat-raised);
+    color: var(--foreground-secondary);
+    box-shadow: 0 0 0 1px var(--border), 0 8px 24px hsl(from var(--neutral-900) h s l / 12%);
+    font-size: calc(12.5 / 16 * 1rem);
+    line-height: calc(19 / 16 * 1rem);
+    animation: feature-tip-in .18s var(--ease-out) backwards;
+}
+.feature-tip.is-bubble.is-floating { position: absolute; }
+.feature-tip.is-bubble .feature-tip-text { display: block; }
+.feature-tip.is-bubble.side-top::after,
+.feature-tip.is-bubble.side-bottom::after {
+    content: '';
+    position: absolute;
+    width: 10px;
+    height: 10px;
+    background: var(--chat-raised);
+    transform: rotate(45deg);
+}
+.feature-tip.is-bubble.side-top::after { bottom: -5px; border-right: 1px solid var(--border); border-bottom: 1px solid var(--border); border-bottom-right-radius: 2px; }
+.feature-tip.is-bubble.side-bottom::after { top: -5px; border-top: 1px solid var(--border); border-left: 1px solid var(--border); border-top-left-radius: 2px; }
+.feature-tip.is-bubble.side-top.align-start::after, .feature-tip.is-bubble.side-bottom.align-start::after { left: 20px; }
+.feature-tip.is-bubble.side-top.align-center::after, .feature-tip.is-bubble.side-bottom.align-center::after { left: 50%; margin-left: -5px; }
+.feature-tip.is-bubble.side-top.align-end::after, .feature-tip.is-bubble.side-bottom.align-end::after { right: 20px; }
+@media (prefers-reduced-motion: reduce) { .feature-tip.is-bubble { animation: none; } }

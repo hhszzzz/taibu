@@ -23,6 +23,7 @@
 .app-modal.dialog-sm { width: min(24rem, calc(100vw - 32px)); }
 .app-modal.dialog-md { width: min(28rem, calc(100vw - 32px)); }
 .app-modal.dialog-lg { width: min(42rem, calc(100vw - 32px)); }
+.app-modal.dialog-xl { width: min(48rem, calc(100vw - 32px)); }
 /* Mobile sheets sit on the bottom edge instead of centering. */
 @media (max-width: 639px) {
     .app-modal.dialog-sheet { width: 100vw; max-width: 100vw; margin-top: auto; margin-bottom: 0; }

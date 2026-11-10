@@ -28,8 +28,8 @@ import {
     updateRecord,
     getMonthDayLabel,
     getNoteTimeLabel,
+    getRecordCategory,
     getRecordDateLabel,
-    getWeekdayChar,
     getWeekdayLabel,
     parseDateKey,
     shiftDateKey,
@@ -49,7 +49,6 @@ import { GanZhi, PillarColumns } from './RecordDisplay';
 import { cn } from '@/lib/utils';
 
 const FIELD_CLASS = 'w-full rounded-xl border-[0.5px] border-border-hover bg-surface px-3.5 text-[15px] text-foreground placeholder:text-foreground-tertiary focus:border-accent focus:outline-none';
-const LABEL_CLASS = 'mb-1.5 block text-sm text-foreground-secondary';
 const SECONDARY_BUTTON_CLASS = 'inline-flex h-10 items-center justify-center rounded-xl border-[0.5px] border-border-hover bg-surface px-5 text-sm text-foreground transition-colors hover:bg-background-secondary disabled:opacity-50';
 
 export function getErrorMessage(error: unknown, fallback: string) {
@@ -114,9 +113,10 @@ export function RecordFormModal({
 }) {
     const [title, setTitle] = useState(record?.title || '');
     const [content, setContent] = useState(record?.content || '');
-    const [category, setCategory] = useState<RecordCategory>(record?.category || 'general');
-    const [eventDate, setEventDate] = useState(record?.event_date || toLocalDateKey());
-    const [tagsInput, setTagsInput] = useState(record?.tags.join(', ') || '');
+    // 旧数据的 life/work 归为通用；编辑没有日期的记录时保持空，避免保存后被改成今天。
+    const [category, setCategory] = useState<RecordCategory>(record ? getRecordCategory(record) : 'general');
+    const [eventDate, setEventDate] = useState(record ? record.event_date ?? '' : toLocalDateKey());
+    const [tagsInput, setTagsInput] = useState((record?.tags ?? []).join(', '));
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
     const { showToast } = useToast();
@@ -125,8 +125,7 @@ export function RecordFormModal({
     const dateLabel = getRecordDateLabel({ category });
     const datePillars = pillarsOf?.(eventDate) ?? null;
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const save = async () => {
         if (!userId) {
             setError('请先登录后再保存记录');
             return;
@@ -144,9 +143,10 @@ export function RecordFormModal({
             const tags = tagsInput.split(/[,，]/).map(t => t.trim()).filter(Boolean);
             const data = {
                 title: title.trim(),
-                content: content.trim() || undefined,
+                // 更新时清空正文或日期要传 null，undefined 会被当成「不修改」。
+                content: content.trim() || null,
                 category,
-                event_date: eventDate || undefined,
+                event_date: eventDate || null,
                 tags,
             };
 
@@ -166,93 +166,118 @@ export function RecordFormModal({
         }
     };
 
+    const handleSubmit = (event: React.FormEvent) => {
+        event.preventDefault();
+        void save();
+    };
+
     return (
-        <Dialog bare open onClose={onClose} busy={loading} labelledBy={`${id}-title`} initialFocusRef={titleInputRef} className="max-w-lg">
-            <DialogHeader
-                titleId={`${id}-title`}
-                title={record ? '编辑记录' : '新建记录'}
-                description="记下断语、应验与感悟，日后对照印证。"
-                onClose={onClose}
-                closeDisabled={loading}
-            />
-
-            <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-4 p-5 sm:p-6">
-                <FormError message={error} />
-
-                <div>
-                    <label htmlFor={`${id}-record-title`} className={LABEL_CLASS}>标题</label>
-                    <Input
-                        ref={titleInputRef}
-                        id={`${id}-record-title`}
-                        type="text"
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        aria-invalid={error === '标题不能为空' || undefined}
-                        className={`${FIELD_CLASS} h-11`}
-                        placeholder="例如：九月面试结果与卦象一致"
-                    />
-                </div>
-
-                <fieldset>
-                    <legend className={LABEL_CLASS}>分类</legend>
-                    <div className="flex flex-wrap gap-2">
-                        {RECORD_CATEGORIES.map(cat => (
-                            <FilterChip key={cat.value} pressed={category === cat.value} onClick={() => setCategory(cat.value)}>
-                                {cat.label}
-                            </FilterChip>
-                        ))}
+        <Dialog bare open onClose={onClose} busy={loading} labelledBy={`${id}-title`} initialFocusRef={titleInputRef}
+            className="dialog-xl dialog-sheet max-h-[min(92dvh,46rem)] overflow-hidden">            <div className="flex max-h-[min(92dvh,46rem)] min-h-0 flex-col">
+                <div className="flex shrink-0 items-start justify-between gap-4 px-5 pt-5 sm:px-6 sm:pt-6">
+                    <div className="min-w-0">
+                        <p className="text-[11px] font-medium tracking-[0.08em] text-foreground-tertiary">命理记录</p>
+                        <h2 id={`${id}-title`} className="mt-1 font-display text-[1.375rem] leading-tight text-foreground">
+                            {record ? '编辑记录' : '新建记录'}
+                        </h2>
                     </div>
-                </fieldset>
+                    <IconButton label="关闭" onClick={onClose} disabled={loading} className="-mt-1 -mr-2 text-foreground-tertiary">
+                        <X className="h-[18px] w-[18px]" aria-hidden="true" />
+                    </IconButton>
+                </div>
 
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                    <div>
-                        <label htmlFor={`${id}-event-date`} className={LABEL_CLASS}>{dateLabel}</label>
-                        <Input
-                            id={`${id}-event-date`}
-                            type="date"
-                            value={eventDate}
-                            onChange={(e) => setEventDate(e.target.value)}
-                            aria-describedby={datePillars ? `${id}-event-date-pillars` : undefined}
-                            className={`${FIELD_CLASS} h-11`}
-                        />
-                        {datePillars ? (
-                            <p id={`${id}-event-date-pillars`} className="mt-1 text-xs text-foreground-tertiary">
-                                <GanZhi value={datePillars.year} />年 <GanZhi value={datePillars.month} />月 <GanZhi value={datePillars.day} />日 · 农历{datePillars.lunarMonthDay}
-                            </p>
-                        ) : null}
+                <form onSubmit={handleSubmit} noValidate
+                    onKeyDown={(event) => {
+                        if ((event.metaKey || event.ctrlKey) && event.key === 'Enter' && !event.nativeEvent.isComposing) {
+                            event.preventDefault();
+                            void save();
+                        }
+                    }}
+                    className="flex min-h-0 flex-1 flex-col">
+                    <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4 pb-5 sm:px-6">
+                        <FormError message={error} />
+
+                        <div className="mt-3 grid gap-5 md:grid-cols-[minmax(0,1fr)_13.5rem]">
+                            <div className="flex min-h-[14rem] flex-col rounded-xl border-[0.5px] border-border bg-background-secondary/40 p-3 transition-colors focus-within:border-border-hover sm:min-h-[18rem] sm:p-4">
+                                <label htmlFor={`${id}-record-title`} className="sr-only">标题</label>
+                                <Input
+                                    ref={titleInputRef}
+                                    id={`${id}-record-title`}
+                                    type="text"
+                                    value={title}
+                                    onChange={(e) => setTitle(e.target.value)}
+                                    aria-invalid={error === '标题不能为空' || undefined}
+                                    className="h-auto rounded-none border-0 bg-transparent px-0.5 pb-2 font-display text-[1.25rem] leading-snug hover:border-transparent focus-visible:border-transparent focus-visible:outline-none"
+                                    placeholder="给这条记录起个标题"
+                                />
+                                <div className="h-px bg-border" aria-hidden="true" />
+                                <label htmlFor={`${id}-content`} className="sr-only">内容</label>
+                                <Textarea
+                                    id={`${id}-content`}
+                                    value={content}
+                                    onChange={(e) => setContent(e.target.value)}
+                                    rows={8}
+                                    className="mt-2 min-h-[9rem] w-full flex-1 resize-none rounded-none border-0 bg-transparent px-0.5 py-1 text-[14.5px] leading-7 hover:border-transparent focus-visible:border-transparent focus-visible:outline-none sm:min-h-[13rem]"
+                                    placeholder="断语、排盘结果、实际应验或心得体会"
+                                />
+                            </div>
+
+                            <aside className="flex flex-col gap-4 md:border-l-[0.5px] md:border-border md:pl-5">
+                                <fieldset>
+                                    <legend className="mb-2 text-[11px] text-foreground-tertiary">分类</legend>
+                                    <div className="grid grid-cols-2 gap-1.5">
+                                        {RECORD_CATEGORIES.map(cat => (
+                                            <FilterChip key={cat.value} pressed={category === cat.value} onClick={() => setCategory(cat.value)}
+                                                className="h-7 justify-center px-2 text-[12.5px]">
+                                                {cat.label}
+                                            </FilterChip>
+                                        ))}
+                                    </div>
+                                </fieldset>
+
+                                <div>
+                                    <label htmlFor={`${id}-event-date`} className="mb-1.5 block text-[11px] text-foreground-tertiary">{dateLabel}</label>
+                                    <Input
+                                        id={`${id}-event-date`}
+                                        type="date"
+                                        value={eventDate}
+                                        onChange={(e) => setEventDate(e.target.value)}
+                                        aria-describedby={datePillars ? `${id}-event-date-pillars` : undefined}
+                                        className={`${FIELD_CLASS} h-9 px-2.5 text-[13px]`}
+                                    />
+                                    {datePillars ? (
+                                        <p id={`${id}-event-date-pillars`} className="mt-1.5 text-[11px] leading-relaxed text-foreground-tertiary">
+                                            <GanZhi value={datePillars.year} colored />年 <GanZhi value={datePillars.month} colored />月 <GanZhi value={datePillars.day} colored />日 · 农历{datePillars.lunarMonthDay}
+                                        </p>
+                                    ) : null}
+                                </div>
+
+                                <div>
+                                    <label htmlFor={`${id}-tags`} className="mb-1.5 block text-[11px] text-foreground-tertiary">标签</label>
+                                    <Input
+                                        id={`${id}-tags`}
+                                        type="text"
+                                        value={tagsInput}
+                                        onChange={(e) => setTagsInput(e.target.value)}
+                                        aria-describedby={`${id}-tags-help`}
+                                        className={`${FIELD_CLASS} h-9 px-2.5 text-[13px]`}
+                                        placeholder="事业, 六爻"
+                                    />
+                                    <p id={`${id}-tags-help`} className="mt-1.5 text-[11px] text-foreground-tertiary">用逗号分隔多个标签</p>
+                                </div>
+                            </aside>
+                        </div>
                     </div>
-                    <div>
-                        <label htmlFor={`${id}-tags`} className={LABEL_CLASS}>标签</label>
-                        <Input
-                            id={`${id}-tags`}
-                            type="text"
-                            value={tagsInput}
-                            onChange={(e) => setTagsInput(e.target.value)}
-                            aria-describedby={`${id}-tags-help`}
-                            className={`${FIELD_CLASS} h-11`}
-                            placeholder="事业, 六爻"
-                        />
-                        <p id={`${id}-tags-help`} className="mt-1 text-xs text-foreground-tertiary">用逗号分隔多个标签</p>
+
+                    <div className="flex shrink-0 items-center justify-between gap-3 border-t-[0.5px] border-border px-5 py-3 sm:px-6">
+                        <span className="hidden text-[11px] text-foreground-tertiary sm:inline">Ctrl / ⌘ + Enter 保存</span>
+                        <div className="ml-auto flex gap-2">
+                            <Button variant="secondary" size="md" onClick={onClose} disabled={loading}>取消</Button>
+                            <Button type="submit" size="md" loading={loading} loadingText="保存中…" disabled={loading}>保存记录</Button>
+                        </div>
                     </div>
-                </div>
-
-                <div>
-                    <label htmlFor={`${id}-content`} className={LABEL_CLASS}>内容</label>
-                    <Textarea
-                        id={`${id}-content`}
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        rows={6}
-                        className={`${FIELD_CLASS} resize-y py-3 leading-relaxed`}
-                        placeholder="断语、排盘结果、实际应验或心得体会"
-                    />
-                </div>
-
-                <div className="flex justify-end gap-2 pt-1">
-                    <Button variant="secondary" size="lg" onClick={onClose} disabled={loading}>取消</Button>
-                    <Button type="submit" size="lg" loading={loading} loadingText="保存中…" disabled={loading}>保存记录</Button>
-                </div>
-            </form>
+                </form>
+            </div>
         </Dialog>
     );
 }
@@ -273,7 +298,7 @@ export function RecordNoteList({ notes, onDelete, empty }: {
             {notes.map(note => {
                 const time = getNoteTimeLabel(note);
                 return (
-                    <li key={note.id} className="group flex items-start gap-3 rounded-lg py-1.5">
+                    <li key={note.id} className="group flex items-start gap-3 rounded-lg py-1">
                         <time dateTime={note.created_at} className="w-10 shrink-0 pt-px text-xs leading-6 text-foreground-tertiary tabular-nums">{time}</time>
                         {note.mood ? (
                             <span role="img" aria-label={NOTE_MOOD_LABELS[note.mood]} title={NOTE_MOOD_LABELS[note.mood]} className="shrink-0 text-[15px] leading-6">
@@ -294,7 +319,7 @@ export function RecordNoteList({ notes, onDelete, empty }: {
     );
 }
 
-/** 一格一天：星期、日期、当天最近一条小记的心情；点选看那天的往日小记。 */
+/** 一行七天：只留日期，有笔记的加一个点；点选看那天的往日小记。 */
 function DayCells({ days, notesByDay, todayKey, selected, onSelect }: {
     days: string[];
     notesByDay: Map<string, MingNote[]>;
@@ -303,25 +328,33 @@ function DayCells({ days, notesByDay, todayKey, selected, onSelect }: {
     onSelect: (key: string) => void;
 }) {
     return (
-        <div role="group" aria-label="往日小记" className="grid grid-cols-7 gap-1">
-            {days.map(key => {
-                const dayNotes = notesByDay.get(key) ?? [];
-                const mood = dayNotes[0]?.mood;
-                const isToday = key === todayKey;
-                return (
-                    <Button key={key} unstyled aria-pressed={key === selected}
-                        aria-label={`${getMonthDayLabel(key)} ${getWeekdayLabel(key)}，${dayNotes.length ? `${dayNotes.length} 条小记` : '没有小记'}`}
-                        onClick={() => onSelect(key)}
-                        className="flex flex-col items-center gap-1 rounded-xl py-2 transition-colors hover:bg-fill-ghost-hover aria-pressed:bg-fill-ghost-selected"
-                    >
-                        <span className="text-[11px] leading-none text-foreground-tertiary">{isToday ? '今天' : getWeekdayChar(key)}</span>
-                        <span className={cn('text-[13px] leading-none tabular-nums', isToday ? 'font-medium text-accent' : 'text-foreground-secondary')}>{parseDateKey(key).getDate()}</span>
-                        <span className="flex h-5 items-center text-[15px] leading-none" aria-hidden="true">
-                            {mood ? NOTE_MOOD_ICONS[mood] : <span className={cn('rounded-full', dayNotes.length ? 'h-1.5 w-1.5 bg-foreground-tertiary' : 'h-1 w-1 bg-border-hover')} />}
-                        </span>
-                    </Button>
-                );
-            })}
+        <div role="group" aria-label="往日小记" className="flex items-center gap-2">
+            <span className="shrink-0 text-[11px] text-foreground-tertiary">近 7 天</span>
+            <div className="grid flex-1 grid-cols-7 gap-0.5">
+                {days.map(key => {
+                    const dayNotes = notesByDay.get(key) ?? [];
+                    const mood = dayNotes[0]?.mood;
+                    const isToday = key === todayKey;
+                    return (
+                        <Button key={key} unstyled aria-pressed={key === selected}
+                            aria-label={`${getMonthDayLabel(key)} ${getWeekdayLabel(key)}，${dayNotes.length ? `${dayNotes.length} 条小记` : '没有小记'}`}
+                            title={`${getMonthDayLabel(key)} ${getWeekdayLabel(key)}${dayNotes.length ? ` · ${dayNotes.length} 条小记` : ''}`}
+                            onClick={() => onSelect(key)}
+                            className={cn('relative flex h-6 items-center justify-center rounded-md text-[11.5px] leading-none tabular-nums transition-colors hover:bg-fill-ghost-hover aria-pressed:bg-fill-ghost-selected',
+                                isToday ? 'font-medium text-accent' : 'text-foreground-tertiary')}
+                        >
+                            <span className="flex items-center gap-0.5">
+                                {parseDateKey(key).getDate()}
+                                {mood ? (
+                                    <span aria-hidden="true" className="text-[10px] leading-none">{NOTE_MOOD_ICONS[mood]}</span>
+                                ) : dayNotes.length ? (
+                                    <span aria-hidden="true" className="h-0.5 w-0.5 rounded-full bg-current opacity-60" />
+                                ) : null}
+                            </span>
+                        </Button>
+                    );
+                })}
+            </div>
         </div>
     );
 }
@@ -373,18 +406,18 @@ export function DailyNotes({
 
     return (
         <section aria-label="今日" className="overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
-            <div className="flex items-start justify-between gap-4 px-5 pt-5 md:px-6 md:pt-6">
-                <div className="flex items-end gap-3.5">
-                    <span className="font-display text-[3.5rem] leading-[0.82] text-foreground tabular-nums">{today.getDate()}</span>
+            <div className="flex items-center justify-between gap-4 px-4 pt-4 md:px-5 md:pt-5">
+                <div className="flex items-end gap-3">
+                    <span className="font-display text-[2.75rem] leading-[0.82] text-foreground tabular-nums">{today.getDate()}</span>
                     <div className="flex flex-col gap-1">
-                        <span className="text-[15px] leading-none text-foreground">{today.getMonth() + 1}月 · {getWeekdayLabel(todayKey)}</span>
-                        <span className="text-[13px] leading-none text-foreground-tertiary">{pillars ? `农历${pillars.lunarMonthDay}` : ' '}</span>
+                        <span className="text-[14px] leading-none text-foreground">{today.getMonth() + 1}月 · {getWeekdayLabel(todayKey)}</span>
+                        <span className="text-[12px] leading-none text-foreground-tertiary">{pillars ? `农历${pillars.lunarMonthDay}` : ' '}</span>
                     </div>
                 </div>
-                {pillars ? <PillarColumns pillars={pillars} /> : <div className="h-[4.25rem]" aria-hidden="true" />}
+                {pillars ? <PillarColumns pillars={pillars} className="gap-2.5 [&_dd]:text-[1.05rem] [&_dt]:text-[10px]" /> : <div className="h-[3.25rem]" aria-hidden="true" />}
             </div>
 
-            <div className="px-5 pt-5 pb-3 md:px-6">
+            <div className="px-4 pt-4 pb-2 md:px-5">
                 {isToday ? (
                     <form onSubmit={(event) => { event.preventDefault(); void submit(); }}
                         className="flex items-end gap-1 rounded-xl border-[0.5px] border-border-hover bg-surface p-1 transition-colors focus-within:border-foreground-tertiary">
@@ -432,11 +465,11 @@ export function DailyNotes({
                     <div className="py-4"><SoundWaveLoader variant="inline" text="加载小记中" /></div>
                 ) : (
                     <RecordNoteList notes={dayNotes} onDelete={onDeleteNote}
-                        empty={<p className="py-2 text-[13px] text-foreground-tertiary">{isToday ? '今天还没有小记，写点什么吧。' : '这天没有小记。'}</p>} />
+                        empty={<p className="py-1.5 text-[12.5px] text-foreground-tertiary">{isToday ? '今天还没有小记，写点什么吧。' : '这天没有小记。'}</p>} />
                 )}
             </div>
 
-            <div className="border-t-[0.5px] border-border px-2 py-1.5 md:px-3">
+            <div className="border-t-[0.5px] border-border px-3 py-1">
                 <DayCells days={week} notesByDay={notesByDay} todayKey={todayKey} selected={selected} onSelect={setSelected} />
             </div>
         </section>

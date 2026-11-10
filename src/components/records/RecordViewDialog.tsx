@@ -122,21 +122,20 @@ export function RecordViewDialog({
     };
 
     return (
-        <Dialog bare open onClose={onClose} labelledBy={`${id}-title`} initialFocusRef={closeRef} className="dialog-lg dialog-sheet max-h-[min(88dvh,52rem)] overflow-y-auto">
+        <Dialog bare open onClose={onClose} labelledBy={`${id}-title`} initialFocusRef={closeRef}
+            className="dialog-lg dialog-sheet max-h-[min(88dvh,48rem)] overflow-y-auto">
             <div className="p-5 sm:p-7">
-                <article className="flex flex-col gap-5">
-                    <header className="flex flex-col gap-2.5">
+                <article className="flex flex-col gap-4">
+                    <header className="flex flex-col gap-2">
                         <div className="flex items-start justify-between gap-3">
-                            <p className="flex flex-wrap items-center gap-x-1.5 gap-y-1 pt-1 text-[13px] text-foreground-tertiary">
+                            <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 pt-1 text-[13px]">
                                 {record.is_pinned ? <Pin className="h-3.5 w-3.5 text-accent" aria-label="已置顶" /> : null}
                                 <span className="text-foreground-secondary">{getRecordCategoryLabel(record)}</span>
-                                {isDateKey(record.event_date) ? (
-                                    <>
-                                        <span aria-hidden="true">·</span>
-                                        <span>{getRecordDateLabel(record)} {getShortDateLabel(record.event_date, todayKey)} {getWeekdayLabel(record.event_date)}</span>
-                                    </>
+                                {status ? <StatusPill status={status} className="h-5" /> : null}
+                                {status?.kind === 'hit' || status?.kind === 'miss' ? (
+                                    <Button variant="ghost" size="xs" className="h-5 px-1.5 text-[11px] text-foreground-tertiary" onClick={() => onClearVerdict(record)}>撤销</Button>
                                 ) : null}
-                            </p>
+                            </div>
                             <div className="-mt-1.5 -mr-2 flex shrink-0 items-center gap-0.5">
                                 <RecordMenu record={record} onTogglePin={onTogglePin} onEdit={onEdit}
                                     onAddToKnowledgeBase={onAddToKnowledgeBase} onDelete={onDelete} showKnowledgeBase={showKnowledgeBase} />
@@ -145,13 +144,7 @@ export function RecordViewDialog({
                                 </IconButton>
                             </div>
                         </div>
-                        <h2 id={`${id}-title`} className="font-display text-[1.625rem] leading-snug text-foreground">{record.title}</h2>
-                        {datePillars ? (
-                            <p className="text-[13px] text-foreground-tertiary">
-                                <GanZhi value={datePillars.year} />年 <GanZhi value={datePillars.month} />月 <GanZhi value={datePillars.day} colored />日
-                                <span className="mx-1.5" aria-hidden="true">·</span>农历{datePillars.lunarMonthDay}
-                            </p>
-                        ) : null}
+                        <h2 id={`${id}-title`} className="font-display text-[1.75rem] leading-snug text-foreground">{record.title}</h2>
                     </header>
 
                     {status?.kind === 'due' ? (
@@ -159,12 +152,20 @@ export function RecordViewDialog({
                             <p className="text-sm text-accent-strong">{status.days === 0 ? '今天是应验日' : `应验日已过 ${status.days} 天`}，结果如何？</p>
                             <VerdictButtons record={record} onVerdict={onVerdict} />
                         </div>
-                    ) : status ? (
-                        <div className="flex items-center gap-2">
-                            <StatusPill status={status} />
-                            {status.kind === 'hit' || status.kind === 'miss' ? (
-                                <Button variant="ghost" size="xs" className="text-xs text-foreground-tertiary" onClick={() => onClearVerdict(record)}>撤销</Button>
-                            ) : null}
+                    ) : null}
+
+                    {isDateKey(record.event_date) ? (
+                        <div className="rounded-xl bg-background-secondary/60 px-3.5 py-2.5">
+                            <div className="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
+                                <span className="text-[11px] text-foreground-tertiary">{getRecordDateLabel(record)}</span>
+                                <span className="text-[13.5px] text-foreground">{getShortDateLabel(record.event_date, todayKey)} {getWeekdayLabel(record.event_date)}</span>
+                                {datePillars ? (
+                                    <span className="text-[11.5px] text-foreground-tertiary">
+                                        <GanZhi value={datePillars.year} colored />年 <GanZhi value={datePillars.month} colored />月 <GanZhi value={datePillars.day} colored />日
+                                        <span className="mx-1" aria-hidden="true">·</span>农历{datePillars.lunarMonthDay}
+                                    </span>
+                                ) : null}
+                            </div>
                         </div>
                     ) : null}
 
@@ -192,10 +193,11 @@ export function RecordViewDialog({
                             {chartLabel ? (
                                 record.related_chart_type === 'bazi_chart' || record.related_chart_type === 'ziwei_chart' ? (
                                     <LinkedRow label="关联资料" value={<span className="inline-flex items-center gap-1.5"><Link2 className="h-3.5 w-3.5 text-foreground-tertiary" aria-hidden="true" />{chartLabel}</span>}
-                                        href={record.related_chart_id ? getSavedChartHref(record.related_chart_type === 'bazi_chart' ? 'bazi' : 'ziwei', record.related_chart_id) : null} />
+                                        href={record.related_chart_id ? getSavedChartHref(record.related_chart_type === 'bazi_chart' ? 'bazi' : 'ziwei', record.related_chart_id) : null}
+                                        staticRow={!record.related_chart_id} />
                                 ) : (
                                     <LinkedRow label="关联资料" value={<span className="inline-flex items-center gap-1.5"><Link2 className="h-3.5 w-3.5 text-foreground-tertiary" aria-hidden="true" />{chartLabel}</span>}
-                                        onClick={() => { void openRelated(); }} busy={relatedBusy} />
+                                        onClick={() => { void openRelated(); }} busy={relatedBusy} staticRow={!record.related_chart_id} />
                                 )
                             ) : null}
                             {record.source_run_id ? (
@@ -209,7 +211,7 @@ export function RecordViewDialog({
                         </div>
                     ) : null}
 
-                    <footer className="text-xs text-foreground-tertiary">
+                    <footer className="text-[11px] text-foreground-tertiary">
                         记于 {getShortDateLabel(createdAtKey, todayKey)}{edited ? ` · 修改于 ${getShortDateLabel(updatedAtKey, todayKey)}` : ''}
                     </footer>
                 </article>

@@ -353,7 +353,7 @@
       "arguments": { "gender": "male", "birthYear": 1990, "birthMonth": 1, "birthDay": 15, "birthHour": 9 }
     },
     "arguments": { "palace": "命宫" },
-    "prompt": "排好我的紫微盘后，细看命宫：星曜四化、三方四正与运限叠加。",
+    "prompt": "我是男的，1990 年 1 月 15 日上午九点出生。排好我的紫微盘后，细看命宫：星曜四化、三方四正与运限叠加。",
     "assertions": [
       "先排紫微盘，再用命盘引用调用 ziwei_palace 查询命宫",
       "引用命宫实际星曜与三方四正，不捏造盘面",
@@ -490,5 +490,76 @@
       "应期给出时间尺度（年/月）与区间，说明入相位、精确、出相位的判断；避免宿命化预言"
     ],
     "sourceEvalId": 8
+  },
+  {
+    "id": "bazi-hepan-2026",
+    "tool": "bazi_hepan",
+    "guide": "bazi",
+    "arguments": {
+      "a": { "name": "男方", "gender": "male", "birthYear": 1990, "birthMonth": 1, "birthDay": 15, "birthHour": 9 },
+      "b": { "name": "女方", "gender": "female", "birthYear": 1992, "birthMonth": 3, "birthDay": 8, "birthHour": 14 }
+    },
+    "prompt": "我是男的，1990 年 1 月 15 日上午九点。女朋友 1992 年 3 月 8 日下午两点。帮我看看我们俩合不合适，以后相处要注意什么。",
+    "assertions": [
+      "双方出生信息齐全，命盘由工具计算，不为任何一方假设或改动出生数据",
+      "调用 bazi_hepan 取两盘之间的事实：日柱、年柱、日主互见的十神与五行生克",
+      "不给分数、不下「合」或「不合」的单一结论，分别写互补处与易冲突处并落到具体干支",
+      "建议针对两盘的具体关系，不写放之四海皆准的空话，避免绝对化预言"
+    ]
+  },
+  {
+    "id": "almanac-select-wedding-2026",
+    "tool": "almanac_select",
+    "guide": "almanac",
+    "arguments": { "startDate": "2026-11-15", "endDate": "2026-12-15", "activity": "嫁娶", "excludeClash": ["牛", "鸡"] },
+    "prompt": "我们想在 2026 年 11 月 15 日到 12 月 15 日之间挑个结婚领证的日子。我属牛，对象属鸡，帮我们筛一下哪些天合适。",
+    "assertions": [
+      "必须调用真实计算工具（almanac_select），区间与两个生肖按用户所给传入",
+      "候选日依据工具返回的宜忌、建除、黄黑道与冲煞，不自行增补未返回的吉日或吉时",
+      "给出候选日与排除理由（如冲生肖、忌嫁娶），并说明区间内共多少天、排除多少",
+      "未查询其他日期时说明需要另查，不虚列吉日；健康与就医不由黄历决定"
+    ]
+  },
+  {
+    "id": "daliuren-lessons-signing",
+    "tool": "daliuren_lessons",
+    "guide": "daliuren",
+    "chart": { "tool": "daliuren", "arguments": { "date": "2026-03-15", "hour": 16, "minute": 53, "timezone": "Asia/Shanghai", "question": "这份合同下周能签成吗" } },
+    "arguments": { "focus": "传", "leiShen": "贵人" },
+    "prompt": "我想问下周能不能签下这份合同，起课时间是 2026 年 3 月 15 日 16:53。起课后帮我细看三传和贵人。",
+    "assertions": [
+      "四课、三传与贵人的内容与详查返回一致：课体、三传地支与所乘天将逐条对得上，不捏造",
+      "三传与贵人的实际返回内容（地支、天将、遁干六亲、旬空）引用准确，不捏造",
+      "应期写明取自哪一传、哪种取法（值日、冲合、填实、出空），不凭记忆写死历日",
+      "结论明确回答能否签成与时间范围，给出建议，避免绝对化预言"
+    ]
+  },
+  {
+    "id": "astrology-point-saturn",
+    "tool": "astrology_point",
+    "guide": "astrology",
+    "chart": { "tool": "astrology", "arguments": { "birthYear": 1990, "birthMonth": 1, "birthDay": 1, "birthHour": 12, "birthMinute": 30, "latitude": 40.7128, "longitude": -74.006, "transitDateTime": "2026-04-10T09:30:00" } },
+    "arguments": { "planet": "saturn", "focus": "流运" },
+    "prompt": "1990 年 1 月 1 日中午十二点半出生在纽约，男的。重点帮我看看土星现在对我有哪些流运触发。",
+    "assertions": [
+      "先调用 astrology 排盘，再用命盘引用调用 astrology_point，不重复传出生信息",
+      "土星的星座宫位、传统尊贵、宫主星落点与流运触发逐项取自工具返回，不捏造",
+      "区分本命结构与流运触发，不据本命相位推流运；流运相位只取自实际返回的列表",
+      "应期给出时间尺度与区间（年/月），说明入相位与出相位，避免宿命化预言"
+    ]
+  },
+  {
+    "id": "past-events-calibration",
+    "mayAskUser": true,
+    "tool": "bazi",
+    "guide": "past-events",
+    "arguments": { "gender": "male", "birthYear": 1990, "birthMonth": 1, "birthDay": 15, "birthHour": 9 },
+    "prompt": "我是男的，1990 年 1 月 15 日上午九点出生。之前有人给我看八字说我身弱，也有人说身强，我自己也拿不准。帮我看看接下来几年怎么样。",
+    "assertions": [
+      "先排盘并指出论断依赖的取舍（旺衰与用神在强弱之间）",
+      "向用户核对两三件在两种取舍下判断相反的往事，问发生年份与顺逆，一次问两三件",
+      "先不给出推断，避免用「是不是换了工作」这类引导式问法",
+      "用户确认前不硬定强弱与用神；按验证前事先提问并暂停任务即视为通过"
+    ]
   }
 ]

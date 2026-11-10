@@ -36,3 +36,34 @@ test('a cancelled score does not start another model request', async () => {
     await assert.rejects(judgeAgentEvaluation(config, input, () => { called = true; throw new Error('must not start'); }, AbortSignal.abort()), { name: 'AbortError' });
     assert.equal(called, false);
 });
+test('a pairing stored with chart references is rebuilt before the Core recompute', async () => {
+    const { assertAgentEvaluation } = require('../lib/agent/evaluation.server') as typeof import('../lib/agent/evaluation.server');
+    const core = require('taibu-core/mcp') as typeof import('taibu-core/mcp');
+    const { MemoryStore, row } = require('./helpers/agent-runtime-fixture') as typeof import('./helpers/agent-runtime-fixture');
+    const run = row(), store = new MemoryStore();
+    const artifact = async (id: string, name: string, args: Record<string, unknown>, input = args) => {
+        const raw = await core.executeTool(name, input);
+        const rendered = core.buildToolSuccessPayload(name, raw, { detailLevel: 'default' });
+        const row = { id, call_id: id, tool_name: name, kind: 'calculation' as const, args,
+            result: { content: rendered.content, details: rendered.structuredContent, canonicalText: rendered.content.map(part => part.text).join('\n') } };
+        store.drafts.set(id, row as never);
+        return row;
+    };
+    const { randomUUID } = require('node:crypto') as typeof import('node:crypto');
+    const a = randomUUID(), b = randomUUID();
+    await artifact(a, 'bazi', { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 });
+    await artifact(b, 'bazi', { gender: 'female', birthYear: 1992, birthMonth: 3, birthDay: 8, birthHour: 14 });
+    await artifact(randomUUID(), 'bazi_hepan', { a: { reference: 'artifact:' + a }, b: { reference: 'artifact:' + b } },
+        { a: { gender: 'male', birthYear: 1990, birthMonth: 1, birthDay: 15, birthHour: 9 }, b: { gender: 'female', birthYear: 1992, birthMonth: 3, birthDay: 8, birthHour: 14 } });
+    await assertAgentEvaluation(run, 'bazi_hepan', [...store.drafts.values()] as never, store);
+    await assert.rejects(assertAgentEvaluation(run, 'bazi_hepan', [...store.drafts.values()] as never), /成果存储/);
+});
+test('a judge request that fails in transport is retried once', async () => {
+    let attempts = 0;
+    const result = await judgeAgentEvaluation(config, input, model => {
+        attempts += 1;
+        return response(attempts === 1 ? '' : '{"passed":true,"failedAssertions":[]}', attempts === 1 ? 'error' : 'stop')(model, {} as never, undefined);
+    });
+    assert.equal(attempts, 2);
+    assert.equal(result.quality.passed, true);
+});

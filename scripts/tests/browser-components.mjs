@@ -2678,20 +2678,17 @@ export async function run(existingPage, bundlePath) {
     await agentPlusMenu.waitFor({ state: 'hidden' });
     await page.evaluate(() => window.fixture.mount.agentComposer(false));
 
-    // 平台没有可用模型时，模型菜单仍要能打开，并保留自带 API 的入口。
+    // 平台没有可用模型时，模型键直接成为自带 API 的入口，不再打开空菜单。
     await page.evaluate(() => { window.fixture.emptyModels = true; window.fixture.client.removeQueries({ queryKey: ['models'] }); window.fixture.mount.modelSelector(true); });
-    await page.waitForFunction(() => document.querySelector('[data-testid="model-selector"] [data-model-trigger]')?.innerText.includes('暂无可用模型'));
+    await page.waitForFunction(() => document.querySelector('[data-testid="model-selector"] [data-model-trigger]')?.innerText.includes('使用自己的模型 API'));
     const modelSelector = page.getByTestId('model-selector');
     const modelTrigger = modelSelector.locator('[data-model-trigger]');
-    check('The model menu opens with no platform models', await modelTrigger.isEnabled());
+    check('An empty catalog turns the model key into the own-API entry', await modelTrigger.isEnabled());
     await modelTrigger.click();
-    const modelMenu = page.getByRole('menu', { name: '模型与分析设置', exact: true });
-    await modelMenu.waitFor();
-    check('An empty catalog still offers the member’s own API', await modelMenu.getByText('暂无可用模型。', { exact: true }).count() === 1
-      && await modelMenu.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).count() === 1);
-    await modelMenu.getByRole('menuitem', { name: '使用自己的模型 API', exact: true }).click();
-    await until(() => document.querySelector('[data-testid="model-selector-settings"]').textContent !== '');
-    check('Choosing the own API opens the own-model settings', await page.getByTestId('model-selector-settings').innerText() === '/settings/byok');
+    await until(() => document.querySelector('[data-testid="model-selector-settings"]').textContent === '/settings/byok');
+    check('Clicking the empty model key opens the own-model settings without an empty menu',
+      await page.getByTestId('model-selector-settings').innerText() === '/settings/byok'
+      && await page.getByRole('menu', { name: '模型与分析设置', exact: true }).count() === 0);
     await page.evaluate(() => { window.fixture.mount.modelSelector(false); window.fixture.emptyModels = false; window.fixture.client.removeQueries({ queryKey: ['models'] }); });
 
     // 引用：选中助手回答中的文字浮出「引用」按钮，消息菜单可引用整条；发送后引用卡在用户气泡上方。

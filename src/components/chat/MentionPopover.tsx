@@ -263,7 +263,7 @@ export function MentionPopover({ query, dataSources, knowledgeBases, enabledData
                 if (item && (activeLevel === 'root' || activeLevel === 'types')) openRow(item);
                 return;
             }
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
                 const item = view.items[effectiveState.activeIndex];
                 if (!item || item.disabled) return;

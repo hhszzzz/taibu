@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState, type RefObject, type KeyboardEvent } from 'react';
+import { useRouter } from 'next/navigation';
 import { X } from 'lucide-react';
 import { Dialog } from '@/components/ui/Dialog';
 import { Button } from '@/components/ui/Button';
@@ -34,6 +35,7 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
     agentMode?: boolean;
 }) {
     const { showToast } = useToast();
+    const router = useRouter();
     const own = useOwnModels(userId);
     const [selected, setSelected] = useState(0);
     const [dismissed, setDismissed] = useState(false);
@@ -91,6 +93,11 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
         // 压缩是 Agent 对话的指令：填入 `/compact `，可接着写想保留的重点，回车发送。
         ...(agentMode ? [{ id: 'compact', label: '压缩上下文', run: () => { change('/compact '); textarea.current?.focus(); } }] : []),
         ...skillCommands,
+        // 浏览入口排在具体技能之后：输入 /skill 时先补全 /skill:名称。
+        ...(agentMode ? [
+            { id: 'skills', label: '查看与管理技能', run: () => router.push('/settings/skills') },
+            { id: 'mcp', label: '查看与管理连接器', run: () => router.push('/settings/connectors') },
+        ] : []),
     ];
     const prefix = /^[\/、]([^\s]*)$/u.exec(text);
     const matches = prefix ? commands.filter(command => command.id.includes(prefix[1].toLowerCase()) || command.label.includes(prefix[1])) : [];
@@ -99,10 +106,10 @@ export function useComposerCommands({ userId, draftKey, text, change, textarea, 
     const changed = () => { setDismissed(false); setSelected(0); historyCursor.current = -1; };
     const keyDown = (event: KeyboardEvent<HTMLTextAreaElement>): boolean => {
         if (event.nativeEvent.isComposing || event.nativeEvent.keyCode === 229 || mentionsOpen) return false;
-        if (open && ['ArrowDown', 'ArrowUp', 'Enter', 'Escape'].includes(event.key)) {
+        if (open && ['ArrowDown', 'ArrowUp', 'Enter', 'Tab', 'Escape'].includes(event.key)) {
             event.preventDefault();
             if (event.key === 'Escape') setDismissed(true);
-            else if (event.key === 'Enter') execute(matches[selected % matches.length]);
+            else if (event.key === 'Enter' || event.key === 'Tab') execute(matches[selected % matches.length]);
             else setSelected(index => (index + (event.key === 'ArrowDown' ? 1 : -1) + matches.length) % matches.length);
             return true;
         }

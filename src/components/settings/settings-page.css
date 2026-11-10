@@ -84,7 +84,7 @@
 .settings-inline-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: .75rem 1.5rem; font-size: .875rem; font-weight: 500; color: var(--foreground); }
 .settings-inline-row > :first-child { flex: 1 1 0%; min-width: 8rem; }
 .settings-inline-row-top { align-items: flex-start; }
-.settings-help { font-size: .8125rem; line-height: 1.65; color: var(--foreground-secondary); }
+.settings-help { font-size: .8125rem; line-height: 1.65; font-weight: 400; color: var(--foreground-secondary); }
 .settings-field { display: flex; flex-direction: column; gap: .375rem; font-size: .8125rem; color: var(--foreground-secondary); }
 
 /* Shared controls. */

@@ -19,7 +19,7 @@
 已迁移区域：
 
 - 设置中心与后台：通用、命盘、记忆、协作、个人资料、钱包、用量日志、知识库、分享链接、AI 模型与网关、公告、计费（用户账户、套餐、兑换码、订单、设置）、日志（用量日志、Agent 任务、定时任务）、Agent 测评/性能/角色/策略/定时限额、MCP 与技能管理。详情弹窗共用 `DetailLayout`（参照 new-api 的日志详情：分区、字段行、可折叠计数分区）。
-- 通用业务操作：认证补全（改密）、命理记录与详情、分享链接、社区列表/发帖/评论（颜色改为语义令牌，分类与排序改用 Select）、通知页、定时任务页、合盘入口、历史列表与详情、每日问答、页头与移动导航的通用按钮。
+- 通用业务操作：认证补全（改密）、命理记录（今日小记卡、待印证、编年时间线与详情弹窗）、分享链接、社区列表/发帖/评论（颜色改为语义令牌，分类与排序改用 Select）、通知页与铃铛的通知面板（`Popover` + `SegmentedControl mode="tabs"`）、公告阅读弹窗与侧栏公告卡、定时任务页、合盘入口、历史列表与详情、每日问答、页头与移动导航的通用按钮。
 
 保留既有实现（有意例外，不是遗漏）：
 
@@ -596,7 +596,7 @@ Badge 分两种，不再扩张：
 
 ### 21.1 待设计裁决
 
-- **SegmentedControl 尺寸**：轨道 40/44px（4px 内衬 + 段高 32/36px），不在 §2.1 刻度内；claude 实测为高 32px、1px 内衬、radius 8、段 radius 6。收敛到 32/38px 会改动八字/合盘表单与设置页布局，需要一次性决定，并同步 `SegmentedChoice`、通知页与解读模式切换。`mode="tabs"` 目前没有调用方。
+- **SegmentedControl 尺寸**：轨道 40/44px（4px 内衬 + 段高 32/36px），不在 §2.1 刻度内；claude 实测为高 32px、1px 内衬、radius 8、段 radius 6。收敛到 32/38px 会改动八字/合盘表单与设置页布局，需要一次性决定，并同步 `SegmentedChoice` 与解读模式切换。`mode="tabs"` 用于通知面板与通知页的「通知 / 公告」切换。
 - **确认框标题字体**：`ConfirmDialog` 标题是 `font-display` 20px，结构化 `Dialog` 是 18px/500 无衬线；§3.3 只允许 display 字体用于 h1、品牌和状态标题。二选一后统一。
 - **ConfirmDialog 外壳与命名**：仍自写外壳（未复用结构化 Dialog），受控属性叫 `isOpen`/`onClose`，与 `Dialog` 的 `open`/`onOpenChange` 不一致。
 - **结构化 Dialog 的去留**：39 处业务对话框全是 `bare`，结构化模式只有组件测试在用。要么把标准编辑器类对话框逐步迁过去，要么承认 bare 是主路径并精简结构化 API。
@@ -609,7 +609,7 @@ Badge 分两种，不再扩张：
 ### 21.2 待调用方跟进
 
 - **设置中心**：`settings-page.css` 的 `.settings-segmented*` 覆盖已与共享默认等价，而且暗色滑块用 `--background-tertiary`，比轨道还暗，看起来像凹进去；删掉这组规则和 `SegmentedChoice` 的 `indicatorClassName`。`.app-modal.collab-dialog :where(input, textarea, .settings-combobox):focus-visible { outline: none; }` 是给已删除的对话框焦点规则打的补丁，也可删除。要中性焦点就在 `.collab-dialog` 上设 `--control-focus: var(--foreground-secondary)`，字段边框与外圈会一起变。
-- **自绘分段控件**：通知页与 `InterpretationModeToggle` 紧凑模式用 `indicator={false}` + 自有类重画轨道和选中态，但没覆盖高度，轨道仍被默认的 `h-11` 撑到 44px：通知页 32px 的选项贴顶、下方空出 8px，解读模式的小号选项上下各空约 10px。定时任务的 `.sched-segmented` 同样自绘。改用默认外观，或至少修正高度。
+- **自绘分段控件**：`InterpretationModeToggle` 紧凑模式用 `indicator={false}` + 自有类重画轨道和选中态，但没覆盖高度，轨道仍被默认的 `h-11` 撑到 44px，小号选项上下各空约 10px。定时任务的 `.sched-segmented` 同样自绘。改用默认外观，或至少修正高度。
 - **音浪补丁**：`SanshiFormControls` 用 `[&_.sound-wave-bar]:bg-on-accent` 修补实色按钮里的音浪，改为 `SoundWaveLoader tone="current"`。
 - **CopyTextModal**：用 `ConfirmDialog showActions={false}` 承载非确认内容，应改用 `Dialog`。
 - **工作区最大化键**：`.agent-icon-button` 带 `aria-pressed`，最大化时会显示陶土淡底；不需要就在领域类里写明 `background`。

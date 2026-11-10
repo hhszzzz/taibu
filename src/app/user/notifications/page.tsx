@@ -195,10 +195,6 @@ function NotificationsTabContent({ tabs }: { tabs: ReactNode }) {
     const selectedCount = selectedIds.size;
     const allSelected = visibleNotifications.length > 0 && visibleNotifications.every((item) => selectedIds.has(item.id));
 
-    useEffect(() => {
-        window.dispatchEvent(new CustomEvent('taibu:notifications-unread', { detail: { count: unreadCount } }));
-    }, [unreadCount]);
-
     const toggleSelectMode = () => {
         setSelectMode((value) => !value);
         setSelectedIds(new Set());

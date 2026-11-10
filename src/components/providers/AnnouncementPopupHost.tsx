@@ -59,7 +59,11 @@ function writeAnnouncementCenterLocalState(value: AnnouncementCenterLocalState) 
         return;
     }
 
-    window.localStorage.setItem(ANNOUNCEMENT_CENTER_STORAGE_KEY, JSON.stringify(value));
+    try {
+        window.localStorage.setItem(ANNOUNCEMENT_CENTER_STORAGE_KEY, JSON.stringify(value));
+    } catch {
+        // Storage can be unavailable in private mode; the notice simply stays unseen.
+    }
 }
 
 export function useAnnouncementCenterSafe(): AnnouncementCenterContextValue {

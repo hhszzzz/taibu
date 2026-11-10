@@ -37,8 +37,8 @@ const toolSearchSection: PromptSection = {
     const data = DATA_TOOL_NAMES.filter(([name]) => deferred.some(tool => tool.name === name)).map(([, label]) => label);
     const external = deferred.some(tool => tool.name.startsWith(AGENT_MCP_TOOL_PREFIX));
     return [
-      `还有 ${deferred.length} 个低频工具没有直接提供：八字的关系、五行、流年扫描详查，大运、四柱反推与两人合盘，紫微大限与飞星，择日，奇门／大六壬／占星／六爻的局部详查${data.length ? `，读取${data.join('、')}` : ''}${external ? '，以及外部服务的工具' : ''}。`,
-      `需要其中某个工具时，先调用 tool_search 用中文关键词检索（例如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」「六爻动爻」${data.length ? '「笔记」「以往对话」' : ''}${external ? '，外部工具也可用服务名或用途检索' : ''}）。命中的工具从下一次模型调用起可用；同一对话内加载过的工具保持可用，压缩上下文后仍可用。已直接提供的排盘工具不必检索。`,
+      `还有 ${deferred.length} 个低频工具没有直接提供：八字的关系、五行、流年扫描详查，大运、四柱反推、推算出生时辰与两人合盘，紫微宫位、运限与飞星，择日，奇门／大六壬／占星／六爻的局部详查${data.length ? `，读取${data.join('、')}` : ''}${external ? '，以及外部服务的工具' : ''}。`,
+      `需要其中某个工具时，先调用 tool_search 检索：用中文关键词，或直接用方法正文里写的工具名（例如「bazi_wuxing」「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」「六爻动爻」${data.length ? '「笔记」「以往对话」' : ''}${external ? '，外部工具也可用服务名或用途检索' : ''}）。命中的工具从下一次模型调用起可用；同一对话内加载过的工具保持可用，压缩上下文后仍可用。已直接提供的排盘工具不必检索。`,
       ...(input.agent.tools.some(tool => tool.name === AGENT_CODEMODE_TOOL)
         ? ['代码模式脚本可以直接调用全部工具（包括尚未加载的），不必先检索。']
         : []),
@@ -70,9 +70,9 @@ export function createAgentToolSearchExtension(session: () => Harness, titles: R
     name: 'taibu_tool_search',
     tools: [defineTool({
       name: AGENT_TOOL_SEARCH_TOOL,
-      description: '按中文关键词检索本任务尚未提供的低频工具（详查、大运、流年扫描、合盘、飞星、择日、外部服务等），命中后从下一次模型调用起可用。',
+      description: '按中文关键词或工具名检索本任务尚未提供的低频工具（详查、大运、流年扫描、推时辰、合盘、紫微宫位与飞星、择日、外部服务等），命中后从下一次模型调用起可用。',
       parameters: obj({
-        query: str({ minLength: 1, description: '中文关键词，如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」' }),
+        query: str({ minLength: 1, description: '中文关键词或工具名，如「大运」「流年扫描」「合盘」「飞星四化」「择日」「宫位」「bazi_wuxing」' }),
         limit: opt(num({ description: `最多返回几个工具，默认 ${AGENT_TOOL_SEARCH_LIMIT}，最多 ${TOOL_SEARCH_MAX_LIMIT}` })),
       }, { open: true }),
       // Loading changes what the model is offered; a script has its own searchTools().

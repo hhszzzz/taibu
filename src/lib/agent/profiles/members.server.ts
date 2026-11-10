@@ -119,7 +119,7 @@ export function createMemberKit(options: {
         .map(([, label]) => label);
       if (offered.some(tool => tool.startsWith('mcp__'))) families.push('外部服务');
       if (!families.includes('排盘与计算') && (profile.tools.inherit || profile.tools.allow.includes('system'))) families.unshift('所给体系的排盘与计算');
-      return `${profile.name}（${profile.displayName}${profile.description ? `：${profile.description}` : ''}；${families.length ? `可用${families.join('、')}` : '不调用工具，只做推理'}）`;
+      return `${profile.name}（${profile.displayName}${profile.description ? `：${profile.description.replace(/[。；\s]+$/u, '')}` : ''}；${families.length ? `可用${families.join('、')}` : '不调用工具，只做推理'}）`;
     }).join('；'),
     setup: async ({ profile, system, identity }) => {
       const granted = grants(profile, system);

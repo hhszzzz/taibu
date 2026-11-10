@@ -4,7 +4,7 @@ import { referenceCosts } from "@/lib/billing/ledger.server";
 import type { ReferenceCost } from "@/lib/billing/config";
 import type { JsonValue } from "@earendil-works/chord";
 import type { ConversationRecord, JsonObject, StorageWrite, SubmissionRecord, TaskRecord } from "@earendil-works/pi-durable";
-import { AGENT_ACTIVE_STATUSES, type AgentRunStatus } from "./types";
+import { AGENT_ACTIVE_STATUSES, AGENT_BLOCKING_STATUSES, type AgentRunStatus } from "./types";
 import { AGENT_BACKGROUND_TASKS } from "./tool-catalog";
 import type {
   AgentAdminRun, AgentTaskConversation, AgentTaskConversationRole, AgentTaskNode, AgentTaskRole, AgentTaskTree,
@@ -185,6 +185,15 @@ export async function listAgentRunsForAdmin(db: ScopedDb, options: { scope: "act
   });
   const emails = await userEmails(db, [...new Set(rows.map(row => row.user_id))]);
   return (rows as unknown as AdminRunRow[]).map(row => adminRun(row, emails));
+}
+
+/** How many tasks an update would interrupt; a paused awaiting-input run resumes after the restart, so it does not count. */
+export async function countBlockingAgentRuns(db: ScopedDb): Promise<number> {
+  const row = await db.tx((trx) => trx.selectFrom("agent_runs")
+    .select((eb) => eb.fn.countAll<string>().as("count"))
+    .where("status", "in", [...AGENT_BLOCKING_STATUSES])
+    .executeTakeFirst());
+  return Number(row?.count ?? 0);
 }
 
 /** A task with its task tree and what its model calls cost (null when that lookup fails), or null when there is no such task. */

@@ -41,6 +41,15 @@ test('the agent schedule tick is dispatched to its runner', async (t) => {
   assert.equal(calls.length, 1);
 });
 
+test('the ask-timeout tick is dispatched to its runner', async (t) => {
+  const expiry = require('../lib/agent/expiry.server') as typeof import('../lib/agent/expiry.server');
+  t.mock.method(expiry, 'expireAwaitingAgentRuns', async () => ({ nudged: 2, cancelled: 1, failed: 0 }));
+
+  assert.deepEqual((await runMaintenanceJob('agent-ask-timeout')).results, [
+    { step: 'expire-awaiting-agent-runs', value: { nudged: 2, cancelled: 1, failed: 0 } },
+  ]);
+});
+
 test('attachment cleanup and notification pruning run their owners', async (t) => {
   const attachments = require('../lib/agent/attachments.server') as typeof import('../lib/agent/attachments.server');
   const images = require('../lib/ai/image-generation.server') as typeof import('../lib/ai/image-generation.server');

@@ -15,6 +15,7 @@ export interface RpcRegistry {
   "agent_create_run": { args: { "p_id": string | null; "p_user_id": string | null; "p_conversation_id": string | null; "p_request_id": string | null; "p_request_hash": string | null; "p_input": unknown | null; "p_checkpoint": unknown | null; "p_message": unknown | null; "p_credential": unknown | null; "p_billing": string | null; }; result: Record<string, unknown> };
   "agent_durable_commit": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_sequence": number | null; "p_writes": unknown | null; "p_checkpoint": unknown | null; }; result: number };
   "agent_durable_read": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_after"?: number | null; }; result: Json };
+  "agent_expire_awaiting_inputs": { args: { "p_max_age_minutes": number | null; "p_limit"?: number | null; }; result: Json };
   "agent_finish_run": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_status": string | null; "p_checkpoint": unknown | null; "p_message": unknown | null; }; result: Record<string, unknown> };
   "agent_latest_schedule_occurrence": { args: { "p_cadence": unknown | null; "p_timezone": string | null; "p_before": string | null; }; result: string };
   "agent_local_to_utc": { args: { "p_local": string | null; "p_timezone": string | null; }; result: string };
@@ -104,6 +105,7 @@ export const RPC_SPECS = {
   "agent_create_run": { args: [["p_id", "uuid", false], ["p_user_id", "uuid", false], ["p_conversation_id", "uuid", false], ["p_request_id", "text", false], ["p_request_hash", "text", false], ["p_input", "jsonb", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false], ["p_credential", "jsonb", false], ["p_billing", "text", false]], returns: "row" },
   "agent_durable_commit": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_sequence", "bigint", false], ["p_writes", "jsonb", false], ["p_checkpoint", "jsonb", false]], returns: "scalar" },
   "agent_durable_read": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_after", "bigint", true]], returns: "scalar" },
+  "agent_expire_awaiting_inputs": { args: [["p_max_age_minutes", "integer", false], ["p_limit", "integer", true]], returns: "scalar" },
   "agent_finish_run": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_status", "text", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false]], returns: "row" },
   "agent_latest_schedule_occurrence": { args: [["p_cadence", "jsonb", false], ["p_timezone", "text", false], ["p_before", "timestamp with time zone", false]], returns: "scalar" },
   "agent_local_to_utc": { args: [["p_local", "timestamp without time zone", false], ["p_timezone", "text", false]], returns: "scalar" },

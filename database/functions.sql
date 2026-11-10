@@ -518,6 +518,73 @@ BEGIN
 END;
 $$;
 
+CREATE OR REPLACE FUNCTION public.agent_expire_awaiting_inputs(p_max_age_minutes integer, p_limit integer DEFAULT 100) RETURNS jsonb
+    LANGUAGE plpgsql SECURITY DEFINER
+    SET search_path TO 'public', 'pg_temp'
+    AS $$
+DECLARE r public.agent_runs; nudged integer:=0; cancelled integer:=0; failed integer:=0;
+  question text; request_id text; message jsonb; plan_wait boolean;
+BEGIN
+  PERFORM public.agent_require_admin();
+  IF p_max_age_minutes IS NULL OR p_max_age_minutes<1 THEN RAISE EXCEPTION 'AGENT_ASK_TIMEOUT_INVALID' USING ERRCODE='22023'; END IF;
+  FOR r IN SELECT * FROM public.agent_runs
+    WHERE status='awaiting_input' AND NOT cancel_requested
+      AND updated_at<now()-make_interval(mins=>p_max_age_minutes)
+    ORDER BY updated_at LIMIT greatest(1,least(coalesce(p_limit,100),500))
+    FOR UPDATE SKIP LOCKED
+  LOOP
+    -- One bad row must not starve the rest of the sweep.
+    BEGIN
+      question:=nullif(r.checkpoint->>'questionId','');
+      plan_wait:=coalesce(r.checkpoint->'questions' @> '[{"id":"plan"}]'::jsonb,false);
+      IF r.checkpoint->>'version'='2' AND r.checkpoint#>>'{durable,engine}'='pi-durable/1.5.0'
+        AND NOT plan_wait
+        AND NOT EXISTS(SELECT 1 FROM public.agent_run_commands c WHERE c.run_id=r.id AND c.request_id LIKE 'ask-timeout:%') THEN
+        request_id:='ask-timeout:'||coalesce(question,r.id::text);
+        message:=jsonb_build_object(
+          'id',gen_random_uuid(),'role','user',
+          'content','［系统］用户未在 '||p_max_age_minutes||' 分钟内回答。请基于已有信息继续完成任务；若确实无法继续，请说明缺少哪些信息并结束，不要再提问。',
+          'createdAt',now(),
+          'metadata',jsonb_build_object('agentRunId',r.id,'agentCommandMode','reply','askTimeout',true,'askTimeoutMinutes',p_max_age_minutes)
+            ||CASE WHEN question IS NULL THEN '{}'::jsonb ELSE jsonb_build_object('agentQuestionId',question) END
+            ||jsonb_build_object('agentAnswers',coalesce((SELECT jsonb_object_agg(q->>'id','null'::jsonb)
+                FROM jsonb_array_elements(coalesce(r.checkpoint->'questions','[]'::jsonb)) q WHERE q->>'id' IS NOT NULL),'{}'::jsonb)));
+        -- The reply re-queues the run so the worker resumes it with the timeout notice.
+        PERFORM public.agent_submit_command(r.id,request_id,'reply',message);
+        nudged:=nudged+1;
+      ELSE
+        UPDATE public.agent_runs SET status='cancelled',cancel_requested=true,lease_until=NULL,worker_id=NULL,
+          public_message=public_message||jsonb_build_object('agent',
+            coalesce(public_message->'agent','{}'::jsonb)||'{"status":"cancelled"}'::jsonb),
+          updated_at=now()
+          WHERE id=r.id AND status='awaiting_input';
+        IF FOUND THEN
+          DELETE FROM public.agent_run_credentials WHERE run_id=r.id;
+          PERFORM public.agent_emit(r.id,'expired');
+          PERFORM public.agent_sync_message(r.id);
+          -- A scheduled run already gets its own failed notice from agent_schedule_run_finished.
+          IF NOT EXISTS(SELECT 1 FROM public.agent_schedule_runs sr WHERE sr.agent_run_id=r.id)
+            AND coalesce((SELECT notifications_enabled AND notify_site FROM public.user_settings WHERE user_id=r.user_id),true) THEN
+            INSERT INTO public.notifications(user_id,type,title,content,link,event_key,event_data)
+              VALUES(r.user_id,'system','太卜任务已结束','等待回答超时，任务已自动结束；可重新发起任务。',
+                '/chat?id='||r.conversation_id::text||'&mode=agent&message='||coalesce(r.public_message->>'id',''),
+                'agent-expired:'||r.id::text,
+                jsonb_build_object('kind','agent','conversationId',r.conversation_id,'messageId',r.public_message->>'id','status','cancelled','reason','ask_timeout'))
+              ON CONFLICT(user_id,event_key) WHERE event_key IS NOT NULL DO NOTHING;
+          END IF;
+          cancelled:=cancelled+1;
+        END IF;
+      END IF;
+    EXCEPTION WHEN OTHERS THEN
+      -- Leave a failed row for a later sweep instead of retrying it every minute.
+      failed:=failed+1;
+      UPDATE public.agent_runs SET updated_at=now() WHERE id=r.id AND status='awaiting_input';
+    END;
+  END LOOP;
+  RETURN jsonb_build_object('nudged',nudged,'cancelled',cancelled,'failed',failed);
+END;
+$$;
+
 CREATE OR REPLACE FUNCTION public.agent_local_to_utc(p_local timestamp without time zone, p_timezone text) RETURNS timestamp with time zone
     LANGUAGE plpgsql STABLE
     SET search_path TO 'public', 'pg_temp'

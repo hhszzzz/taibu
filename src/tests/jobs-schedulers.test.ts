@@ -41,6 +41,7 @@ test('maintenance schedulers use stable ids and are safe to upsert repeatedly', 
   const ids = new Set(calls.map((call) => call.id));
   assert.equal(ids.size, MAINTENANCE_SCHEDULERS.length);
   assert.deepEqual([...ids].sort(), [
+    'agent-ask-timeout',
     'agent-attachments-cleanup',
     'agent-retention',
     'agent-schedules',
@@ -58,6 +59,7 @@ test('maintenance schedulers use stable ids and are safe to upsert repeatedly', 
   const reminders = calls.find((call) => call.id === 'reminders');
   assert.deepEqual(reminders?.repeat, { every: 5 * 60 * 1000 });
   assert.deepEqual(calls.find((call) => call.id === 'agent-schedules')?.repeat, { every: 60 * 1000 });
+  assert.deepEqual(calls.find((call) => call.id === 'agent-ask-timeout')?.repeat, { every: 60 * 1000 });
   assert.deepEqual(calls.find((call) => call.id === 'agent-retention')?.repeat, { pattern: '0 37 3 * * *', tz: 'Asia/Shanghai' });
   assert.deepEqual(calls.find((call) => call.id === 'billing-maintenance')?.repeat, { every: 10 * 60 * 1000 });
   assert.deepEqual(calls.find((call) => call.id === 'identity-cleanup')?.repeat, { pattern: '0 47 3 * * *', tz: 'Asia/Shanghai' });

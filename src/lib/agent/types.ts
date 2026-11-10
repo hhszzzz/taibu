@@ -194,6 +194,12 @@ export const AGENT_ACTIVE_STATUSES: AgentRunStatus[] = [
   "awaiting_input",
   "cancelling",
 ];
+/** Statuses an update must wait for; an awaiting_input run is a durable pause and resumes after a restart. */
+export const AGENT_BLOCKING_STATUSES: AgentRunStatus[] = [
+  "queued",
+  "running",
+  "cancelling",
+];
 export function isAgentRunTerminal(status: AgentRunStatus) {
   return (
     status === "completed" || status === "cancelled" || status === "failed"

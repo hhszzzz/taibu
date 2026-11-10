@@ -1,6 +1,7 @@
 import 'server-only';
 
 import { cleanupAgentAttachments } from '@/lib/agent/attachments.server';
+import { expireAwaitingAgentRuns } from '@/lib/agent/expiry.server';
 import { cleanupGeneratedImages } from '@/lib/ai/image-generation.server';
 import { expireDueBilling } from '@/lib/billing/account.server';
 import { processAgentSchedules } from '@/lib/agent/schedules/runner.server';
@@ -39,6 +40,9 @@ const MAINTENANCE_JOBS: Record<string, MaintenanceStep[]> = {
   ],
   'agent-schedules': [
     { name: 'process-agent-schedules', run: () => processAgentSchedules() },
+  ],
+  'agent-ask-timeout': [
+    { name: 'expire-awaiting-agent-runs', run: () => expireAwaitingAgentRuns() },
   ],
   'agent-attachments-cleanup': [
     { name: 'cleanup-agent-attachments', run: () => cleanupAgentAttachments() },

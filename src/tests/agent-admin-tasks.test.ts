@@ -10,7 +10,8 @@ import {
 import type { StorageWrite } from '@earendil-works/pi-durable';
 import type { PiStreamFn } from '../lib/agent/types';
 import type { AgentTaskConversation, AgentTaskNode, AgentTaskTree } from '../lib/agent/admin-tasks';
-import { buildAgentTaskTree, type AgentTaskLogCommit } from '../lib/agent/admin-tasks.server';
+import { buildAgentTaskTree, countBlockingAgentRuns, type AgentTaskLogCommit } from '../lib/agent/admin-tasks.server';
+import { AGENT_ACTIVE_STATUSES } from '../lib/agent/types';
 import { executeAgentRun } from '../lib/agent/runtime.server';
 import { emptyPiAssistant } from '../lib/agent/pi-stream.server';
 import { GET as listRoute } from '../app/api/admin/agent-runs/route';
@@ -177,6 +178,28 @@ test('the tree keeps each record\'s latest write, names script calls, failures a
   assert.deepEqual([fork.tasks[0].outcome, fork.tasks[0].reason?.length, fork.tasks[0].reason?.startsWith('boom')], ['faulted', 2000, true]);
   assert.deepEqual(tree.counts, { live: 4, completed: 0, failed: 2, aborted: 1 });
   assert.deepEqual(buildAgentTaskTree([]), { commits: 0, lastCommitAt: null, truncated: false, conversations: [], counts: { live: 0, completed: 0, failed: 0, aborted: 0 } });
+});
+
+test('blocking tasks exclude durable pauses', async () => {
+  const calls: Array<{ method: string; args: unknown[] }> = [];
+  const db = createMockScopedDb({
+    tx: async (work: (trx: never) => unknown) => work({
+      selectFrom() {
+        const query = {
+          select(callback?: (builder: unknown) => unknown) {
+            callback?.({ fn: { countAll: () => ({ as: () => 'count' }) } });
+            return query;
+          },
+          where(...args: unknown[]) { calls.push({ method: 'where', args }); return query; },
+          async executeTakeFirst() { return { count: '2' }; },
+        };
+        return query;
+      },
+    } as never),
+  });
+  assert.equal(await countBlockingAgentRuns(db), 2);
+  assert.deepEqual(calls, [{ method: 'where', args: ['status', 'in', ['queued', 'running', 'cancelling']] }]);
+  assert.ok(AGENT_ACTIVE_STATUSES.includes('awaiting_input'), 'the admin list keeps showing paused tasks');
 });
 
 const RUN = randomUUID(), CONVERSATION = randomUUID(), USER = randomUUID();

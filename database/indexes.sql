@@ -141,6 +141,8 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS ming_records_source_run ON public.ming_r
 
 CREATE UNIQUE INDEX CONCURRENTLY IF NOT EXISTS notifications_owner_event ON public.notifications USING btree (user_id, event_key) WHERE (event_key IS NOT NULL);
 
+CREATE INDEX CONCURRENTLY IF NOT EXISTS agent_runs_awaiting_age_idx ON public.agent_runs USING btree (updated_at) WHERE (status = 'awaiting_input'::text);
+
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_annual_reports_owner_idx ON public.annual_reports USING btree (user_id);
 
 CREATE INDEX CONCURRENTLY IF NOT EXISTS selfhost_archived_sources_owner_idx ON public.archived_sources USING btree (user_id);

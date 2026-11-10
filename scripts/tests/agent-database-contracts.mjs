@@ -599,4 +599,95 @@ export async function agentDatabaseContracts(
       await finish(run, "failed");
     },
   );
+
+  const questionCheckpoint = (qid, questions = [{ id: "birth", question: "出生时间", allowCustom: true, allowSkip: false }]) => ({
+    ...checkpoint, question: "出生信息？", questions, questionId: qid,
+  });
+  const awaitingRun = async (qid = `q-${randomUUID()}`, questions) => {
+    const conversationId = await createConversation();
+    await create(conversationId);
+    const claimed = await claim();
+    const waiting = await finish(claimed, "awaiting_input", assistant(claimed.id), questionCheckpoint(qid, questions));
+    assert.equal(waiting.status, "awaiting_input");
+    return claimed;
+  };
+  const ageRun = (id) => sql(`UPDATE public.agent_runs SET updated_at=now()-interval '61 minutes' WHERE id=${quote(id)};`);
+  const expire = async () => JSON.parse(await admin("SELECT public.agent_expire_awaiting_inputs(60);"));
+
+  await t.test("an unanswered question is nudged once, then the run expires with a notice", async () => {
+    let run = await awaitingRun("q1");
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 1, cancelled: 0, failed: 0 });
+    assert.equal((await get(run.id)).status, "queued");
+    const nudge = JSON.parse(await asOwner(
+      `SELECT to_jsonb(c) FROM public.agent_run_commands c WHERE c.run_id=${quote(run.id)} AND c.request_id='ask-timeout:q1';`,
+    ));
+    assert.match(nudge.message.content, /用户未在 60 分钟内回答/u);
+    assert.deepEqual(
+      [nudge.message.metadata.agentRunId, nudge.message.metadata.agentQuestionId, nudge.message.metadata.askTimeout, nudge.message.metadata.askTimeoutMinutes, nudge.message.metadata.agentCommandMode],
+      [run.id, "q1", true, 60, "reply"],
+    );
+    assert.deepEqual(nudge.message.metadata.agentAnswers, { birth: null });
+    assert.equal(await asOwner(`SELECT count(*) FROM public.notifications WHERE user_id=${quote(owner)} AND event_key=${quote(`agent-expired:${run.id}`)};`), "0");
+
+    // The worker consumes the notice and the model asks again; this second pause expires the run.
+    run = await claim();
+    await sql(`UPDATE public.agent_run_commands SET consumed=true,delivery_state='consumed' WHERE run_id=${quote(run.id)} AND request_id='ask-timeout:q1';`);
+    assert.equal((await finish(run, "awaiting_input", assistant(run.id), questionCheckpoint("q2"))).status, "awaiting_input");
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 0, cancelled: 1, failed: 0 });
+    const ended = await get(run.id);
+    assert.deepEqual([ended.status, ended.cancel_requested, ended.public_message.agent.status], ["cancelled", true, "cancelled"]);
+    assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_credentials WHERE run_id=${quote(run.id)};`), "0");
+    assert.equal(await asOwner(`SELECT count(*) FROM public.notifications WHERE user_id=${quote(owner)} AND event_key=${quote(`agent-expired:${run.id}`)};`), "1");
+    assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_commands WHERE run_id=${quote(run.id)} AND request_id LIKE 'ask-timeout:%';`), "1");
+  });
+
+  await t.test("the sweep is administrator-only and rejects a non-positive window", async () => {
+    await assert.rejects(asActor(owner, "SELECT public.agent_expire_awaiting_inputs(60);"), /AGENT_ADMIN_REQUIRED/u);
+    await assert.rejects(admin("SELECT public.agent_expire_awaiting_inputs(0);"), /AGENT_ASK_TIMEOUT_INVALID/u);
+  });
+
+  await t.test("plan approval is ended on its first timeout instead of being nudged", async () => {
+    const run = await awaitingRun("plan-q", [{ id: "plan", question: "是否按这个计划执行？", allowCustom: true, allowSkip: false }]);
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 0, cancelled: 1, failed: 0 });
+    assert.equal((await get(run.id)).status, "cancelled");
+    assert.equal(await asOwner(`SELECT count(*) FROM public.agent_run_commands WHERE run_id=${quote(run.id)} AND request_id LIKE 'ask-timeout:%';`), "0");
+  });
+
+  await t.test("one rejected row does not starve the rest of the sweep", async () => {
+    const blocked = await awaitingRun();
+    const open = await awaitingRun();
+    await asOwner(`INSERT INTO public.agent_run_commands(run_id,request_id,mode,message,sort_order)
+      SELECT ${quote(blocked.id)},'fill-'||g,'steer',${json({ id: "fill", role: "user", content: "filler", createdAt: new Date().toISOString() })},g
+      FROM generate_series(1,50) g;`);
+    await ageRun(blocked.id);
+    await ageRun(open.id);
+    assert.deepEqual(await expire(), { nudged: 1, cancelled: 0, failed: 1 });
+    assert.equal((await get(open.id)).status, "queued");
+    assert.equal((await get(blocked.id)).status, "awaiting_input");
+    // Later suites claim the oldest queued run; neither fixture may outlive this test.
+    await asOwner(`UPDATE public.agent_runs SET status='cancelled',cancel_requested=true
+      WHERE id IN (${quote(blocked.id)},${quote(open.id)}) AND status IN ('awaiting_input','queued');`);
+  });
+
+  await t.test("an expiry notice honours the owner's notification switch", async (t) => {
+    const run = await awaitingRun("q1");
+    t.after(async () => {
+      await asOwner(`DELETE FROM public.user_settings WHERE user_id=${quote(owner)};`);
+      await asOwner(`UPDATE public.agent_runs SET status='cancelled',cancel_requested=true
+        WHERE id=${quote(run.id)} AND status IN ('awaiting_input','queued','running');`);
+    });
+    await asOwner(`INSERT INTO public.user_settings(user_id,notifications_enabled,notify_site) VALUES(${quote(owner)},false,false)
+      ON CONFLICT(user_id) DO UPDATE SET notifications_enabled=false,notify_site=false;`);
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 1, cancelled: 0, failed: 0 });
+    let claimed = await claim();
+    await sql(`UPDATE public.agent_run_commands SET consumed=true,delivery_state='consumed' WHERE run_id=${quote(run.id)} AND request_id LIKE 'ask-timeout:%';`);
+    await finish(claimed, "awaiting_input", assistant(claimed.id), questionCheckpoint("q2"));
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 0, cancelled: 1, failed: 0 });
+    assert.equal(await asOwner(`SELECT count(*) FROM public.notifications WHERE user_id=${quote(owner)} AND event_key=${quote(`agent-expired:${run.id}`)};`), "0");
+  });
 }

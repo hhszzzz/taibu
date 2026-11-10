@@ -590,6 +590,8 @@ GRANT ALL ON FUNCTION public.agent_cache_tool(p_run_id uuid, p_worker_id text, p
 
 GRANT ALL ON FUNCTION public.agent_cancel_run(p_run_id uuid) TO authenticated;
 
+GRANT ALL ON FUNCTION public.agent_expire_awaiting_inputs(p_max_age_minutes integer, p_limit integer) TO authenticated;
+
 GRANT SELECT ON TABLE public.agent_run_commands TO authenticated;
 
 GRANT ALL ON FUNCTION public.agent_change_command(p_run_id uuid, p_sequence bigint, p_revision integer, p_action text, p_payload jsonb) TO authenticated;

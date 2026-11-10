@@ -9,7 +9,7 @@ import { promises as fs } from 'node:fs';
 import path from 'node:path';
 import { jsonError, jsonOk, requireAdminContext } from '@/lib/api-utils';
 import { systemDb } from '@/lib/db/context.server';
-import { listAgentRunsForAdmin } from '@/lib/agent/admin-tasks.server';
+import { countBlockingAgentRuns } from '@/lib/agent/admin-tasks.server';
 import { getVersionInfo } from '@/lib/version.server';
 
 /** Host updater watches this file; it sees ours through the /run/taibu bind mount. */
@@ -30,9 +30,9 @@ export async function POST(request: NextRequest) {
     }
 
     const db = systemDb();
-    const running = await listAgentRunsForAdmin(db, { scope: 'active' });
-    if (running.length > 0) {
-      return jsonError(`还有 ${running.length} 个 Agent 任务正在运行，请等待完成后再更新`, 409, { runs: running.length });
+    const running = await countBlockingAgentRuns(db);
+    if (running > 0) {
+      return jsonError(`还有 ${running} 个 Agent 任务正在运行，请等待完成后再更新`, 409, { runs: running });
     }
 
     try {

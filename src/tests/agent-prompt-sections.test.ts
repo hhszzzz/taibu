@@ -14,7 +14,9 @@ test('the methods are listed once with only their offered tools, then the shared
     assert.match(full, /^- birth-hour（推理时柱，技法，遇到所述情形时与体系方法同用）— /m);
     assert.doesNotMatch(full, /^- (birth-hour|past-events)（[^\n]*工具：/m);
     // Fifteen cards with their routing descriptions stay a short catalogue; the cards themselves load on demand.
-    assert.ok(full.length < 3800, `directory length ${full.length}`);
+    assert.ok(full.length < 4800, `directory length ${full.length}`);
+    // The reading principles are listed once here instead of after every card.
+    assert.equal(full.split('断语必须引用盘面证据').length, 2);
     for (const label of ['历法', '时间', '占当下', '日期核实', '随机性', '六爻用神', 'detailLevel']) {
         assert.ok(full.includes(`**${label}**`), `missing shared convention: ${label}`);
     }

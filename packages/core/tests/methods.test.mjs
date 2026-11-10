@@ -34,7 +34,7 @@ test('cards come in system order, each default card first, with its system tools
   assert.deepEqual(methods.map(method => [method.id, method.kind]).filter(([, kind]) => kind !== 'system'), [['bazi-mangpai', 'school'], ['birth-hour', 'technique'], ['past-events', 'technique']]);
   // A technique serving several systems reads all of their tools, in registry order.
   const toolsOf = (...ids) => ids.flatMap(id => methods.find(method => method.id === id).tools);
-  assert.deepEqual(methods.find(method => method.id === 'birth-hour')?.tools, toolsOf('bazi', 'ziwei'));
+  assert.deepEqual(methods.find(method => method.id === 'birth-hour')?.tools, toolsOf('bazi', 'ziwei', 'astrology'));
   assert.deepEqual(methods.find(method => method.id === 'past-events')?.systems, ['bazi', 'ziwei', 'astrology']);
   assert.deepEqual(methods.find(method => method.id === 'past-events')?.tools, toolsOf('bazi', 'ziwei', 'astrology'));
   assert.ok(methods.find(method => method.id === 'birth-hour')?.tools.includes('bazi_hour_candidates'));

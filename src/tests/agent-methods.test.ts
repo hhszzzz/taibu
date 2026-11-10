@@ -6,19 +6,16 @@ import { ANALYSIS_METHODS, loadAnalysisMethod } from '../lib/agent/methods.serve
 import { PARALLEL_SYSTEMS } from '../lib/agent/parallel.server';
 import { memberInstructions, systemTitle } from '../lib/agent/profiles/members.server';
 
-const LIMIT = '\n计算必须调用 Core 工具；方法包不授予工具或联网权限。';
-const PRINCIPLES = '\n## 解读通则\n\n';
+const LIMIT = '\n解读通则见系统提示的方法目录，对每个方法都适用。计算必须调用 Core 工具；方法包不授予工具或联网权限。';
 
 test('every card loads its own text by id, and every Core tool loads its system default card', () => {
     assert.equal(ANALYSIS_METHODS.length, 15);
     for (const method of ANALYSIS_METHODS) {
         const loaded = loadAnalysisMethod(method.id);
         const source = readFileSync(`skills/taibu-divination/methods/${method.id}.md`, 'utf8');
-        // The card body, then the shared reading principles, then the package's limit.
+        // The card body, then the package's limit; the shared reading principles are in the directory, once.
         const body = source.slice(source.indexOf('---\n\n') + 5);
-        assert.ok(loaded.instructions.startsWith(body + PRINCIPLES), method.id);
-        assert.ok(loaded.instructions.endsWith(LIMIT), method.id);
-        assert.match(loaded.instructions, /断语必须引用盘面证据/, `${method.id} carries the reading principles`);
+        assert.equal(loaded.instructions, body + LIMIT, method.id);
         assert.deepEqual({ id: loaded.id, version: loaded.version, whenToUse: loaded.whenToUse }, { id: method.id, version: method.version, whenToUse: method.description });
     }
     for (const tool of listToolDefinitions()) {
@@ -28,7 +25,7 @@ test('every card loads its own text by id, and every Core tool loads its system 
     assert.equal(loadAnalysisMethod('bazi-mangpai').title, '盲派八字');
     assert.deepEqual(loadAnalysisMethod('bazi-mangpai').tools, loadAnalysisMethod('bazi').tools);
     assert.deepEqual(loadAnalysisMethod('dream').tools, []);
-    assert.equal(loadAnalysisMethod('bazi', '2.2.0').version, '2.2.0');
+    assert.equal(loadAnalysisMethod('bazi', '2.3.0').version, '2.3.0');
     assert.throws(() => loadAnalysisMethod('__proto__'), /分析方法或版本不存在/);
     assert.throws(() => loadAnalysisMethod('bazi', '1.0.0'), /分析方法或版本不存在/);
 });

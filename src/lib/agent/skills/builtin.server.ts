@@ -1,5 +1,5 @@
 import 'server-only';
-import { METHOD_CHOICE_RULE, METHOD_CONVENTIONS, listAnalysisMethods, type AnalysisMethod } from 'taibu-core/mcp';
+import { METHOD_CHOICE_RULE, METHOD_CONVENTIONS, METHOD_PRINCIPLES, listAnalysisMethods, type AnalysisMethod } from 'taibu-core/mcp';
 import { loadAnalysisMethod } from '../methods.server';
 import { AGENT_SKILL_TOOLS } from '../tool-catalog';
 import type { SkillRow } from './store.server';
@@ -54,7 +54,7 @@ export function findBuiltinSkill(name: string): SkillEntry | undefined {
 /** Names no stored skill may take: a method always keeps its own name. */
 export const BUILTIN_SKILL_NAMES: ReadonlySet<string> = new Set(BY_NAME.keys());
 
-/** A method as the model reads it: the card, then the shared reading principles. */
+/** A method as the model reads it: the card. The shared reading principles are in the directory, once per task. */
 export function builtinSkillContent(name: string): string | undefined {
   return BY_NAME.get(name)?.method?.instructions;
 }
@@ -93,6 +93,9 @@ export function renderMethodLines(offered: readonly string[], chartless = true):
   return [
     `方法是内置技能，随版本提供且不可编辑。每个体系首次解读前必须先调用 ${AGENT_SKILL_TOOLS.load} 加载对应 id 的方法，并遵守其断法、工具流程与输出要求；短回答也不得跳过，目录不能代替正文。${METHOD_CHOICE_RULE}`,
     ...lines,
+    '解读通则（对每个方法都适用，方法正文不再重复）：',
+    METHOD_PRINCIPLES,
+    '工具约定：',
     METHOD_CONVENTIONS,
   ].join('\n');
 }

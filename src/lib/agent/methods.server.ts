@@ -1,5 +1,5 @@
 import 'server-only';
-import { METHOD_PRINCIPLES, findAnalysisMethod, listAnalysisMethods, renderMethodGuide } from 'taibu-core/mcp';
+import { findAnalysisMethod, listAnalysisMethods, renderMethodGuide } from 'taibu-core/mcp';
 
 /** The trusted, versioned catalogue: one card per system or school, with the Core tools its system reads. */
 export const ANALYSIS_METHODS = listAnalysisMethods();
@@ -11,6 +11,6 @@ export function loadAnalysisMethod(id: string, version?: string) {
     return {
         ...method,
         whenToUse: method.description,
-        instructions: `${renderMethodGuide(method.id)}\n## 解读通则\n\n${METHOD_PRINCIPLES}\n\n计算必须调用 Core 工具；方法包不授予工具或联网权限。`,
+        instructions: `${renderMethodGuide(method.id)}\n解读通则见系统提示的方法目录，对每个方法都适用。计算必须调用 Core 工具；方法包不授予工具或联网权限。`,
     };
 }

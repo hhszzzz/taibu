@@ -1,9 +1,9 @@
 ---
 name: birth-hour
 title: 推理时柱
-system: bazi, ziwei
+system: bazi, ziwei, astrology
 kind: technique
-version: 1.0.0
+version: 1.0.1
 description: 出生时辰未知时先推时辰：列出当天各时辰的候选，以六亲、几件前事的年份与性情逐个排除，剩两三个时用紫微交叉核对，经用户确认后再正式排盘。用户不知道或记不清出生时辰、只记得大致时段时使用，与八字、紫微、占星的体系方法同用。
 ---
 

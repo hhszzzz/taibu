@@ -6,8 +6,8 @@
  * - 当前页面属于未固定的占术时，临时插入列表并高亮
  * - 下方内嵌对话列表（滚动容器必须是 nav，见 SidebarConversations）
  * - 桌面端显示在左侧，移动端隐藏（使用 MobileNav 代替）
- * - 侧边栏固定展开，顶部入口改为公告中心
- * - 底部包含用户信息
+ * - 侧边栏固定展开
+ * - 底部是用户信息与通知铃铛；有未看的新公告时，账户行上方显示公告卡
  */
 'use client';
 
@@ -21,6 +21,7 @@ import { useState, useCallback, useEffect, useMemo, Suspense, useSyncExternalSto
 import { AuthModal } from '@/components/auth/AuthModal';
 import { SidebarUserCard } from '@/components/layout/UserMenu';
 import { AnnouncementBellButton } from '@/components/layout/AnnouncementBellButton';
+import { AnnouncementCard } from '@/components/notifications/AnnouncementCard';
 import { VersionChip } from '@/components/layout/VersionChip';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
@@ -313,6 +314,7 @@ function SidebarInner() {
                 <nav aria-label="最近对话" className="flex flex-1 min-h-0 flex-col overflow-hidden px-2">
                     {chatItem && user ? <ChatSidebarConversations /> : null}
                 </nav>
+                <AnnouncementCard />
                 <div className="border-t border-border px-2 py-1.5 flex-shrink-0">
                     {user ? (
                         <div className="flex items-center gap-1">

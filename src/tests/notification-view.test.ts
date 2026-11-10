@@ -31,17 +31,21 @@ test('task notices open the Agent conversation once, with the source message', (
   assert.equal(resolveNotificationLink({ link: null }), null);
 });
 
-test('groupNotificationsByDay keeps the 今天 / 近 7 天 / 更早 order', () => {
+test('groupNotificationsByDay keeps the 今天 / 昨天 / 更早 order', () => {
   const item = (id: string, date: Date): Notification => ({
     id, user_id: 'u', type: 'system', title: id, content: null, is_read: false, link: null, created_at: date.toISOString(),
   });
   const groups = groupNotificationsByDay([
     item('old', new Date(2026, 8, 1)),
     item('today', new Date(2026, 9, 14, 8)),
-    item('recent', new Date(2026, 9, 10)),
+    item('yesterday', new Date(2026, 9, 13, 22)),
+    item('four-days-ago', new Date(2026, 9, 10)),
   ], NOW.toISOString());
 
+  // 通知只保留 3 天：前天及更早都归「更早」，不会再出现空的「近 7 天」。
   assert.deepEqual(groups.map(group => [group.label, group.items.map(entry => entry.id)]), [
-    ['今天', ['today']], ['近 7 天', ['recent']], ['更早', ['old']],
+    ['今天', ['today']], ['昨天', ['yesterday']], ['更早', ['old', 'four-days-ago']],
   ]);
+  assert.deepEqual(groupNotificationsByDay([item('skewed', new Date(2026, 9, 14, 18))], NOW.toISOString())
+    .map(group => group.label), ['今天']);
 });

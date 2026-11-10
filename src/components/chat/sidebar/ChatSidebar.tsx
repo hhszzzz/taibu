@@ -136,7 +136,7 @@ export function ChatSidebarPanel({ markers, onLogin, onClose, heading }: {
             <div className="chat-nav-footer">{user ? (
                 <div className="chat-nav-footer-row">
                     <div className="min-w-0 flex-1"><SidebarUserCard user={user} appearance="account" collapsed={false} /></div>
-                    <AnnouncementBellButton className="chat-nav-icon is-round" iconSize={18} />
+                    <AnnouncementBellButton className="chat-nav-icon is-round" iconSize={18} mode={onClose ? 'link' : 'panel'} />
                 </div>
             ) : <LoginButton rail={false} onLogin={login} />}</div>
         </div>

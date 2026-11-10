@@ -4,6 +4,7 @@ import { usePathname } from 'next/navigation';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { MobileNav } from './MobileNav';
+import { AnnouncementCard } from '@/components/notifications/AnnouncementCard';
 
 /**
  * 换页时主内容区淡入（不重建页面树，也不加包裹层）；首屏不播放。只动透明度：
@@ -38,6 +39,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {!settings && <Sidebar />}
       <div className="flex-1 flex flex-col min-w-0 min-h-screen">
         {mobileChrome && <div className="lg:hidden h-[var(--mobile-header-height)] safe-top flex-shrink-0"><Header /></div>}
+        {mobileChrome && <AnnouncementCard variant="banner" />}
         <main ref={mainRef} id="main-content" className={`flex-1 overflow-x-hidden${mobileChrome ? ' pb-20 lg:pb-0' : ''}`}>{children}</main>
       </div>
     </div>

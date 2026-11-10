@@ -17,9 +17,8 @@ import {
 import { IconButton } from '@/components/ui/IconButton';
 import { Menu, MenuContent, MenuItem, MenuSeparator, MenuTrigger } from '@/components/ui/Menu';
 import { useTheme } from '@/components/ui/ThemeProvider';
-import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { useHeaderMenuSafe } from '@/components/layout/HeaderMenuContext';
-import { useAnnouncementCenterSafe } from '@/components/providers/AnnouncementPopupHost';
+import { notificationsHref, useAnnouncementCenterSafe } from '@/components/providers/AnnouncementPopupHost';
 import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
 import { getSettingsCenterRouteTarget, isAdminSettingsCenterTab } from '@/lib/settings-center';
 
@@ -125,11 +124,10 @@ export function Header() {
     const pathname = usePathname();
     const router = useRouter();
     const { theme, toggleTheme } = useTheme();
-    const { user } = useSessionSafe();
-    const { openAnnouncementCenter } = useAnnouncementCenterSafe();
+    const { defaultTab } = useAnnouncementCenterSafe();
     const headerMenuContext = useHeaderMenuSafe();
     const customMenuItems = headerMenuContext?.menuItems || [];
-    const announcementMenuLabel = user ? '通知 / 公告' : '公告';
+    const announcementMenuLabel = defaultTab === 'notifications' ? '通知与公告' : '公告';
     const activeSettingsTab = useActiveSettingsCenterTab();
     const isAdminContext = !!pathname?.startsWith('/admin') || isAdminSettingsCenterTab(activeSettingsTab);
 
@@ -202,7 +200,7 @@ export function Header() {
                         </MenuTrigger>
                         <MenuContent align="end" className="w-44">
                             {!isAdminContext && <>
-                                <MenuItem className="gap-3 px-4 py-2.5" onClick={() => openAnnouncementCenter({ tab: user ? 'notifications' : 'announcements' })}>
+                                <MenuItem className="gap-3 px-4 py-2.5" onClick={() => router.push(notificationsHref(defaultTab))}>
                                     <Megaphone className="w-4 h-4" aria-hidden="true" />
                                     {announcementMenuLabel}
                                 </MenuItem>

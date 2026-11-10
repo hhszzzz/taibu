@@ -34,22 +34,23 @@ export function groupNotificationsByDay(
     notifications: Notification[],
     nowIso: string = new Date().toISOString(),
 ): NotificationGroup[] {
+    // 通知只保留 3 天，按今天、昨天、更早分组。
     const now = new Date(nowIso);
     const startOfToday = startOfLocalDay(now);
     const today: Notification[] = [];
-    const recent: Notification[] = [];
+    const yesterday: Notification[] = [];
     const older: Notification[] = [];
 
     for (const notification of notifications) {
         const createdAt = new Date(notification.created_at);
         const diffDays = Number.isNaN(createdAt.getTime())
             ? Number.POSITIVE_INFINITY
-            : Math.floor((startOfToday - startOfLocalDay(createdAt)) / 86_400_000);
+            : Math.round((startOfToday - startOfLocalDay(createdAt)) / 86_400_000);
 
         if (diffDays <= 0) {
             today.push(notification);
-        } else if (diffDays < 7) {
-            recent.push(notification);
+        } else if (diffDays === 1) {
+            yesterday.push(notification);
         } else {
             older.push(notification);
         }
@@ -57,7 +58,7 @@ export function groupNotificationsByDay(
 
     const groups: NotificationGroup[] = [];
     if (today.length > 0) groups.push({ label: '今天', items: today });
-    if (recent.length > 0) groups.push({ label: '近 7 天', items: recent });
+    if (yesterday.length > 0) groups.push({ label: '昨天', items: yesterday });
     if (older.length > 0) groups.push({ label: '更早', items: older });
     return groups;
 }

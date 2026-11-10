@@ -69,6 +69,42 @@ export function getAnnouncementExcerpt(content: string): string {
         .trim();
 }
 
+const ANNOUNCEMENT_TITLE_MAX = 30;
+const HEADING_LINE = /^ {0,3}#{1,6} +(.+?)(?: +#+)? *$/u;
+
+const FIRST_SENTENCE = /^(.{8,30}?)[，,。！？!?：:；;]/u;
+
+/**
+ * 公告没有标题字段：首个非空行是 Markdown 标题或不长于 30 字时作标题，正文是其后的内容；
+ * 首行太长就在第 8 字后的第一个标点处断开（正文从断开处起），断不开才截断，正文保留全文。
+ */
+function splitAnnouncement(content: string): { title: string; body: string } {
+    const lines = content.split('\n');
+    const index = lines.findIndex(line => line.trim());
+    if (index < 0) return { title: '', body: '' };
+    const rest = lines.slice(index + 1).join('\n');
+    const heading = lines[index].match(HEADING_LINE)?.[1];
+    const line = getAnnouncementExcerpt(heading ?? lines[index]);
+    if (heading || line.length <= ANNOUNCEMENT_TITLE_MAX) {
+        return { title: line, body: rest.trim() };
+    }
+    const first = lines[index].trimStart();
+    const sentence = line.match(FIRST_SENTENCE)?.[1];
+    if (sentence && first.startsWith(sentence)) {
+        const remainder = first.slice(sentence.length).replace(/^[，,。！？!?：:；;\s]+/u, '');
+        return { title: sentence, body: `${remainder}\n${rest}`.trim() };
+    }
+    return { title: `${line.slice(0, ANNOUNCEMENT_TITLE_MAX - 6)}…`, body: content.trim() };
+}
+
+export function getAnnouncementTitle(content: string): string {
+    return splitAnnouncement(content).title;
+}
+
+export function getAnnouncementBody(content: string): string {
+    return splitAnnouncement(content).body;
+}
+
 export function parseAnnouncementInput(
     body: unknown,
     options: { partial?: boolean } = {},

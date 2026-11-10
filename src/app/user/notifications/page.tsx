@@ -1,24 +1,33 @@
 /**
- * 消息通知页面
+ * 通知中心：「通知 | 公告」两段（`?tab=announcements`）。
  *
- * 支持筛选、加载更多、多选、批量删除、批量已读
+ * 通知段需登录且通知功能开启：筛选、加载更多、多选、批量删除、批量已读；
+ * 公告段访客也能看，点开进单条阅读弹窗。
  *
  * 'use client'：列表、筛选与多选状态都在客户端
  */
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { Bell, Check, CheckCheck, ChevronRight, Gift, Megaphone, Sparkles, Trash2, type LucideIcon } from 'lucide-react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
+import { Bell, Check, CheckCheck, ChevronDown, Megaphone, Trash2 } from 'lucide-react';
 import { useSessionSafe } from '@/components/providers/ClientProviders';
+import { useHeaderTitle } from '@/components/layout/HeaderMenuContext';
+import { useAnnouncementCenterSafe, type NotificationsTab } from '@/components/providers/AnnouncementPopupHost';
+import { AnnouncementRows } from '@/components/notifications/AnnouncementList';
+import { NOTIFICATION_TYPES, NotificationRow } from '@/components/notifications/NotificationRow';
+import { useAnnouncementFeed, useMarkLatestAnnouncementSeen } from '@/components/notifications/feeds';
 import { Button } from '@/components/ui/Button';
 import { Checkbox } from '@/components/ui/Checkbox';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { IconButton } from '@/components/ui/IconButton';
+import { Menu, MenuContent, MenuRadioGroup, MenuRadioItem, MenuTrigger } from '@/components/ui/Menu';
+import { SegmentedControl } from '@/components/ui/SegmentedControl';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import { useToast } from '@/components/ui/Toast';
-import { SegmentedControl as SharedSegmentedControl } from '@/components/ui/SegmentedControl';
 import { StatePanel } from '@/components/ui/StatePanel';
+import { useFeatureToggles } from '@/lib/hooks/useFeatureToggles';
+import { useNotificationUnreadCount } from '@/lib/hooks/useNotificationUnreadCount';
 import {
     deleteNotification,
     deleteNotifications,
@@ -39,12 +48,6 @@ import {
 
 const PAGE_SIZE = 50;
 
-const TYPE_STYLES: Record<Notification['type'], { icon: LucideIcon; label: string }> = {
-    feature_launch: { icon: Sparkles, label: '功能上线' },
-    system: { icon: Megaphone, label: '系统通知' },
-    promotion: { icon: Gift, label: '活动推广' },
-};
-
 const READ_FILTER_OPTIONS: Array<{ value: NotificationFilterState['read']; label: string }> = [
     { value: 'all', label: '全部' },
     { value: 'unread', label: '未读' },
@@ -58,130 +61,55 @@ const TYPE_FILTER_OPTIONS: Array<{ value: NotificationFilterState['type']; label
     { value: 'promotion', label: '活动' },
 ];
 
-
-/** 分段控件：一组互斥选项，选中项浮起为白底。 */
-function SegmentedControl<T extends string>({ label, options, value, onChange }: {
-    label: string;
-    options: ReadonlyArray<{ value: T; label: string; badge?: number }>;
-    value: T;
-    onChange: (value: T) => void;
-}) {
+function TypeFilterMenu({ value, onChange }: { value: NotificationFilterState['type']; onChange: (value: NotificationFilterState['type']) => void }) {
+    const current = TYPE_FILTER_OPTIONS.find(option => option.value === value) ?? TYPE_FILTER_OPTIONS[0];
     return (
-        <SharedSegmentedControl
-            ariaLabel={label}
-            mode="toggle"
-            indicator={false}
-            value={value}
-            onChange={onChange}
-            className="inline-flex shrink-0 gap-0.5 rounded-xl bg-background-secondary p-0.5"
-            optionClassName="h-8 rounded-lg px-3 text-[13px] text-foreground-secondary transition-colors hover:text-foreground aria-pressed:bg-surface aria-pressed:text-foreground aria-pressed:shadow-[var(--shadow-sm)] dark:aria-pressed:bg-background-tertiary"
-            options={options.map(option => ({
-                value: option.value,
-                label: <>{option.label}{option.badge ? <span className="text-xs text-accent tabular-nums">{option.badge}</span> : null}</>,
-            }))}
-        />
+        <Menu>
+            <MenuTrigger aria-label={`通知类型：${current.label}`}
+                className="inline-flex h-10 shrink-0 items-center gap-1 rounded-xl px-3 text-sm text-foreground-secondary transition-colors hover:bg-fill-ghost-hover hover:text-foreground data-popup-open:bg-fill-ghost-hover">
+                {current.label}<ChevronDown className="h-3.5 w-3.5" aria-hidden="true" />
+            </MenuTrigger>
+            <MenuContent className="w-36">
+                <MenuRadioGroup value={value} onValueChange={(next) => onChange(next as NotificationFilterState['type'])}>
+                    {TYPE_FILTER_OPTIONS.map(option => <MenuRadioItem key={option.value} value={option.value}>{option.label}</MenuRadioItem>)}
+                </MenuRadioGroup>
+            </MenuContent>
+        </Menu>
     );
 }
 
-function NotificationRow({
-    notification,
-    selectMode,
-    selected,
-    onToggleSelect,
-    onOpen,
-    onMarkRead,
-    onDelete,
-}: {
+function SelectableNotificationRow({ notification, selected, onToggleSelect }: {
     notification: Notification;
-    selectMode: boolean;
     selected: boolean;
     onToggleSelect: () => void;
-    onOpen: () => void;
-    onMarkRead: () => void;
-    onDelete: () => void;
 }) {
-    const style = TYPE_STYLES[notification.type] ?? TYPE_STYLES.system;
-    const Icon = style.icon;
-    const unread = !notification.is_read;
+    const type = NOTIFICATION_TYPES[notification.type] ?? NOTIFICATION_TYPES.system;
+    const Icon = type.icon;
     const time = formatNotificationTime(notification.created_at);
     const checkboxId = `notification-select-${notification.id}`;
-
-    const text = (
-        <>
-            <div className="flex items-baseline justify-between gap-4">
-                <h3 className={`min-w-0 text-[15px] leading-6 ${unread ? 'font-medium text-foreground' : 'text-foreground-secondary'}`}>
-                    {notification.title}
-                </h3>
-                {time ? <time dateTime={notification.created_at} className="shrink-0 text-xs text-foreground-tertiary">{time}</time> : null}
-            </div>
-            {notification.content ? (
-                <p className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-foreground-secondary">{notification.content}</p>
-            ) : null}
-        </>
-    );
-
-    const typeLabel = (
-        <span className="inline-flex items-center gap-1 text-xs text-foreground-tertiary">
-            <Icon className="h-3.5 w-3.5" aria-hidden="true" />{style.label}
-        </span>
-    );
-
-    if (selectMode) {
-        return (
-            <li className={`relative before:pointer-events-none before:absolute before:inset-x-3 before:top-0 before:border-t-[0.5px] before:border-border first:before:hidden md:before:inset-x-4 rounded-xl transition-colors ${selected ? 'bg-accent-light' : 'hover:bg-background-secondary/70'}`}>
-                <div className="flex gap-3 px-3 py-3.5 md:px-4">
-                    <Checkbox id={checkboxId} checked={selected} onCheckedChange={() => onToggleSelect()} className="mt-1" />
-                    {/* 整行都能点选，复选框本身仍是唯一的可聚焦控件。 */}
-                    <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer">
-                        {text}
-                        <div className="mt-2">{typeLabel}</div>
-                    </label>
-                </div>
-            </li>
-        );
-    }
-
     return (
-        <li className="group relative before:pointer-events-none before:absolute before:inset-x-3 before:top-0 before:border-t-[0.5px] before:border-border first:before:hidden md:before:inset-x-4 rounded-xl transition-colors hover:bg-background-secondary/70">
-            <div className="flex gap-3 py-3.5 pr-2 pl-3 md:pr-3 md:pl-4">
-                <span className="flex h-6 w-2 shrink-0 items-center">
-                    {unread ? (
-                        <span className="h-2 w-2 rounded-full bg-accent"><span className="sr-only">未读</span></span>
-                    ) : null}
-                </span>
-                <div className="min-w-0 flex-1">
-                    {text}
-                    <div className="mt-1.5 flex min-h-9 items-center gap-3 md:min-h-7">
-                        {typeLabel}
-                        {notification.link ? (
-                            <Button unstyled type="button" onClick={onOpen} className="inline-flex items-center text-xs text-accent hover:text-accent-strong">
-                                查看详情<ChevronRight className="h-3 w-3" aria-hidden="true" />
-                            </Button>
-                        ) : null}
-                        {/* 手机上常显；桌面端悬停或键盘聚焦到该行时出现。 */}
-                        <span className="ml-auto flex gap-0.5 transition-opacity md:opacity-0 md:group-focus-within:opacity-100 md:group-hover:opacity-100">
-                            {unread ? (
-                                <IconButton label="标为已读" title="标为已读" size="sm" onClick={onMarkRead}>
-                                    <Check aria-hidden="true" />
-                                </IconButton>
-                            ) : null}
-                            <IconButton label="删除通知" title="删除" size="sm" tone="danger" onClick={onDelete}>
-                                <Trash2 aria-hidden="true" />
-                            </IconButton>
-                        </span>
-                    </div>
-                </div>
+        <li className={`relative rounded-xl transition-colors before:pointer-events-none before:absolute before:inset-x-3 before:top-0 before:border-t-[0.5px] before:border-border first:before:hidden md:before:inset-x-4 ${selected ? 'bg-accent-light' : 'hover:bg-fill-ghost-hover'}`}>
+            <div className="flex gap-3 px-3 py-3.5 md:px-4">
+                <Checkbox id={checkboxId} checked={selected} onCheckedChange={() => onToggleSelect()} className="mt-1" />
+                {/* 整行都能点选，复选框本身仍是唯一的可聚焦控件。 */}
+                <label htmlFor={checkboxId} className="min-w-0 flex-1 cursor-pointer">
+                    <span className="flex items-baseline justify-between gap-4">
+                        <span className={`min-w-0 text-[15px] leading-6 ${notification.is_read ? 'text-foreground-secondary' : 'font-medium text-foreground'}`}>{notification.title}</span>
+                        {time ? <time dateTime={notification.created_at} className="shrink-0 text-xs text-foreground-tertiary">{time}</time> : null}
+                    </span>
+                    {notification.content ? <span className="mt-0.5 line-clamp-2 text-sm leading-relaxed text-foreground-secondary">{notification.content}</span> : null}
+                    <span className="mt-2 inline-flex items-center gap-1 text-xs text-foreground-tertiary"><Icon className="h-3.5 w-3.5" aria-hidden="true" />{type.label}</span>
+                </label>
             </div>
         </li>
     );
 }
 
-function NotificationsSkeleton() {
+function ListSkeleton() {
     return (
-        <div aria-hidden="true" className="divide-y-[0.5px] divide-border overflow-hidden rounded-2xl border-[0.5px] border-border bg-surface">
+        <div aria-hidden="true" className="flex flex-col">
             {[1, 2, 3, 4].map(index => (
-                <div key={index} className="flex animate-pulse gap-4 py-4 pr-3 pl-5">
-                    <div className="h-9 w-9 rounded-full bg-foreground/10" />
+                <div key={index} className="flex animate-pulse gap-3 py-4 pl-5">
                     <div className="flex-1 space-y-2">
                         <div className="h-4 w-40 rounded bg-foreground/10" />
                         <div className="h-3 w-full rounded bg-foreground/5" />
@@ -192,9 +120,9 @@ function NotificationsSkeleton() {
     );
 }
 
-export default function NotificationsPage() {
+function NotificationsTabContent({ tabs }: { tabs: ReactNode }) {
     const router = useRouter();
-    const { user, loading: sessionLoading } = useSessionSafe();
+    const { user } = useSessionSafe();
     const userId = user?.id;
     const { showToast } = useToast();
     const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -213,11 +141,7 @@ export default function NotificationsPage() {
 
     // 账号切换或重试时重新加载；旧请求的结果直接丢弃。
     useEffect(() => {
-        if (sessionLoading) return;
-        if (!userId) {
-            router.push('/');
-            return;
-        }
+        if (!userId) return;
         const generation = ++listGenerationRef.current;
         const isCurrent = () => listGenerationRef.current === generation;
         void (async () => {
@@ -242,7 +166,7 @@ export default function NotificationsPage() {
             }
         })();
         return () => { listGenerationRef.current += 1; };
-    }, [reloadKey, router, sessionLoading, showToast, userId]);
+    }, [reloadKey, showToast, userId]);
 
     const loadMore = useCallback(async () => {
         if (nextOffset == null || loadingMore) return;
@@ -311,11 +235,11 @@ export default function NotificationsPage() {
         return success;
     };
 
+    // 点整行：标为已读，有链接就打开。
     const handleOpen = async (notification: Notification) => {
+        const success = await handleMarkRead(notification);
         const href = resolveNotificationLink(notification);
-        if (!href) return;
-        await handleMarkRead(notification);
-        router.push(href);
+        if (success && href) router.push(href);
     };
 
     const handleDeleteSingle = async (id: string) => {
@@ -373,107 +297,107 @@ export default function NotificationsPage() {
     };
 
     const hasNotifications = notifications.length > 0;
-    const unreadLabel = unreadCount > 0 ? `${unreadCount} 条未读` : '全部已读';
 
     return (
-        <div className="min-h-screen bg-background pb-20 text-foreground lg:pb-8">
-            <div className={`mx-auto flex max-w-[44rem] flex-col gap-6 px-4 py-4 md:gap-8 md:py-10 ${selectMode ? 'pb-28' : ''}`}>
-                <header className="flex flex-wrap items-end justify-between gap-x-4 gap-y-3">
-                    <div className="flex min-w-0 flex-col gap-1">
-                        {/* 手机端顶栏已显示「通知中心」，这里不再重复标题。 */}
-                        <h1 className="hidden font-display text-[1.875rem] leading-tight font-normal md:block">通知</h1>
-                        <p className="text-[15px] text-foreground-secondary">
-                            {isLoading ? '系统提醒、功能上线与活动消息' : hasNotifications ? unreadLabel : '系统提醒、功能上线与活动消息'}
-                        </p>
-                    </div>
-
-                    {hasNotifications ? (
-                        <div className="-mr-3 flex items-center">
-                            {!selectMode ? (
-                                <Button variant="ghost" size="sm" onClick={handleMarkAllRead} disabled={isProcessing || unreadCount === 0}>
-                                    {isProcessing ? <SoundWaveLoader variant="inline" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
-                                    全部已读
-                                </Button>
-                            ) : null}
-                            <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={toggleSelectMode}
-                                aria-pressed={selectMode}
-                                className="aria-pressed:text-accent"
-                            >
-                                {selectMode ? '完成' : '选择'}
-                            </Button>
-                        </div>
-                    ) : null}
-                </header>
-
+        <>
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-3">
+                {tabs}
                 {hasNotifications ? (
-                    <div className="-mx-4 flex items-center gap-2 overflow-x-auto px-4 md:mx-0 md:flex-wrap md:px-0">
-                        <SegmentedControl
-                            label="阅读状态"
-                            options={READ_FILTER_OPTIONS.map(option => (option.value === 'unread' ? { ...option, badge: unreadCount } : option))}
-                            value={filters.read}
-                            onChange={(read) => updateFilters({ read })}
-                        />
-                        <SegmentedControl
-                            label="通知类型"
-                            options={TYPE_FILTER_OPTIONS}
-                            value={filters.type}
-                            onChange={(type) => updateFilters({ type })}
-                        />
-                    </div>
-                ) : null}
-
-                {isLoading ? (
-                    <NotificationsSkeleton />
-                ) : loadError ? (
-                    <StatePanel
-                        tone="danger"
-                        title="加载通知失败"
-                        description={loadError}
-                        action={<Button variant="secondary" size="xs" onClick={() => setReloadKey(key => key + 1)}>重试</Button>}
-                    />
-                ) : !hasNotifications ? (
-                    <StatePanel icon={Bell} title="暂无通知" description="系统提醒和功能更新会出现在这里。" />
-                ) : visibleNotifications.length === 0 ? (
-                    filters.read === 'unread' && filters.type === 'all'
-                        ? <StatePanel title="没有未读通知" description="所有通知都已读过。" />
-                        : <StatePanel title="当前筛选下没有通知" description="换个分类看看。" />
-                ) : (
-                    <div className="flex flex-col gap-6">
-                        {groupedNotifications.map((group) => (
-                            <section key={group.label} aria-label={group.label}>
-                                <h2 className="mb-1 text-[13px] font-medium text-foreground-tertiary">{group.label}</h2>
-                                {/* 行内留白与悬停底色向外延伸，文字与分隔线仍和标题左对齐。 */}
-                                <ul className="-mx-3 flex flex-col md:-mx-4">
-                                    {group.items.map((notification) => (
-                                        <NotificationRow
-                                            key={notification.id}
-                                            notification={notification}
-                                            selectMode={selectMode}
-                                            selected={selectedIds.has(notification.id)}
-                                            onToggleSelect={() => toggleSelect(notification.id)}
-                                            onOpen={() => { void handleOpen(notification); }}
-                                            onMarkRead={() => { void handleMarkRead(notification); }}
-                                            onDelete={() => { void handleDeleteSingle(notification.id); }}
-                                        />
-                                    ))}
-                                </ul>
-                            </section>
-                        ))}
-                    </div>
-                )}
-
-                {!isLoading && nextOffset != null ? (
-                    <div className="flex justify-center">
-                        <Button variant="secondary" onClick={() => { void loadMore(); }} loading={loadingMore}>
-                            加载更早的通知
+                    <div className="-mr-2 flex items-center">
+                        {!selectMode ? (
+                            <Button variant="ghost" size="sm" onClick={handleMarkAllRead} disabled={isProcessing || unreadCount === 0}>
+                                {isProcessing ? <SoundWaveLoader variant="inline" /> : <CheckCheck className="h-4 w-4" aria-hidden="true" />}
+                                全部已读
+                            </Button>
+                        ) : null}
+                        <Button variant="ghost" size="sm" onClick={toggleSelectMode} aria-pressed={selectMode} className="aria-pressed:text-accent">
+                            {selectMode ? '完成' : '选择'}
                         </Button>
                     </div>
                 ) : null}
             </div>
 
+            {hasNotifications ? (
+                <div className="flex items-center gap-2">
+                    <SegmentedControl
+                        ariaLabel="阅读状态"
+                        mode="toggle"
+                        size="sm"
+                        value={filters.read}
+                        onChange={(read) => updateFilters({ read })}
+                        className="w-[13.5rem]"
+                        options={READ_FILTER_OPTIONS.map(option => ({
+                            value: option.value,
+                            label: <>{option.label}{option.value === 'unread' && unreadCount ? <span className="text-xs text-accent tabular-nums">{unreadCount}</span> : null}</>,
+                        }))}
+                    />
+                    <TypeFilterMenu value={filters.type} onChange={(type) => updateFilters({ type })} />
+                </div>
+            ) : null}
+
+            {isLoading ? (
+                <ListSkeleton />
+            ) : loadError ? (
+                <StatePanel
+                    tone="danger"
+                    title="加载通知失败"
+                    description={loadError}
+                    action={<Button variant="secondary" size="xs" onClick={() => setReloadKey(key => key + 1)}>重试</Button>}
+                />
+            ) : !hasNotifications ? (
+                <StatePanel icon={Bell} title="暂无通知" description="最近 3 天的系统提醒、任务结果和功能更新会出现在这里。" />
+            ) : visibleNotifications.length === 0 ? (
+                filters.read === 'unread' && filters.type === 'all'
+                    ? <StatePanel title="没有未读通知" description="所有通知都已读过。" />
+                    : <StatePanel title="当前筛选下没有通知" description="换个分类看看。" />
+            ) : (
+                <div className="flex flex-col gap-6">
+                    {groupedNotifications.map((group) => (
+                        <section key={group.label} aria-label={group.label}>
+                            <h2 className="mb-1 text-[13px] font-medium text-foreground-tertiary">{group.label}</h2>
+                            {/* 行内留白与悬停底色向外延伸，文字与分隔线仍和标题左对齐。 */}
+                            <ul className="-mx-3 flex flex-col md:-mx-4">
+                                {group.items.map((notification) => selectMode ? (
+                                    <SelectableNotificationRow
+                                        key={notification.id}
+                                        notification={notification}
+                                        selected={selectedIds.has(notification.id)}
+                                        onToggleSelect={() => toggleSelect(notification.id)}
+                                    />
+                                ) : (
+                                    <NotificationRow
+                                        key={notification.id}
+                                        notification={notification}
+                                        onOpen={() => { void handleOpen(notification); }}
+                                        actions={(
+                                            <>
+                                                {!notification.is_read ? (
+                                                    <IconButton label="标为已读" title="标为已读" size="sm" onClick={() => { void handleMarkRead(notification); }}>
+                                                        <Check aria-hidden="true" />
+                                                    </IconButton>
+                                                ) : null}
+                                                <IconButton label="删除通知" title="删除" size="sm" className="hover:bg-danger/10 hover:text-danger" onClick={() => { void handleDeleteSingle(notification.id); }}>
+                                                    <Trash2 aria-hidden="true" />
+                                                </IconButton>
+                                            </>
+                                        )}
+                                    />
+                                ))}
+                            </ul>
+                        </section>
+                    ))}
+                </div>
+            )}
+
+            {!isLoading && nextOffset != null ? (
+                <div className="flex justify-center">
+                    <Button variant="secondary" onClick={() => { void loadMore(); }} loading={loadingMore}>
+                        加载更早的通知
+                    </Button>
+                </div>
+            ) : null}
+
+            {selectMode && visibleNotifications.length > 0 ? <div className="h-16" aria-hidden="true" /> : null}
             {selectMode && visibleNotifications.length > 0 ? (
                 <div className="fixed inset-x-0 bottom-[calc(var(--sab,0px)+5.5rem)] z-40 flex justify-center px-4 lg:bottom-8">
                     <div role="toolbar" aria-label="批量操作" className="flex w-full max-w-xl items-center gap-2 rounded-2xl border-[0.5px] border-border bg-surface py-2 pr-2 pl-4 shadow-[var(--shadow-lg)]">
@@ -502,6 +426,90 @@ export default function NotificationsPage() {
                 confirmText="删除"
                 variant="danger"
             />
+        </>
+    );
+}
+
+function AnnouncementsTabContent({ tabs }: { tabs: ReactNode }) {
+    const { openAnnouncement } = useAnnouncementCenterSafe();
+    const feed = useAnnouncementFeed(true);
+    const newAnnouncementKey = useMarkLatestAnnouncementSeen(feed.loading ? undefined : feed.items[0]);
+
+    return (
+        <>
+            {tabs}
+            {feed.loading ? (
+                <ListSkeleton />
+            ) : feed.error ? (
+                <StatePanel
+                    tone="danger"
+                    title="加载公告失败"
+                    description={feed.error}
+                    action={<Button variant="secondary" size="xs" onClick={feed.reload}>重试</Button>}
+                />
+            ) : feed.items.length === 0 ? (
+                <StatePanel icon={Megaphone} title="还没有公告" description="版本更新与站务公告会出现在这里。" />
+            ) : (
+                <div className="-mx-3 md:-mx-4">
+                    <AnnouncementRows announcements={feed.items} unseenKey={newAnnouncementKey} onOpen={openAnnouncement} />
+                </div>
+            )}
+            {!feed.loading && feed.nextOffset != null ? (
+                <div className="flex justify-center">
+                    <Button variant="secondary" onClick={feed.loadMore} loading={feed.loadingMore}>加载更早的公告</Button>
+                </div>
+            ) : null}
+        </>
+    );
+}
+
+function NotificationCenter() {
+    const router = useRouter();
+    const pathname = usePathname();
+    const searchParams = useSearchParams();
+    const { user, loading: sessionLoading } = useSessionSafe();
+    const { isLoading: togglesLoading } = useFeatureToggles();
+    const { supportsNotifications } = useAnnouncementCenterSafe();
+    const unreadCount = useNotificationUnreadCount(user?.id ?? null, { enabled: supportsNotifications }) ?? 0;
+    const tab: NotificationsTab = supportsNotifications && searchParams.get('tab') !== 'announcements' ? 'notifications' : 'announcements';
+    const title = supportsNotifications ? '通知中心' : '公告';
+    useHeaderTitle(sessionLoading || togglesLoading ? null : title);
+    const setTab = (next: NotificationsTab) => {
+        router.replace(next === 'announcements' ? `${pathname}?tab=announcements` : pathname, { scroll: false });
+    };
+
+    const tabs = supportsNotifications ? (
+        <SegmentedControl<NotificationsTab>
+            ariaLabel="通知与公告"
+            mode="tabs"
+            size="sm"
+            value={tab}
+            onChange={setTab}
+            className="w-[12rem]"
+            options={[
+                { value: 'notifications', label: <>通知{unreadCount > 0 ? <span className="text-xs text-accent tabular-nums">{unreadCount > 99 ? '99+' : unreadCount}</span> : null}</> },
+                { value: 'announcements', label: '公告' },
+            ]}
+        />
+    ) : null;
+
+    return (
+        <div className="min-h-screen bg-background pb-20 text-foreground lg:pb-8">
+            <div className="mx-auto flex max-w-[44rem] flex-col gap-5 px-4 py-4 md:gap-6 md:py-10">
+                {/* 手机端顶栏已显示标题，这里不再重复。 */}
+                <h1 className="hidden font-display text-[1.875rem] leading-tight font-normal md:block">{title}</h1>
+                {sessionLoading || togglesLoading ? (
+                    <ListSkeleton />
+                ) : tab === 'notifications' ? (
+                    <NotificationsTabContent tabs={tabs} />
+                ) : (
+                    <AnnouncementsTabContent tabs={tabs} />
+                )}
+            </div>
         </div>
     );
+}
+
+export default function NotificationsPage() {
+    return <Suspense fallback={<ListSkeleton />}><NotificationCenter /></Suspense>;
 }

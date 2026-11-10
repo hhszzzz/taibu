@@ -1,8 +1,8 @@
 'use client';
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { usePathname } from 'next/navigation';
-import { SidebarAnnouncementCenter } from '@/components/layout/SidebarAnnouncementCenter';
+import { usePathname, useRouter } from 'next/navigation';
+import { AnnouncementDialog } from '@/components/notifications/AnnouncementDialog';
 import { useToast } from '@/components/ui/Toast';
 import {
     ANNOUNCEMENT_CENTER_STORAGE_KEY,
@@ -18,16 +18,25 @@ import { useNotificationUnreadCount } from '@/lib/hooks/useNotificationUnreadCou
 import { useActiveSettingsCenterTab } from '@/lib/hooks/useSettingsCenterRouteState';
 import { isAdminSettingsCenterTab } from '@/lib/settings-center';
 
-export type AnnouncementCenterTab = 'notifications' | 'announcements';
+export type NotificationsTab = 'notifications' | 'announcements';
 
-type OpenAnnouncementCenterOptions = {
-    tab?: AnnouncementCenterTab;
-};
+export function notificationsHref(tab: NotificationsTab) {
+    return tab === 'announcements' ? '/user/notifications?tab=announcements' : '/user/notifications';
+}
+
+/** 桌面侧栏的铃铛登记自己：可见时，「查看通知」就地打开它的面板。 */
+export type NotificationBellHandle = { element: () => HTMLElement | null; open: (tab: NotificationsTab) => void };
 
 type AnnouncementCenterContextValue = {
-    openAnnouncementCenter: (options?: OpenAnnouncementCenterOptions) => void;
-    closeAnnouncementCenter: () => void;
-    announcementPromptCount: number;
+    openNotifications: (options?: { tab?: NotificationsTab }) => void;
+    registerBell: (bell: NotificationBellHandle) => () => void;
+    supportsNotifications: boolean;
+    defaultTab: NotificationsTab;
+    /** 还没看过的最新公告；后台与管理设置里不提示。 */
+    unseenAnnouncement: Announcement | null;
+    unseenAnnouncementKey: string | null;
+    openAnnouncement: (announcement: Announcement) => void;
+    markAnnouncementSeen: (announcement: Announcement) => void;
 };
 
 const AnnouncementCenterContext = createContext<AnnouncementCenterContextValue | null>(null);
@@ -53,11 +62,16 @@ function writeAnnouncementCenterLocalState(value: AnnouncementCenterLocalState) 
     window.localStorage.setItem(ANNOUNCEMENT_CENTER_STORAGE_KEY, JSON.stringify(value));
 }
 
-export function useAnnouncementCenterSafe() {
+export function useAnnouncementCenterSafe(): AnnouncementCenterContextValue {
     return useContext(AnnouncementCenterContext) ?? {
-        openAnnouncementCenter: () => { },
-        closeAnnouncementCenter: () => { },
-        announcementPromptCount: 0,
+        openNotifications: () => { },
+        registerBell: () => () => { },
+        supportsNotifications: false,
+        defaultTab: 'announcements',
+        unseenAnnouncement: null,
+        unseenAnnouncementKey: null,
+        openAnnouncement: () => { },
+        markAnnouncementSeen: () => { },
     };
 }
 
@@ -71,13 +85,15 @@ export function AnnouncementPopupHost({
     children: ReactNode;
 }) {
     const pathname = usePathname();
+    const router = useRouter();
     const { showToast } = useToast();
     const { isFeatureEnabled } = useFeatureToggles();
     const notificationsEnabled = isFeatureEnabled('notifications');
-    const [open, setOpen] = useState(false);
-    const [preferredTab, setPreferredTab] = useState<AnnouncementCenterTab>('announcements');
+    const supportsNotifications = !!userId && notificationsEnabled;
+    const defaultTab: NotificationsTab = supportsNotifications ? 'notifications' : 'announcements';
+    const [reading, setReading] = useState<Announcement | null>(null);
     const [localStateVersion, setLocalStateVersion] = useState(0);
-    const openRef = useRef(false);
+    const bellRef = useRef<NotificationBellHandle | null>(null);
     const previousUnreadCountRef = useRef<number | null>(null);
     const activeSettingsTab = useActiveSettingsCenterTab();
     const isAdminContext = pathname.startsWith('/admin') || isAdminSettingsCenterTab(activeSettingsTab);
@@ -85,19 +101,12 @@ export function AnnouncementPopupHost({
         enabled: !authLoading && !isAdminContext,
     });
     const latestAnnouncement = latestAnnouncementQuery.data ?? null;
+    const latestKey = getAnnouncementPromptIdentity(latestAnnouncement);
     const unreadNotificationCount = useNotificationUnreadCount(userId, {
         enabled: notificationsEnabled && !authLoading,
     });
 
-    useEffect(() => {
-        openRef.current = open;
-    }, [open]);
-
-    const closeAnnouncementCenter = useCallback(() => {
-        setOpen(false);
-    }, []);
-
-    /** 公告真正展示给用户时立即记为已看：自动弹出、点铃铛查看都算，之后刷新或隔天都不再弹。 */
+    /** 公告真正展示给用户时记为已看：看过卡片里的这条、打开公告列表或关掉提示都算。 */
     const markAnnouncementSeen = useCallback((announcement: Announcement) => {
         const announcementKey = getAnnouncementPromptIdentity(announcement);
         if (!announcementKey) return;
@@ -107,11 +116,28 @@ export function AnnouncementPopupHost({
         setLocalStateVersion((value) => value + 1);
     }, []);
 
-    const openAnnouncementCenter = useCallback((options: OpenAnnouncementCenterOptions = {}) => {
-        const wantsNotifications = options.tab === 'notifications' && !!userId && notificationsEnabled;
-        setPreferredTab(wantsNotifications ? 'notifications' : 'announcements');
-        setOpen(true);
-    }, [notificationsEnabled, userId]);
+    const openAnnouncement = useCallback((announcement: Announcement) => {
+        setReading(announcement);
+        // 只有最新那条算「看过」；读旧公告不能把已看标记倒回去。
+        if (getAnnouncementPromptIdentity(announcement) === latestKey) markAnnouncementSeen(announcement);
+    }, [latestKey, markAnnouncementSeen]);
+
+    const registerBell = useCallback((bell: NotificationBellHandle) => {
+        bellRef.current = bell;
+        return () => {
+            if (bellRef.current === bell) bellRef.current = null;
+        };
+    }, []);
+
+    const openNotifications = useCallback((options: { tab?: NotificationsTab } = {}) => {
+        const tab = options.tab === 'notifications' && !supportsNotifications ? 'announcements' : options.tab ?? defaultTab;
+        const bell = bellRef.current;
+        if (bell && (bell.element()?.getClientRects().length ?? 0) > 0) {
+            bell.open(tab);
+            return;
+        }
+        router.push(notificationsHref(tab));
+    }, [defaultTab, router, supportsNotifications]);
 
     useEffect(() => {
         if (!userId || authLoading || !notificationsEnabled || unreadNotificationCount == null) {
@@ -127,7 +153,6 @@ export function AnnouncementPopupHost({
         if (
             unreadNotificationCount > previousUnreadCountRef.current
             && !pathname.startsWith('/user/notifications')
-            && !openRef.current
         ) {
             const addedCount = unreadNotificationCount - previousUnreadCountRef.current;
             showToast(
@@ -137,7 +162,7 @@ export function AnnouncementPopupHost({
                     duration: 5000,
                     action: {
                         label: '查看',
-                        onClick: () => openAnnouncementCenter({ tab: 'notifications' }),
+                        onClick: () => openNotifications({ tab: 'notifications' }),
                     },
                 },
             );
@@ -147,64 +172,48 @@ export function AnnouncementPopupHost({
     }, [
         authLoading,
         notificationsEnabled,
-        openAnnouncementCenter,
+        openNotifications,
         pathname,
         showToast,
         unreadNotificationCount,
         userId,
     ]);
 
-    const announcementPromptCount = useMemo(() => {
+    const unseenAnnouncement = useMemo(() => {
         void localStateVersion;
 
         if (isAdminContext || authLoading || latestAnnouncementQuery.isLoading) {
-            return 0;
+            return null;
         }
 
         return shouldPromptLatestAnnouncement({
-            announcementKey: getAnnouncementPromptIdentity(latestAnnouncement),
+            announcementKey: latestKey,
             state: readAnnouncementCenterLocalState(),
-        }) ? 1 : 0;
-    }, [authLoading, isAdminContext, latestAnnouncement, latestAnnouncementQuery.isLoading, localStateVersion]);
-
-    useEffect(() => {
-        if (isAdminContext && openRef.current) {
-            queueMicrotask(() => {
-                setOpen(false);
-            });
-            return;
-        }
-
-        if (announcementPromptCount <= 0 || openRef.current) {
-            return;
-        }
-
-        queueMicrotask(() => {
-            setPreferredTab('announcements');
-            setOpen(true);
-        });
-    }, [announcementPromptCount, isAdminContext]);
+        }) ? latestAnnouncement : null;
+    }, [authLoading, isAdminContext, latestAnnouncement, latestAnnouncementQuery.isLoading, latestKey, localStateVersion]);
 
     const contextValue = useMemo<AnnouncementCenterContextValue>(() => ({
-        openAnnouncementCenter,
-        closeAnnouncementCenter,
-        announcementPromptCount,
-    }), [announcementPromptCount, closeAnnouncementCenter, openAnnouncementCenter]);
+        openNotifications,
+        registerBell,
+        supportsNotifications,
+        defaultTab,
+        unseenAnnouncement,
+        unseenAnnouncementKey: unseenAnnouncement ? latestKey : null,
+        openAnnouncement,
+        markAnnouncementSeen,
+    }), [defaultTab, latestKey, markAnnouncementSeen, openAnnouncement, openNotifications, registerBell, supportsNotifications, unseenAnnouncement]);
 
     return (
         <AnnouncementCenterContext.Provider value={contextValue}>
             {children}
-            {open ? (
-                <SidebarAnnouncementCenter
-                    key={`${preferredTab}-${userId ?? 'visitor'}`}
-                    open={open}
-                    userId={userId}
-                    notificationsEnabled={notificationsEnabled}
-                    initialTab={preferredTab}
-                    onClose={closeAnnouncementCenter}
-                    onAnnouncementsViewed={markAnnouncementSeen}
-                />
-            ) : null}
+            <AnnouncementDialog
+                announcement={reading}
+                onClose={() => setReading(null)}
+                onShowAll={pathname.startsWith('/user/notifications') ? undefined : () => {
+                    setReading(null);
+                    router.push(notificationsHref('announcements'));
+                }}
+            />
         </AnnouncementCenterContext.Provider>
     );
 }

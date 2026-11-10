@@ -311,9 +311,9 @@ export function AnnouncementManagementPanel() {
             value={form.content}
             onChange={(event) => setForm((current) => ({ ...current, content: event.target.value }))}
             className="min-h-[220px]" 
-            placeholder="输入公告内容，支持多段文本..."
+            placeholder={"# 公告标题\n\n正文，支持多段文本"}
           />
-          <p id="announcement-content-hint" className="settings-help">支持 Markdown，建议用标题、列表、加粗、链接等基础语法。</p>
+          <p id="announcement-content-hint" className="settings-help">支持 Markdown。第一行（或第一个标题）会作为公告标题，显示在侧栏提示、铃铛面板和公告列表里。</p>
         </div>
 
         <div className="flex flex-col gap-2">

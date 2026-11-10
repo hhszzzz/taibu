@@ -44,6 +44,18 @@ const history: ChatMessage[] = [
     } as ChatMessage,
 ];
 
+test('a timeout reminder is not shared as a user message', () => {
+    const messages: ChatMessage[] = [
+        { id: 'u1', role: 'user', content: '帮我看盘', createdAt: '2026-10-19T00:00:01.000Z' },
+        { id: 't', role: 'user', content: '［系统］用户未在 5 分钟内回答。', createdAt: '2026-10-19T00:00:02.000Z', metadata: { askTimeout: true, askTimeoutMinutes: 5 } },
+        { id: 'a1', role: 'assistant', content: '按现有信息继续分析。', createdAt: '2026-10-19T00:00:03.000Z' },
+    ];
+    assert.deepEqual(buildShareSnapshot(messages, { includeCharts: false }).map(message => [message.role, message.content]), [
+        ['user', '帮我看盘'],
+        ['assistant', '按现有信息继续分析。'],
+    ]);
+});
+
 test('share tokens are 43-character base64url values and validation rejects anything else', () => {
     const first = createShareToken();
     const second = createShareToken();

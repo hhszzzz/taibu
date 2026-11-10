@@ -22,6 +22,7 @@ import { WebSearchSources } from '@/components/chat/WebSearchSources';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { MentionIcon } from '@/components/chat/mention/MentionIcon';
 import { mentionTypeLabels } from '@/components/chat/mentionStyles';
+import { isAskTimeoutReminder } from '@/lib/chat/ask-timeout';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { MessageActions } from './MessageActions';
 import { MessageQuoteCards } from './MessageQuotes';
@@ -179,6 +180,16 @@ export const ChatMessageItem = memo(function ChatMessageItem({
         chartErrorToasted.current.add(message.id);
         showToast('error', '图表错误，已隐藏该图表；文字解读仍保留。');
     }, [message.id, showToast]);
+
+    // 超时提醒以系统身份留在会话里，不能冒充用户发言。
+    if (isAskTimeoutReminder(message)) {
+        const minutes = message.metadata?.askTimeoutMinutes;
+        return (
+            <div className="chat-system-note" role="note" data-message-id={message.id}>
+                <span>{typeof minutes === 'number' ? `等待 ${minutes} 分钟未回答，按已有信息继续` : '等待回答超时，按已有信息继续'}</span>
+            </div>
+        );
+    }
 
     if (message.role === 'user') {
         return (

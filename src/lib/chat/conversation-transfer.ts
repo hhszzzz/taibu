@@ -2,6 +2,7 @@ import type { ChatMessage } from '@/types';
 import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
+import { isAskTimeoutReminder } from '@/lib/chat/ask-timeout';
 import { parseVisualSource } from '@/lib/visualization/chart-data-extract';
 
 /** Copy only the selected visible branch. No version trees, run state or credentials. */
@@ -9,7 +10,7 @@ export function forkConversationMessages(messages: ChatMessage[], throughId: str
     const index = messages.findIndex(message => message.id === throughId);
     const target = messages[index];
     if (index < 0 || target.role !== 'assistant' || (target.agent && target.agent.status !== 'completed')) throw new Error('只能从已完成的回答分叉');
-    return messages.slice(0, index + 1).filter(message => message.role !== 'system').map(message => ({
+    return messages.slice(0, index + 1).filter(message => message.role !== 'system' && !isAskTimeoutReminder(message)).map(message => ({
         id: newId(), role: message.role, content: message.content, createdAt: message.createdAt,
         model: message.model, modelName: message.modelName, reasoning: message.reasoning,
         mentions: message.mentions, quotes: message.quotes, attachments: message.attachments, chartInfo: message.chartInfo,
@@ -32,6 +33,8 @@ export function conversationMarkdown(title: string, messages: ChatMessage[], too
     const sections = [`# ${title.replace(/[\r\n]/gu, ' ')}`];
     for (const message of messages) {
         if (message.role === 'system') continue;
+        // The timeout reminder is the system talking, not a question the user asked.
+        if (isAskTimeoutReminder(message)) continue;
         sections.push(`## ${message.role === 'user' ? '提问' : '太卜'}\n\n${message.content}`);
         for (const part of message.agent?.parts ?? []) {
             if (part.type === 'artifact') sections.push(`### ${part.title}\n\n${part.chartId ? `命盘 ID：${part.chartId}（${part.chartType ?? ''}）` : ''}`);

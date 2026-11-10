@@ -8,6 +8,7 @@
 import { randomBytes } from 'node:crypto';
 import type { AIMessageMetadata, ChatMessage, MentionType } from '@/types';
 import { DATA_SOURCE_TYPES } from '@/lib/data-sources/types';
+import { isAskTimeoutReminder } from './ask-timeout';
 import { redactExportValue } from './conversation-transfer';
 import { getVisibleWebSearch } from './feature-normalization';
 import { normalizeMessageQuotes } from './quotes';
@@ -106,6 +107,8 @@ function validDate(value: unknown): string | undefined {
 
 function shareMessage(message: ChatMessage, includeCharts: boolean): SharedMessage | null {
     if (message.role !== 'user' && message.role !== 'assistant') return null;
+    // The timeout reminder is the system talking, not a question the user asked.
+    if (isAskTimeoutReminder(message)) return null;
     const shared: SharedMessage = { role: message.role, content: typeof message.content === 'string' ? message.content : '' };
     const createdAt = validDate(message.createdAt);
     if (createdAt) shared.createdAt = createdAt;

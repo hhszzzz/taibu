@@ -57,6 +57,20 @@ test('forks copy only the completed visible branch, preserve attachment referenc
     assert.throws(()=>forkConversationMessages([{...history[1],agent:{...history[1].agent!,status:'running'}}],'a',()=>''));
 });
 
+test('timeout reminders stay out of exported markdown and forks', () => {
+    const reminder: ChatMessage = { id: 't', role: 'user', content: '［系统］用户未在 5 分钟内回答。', createdAt: 'now', metadata: { askTimeout: true, askTimeoutMinutes: 5 } };
+    const markdown = conversationMarkdown('导出', [{ id: 'u', role: 'user', content: '帮我看盘', createdAt: 'now' }, reminder]);
+    assert.ok(markdown.includes('帮我看盘'));
+    assert.ok(!markdown.includes('［系统］'));
+    let sequence = 0;
+    const fork = forkConversationMessages([
+        { id: 'u', role: 'user', content: '帮我看盘', createdAt: 'now' },
+        reminder,
+        { id: 'a', role: 'assistant', content: '按现有信息继续分析。', createdAt: 'now', agent: { version: 1, runId: 'r', status: 'completed', parts: [] } },
+    ], 'a', () => `fork-${++sequence}`);
+    assert.deepEqual(fork.map(message => message.content), ['帮我看盘', '按现有信息继续分析。']);
+});
+
 test('static HTML exports render GFM tables and block executable HTML, URLs and credentials', () => {
     const html = conversationHtml('<script>title</script>','| A | B |\n|---|---|\n| 1 | 2 |\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1))\n\n![bad](data:image/svg+xml;base64,abc)');
     assert.match(html,/<table>/); assert.ok(!html.includes('<script>')); assert.ok(!html.includes('href="javascript:'));

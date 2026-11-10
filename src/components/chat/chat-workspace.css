@@ -467,6 +467,22 @@ button.agent-evidence-chip:hover { border-color: var(--accent); color: var(--acc
 /* claude 实测：用户气泡底 = alpha-1（5% 前景色），非页色调；解梦气泡保留自己的紫色调 */
 .chat-user-bubble:not(.is-dream) { background: hsl(from var(--neutral-900) h s l / 5%); }
 .chat-user-bubble > p { font-size: calc(15 / 16 * 1rem); line-height: calc(20 / 16 * 1rem); }
+.chat-system-note {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 2px 0 10px;
+  color: var(--foreground-tertiary);
+  font-size: calc(12 / 16 * 1rem);
+  line-height: 1.5;
+}
+.chat-system-note::before, .chat-system-note::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+.chat-system-note > span { flex: none; text-align: center; }
 /* 引用卡：用户消息上方，最多 3 段，长段落折叠为 4 行，悬停看全文。 */
 .chat-message-quotes { display: flex; max-width: 75%; flex-direction: column; align-items: flex-end; gap: 4px; margin-bottom: 6px; }
 .chat-message-quote { display: flex; max-width: 100%; gap: 7px; margin: 0; padding: 7px 10px; border-left: 2px solid var(--accent); border-radius: 0 8px 8px 0; background: var(--fill-field); color: var(--foreground-secondary); font-size: calc(13 / 16 * 1rem); line-height: 1.55; text-align: left; }

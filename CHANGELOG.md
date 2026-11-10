@@ -2,6 +2,16 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.3.0 · 2026-11-10
+
+### 新功能与体验
+
+- **Agent · 每用户串行执行**：同一用户同一时间只运行一个 Agent 任务，其余任务保持排队，前一个结束后按创建顺序自动开始；等待回答的任务与已取消的排队任务不占名额。多个用户仍可同时使用不同的 worker，单用户上限可用 `AGENT_USER_CONCURRENCY` 调整（默认 1）。([53f366a](https://github.com/hhszzzz/taibu/commit/53f366aa))
+
+### 升级须知
+
+更新时数据库函数会自动刷新；没有新的迁移或 npm 包版本变更。`AGENT_USER_CONCURRENCY` 不填时默认为 1，更新镜像后刷新页面即可。
+
 ## v1.2.1 · 2026-11-10
 
 ### 修复

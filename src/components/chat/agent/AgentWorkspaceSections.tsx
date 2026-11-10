@@ -4,13 +4,14 @@
 import { useId, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react';
 import { Button } from '@/components/ui/Button';
 import Link from 'next/link';
-import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Clock, Database, Files, FileCode2, FileText, Globe, GripVertical, ImagePlus, ListChecks, ScanSearch, Search, Sigma, Sparkles, Users, Wrench, type LucideIcon } from 'lucide-react';
+import { ArrowUpRight, BookOpen, BookmarkPlus, Calculator, ChevronDown, ChevronRight, CircleHelp, Clock, Database, Files, FileCode2, FileText, Globe, GripVertical, ImagePlus, ListChecks, ScanSearch, Search, Sigma, Sparkles, Wrench, type LucideIcon } from 'lucide-react';
 import { type AgentMessageData, type AgentRunView } from '@/lib/agent/types';
 import { getAgentChart, getAgentPlan, getAgentUnrepresentedArtifacts, type AgentChart, type AgentToolPart } from '@/lib/agent/tool-presentation';
 import { getAgentToolFamily } from '@/lib/agent/tool-catalog';
 import type { AgentWorkspaceModel, AgentWorkspaceResource } from '@/lib/agent/workspace';
 import { resolveClientModelName } from '@/lib/ai/model-name-cache';
 import type { NavIcon } from '@/lib/navigation/registry';
+import { AgentIcon } from '@/lib/navigation/nav-icons';
 import { ChartThumb } from './chart-preview';
 import { ModelAvatar } from './ModelAvatar';
 import { getChartKindMeta } from './chart-registry';
@@ -19,9 +20,9 @@ import {
     summarizeAgentTool, type AgentArtifact,
 } from './presentation';
 
-export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon> = {
+export const WORKSPACE_ICONS: Record<AgentWorkspaceResource['family'], LucideIcon | NavIcon> = {
     chart: Calculator, calculation: Sigma, drilldown: ScanSearch, search: Search, data: Database, method: BookOpen, skill: Sparkles, plan: ListChecks, todo: ListChecks,
-    question: CircleHelp, collaboration: Users, memory: Database, archive: BookmarkPlus, code: FileCode2, external: Globe, image: ImagePlus, time: Clock, other: Wrench,
+    question: CircleHelp, collaboration: AgentIcon, memory: Database, archive: BookmarkPlus, code: FileCode2, external: Globe, image: ImagePlus, time: Clock, other: Wrench,
     saved: Files, attachment: FileText,
 };
 

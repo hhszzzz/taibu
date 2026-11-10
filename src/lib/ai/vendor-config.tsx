@@ -20,7 +20,7 @@ import {
     XAI,
     Minimax,
 } from '@lobehub/icons';
-import { Sparkles } from 'lucide-react';
+import { AgentIcon } from '@/lib/navigation/nav-icons';
 
 type VendorIconProps = {
     className?: string;
@@ -45,7 +45,8 @@ const vendorIcons: Record<string, VendorIconComponent> = {
     minimax: Minimax,
 };
 
-const fallbackIcon = (s = 18) => <Sparkles size={s} className="text-foreground-secondary" />;
+// 认不出供应商的模型用本站的 Agent 标记（∞），与模式切换、Agent 入口同一枚。
+const fallbackIcon = (s = 18) => <AgentIcon size={s} className="text-foreground-secondary" />;
 
 export function getVendorIcon(vendor: string, size?: number): ReactNode {
     const Icon = vendorIcons[vendor];

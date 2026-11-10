@@ -1,10 +1,9 @@
 import type { Mention, MentionType } from '@/types';
 import { extractMentionTokens, mapMentionsToTokens } from '@/lib/mention-tokens';
-import { mentionStyleMap } from '@/components/chat/mentionStyles';
 
 export type MentionHighlightedPart =
     | { kind: 'text'; value: string }
-    | { kind: 'mention'; value: string; className: string; type: MentionType; start: number; end: number };
+    | { kind: 'mention'; value: string; type: MentionType; start: number; end: number };
 
 export function buildMentionHighlightedParts(content: string, mentions: Mention[]): MentionHighlightedPart[] {
     if (!content) return [];
@@ -20,12 +19,9 @@ export function buildMentionHighlightedParts(content: string, mentions: Mention[
         if (token.start > cursor) {
             parts.push({ kind: 'text', value: content.slice(cursor, token.start) });
         }
-        const styleType = (match.mention?.type || 'default') as MentionType | 'default';
-        const style = mentionStyleMap[styleType] || mentionStyleMap.default;
         parts.push({
             kind: 'mention',
             value: content.slice(token.start, token.end),
-            className: style.className,
             type: (match.mention?.type ?? 'knowledge_base') as MentionType,
             start: token.start,
             end: token.end,

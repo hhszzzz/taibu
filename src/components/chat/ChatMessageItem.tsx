@@ -6,7 +6,7 @@
  * - 需要处理用户交互事件
  */
 'use client';
-import { Fragment, memo, useState, useMemo, useCallback, useRef } from 'react';
+import { memo, useState, useMemo, useCallback, useRef } from 'react';
 import { FileText, Globe, KeyRound } from 'lucide-react';
 import type { AIMessageMetadata, ChatMessage, Mention } from '@/types';
 import type { MessageQuote } from '@/lib/chat/quotes';
@@ -21,6 +21,7 @@ import { AgentMessage } from '@/components/chat/AgentMessage';
 import { WebSearchSources } from '@/components/chat/WebSearchSources';
 import { buildMentionHighlightedParts } from '@/components/chat/mentionHighlight';
 import { MentionIcon } from '@/components/chat/mention/MentionIcon';
+import { mentionTypeLabels } from '@/components/chat/mentionStyles';
 import { openSettingsCenter } from '@/lib/settings-center';
 import { MessageActions } from './MessageActions';
 import { MessageQuoteCards } from './MessageQuotes';
@@ -190,7 +191,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                     {highlightedEditContentParts.map((part) => (
                                         part.kind === 'mention'
                                             ? (
-                                                <Fragment key={`${part.start}-${part.end}`}><span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}</Fragment>
+                                                <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}><span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}</span>
                                             )
                                             : part.value
                                     ))}
@@ -243,7 +244,7 @@ export const ChatMessageItem = memo(function ChatMessageItem({
                                 {highlightedUserContentParts.map((part) => (
                                     part.kind === 'mention'
                                         ? (
-                                            <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type}>
+                                            <span key={`${part.start}-${part.end}`} className="chat-mention-token" data-type={part.type} title={mentionTypeLabels[part.type]}>
                                                 <span className="chat-mention-at">@<MentionIcon type={part.type} size={12} /></span>{part.value.slice(1)}
                                             </span>
                                         )

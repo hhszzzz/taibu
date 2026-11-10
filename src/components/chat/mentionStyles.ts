@@ -1,25 +1,5 @@
 import type { MentionType } from '@/types';
 
-export const mentionStyleMap: Record<MentionType | 'default', { className: string }> = {
-    knowledge_base: { className: 'text-emerald-500' },
-    bazi_chart: { className: 'text-orange-500' },
-    ziwei_chart: { className: 'text-purple-500' },
-    tarot_reading: { className: 'text-fuchsia-500' },
-    liuyao_divination: { className: 'text-amber-500' },
-    mbti_reading: { className: 'text-blue-500' },
-    hepan_chart: { className: 'text-rose-500' },
-    face_reading: { className: 'text-orange-500' },
-    palm_reading: { className: 'text-yellow-600' },
-    ming_record: { className: 'text-slate-500' },
-    daily_fortune: { className: 'text-lime-600' },
-    monthly_fortune: { className: 'text-lime-600' },
-    qimen_chart: { className: 'text-indigo-500' },
-    daliuren_divination: { className: 'text-cyan-500' },
-    meihua_divination: { className: 'text-pink-500' },
-    xiaoliuren_divination: { className: 'text-emerald-500' },
-    default: { className: 'text-foreground' }
-};
-
 export const mentionTypeLabels: Record<MentionType | 'default', string> = {
     knowledge_base: '知识库',
     bazi_chart: '八字命盘',

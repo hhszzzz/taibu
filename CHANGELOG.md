@@ -2,6 +2,13 @@
 
 版本号为 `x.y.z`：x 是重大架构变更，y 是功能新增，z 是问题修复。每个版本的镜像发布在 `ghcr.io/hhszzzz/taibu`，部署方法见 [自托管手册](docs/manual/Self-Hosting.md)。
 
+## v1.3.1 · 2026-11-10
+
+### 新功能
+
+- **chat**: offer the own-model API when no models exist ([1a4c8e4](https://github.com/hhszzzz/taibu/commit/1a4c8e42355f9f5bcf06daf4524ca8872f0df89e))
+- **ui**: add a reusable feature tip ([bb6d90c](https://github.com/hhszzzz/taibu/commit/bb6d90c7659c3df15b6ad152453274dd4c36bc25))
+
 ## v1.3.0 · 2026-11-10
 
 ### 新功能与体验

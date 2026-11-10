@@ -70,6 +70,8 @@ export interface RecordFilters {
     endDate?: string;
     tags?: string[];
     isPinned?: boolean;
+    /** date：按记录所在日期倒序（置顶仍在前），默认按写入时间。 */
+    sort?: 'date';
 }
 
 export interface ExportData {
@@ -364,6 +366,7 @@ export async function getRecords(
     if (filters?.startDate) query.set('startDate', filters.startDate);
     if (filters?.endDate) query.set('endDate', filters.endDate);
     if (filters?.isPinned !== undefined) query.set('isPinned', String(filters.isPinned));
+    if (filters?.sort) query.set('sort', filters.sort);
     for (const tag of filters?.tags || []) {
         query.append('tag', tag);
     }
@@ -439,6 +442,15 @@ export async function toggleRecordPin(recordId: string, options: { signal?: Abor
  */
 export async function getNotesByDate(date: string, options: { signal?: AbortSignal } = {}): Promise<MingNote[]> {
     const payload = await requestBrowserData<{ notes?: unknown[] }>(`/api/notes?date=${encodeURIComponent(date)}`, { signal: options.signal }, {
+        fallbackMessage: '请求失败',
+    });
+    return (payload.notes ?? []).filter(isValidMingNote);
+}
+
+/** 一段日期内（含两端）的小记，按写入时间倒序；接口一页最多 100 条。 */
+export async function getNotesInRange(startDate: string, endDate: string, options: { signal?: AbortSignal } = {}): Promise<MingNote[]> {
+    const query = new URLSearchParams({ startDate, endDate, pageSize: '100' });
+    const payload = await requestBrowserData<{ notes?: unknown[] }>(`/api/notes?${query.toString()}`, { signal: options.signal }, {
         fallbackMessage: '请求失败',
     });
     return (payload.notes ?? []).filter(isValidMingNote);
@@ -544,6 +556,140 @@ export function downloadExportData(data: ExportData, filename?: string): void {
  */
 export function toLocalDateKey(date: Date = new Date()): string {
     return formatLocalDate(date);
+}
+
+// =====================================================
+// 日期、分类与印证
+// =====================================================
+
+/** 预测的印证结果写成标签，不改表结构；展示时认作状态而不是普通标签。 */
+export const PREDICTION_VERDICT_TAGS = { hit: '已应验', miss: '未应验' } as const;
+
+export type PredictionVerdict = keyof typeof PREDICTION_VERDICT_TAGS;
+
+export const NOTE_MOOD_ICONS = Object.fromEntries(NOTE_MOODS.map(mood => [mood.value, mood.icon])) as Record<NoteMood, string>;
+export const NOTE_MOOD_LABELS = Object.fromEntries(NOTE_MOODS.map(mood => [mood.value, mood.label])) as Record<NoteMood, string>;
+
+const DATE_KEY = /^\d{4}-\d{2}-\d{2}$/u;
+const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const;
+const NOTE_TIME_FORMAT = new Intl.DateTimeFormat('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+
+export function isDateKey(value: unknown): value is string {
+    return typeof value === 'string' && DATE_KEY.test(value);
+}
+
+export function parseDateKey(key: string): Date {
+    const [year, month, day] = key.split('-').map(Number);
+    return new Date(year, month - 1, day);
+}
+
+export function shiftDateKey(key: string, days: number): string {
+    const date = parseDateKey(key);
+    date.setDate(date.getDate() + days);
+    return toLocalDateKey(date);
+}
+
+/** 两个日期相差的整天数，`to` 更早时为负。 */
+export function daysBetweenDateKeys(from: string, to: string): number {
+    const start = parseDateKey(from);
+    const end = parseDateKey(to);
+    return Math.round((Date.UTC(end.getFullYear(), end.getMonth(), end.getDate()) - Date.UTC(start.getFullYear(), start.getMonth(), start.getDate())) / 86_400_000);
+}
+
+export function getWeekdayLabel(key: string): string {
+    return `周${WEEKDAYS[parseDateKey(key).getDay()]}`;
+}
+
+export function getWeekdayChar(key: string): string {
+    return WEEKDAYS[parseDateKey(key).getDay()];
+}
+
+export function getMonthDayLabel(key: string): string {
+    const date = parseDateKey(key);
+    return `${date.getMonth() + 1}月${date.getDate()}日`;
+}
+
+/** 同年省去年份。 */
+export function getShortDateLabel(key: string, todayKey: string): string {
+    return key.slice(0, 4) === todayKey.slice(0, 4) ? getMonthDayLabel(key) : `${key.slice(0, 4)}年${getMonthDayLabel(key)}`;
+}
+
+export function getNoteTimeLabel(note: Pick<MingNote, 'created_at'>): string {
+    const date = new Date(note.created_at);
+    return Number.isNaN(date.getTime()) ? '' : NOTE_TIME_FORMAT.format(date);
+}
+
+/** 记录坐在哪一天：事件日期，没有（或格式不对）就用写下的那天。 */
+export function getRecordDateKey(record: Pick<MingRecord, 'event_date' | 'created_at'>): string {
+    return isDateKey(record.event_date) ? record.event_date : toLocalDateKey(new Date(record.created_at));
+}
+
+/** 旧数据里出现过 life/work 这类不在选项内的分类，一律按「通用」处理。 */
+export function getRecordCategory(record: Pick<MingRecord, 'category'>): RecordCategory {
+    return isRecordCategory(record.category) ? record.category : 'general';
+}
+
+export function getRecordCategoryLabel(record: Pick<MingRecord, 'category'>): string {
+    return RECORD_CATEGORIES.find(item => item.value === getRecordCategory(record))?.label ?? '通用';
+}
+
+export function getRecordVerdict(record: Pick<MingRecord, 'tags'>): PredictionVerdict | null {
+    if (!Array.isArray(record.tags)) return null;
+    if (record.tags.includes(PREDICTION_VERDICT_TAGS.hit)) return 'hit';
+    if (record.tags.includes(PREDICTION_VERDICT_TAGS.miss)) return 'miss';
+    return null;
+}
+
+/** 展示用标签：印证结果以状态呈现，不再重复成标签。 */
+export function getPlainTags(record: Pick<MingRecord, 'tags'>): string[] {
+    return (Array.isArray(record.tags) ? record.tags : [])
+        .filter(tag => tag !== PREDICTION_VERDICT_TAGS.hit && tag !== PREDICTION_VERDICT_TAGS.miss);
+}
+
+export type PredictionStatus =
+    | { kind: 'hit' | 'miss' | 'open' }
+    | { kind: 'upcoming' | 'due'; days: number };
+
+/** 预测类记录的印证状态：已应验 / 未应验 / 未定应验日 / 还有几天 / 已到应验日。 */
+export function getPredictionStatus(record: MingRecord, todayKey: string): PredictionStatus | null {
+    if (getRecordCategory(record) !== 'prediction') return null;
+    const verdict = getRecordVerdict(record);
+    if (verdict) return { kind: verdict };
+    if (!isDateKey(record.event_date)) return { kind: 'open' };
+    const days = daysBetweenDateKeys(todayKey, record.event_date);
+    return days > 0 ? { kind: 'upcoming', days } : { kind: 'due', days: Math.abs(days) };
+}
+
+export function getPredictionStatusText(status: PredictionStatus): string {
+    switch (status.kind) {
+        case 'hit': return '已应验';
+        case 'miss': return '未应验';
+        case 'open': return '未定应验日';
+        case 'upcoming': return status.days === 1 ? '明天到期' : `还有 ${status.days} 天`;
+        case 'due': return status.days === 0 ? '今天到应验日' : `已到应验日 · ${status.days} 天前`;
+    }
+}
+
+/** 日期文案随分类变：预测看应验日，事件看发生日，其余是记下的日子。 */
+export function getRecordDateLabel(record: Pick<MingRecord, 'category'>): string {
+    const category = getRecordCategory(record);
+    return category === 'prediction' ? '预计应验' : category === 'event' ? '发生于' : '记于';
+}
+
+/** 写印证结果：只改标签，保留 Agent 来源等其它字段。 */
+export function setRecordVerdict(record: MingRecord, verdict: PredictionVerdict | null): Promise<MingRecord> {
+    const tags = getPlainTags(record);
+    if (verdict) tags.push(PREDICTION_VERDICT_TAGS[verdict]);
+    return updateRecord(record.id, { tags });
+}
+
+/** 按小记所属日期分组，组内按写入时间倒序。 */
+export function groupNotesByDay(notes: MingNote[]): Map<string, MingNote[]> {
+    const byDay = new Map<string, MingNote[]>();
+    for (const note of [...notes].sort((a, b) => b.created_at.localeCompare(a.created_at))) {
+        byDay.set(note.note_date, [...(byDay.get(note.note_date) ?? []), note]);
+    }
+    return byDay;
 }
 
 /**

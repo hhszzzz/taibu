@@ -32,9 +32,12 @@ test('records page no longer keeps a parallel fetch client next to src/lib/recor
 
   assert.equal(pageSource.includes('await fetch(`/api/records?'), false);
   assert.equal(pageSource.includes("await fetch(`/api/records/${id}`"), false);
-  assert.equal(pageSource.includes('await fetch(`/api/notes?date='), false);
+  assert.equal(pageSource.includes('await fetch(`/api/notes?'), false);
   assert.equal(pageSource.includes('getRecords('), true);
-  assert.equal(pageSource.includes('getNotesByDate('), true);
+  assert.equal(pageSource.includes('getNotesInRange('), true);
+  assert.equal(pageSource.includes('createNote('), true);
+  assert.equal(pageSource.includes('deleteNote('), true);
+  assert.equal(pageSource.includes('setRecordVerdict('), true);
   assert.equal(pageSource.includes('deleteRecord('), true);
   assert.equal(pageSource.includes('toggleRecordPin('), true);
   assert.equal(pageSource.includes('useSessionSafe('), true);
@@ -43,8 +46,10 @@ test('records page no longer keeps a parallel fetch client next to src/lib/recor
   assert.equal(pageSource.includes('listKnowledgeBases('), false);
 });
 
-test('records detail components reuse src/lib/records.ts instead of maintaining raw records/nodes fetchers', () => {
+test('record dialogs and the timeline reuse src/lib/records.ts instead of raw fetchers', () => {
   const detailSource = readFileSync(resolve(process.cwd(), 'src/components/records/RecordDetail.tsx'), 'utf8');
+  const timelineSource = readFileSync(resolve(process.cwd(), 'src/components/records/RecordsTimeline.tsx'), 'utf8');
+  const viewSource = readFileSync(resolve(process.cwd(), 'src/components/records/RecordViewDialog.tsx'), 'utf8');
 
   assert.equal(detailSource.includes("fetch(record ? `/api/records/${record.id}` : '/api/records'"), false);
   assert.equal(detailSource.includes("fetch('/api/notes'"), false);
@@ -53,10 +58,14 @@ test('records detail components reuse src/lib/records.ts instead of maintaining 
   assert.equal(detailSource.includes("window.open('/api/records/export'"), false);
   assert.equal(detailSource.includes('createRecord('), true);
   assert.equal(detailSource.includes('updateRecord('), true);
-  assert.equal(detailSource.includes('createNote('), true);
-  assert.equal(detailSource.includes('deleteNote('), true);
   assert.equal(detailSource.includes('exportData('), true);
   assert.equal(detailSource.includes('importData('), true);
+  // 小记的读写由页面统一收口，展示组件不自己发请求。
+  for (const source of [timelineSource, viewSource]) {
+    assert.equal(source.includes("fetch('/api/"), false);
+    assert.equal(source.includes('requestBrowserData('), false);
+  }
+  assert.equal(viewSource.includes('loadHistoryRestore('), true);
 });
 
 test('records client should not keep dead allowNotFound fallback for removed single-record helpers', () => {

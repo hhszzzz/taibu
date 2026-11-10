@@ -49,9 +49,22 @@ test('records list compiles an owner-scoped any-tag filter and counts within the
     assert.deepEqual(statements[0]?.parameters.slice(2), [2, 2]);
     assert.doesNotMatch(statements[1]!.sql, /limit|offset/u);
 
+    // 搜索同时匹配标签；sort=date 按记录所在日期（事件日期，没有就用写入时间）排序，置顶仍在最前。
+    statements.length = 0;
+    const searchResponse = await GET(request('?search=甲&sort=date&pageSize=5'));
+    assert.equal(searchResponse.status, 200);
+    assert.equal(statements.length, 2);
+    const listSql = statements[0]!.sql;
+    assert.match(listSql, /array_to_string\("tags"/u);
+    assert.ok(statements[0]!.parameters.includes('%甲%'), 'the search pattern also feeds the tag match');
+    assert.match(listSql, /order by "is_pinned" desc, coalesce\("event_date", "created_at"\) desc/u);
+    assert.equal(options.length, 2);
+
     assert.equal((await GET(request('?page=0'))).status, 400);
-    assert.equal(options.length, 1, 'invalid pagination must not query the database');
+    assert.equal(options.length, 2, 'invalid pagination must not query the database');
+    assert.equal((await GET(request('?sort=wrong'))).status, 400);
+    assert.equal(options.length, 2, 'an unknown sort must not query the database');
     auth.mock.mockImplementation(async () => ({ error: { message: '请先登录', status: 401 } }));
     assert.equal((await GET(request())).status, 401);
-    assert.equal(options.length, 1, 'an unauthenticated request must not query the database');
+    assert.equal(options.length, 2, 'an unauthenticated request must not query the database');
 });

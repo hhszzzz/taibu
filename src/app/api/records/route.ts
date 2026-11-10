@@ -35,6 +35,10 @@ export async function GET(request: NextRequest) {
         const endDate = searchParams.get('endDate');
         const isPinned = searchParams.get('isPinned');
         const tags = searchParams.getAll('tag');
+        const sort = searchParams.get('sort');
+        if (sort != null && sort !== 'date') {
+            return jsonError('sort 参数无效', 400);
+        }
 
         const filters: RecordFilters = {};
         if (category) filters.category = category;
@@ -59,14 +63,22 @@ export async function GET(request: NextRequest) {
             if (filters.endDate) query = query.where('event_date', '<=', filters.endDate);
             if (filters.tags && filters.tags.length > 0) query = query.where('tags', '&&', arrayValue(filters.tags));
             if (pattern) {
+                // 标签也参与搜索：数组拼成一段文本再做模糊匹配，避免逐标签正则在路由里展开。
                 query = query.where((eb) => eb.or([
                     eb('title', 'ilike', pattern),
                     eb('content', 'ilike', pattern),
+                    eb(eb.fn('array_to_string', [eb.ref('tags'), eb.val(' ')]), 'ilike', pattern),
                 ]));
             }
-            const rows = await query.selectAll()
-                .orderBy('is_pinned', 'desc')
-                .orderBy('created_at', 'desc')
+            // sort=date：按记录所在的日期排（事件日期，没有就用写入时间），置顶仍在前。
+            const rows = await (sort === 'date'
+                ? query.selectAll()
+                    .orderBy('is_pinned', 'desc')
+                    .orderBy((eb) => eb.fn.coalesce(eb.ref('event_date'), eb.ref('created_at')), 'desc')
+                    .orderBy('created_at', 'desc')
+                : query.selectAll()
+                    .orderBy('is_pinned', 'desc')
+                    .orderBy('created_at', 'desc'))
                 .offset(from)
                 .limit(pageSize)
                 .execute();

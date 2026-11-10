@@ -153,10 +153,21 @@ const attachmentRows = agentDemo.attachments.map((item) => {
   return { ...item, bytes, objectPath: `${DEMO}/${item.id}`, sha256: createHash('sha256').update(bytes).digest('hex') };
 });
 
+// 记录分类只认 general / prediction / event / reflection（src/lib/records.ts）。
+const dayKey = (offsetDays) => {
+  const date = new Date(now + offsetDays * DAY);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+};
 const records = [
-  ['近郊水库散步', '风不大，沿堤走了四十分钟，回来睡得很好。', 'life', ['散步', '睡眠'], '2026-10-18'],
-  ['汇报提纲', '只保留三个结论：现状、方案、需要的支持。', 'work', ['汇报'], '2026-10-21'],
+  ['近郊水库散步', '风不大，沿堤走了四十分钟，回来睡得很好。', 'general', ['散步', '睡眠'], '2026-10-18'],
+  ['汇报提纲', '只保留三个结论：现状、方案、需要的支持。', 'general', ['汇报'], '2026-10-21'],
   ['读书摘记', '“先把问题写清楚，答案会自己浮出来。”', 'general', ['阅读'], '2026-10-23'],
+  // 预测类记录：一条已到应验日、一条未到期、一条没有应验日，另有已应验/未应验各一条。
+  ['这周的面试能进复试', '得「天火同人」之「乾为天」。官鬼持世，世应相生，父母爻旺相发动，主文书顺利，有望进复试。', 'prediction', ['面试', '六爻'], dayKey(-2)],
+  ['年底前会有一次岗位调动', '丙午年己亥月，大运交接在即，正官透干。\n流月逢亥卯未三合，主有调动或升迁之象；若十二月前没有动静，则应在明年寅月。', 'prediction', ['事业', '八字'], dayKey(12)],
+  ['明年春天适合换城市', '紫微流年迁移宫化禄，明年春季出行、迁动有利。', 'prediction', ['迁移', '紫微'], null],
+  ['九月的合同会延期签', '掐得「留连」，主拖延反复。\n\n结果：合同推到十月初才签。', 'prediction', ['事业', '小六壬', '已应验'], dayKey(-51)],
+  ['八月搬家一切顺利', '择日选在八月十六，黄历宜入宅、移徙。\n\n结果：当天大雨，电梯还坏了，并不顺利。', 'prediction', ['搬家', '择日', '未应验'], dayKey(-86)],
 ];
 // Moods are NOTE_MOODS values (src/lib/records.ts).
 const notes = [

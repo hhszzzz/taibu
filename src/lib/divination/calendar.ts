@@ -116,7 +116,26 @@ export interface CalendarAlmanacData {
     };
 }
 
+/** 一天的年、月、日三柱（立春换年、节气换月）与农历月日，如「十月初一」。 */
+export interface DatePillars {
+    year: string;
+    month: string;
+    day: string;
+    lunarMonthDay: string;
+}
+
 // ===== 主要函数 =====
+
+export function getDatePillars(date: Date): DatePillars {
+    const lunar = Solar.fromYmd(date.getFullYear(), date.getMonth() + 1, date.getDate()).getLunar();
+    const eightChar = lunar.getEightChar();
+    return {
+        year: eightChar.getYear(),
+        month: eightChar.getMonth(),
+        day: eightChar.getDay(),
+        lunarMonthDay: `${lunar.getMonthInChinese()}月${lunar.getDayInChinese()}`,
+    };
+}
 
 /**
  * 获取指定日期的完整黄历信息

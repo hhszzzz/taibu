@@ -168,10 +168,11 @@ async function userEmails(db: ScopedDb, ids: readonly string[]) {
 }
 
 /**
- * The newest tasks first: active ones (queued, running, awaiting input, stopping) or every recent one. A search, which
- * the route has checked is a UUID, finds a task, a conversation's tasks or a user's tasks in any state.
+ * The newest tasks first: active ones (queued, running, awaiting input, stopping), the ones an update would interrupt,
+ * or every recent one. A search, which the route has checked is a UUID, finds a task, a conversation's tasks or a
+ * user's tasks in any state.
  */
-export async function listAgentRunsForAdmin(db: ScopedDb, options: { scope: "active" | "recent"; search?: string }): Promise<AgentAdminRun[]> {
+export async function listAgentRunsForAdmin(db: ScopedDb, options: { scope: "active" | "blocking" | "recent"; search?: string }): Promise<AgentAdminRun[]> {
   const rows = await db.tx((trx) => {
     let query = trx.selectFrom("agent_runs")
       .select(["id", "conversation_id", "user_id", "status", "billing", "worker_id", "fence", "lease_until", "cancel_requested", "created_at", "updated_at", "input"]);
@@ -181,6 +182,7 @@ export async function listAgentRunsForAdmin(db: ScopedDb, options: { scope: "act
       eb("user_id", "=", options.search!),
     ]));
     else if (options.scope === "active") query = query.where("status", "in", [...AGENT_ACTIVE_STATUSES]);
+    else if (options.scope === "blocking") query = query.where("status", "in", [...AGENT_BLOCKING_STATUSES]);
     return query.orderBy("updated_at", "desc").limit(AGENT_ADMIN_RUN_LIMIT).execute();
   });
   const emails = await userEmails(db, [...new Set(rows.map(row => row.user_id))]);

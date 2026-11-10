@@ -19,10 +19,10 @@ interface UpdateDialogProps {
 
 type Tab = 'info' | 'upgrade' | 'tasks';
 
-async function fetchActiveTaskCount(): Promise<number | null> {
+async function fetchBlockingTaskCount(): Promise<number | null> {
   try {
     const data = await requestBrowserData<{ runs?: unknown[] }>(
-      '/api/admin/agent-runs?scope=active',
+      '/api/admin/agent-runs?scope=blocking',
       undefined,
       { fallbackMessage: '读取运行中的任务失败' },
     );
@@ -41,15 +41,15 @@ async function triggerUpdate(): Promise<void> {
 
 export function UpdateDialog({ versionInfo, onClose, onIgnore }: UpdateDialogProps) {
   const [tab, setTab] = useState<Tab>('info');
-  const [activeTasks, setActiveTasks] = useState<number | null>(null);
+  const [blockingTasks, setBlockingTasks] = useState<number | null>(null);
   const [updating, setUpdating] = useState(false);
   const [submitted, setSubmitted] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    void fetchActiveTaskCount().then((count) => {
-      if (!cancelled) setActiveTasks(count);
+    void fetchBlockingTaskCount().then((count) => {
+      if (!cancelled) setBlockingTasks(count);
     });
     return () => {
       cancelled = true;
@@ -69,7 +69,7 @@ export function UpdateDialog({ versionInfo, onClose, onIgnore }: UpdateDialogPro
     }
   }, []);
 
-  const canUpdate = activeTasks === 0 && !updating && !submitted;
+  const canUpdate = blockingTasks === 0 && !updating && !submitted;
 
   return (
     <Dialog
@@ -157,11 +157,11 @@ export function UpdateDialog({ versionInfo, onClose, onIgnore }: UpdateDialogPro
 
       {tab === 'tasks' && (
         <div className="space-y-3 text-sm">
-          {activeTasks === null ? (
+          {blockingTasks === null ? (
             <p className="py-4 text-center text-foreground-secondary">加载中...</p>
-          ) : activeTasks > 0 ? (
+          ) : blockingTasks > 0 ? (
             <p className="rounded-lg bg-warning/10 p-3 text-foreground">
-              有 {activeTasks} 个 Agent 任务正在运行，请等待完成后再更新。
+              有 {blockingTasks} 个 Agent 任务正在运行，请等待完成后再更新。
             </p>
           ) : (
             <p className="rounded-lg bg-background-secondary p-3 text-foreground">可以安全更新，没有进行中的任务。</p>

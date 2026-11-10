@@ -273,6 +273,9 @@ test('the task list reads active tasks newest first, names their users, and find
   await listRoute(listRequest('?scope=recent'));
   assert.deepEqual(filters(), [['orderBy', 'updated_at', 'desc'], ['limit', 50]], 'recent tasks in every state');
   f.calls.length = 0;
+  await listRoute(listRequest('?scope=blocking'));
+  assert.deepEqual(filters(), [['where', 'status', 'in', ['queued', 'running', 'cancelling']], ['orderBy', 'updated_at', 'desc'], ['limit', 50]], 'only the tasks an update would interrupt');
+  f.calls.length = 0;
   f.state.emailError = true;
   f.state.rows = [runRow({ input: { ...runInput, compact: { instructions: null } }, status: 'completed' })];
   const found = await (await listRoute(listRequest(`?q=${CONVERSATION}`))).json();

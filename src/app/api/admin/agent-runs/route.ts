@@ -1,7 +1,7 @@
 /**
  * Agent 任务排障 API
  *
- * GET: 进行中（scope=active，默认）或最近（scope=recent）的 Agent 任务，新的在前；
+ * GET: 进行中（scope=active，默认）、会阻断更新（scope=blocking）或最近（scope=recent）的 Agent 任务，新的在前；
  *      q 为任务、对话或用户 ID 时查找它们的任务，不限状态
  */
 import { NextRequest } from 'next/server';
@@ -20,7 +20,8 @@ export async function GET(request: NextRequest) {
     if (search && !isValidUUID(search)) {
         return jsonError('请输入完整的任务、对话或用户 ID', 400);
     }
-    const scope = request.nextUrl.searchParams.get('scope') === 'recent' ? 'recent' : 'active';
+    const scopeParam = request.nextUrl.searchParams.get('scope');
+    const scope = scopeParam === 'recent' ? 'recent' : scopeParam === 'blocking' ? 'blocking' : 'active';
 
     try {
         const runs = await listAgentRunsForAdmin(systemDb(), { scope, ...(search ? { search } : {}) });

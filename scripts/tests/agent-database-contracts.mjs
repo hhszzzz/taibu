@@ -690,4 +690,29 @@ export async function agentDatabaseContracts(
     assert.deepEqual(await expire(), { nudged: 0, cancelled: 1, failed: 0 });
     assert.equal(await asOwner(`SELECT count(*) FROM public.notifications WHERE user_id=${quote(owner)} AND event_key=${quote(`agent-expired:${run.id}`)};`), "0");
   });
+
+  await t.test("a scheduled run's expiry leaves the notice to its schedule", async (t) => {
+    const schedule = JSON.parse(await asActor(owner,
+      `SELECT to_jsonb(public.create_agent_schedule(${quote('超时契约')},${quote('custom')},${quote('整理今天的重点。')},${json({ kind: 'daily', time: '08:00' })},${quote('Asia/Shanghai')},${json({ notify: true })})) s;`));
+    const run = await awaitingRun("q1");
+    t.after(async () => {
+      await asOwner(`DELETE FROM public.agent_schedule_runs WHERE agent_run_id=${quote(run.id)};`);
+      await asOwner(`DELETE FROM public.agent_schedules WHERE id=${quote(schedule.id)};`);
+      await asOwner(`UPDATE public.agent_runs SET status='cancelled',cancel_requested=true
+        WHERE id=${quote(run.id)} AND status IN ('awaiting_input','queued','running');`);
+    });
+    await asOwner(`INSERT INTO public.agent_schedule_runs(schedule_id,user_id,scheduled_for,status,agent_run_id)
+      VALUES(${quote(schedule.id)},${quote(owner)},now(),'running',${quote(run.id)});`);
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 1, cancelled: 0, failed: 0 });
+    const claimed = await claim();
+    assert.equal(claimed.id, run.id);
+    await sql(`UPDATE public.agent_run_commands SET consumed=true,delivery_state='consumed' WHERE run_id=${quote(run.id)} AND request_id LIKE 'ask-timeout:%';`);
+    await finish(claimed, "awaiting_input", assistant(claimed.id), questionCheckpoint("q2"));
+    await ageRun(run.id);
+    assert.deepEqual(await expire(), { nudged: 0, cancelled: 1, failed: 0 });
+    assert.equal((await get(run.id)).status, "cancelled");
+    // The schedule's own notification covers it; the generic task notice would duplicate it.
+    assert.equal(await asOwner(`SELECT count(*) FROM public.notifications WHERE user_id=${quote(owner)} AND event_key=${quote(`agent-expired:${run.id}`)};`), "0");
+  });
 }

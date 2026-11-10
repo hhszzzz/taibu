@@ -11,6 +11,7 @@
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { SkillManager } from '@/components/settings/skills/SkillManager';
+import { BuiltinMethods } from '@/components/settings/skills/BuiltinMethods';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { ExtensionAllowanceView } from '@/lib/agent/extensions/config';
 import type { SkillListing } from '@/lib/agent/skills/client';
@@ -38,13 +39,16 @@ export default function SkillsPanel() {
   }
   if (!user) return <SettingsLoginRequired title="请先登录后管理技能" />;
   return (
-    <SkillManager
-      key={user.id}
-      scope="user"
-      userId={user.id}
-      canAdd={canAdd}
-      notice={listing => <AllowanceNotice allowance={listing.allowance} />}
-      empty={{ title: '还没有技能', detail: '上传一个包含 SKILL.md 的文件夹。' }}
-    />
+    <div className="flex flex-col gap-6">
+      <SkillManager
+        key={user.id}
+        scope="user"
+        userId={user.id}
+        canAdd={canAdd}
+        notice={listing => <AllowanceNotice allowance={listing.allowance} />}
+        empty={{ title: '还没有技能', detail: '上传一个包含 SKILL.md 的文件夹。' }}
+      />
+      <BuiltinMethods />
+    </div>
   );
 }

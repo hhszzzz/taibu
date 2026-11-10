@@ -156,13 +156,20 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                     {agentMode && (userId ? <MenuSub>
                         <MenuSubTrigger><SkillIcon size={18} /><span className="chat-plus-label">技能</span><BetaBadge /></MenuSubTrigger>
                         <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="技能">
-                            {extensions.skills.length > 0 ? extensions.skills.map(skill => (
+                            {/* 内置技能只有太卜占术一个，始终随任务加载，因此是只读行而不是可插入的命令。 */}
+                            <ul className="chat-plus-connector-list" aria-label="内置技能">
+                                <li title="内置技能：随版本提供，Agent 会按问题自动调用其中的方法">
+                                    <SkillIcon size={16} /><span>太卜占术</span><small>官方</small><Check size={14} aria-hidden="true" />
+                                </li>
+                            </ul>
+                            {extensions.skills.map(skill => (
                                 <MenuItem key={skill.name} title={skill.description}
                                     onClick={() => props.onSkillSelect?.(skill.name)}>
                                     <SkillIcon size={18} /><span className="chat-plus-label">{skill.name}</span>
-                                    <small>{skill.scope === 'platform' ? '平台' : '我的'}</small>
+                                    <small>{skill.scope === 'platform' ? '内置' : '我的'}</small>
                                 </MenuItem>
-                            )) : <p className="chat-plus-empty">{extensions.loaded ? '还没有可用技能' : '正在读取…'}</p>}
+                            ))}
+                            {!extensions.loaded ? <p className="chat-plus-empty">正在读取…</p> : null}
                             <MenuSeparator className="chat-plus-divider" />
                             <MenuItem onClick={() => router.push('/settings/skills')}>
                                 <Settings2 size={16} aria-hidden="true" /><span className="chat-plus-label">管理技能</span>
@@ -176,9 +183,9 @@ export function ComposerToolbar(props: ComposerToolbarProps) {
                         <MenuSubContent className="chat-plus-menu chat-extension-menu" aria-label="连接器">
                             {extensions.connectors.length > 0
                                 ? <ul className="chat-plus-connector-list" aria-label="可用连接器">
-                                    {extensions.connectors.map(connector => <li key={connector.id}>
+                                    {extensions.connectors.map(connector => <li key={connector.id} title={connector.description || undefined}>
                                         <ConnectorsIcon size={16} /><span>{connector.name}</span>
-                                        <small>{connector.scope === 'platform' ? '平台' : '我的'}</small><Check size={14} aria-hidden="true" />
+                                        <small>{connector.scope === 'platform' ? '内置' : '我的'}</small><Check size={14} aria-hidden="true" />
                                     </li>)}
                                 </ul>
                                 : <p className="chat-plus-empty">{extensions.loaded ? '还没有可用连接器' : '正在读取…'}</p>}

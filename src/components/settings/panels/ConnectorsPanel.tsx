@@ -11,6 +11,7 @@
 import { useSessionSafe } from '@/components/providers/ClientProviders';
 import { SettingsLoginRequired } from '@/components/settings/SettingsLoginRequired';
 import { McpServerManager } from '@/components/settings/mcp/McpServerManager';
+import { BuiltinConnectors } from '@/components/settings/mcp/BuiltinConnectors';
 import { SoundWaveLoader } from '@/components/ui/SoundWaveLoader';
 import type { ExtensionAllowanceView } from '@/lib/agent/extensions/config';
 import type { McpServerListing } from '@/lib/agent/mcp/client';
@@ -38,14 +39,17 @@ export default function ConnectorsPanel() {
   }
   if (!user) return <SettingsLoginRequired title="请先登录后管理连接器" />;
   return (
-    <McpServerManager
-      key={user.id}
-      scope="user"
-      userId={user.id}
-      addLabel="添加连接器"
-      canAdd={canAdd}
-      notice={listing => <AllowanceNotice allowance={listing.allowance} />}
-      empty={{ title: '还没有连接器', detail: '接入支持 Streamable HTTP 的 MCP 服务后，Agent 在开启联网的任务中可以调用它的工具。' }}
-    />
+    <div className="flex flex-col gap-6">
+      <McpServerManager
+        key={user.id}
+        scope="user"
+        userId={user.id}
+        addLabel="添加连接器"
+        canAdd={canAdd}
+        notice={listing => <AllowanceNotice allowance={listing.allowance} />}
+        empty={{ title: '还没有连接器', detail: '接入支持 Streamable HTTP 的 MCP 服务后，Agent 在开启联网的任务中可以调用它的工具。' }}
+      />
+      <BuiltinConnectors />
+    </div>
   );
 }

@@ -7,6 +7,7 @@
 'use client';
 
 import { SkillManager } from '@/components/settings/skills/SkillManager';
+import { BuiltinMethods } from '@/components/settings/skills/BuiltinMethods';
 
 const notice = () => (
   <p className="mcp-notice">
@@ -16,10 +17,13 @@ const notice = () => (
 
 export function AgentSkillsPanel() {
   return (
-    <SkillManager
-      scope="platform"
-      notice={notice}
-      empty={{ title: '还没有平台技能', detail: '粘贴一份 SKILL.md，或上传包含 SKILL.md 的文件夹。' }}
-    />
+    <div className="flex flex-col gap-6">
+      <SkillManager
+        scope="platform"
+        notice={notice}
+        empty={{ title: '还没有平台技能', detail: '粘贴一份 SKILL.md，或上传包含 SKILL.md 的文件夹。' }}
+      />
+      <BuiltinMethods />
+    </div>
   );
 }

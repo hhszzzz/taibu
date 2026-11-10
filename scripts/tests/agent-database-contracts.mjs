@@ -54,12 +54,12 @@ export async function agentDatabaseContracts(
   const create = async (conversationId, options = {}) => {
     const id = options.id ?? randomUUID();
     return parsed(
-      `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(options.input ?? input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${quote(options.billing ?? "metered")}));`,
+      `SELECT to_jsonb(public.agent_create_run(${quote(id)},${quote(options.user ?? owner)},${quote(conversationId)},${quote(options.request ?? id)},${quote(options.hash ?? "same-hash")},${json(options.input ?? input(id))},${json(options.checkpoint ?? checkpoint)},${json(assistant(id))},${json({ version: 1, data: "encrypted-fixture", iv: "nonce", tag: "tag" })},${quote(options.billing ?? "metered")}));`,
     );
   };
-  const claim = async (worker = "worker-a") => {
+  const claim = async (worker = "worker-a", maxPerUser) => {
     await admin(`SELECT public.agent_worker_heartbeat(${quote(worker)},'pi-durable/1.5.0');`);
-    return parsed(`SELECT to_jsonb(public.agent_claim_run(${quote(worker)}));`);
+    return parsed(`SELECT to_jsonb(public.agent_claim_run(${quote(worker)}${maxPerUser === undefined ? "" : `,${maxPerUser}`}));`);
   };
   const lease = (run) =>
     `${quote(run.id)},${quote(run.worker_id)},${run.fence}`;
@@ -284,7 +284,7 @@ export async function agentDatabaseContracts(
   await t.test('engine retirement fences every old active state, settles once and preserves completed history and artifacts', async () => {
     const active = [];
     for (const status of ['queued', 'running', 'awaiting_input', 'cancelling']) {
-      const queued = await create(await createConversation()), run = await claim(`retire-${status}`);
+      const queued = await create(await createConversation()), run = await claim(`retire-${status}`, 10);
       const artifact = await saveTool(run);
       await command(run, randomUUID(), 'follow_up', '旧任务待处理消息');
       const output = { ...assistant(run.id), content: status === 'running' ? '已有局部回答' : '' };
@@ -430,6 +430,56 @@ export async function agentDatabaseContracts(
       const stopped = await finish(second, "completed");
       assert.equal(stopped.status, "cancelled");
       assert.equal(stopped.billing, "metered");
+    },
+  );
+
+  await t.test(
+    "one live run per user leaves that user's next task queued while other users proceed",
+    async () => {
+      const first = await create(await createConversation());
+      const second = await create(await createConversation());
+      const otherConversation = await asActor(other,
+        `SELECT public.create_conversation_with_messages(${quote(other)},'Agent fixture','chat','{}','[]');`);
+      const otherRun = await create(otherConversation, { user: other });
+      const firstClaim = await claim("user-slot-a");
+      assert.equal(firstClaim.id, first.id);
+      // The same user's next task waits; another user's queued task is claimable.
+      const otherClaim = await claim("user-slot-b");
+      assert.equal(otherClaim.id, otherRun.id);
+      assert.equal(await claim("user-slot-a"), null);
+      await finish(firstClaim, "completed");
+      const secondClaim = await claim("user-slot-a");
+      assert.equal(secondClaim.id, second.id);
+      await finish(secondClaim, "completed");
+      await finish(otherClaim, "completed");
+
+      // A cancelled queued task settles without waiting for the slot.
+      const busy = await create(await createConversation());
+      const cancelled = await create(await createConversation());
+      const busyClaim = await claim("user-slot-d");
+      assert.equal(busyClaim.id, busy.id);
+      await asActor(owner, `SELECT public.agent_cancel_run(${quote(cancelled.id)});`);
+      const cancelClaim = await claim("user-slot-d");
+      assert.equal(cancelClaim.id, cancelled.id);
+      assert.equal((await finish(cancelClaim, "completed")).status, "cancelled");
+      await finish(busyClaim, "completed");
+
+      // The limit is per call: 2 lets one user hold two runs.
+      const third = await create(await createConversation());
+      const fourth = await create(await createConversation());
+      const fifth = await create(await createConversation());
+      await admin(`SELECT public.agent_worker_heartbeat('user-slot-c','pi-durable/1.5.0');`);
+      await assert.rejects(admin(`SELECT public.agent_claim_run('user-slot-c',0);`), /AGENT_USER_CONCURRENCY_INVALID/);
+      const claimTwo = () => parsed(`SELECT to_jsonb(public.agent_claim_run('user-slot-c',2));`);
+      const a = await claimTwo();
+      const b = await claimTwo();
+      assert.deepEqual([a?.id, b?.id], [third.id, fourth.id]);
+      assert.equal(await claimTwo(), null);
+      await finish(a, "completed");
+      const c = await claimTwo();
+      assert.equal(c.id, fifth.id);
+      await finish(b, "completed");
+      await finish(c, "completed");
     },
   );
 

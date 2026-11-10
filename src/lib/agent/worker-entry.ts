@@ -41,6 +41,9 @@ async function main() {
   const concurrency = Number(process.env.AGENT_WORKER_CONCURRENCY ?? 2);
   if (!Number.isSafeInteger(concurrency) || concurrency < 1)
     throw new Error("AGENT_WORKER_CONCURRENCY must be a positive integer");
+  const userConcurrency = Number(process.env.AGENT_USER_CONCURRENCY ?? 1);
+  if (!Number.isSafeInteger(userConcurrency) || userConcurrency < 1)
+    throw new Error("AGENT_USER_CONCURRENCY must be a positive integer");
   process.once("SIGINT", () => shutdown.abort());
   process.once("SIGTERM", () => shutdown.abort());
   await store.rpc("agent_worker_heartbeat", { p_worker_id: workerId, p_engine: AGENT_ENGINE });
@@ -64,6 +67,7 @@ async function main() {
       }
       const run = await store.rpc<AgentRunRow | null>("agent_claim_run", {
         p_worker_id: workerId,
+        p_max_per_user: userConcurrency,
       });
       if (run?.id) {
         const work = executeAgentRun(store, run, shutdown.signal)

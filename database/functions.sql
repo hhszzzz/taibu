@@ -286,19 +286,32 @@ BEGIN
 END;
 $$;
 
-CREATE OR REPLACE FUNCTION public.agent_claim_run(p_worker_id text) RETURNS public.agent_runs
+CREATE OR REPLACE FUNCTION public.agent_claim_run(p_worker_id text, p_max_per_user integer DEFAULT 1) RETURNS public.agent_runs
     LANGUAGE plpgsql SECURITY DEFINER
     SET search_path TO 'public', 'pg_temp'
     AS $$
-DECLARE r public.agent_runs;
+DECLARE r public.agent_runs; active integer;
 BEGIN
   PERFORM public.agent_require_admin();
+  IF p_max_per_user IS NULL OR p_max_per_user<1 THEN RAISE EXCEPTION 'AGENT_USER_CONCURRENCY_INVALID' USING ERRCODE='22023'; END IF;
   IF NOT EXISTS(SELECT 1 FROM public.agent_workers WHERE id=p_worker_id AND engine='pi-durable/1.5.0') THEN RETURN NULL; END IF;
-  SELECT * INTO r FROM public.agent_runs
-    WHERE (status='queued' OR (status IN ('running','cancelling') AND lease_until<now()))
-      AND checkpoint->>'version'='2' AND checkpoint#>>'{durable,engine}'='pi-durable/1.5.0'
-    ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1;
+  SELECT * INTO r FROM public.agent_runs a
+    WHERE (a.status='queued' OR (a.status IN ('running','cancelling') AND a.lease_until<now()))
+      AND a.checkpoint->>'version'='2' AND a.checkpoint#>>'{durable,engine}'='pi-durable/1.5.0'
+      AND (a.cancel_requested OR (SELECT count(*) FROM public.agent_runs b
+           WHERE b.user_id=a.user_id AND b.id<>a.id
+             AND b.status IN ('running','cancelling') AND b.lease_until>=now()
+             AND b.checkpoint->>'version'='2' AND b.checkpoint#>>'{durable,engine}'='pi-durable/1.5.0')<p_max_per_user)
+    ORDER BY a.created_at FOR UPDATE SKIP LOCKED LIMIT 1;
   IF NOT FOUND THEN RETURN NULL; END IF;
+  -- Two workers must not both take a user's last free slot.
+  IF NOT pg_try_advisory_xact_lock(hashtextextended('agent-user:'||r.user_id::text,0)) THEN RETURN NULL; END IF;
+  SELECT count(*) INTO active FROM public.agent_runs b
+    WHERE b.user_id=r.user_id AND b.id<>r.id
+      AND b.status IN ('running','cancelling') AND b.lease_until>=now()
+      AND b.checkpoint->>'version'='2' AND b.checkpoint#>>'{durable,engine}'='pi-durable/1.5.0';
+  -- A cancelled queued task settles without a model call, so it never waits for the slot.
+  IF NOT r.cancel_requested AND active>=p_max_per_user THEN RETURN NULL; END IF;
   UPDATE public.agent_runs SET status=CASE WHEN cancel_requested THEN 'cancelling' ELSE 'running' END,
     worker_id=p_worker_id,fence=fence+1,lease_until=now()+interval '60 seconds',updated_at=now()
     WHERE id=r.id RETURNING * INTO r;

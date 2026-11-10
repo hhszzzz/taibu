@@ -600,7 +600,7 @@ GRANT ALL ON FUNCTION public.agent_checkpoint(p_run_id uuid, p_worker_id text, p
 
 GRANT ALL ON FUNCTION public.agent_claim_command(p_run_id uuid, p_worker_id text, p_fence bigint, p_sequence bigint) TO authenticated;
 
-GRANT ALL ON FUNCTION public.agent_claim_run(p_worker_id text) TO authenticated;
+GRANT ALL ON FUNCTION public.agent_claim_run(p_worker_id text, p_max_per_user integer) TO authenticated;
 
 GRANT ALL ON FUNCTION public.agent_create_run(p_id uuid, p_user_id uuid, p_conversation_id uuid, p_request_id text, p_request_hash text, p_input jsonb, p_checkpoint jsonb, p_message jsonb, p_credential jsonb, p_billing text) TO authenticated;
 

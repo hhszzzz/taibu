@@ -11,7 +11,7 @@ export interface RpcRegistry {
   "agent_change_command": { args: { "p_run_id": string | null; "p_sequence": number | null; "p_revision": number | null; "p_action": string | null; "p_payload"?: unknown | null; }; result: Record<string, unknown> };
   "agent_checkpoint": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_checkpoint": unknown | null; "p_message": unknown | null; "p_event": unknown | null; "p_command"?: number | null; }; result: null };
   "agent_claim_command": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_sequence": number | null; }; result: Record<string, unknown> };
-  "agent_claim_run": { args: { "p_worker_id": string | null; }; result: Record<string, unknown> };
+  "agent_claim_run": { args: { "p_worker_id": string | null; "p_max_per_user"?: number | null; }; result: Record<string, unknown> };
   "agent_create_run": { args: { "p_id": string | null; "p_user_id": string | null; "p_conversation_id": string | null; "p_request_id": string | null; "p_request_hash": string | null; "p_input": unknown | null; "p_checkpoint": unknown | null; "p_message": unknown | null; "p_credential": unknown | null; "p_billing": string | null; }; result: Record<string, unknown> };
   "agent_durable_commit": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_sequence": number | null; "p_writes": unknown | null; "p_checkpoint": unknown | null; }; result: number };
   "agent_durable_read": { args: { "p_run_id": string | null; "p_worker_id": string | null; "p_fence": number | null; "p_after"?: number | null; }; result: Json };
@@ -101,7 +101,7 @@ export const RPC_SPECS = {
   "agent_change_command": { args: [["p_run_id", "uuid", false], ["p_sequence", "bigint", false], ["p_revision", "integer", false], ["p_action", "text", false], ["p_payload", "jsonb", true]], returns: "row" },
   "agent_checkpoint": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false], ["p_event", "jsonb", false], ["p_command", "bigint", true]], returns: "void" },
   "agent_claim_command": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_sequence", "bigint", false]], returns: "row" },
-  "agent_claim_run": { args: [["p_worker_id", "text", false]], returns: "row" },
+  "agent_claim_run": { args: [["p_worker_id", "text", false], ["p_max_per_user", "integer", true]], returns: "row" },
   "agent_create_run": { args: [["p_id", "uuid", false], ["p_user_id", "uuid", false], ["p_conversation_id", "uuid", false], ["p_request_id", "text", false], ["p_request_hash", "text", false], ["p_input", "jsonb", false], ["p_checkpoint", "jsonb", false], ["p_message", "jsonb", false], ["p_credential", "jsonb", false], ["p_billing", "text", false]], returns: "row" },
   "agent_durable_commit": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_sequence", "bigint", false], ["p_writes", "jsonb", false], ["p_checkpoint", "jsonb", false]], returns: "scalar" },
   "agent_durable_read": { args: [["p_run_id", "uuid", false], ["p_worker_id", "text", false], ["p_fence", "bigint", false], ["p_after", "bigint", true]], returns: "scalar" },

@@ -92,7 +92,7 @@ function SectionError({
 
 function SectionTitle({ id, children, aside }: { id: string; children: React.ReactNode; aside?: React.ReactNode }) {
     return (
-        <div className="mb-3 flex min-h-8 items-center justify-between gap-3">
+        <div className="mb-2 flex min-h-7 items-center justify-between gap-3">
             <h2 id={id} className="text-[13px] font-medium text-foreground-tertiary">{children}</h2>
             {aside}
         </div>
@@ -118,23 +118,19 @@ function PendingCard({ item, todayKey, pillarsOf, onOpen, onVerdict }: {
     const { record, status } = item;
     const datePillars = record.event_date ? pillarsOf(record.event_date) : null;
     return (
-        <li className={`relative flex h-full flex-col gap-2 rounded-2xl border-[0.5px] bg-surface p-4 transition-colors hover:border-border-hover ${status.kind === 'due' ? 'border-accent/35' : 'border-border'}`}>
-            <div className="flex items-center justify-between gap-2">
-                <StatusPill status={status} />
-                {record.event_date ? (
-                    <span className="text-xs text-foreground-tertiary tabular-nums">
-                        {getShortDateLabel(record.event_date, todayKey)}{datePillars ? ` · ${datePillars.day}日` : ''}
-                    </span>
-                ) : null}
-            </div>
-            <h3 className="text-[15px] leading-snug font-medium text-foreground">
-                <Button unstyled onClick={() => onOpen(record)} className="line-clamp-2 text-left after:absolute after:inset-0 after:rounded-2xl">
-                    {record.title}
-                </Button>
-            </h3>
-            {record.content ? <p className="line-clamp-2 text-[13px] leading-relaxed text-foreground-secondary">{record.content}</p> : null}
+        <li className={`relative flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border-[0.5px] bg-surface px-3 py-2 transition-colors hover:border-border-hover ${status.kind === 'due' ? 'border-accent/35' : 'border-border'}`}>
+            <StatusPill status={status} />
+            <Button unstyled onClick={() => onOpen(record)}
+                className="min-w-0 flex-1 line-clamp-1 text-left text-[14px] font-medium text-foreground after:absolute after:inset-0">
+                {record.title}
+            </Button>
             {status.kind === 'due' ? (
-                <div className="relative z-10 mt-auto pt-1"><VerdictButtons record={record} onVerdict={onVerdict} size="sm" /></div>
+                <div className="relative z-10 hidden shrink-0 sm:block"><VerdictButtons record={record} onVerdict={onVerdict} size="xs" /></div>
+            ) : null}
+            {record.event_date ? (
+                <span className="hidden shrink-0 text-[11.5px] text-foreground-tertiary tabular-nums sm:inline">
+                    {getShortDateLabel(record.event_date, todayKey)}{datePillars ? ` · ${datePillars.day}日` : ''}
+                </span>
             ) : null}
         </li>
     );
@@ -552,17 +548,17 @@ function RecordsContent() {
 
     return (
         <div className="min-h-screen bg-background pb-20 text-foreground lg:pb-8">
-            <div className="mx-auto flex max-w-[46rem] flex-col gap-8 px-4 py-4 md:gap-10 md:py-10">
+            <div className="mx-auto flex max-w-[46rem] flex-col gap-5 px-4 py-3 md:gap-6 md:py-7">
                 {/* 手机端顶栏已显示「命理记录」，这里只保留操作。 */}
-                <header className="flex flex-wrap items-end justify-between gap-4">
-                    <div className="hidden flex-col gap-1.5 md:flex">
-                        <h1 className="font-display text-[1.875rem] leading-tight font-normal">命理记录</h1>
-                        <p className="text-[15px] text-foreground-secondary">记下断语、应验与感悟，日后对照印证。</p>
+                <header className="flex flex-wrap items-center justify-between gap-3">
+                    <div className="hidden items-baseline gap-3 md:flex">
+                        <h1 className="font-display text-[1.75rem] leading-tight font-normal">命理记录</h1>
+                        <p className="text-[13px] text-foreground-tertiary">记下断语、应验与感悟，日后对照印证。</p>
                     </div>
                     <div className="flex w-full items-center justify-end gap-2 md:w-auto">
                         <div className="hidden md:block">
                             <Menu>
-                                <MenuTrigger aria-label="更多" className="flex h-11 w-11 items-center justify-center rounded-xl text-foreground-secondary transition-colors hover:bg-fill-ghost-hover hover:text-foreground data-popup-open:bg-fill-ghost-hover">
+                                <MenuTrigger aria-label="更多" className="flex h-10 w-10 items-center justify-center rounded-lg text-foreground-secondary transition-colors hover:bg-fill-ghost-hover hover:text-foreground data-popup-open:bg-fill-ghost-hover">
                                     <Ellipsis className="h-[18px] w-[18px]" aria-hidden="true" />
                                 </MenuTrigger>
                                 <MenuContent align="end" className="w-44">
@@ -572,7 +568,7 @@ function RecordsContent() {
                                 </MenuContent>
                             </Menu>
                         </div>
-                        <Button className="h-11 rounded-xl px-[18px] text-[15px]" onClick={() => { setEditingRecord(null); setShowRecordForm(true); }}>
+                        <Button className="h-8 rounded-lg px-3 text-[13px]" onClick={() => { setEditingRecord(null); setShowRecordForm(true); }}>
                             <Plus className="h-4 w-4" aria-hidden="true" />
                             新建记录
                         </Button>
@@ -580,7 +576,7 @@ function RecordsContent() {
                 </header>
 
                 <section aria-labelledby="records-notes-title">
-                    <h2 id="records-notes-title" className="mb-3 text-[13px] font-medium text-foreground-tertiary">今日小记</h2>
+                    <h2 id="records-notes-title" className="mb-2 text-[12px] font-medium text-foreground-tertiary">今日小记</h2>
                     {notesError ? (
                         <SectionError message={notesError} onRetry={loadNotes} />
                     ) : notesLoading ? (
@@ -598,7 +594,7 @@ function RecordsContent() {
                         <SectionTitle id="records-pending-title" aside={<span className="text-xs text-foreground-tertiary">{pendingPredictions.length} 条</span>}>
                             待印证
                         </SectionTitle>
-                        <ul className="grid gap-3 md:grid-cols-2">
+                        <ul className="flex flex-col gap-2">
                             {visiblePending.map(item => (
                                 <PendingCard key={item.record.id} item={item} todayKey={todayKey} pillarsOf={pillarsOf}
                                     onOpen={openView} onVerdict={handleVerdict} />
@@ -613,8 +609,8 @@ function RecordsContent() {
                 ) : null}
 
                 <section aria-labelledby="records-list-title">
-                    <h2 id="records-list-title" className="mb-3 text-[13px] font-medium text-foreground-tertiary">全部记录</h2>
-                    <div className="flex flex-col gap-4">
+                    <h2 id="records-list-title" className="mb-2 text-[12px] font-medium text-foreground-tertiary">全部记录</h2>
+                    <div className="flex flex-col gap-3">
                         <RecordFilters
                             search={search}
                             onSearchChange={(value) => { setSearch(value); setPage(1); }}

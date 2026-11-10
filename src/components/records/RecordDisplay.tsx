@@ -58,7 +58,7 @@ export function StatusPill({ status, className }: { status: PredictionStatus; cl
 export function VerdictButtons({ record, onVerdict, size = 'md' }: {
     record: MingRecord;
     onVerdict: (record: MingRecord, verdict: PredictionVerdict) => void;
-    size?: 'sm' | 'md';
+    size?: 'xs' | 'sm' | 'md';
 }) {
     return (
         <div className="flex shrink-0 gap-1.5">

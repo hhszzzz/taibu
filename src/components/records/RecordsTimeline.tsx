@@ -66,9 +66,9 @@ function nodeOf(day: DayRow): RecordCategory | 'note' {
 
 function RailRow({ date, children, dashed, node, className }: { date: React.ReactNode; children: React.ReactNode; dashed?: boolean; node?: React.ReactNode; className?: string }) {
     return (
-        <div className="grid grid-cols-[3.25rem_minmax(0,1fr)] gap-x-3 md:grid-cols-[5.5rem_minmax(0,1fr)] md:gap-x-5">
+        <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-x-2 md:grid-cols-[4.25rem_minmax(0,1fr)] md:gap-x-3">
             <div className="pt-px text-right">{date}</div>
-            <div className={cn('relative flex flex-col gap-5 border-l pb-8 pl-5 md:pl-6', dashed ? 'border-dashed border-border-hover' : 'border-border', className)}>
+            <div className={cn('relative flex flex-col gap-2.5 border-l pb-4 pl-4 md:pl-5', dashed ? 'border-dashed border-border-hover' : 'border-border', className)}>
                 {node}
                 {children}
             </div>
@@ -80,30 +80,30 @@ function TimelineRecord({ record, todayKey, actions }: { record: MingRecord; tod
     const status = getPredictionStatus(record, todayKey);
     const tags = getPlainTags(record);
     return (
-        <div className="group relative pr-9">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-foreground-tertiary">
+        <div className="group relative pr-8">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                <h3 className="min-w-0 text-[14px] leading-snug font-medium text-foreground">
+                    <Button unstyled onClick={() => actions.onOpen(record)}
+                        className="text-left decoration-border-hover underline-offset-4 after:absolute after:inset-0 hover:underline">
+                        {record.title}
+                    </Button>
+                </h3>
                 {record.is_pinned ? <Pin className="h-3 w-3 text-accent" aria-label="已置顶" /> : null}
-                <span>{getRecordCategoryLabel(record)}</span>
+                <span className="text-[11.5px] text-foreground-tertiary">{getRecordCategoryLabel(record)}</span>
                 {status ? <StatusPill status={status} className="h-5" /> : null}
-                {record.source_run_id ? <span role="img" aria-label="Agent 记录" title="Agent 记录" className="inline-flex"><AgentIcon size={13} /></span> : null}
+                {record.source_run_id ? <span role="img" aria-label="Agent 记录" title="Agent 记录" className="inline-flex"><AgentIcon size={12} /></span> : null}
+                {status?.kind === 'due' ? <div className="relative z-10 ml-auto shrink-0"><VerdictButtons record={record} onVerdict={actions.onVerdict} size="xs" /></div> : null}
+                <div className="absolute -top-1 right-0 z-10 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-[[data-popup-open]]:opacity-100">
+                    <RecordMenu record={record} onTogglePin={actions.onTogglePin} onEdit={actions.onEdit}
+                        onAddToKnowledgeBase={actions.onAddToKnowledgeBase} onDelete={actions.onDelete} showKnowledgeBase={actions.showKnowledgeBase} />
+                </div>
             </div>
-            <h3 className="mt-1 text-[15px] leading-snug font-medium text-foreground">
-                <Button unstyled onClick={() => actions.onOpen(record)}
-                    className="text-left decoration-border-hover underline-offset-4 after:absolute after:inset-0 hover:underline">
-                    {record.title}
-                </Button>
-            </h3>
-            {record.content ? <p className="mt-1 line-clamp-2 text-[13px] leading-relaxed text-foreground-secondary">{record.content}</p> : null}
+            {record.content ? <p className="mt-0.5 line-clamp-1 text-[12.5px] leading-relaxed text-foreground-secondary">{record.content}</p> : null}
             {tags.length ? (
-                <div className="relative z-10 mt-1.5 flex flex-wrap gap-x-2 text-xs text-foreground-tertiary">
+                <div className="relative z-10 mt-0.5 flex flex-wrap gap-x-2 text-[11.5px] text-foreground-tertiary">
                     {tags.map(tag => <Button key={tag} unstyled onClick={() => actions.onTag(tag)} className="hover:text-foreground">#{tag}</Button>)}
                 </div>
             ) : null}
-            {status?.kind === 'due' ? <div className="relative z-10 mt-2.5"><VerdictButtons record={record} onVerdict={actions.onVerdict} size="sm" /></div> : null}
-            <div className="absolute -top-1.5 right-0 z-10 md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100 md:has-[[data-popup-open]]:opacity-100">
-                <RecordMenu record={record} onTogglePin={actions.onTogglePin} onEdit={actions.onEdit}
-                    onAddToKnowledgeBase={actions.onAddToKnowledgeBase} onDelete={actions.onDelete} showKnowledgeBase={actions.showKnowledgeBase} />
-            </div>
         </div>
     );
 }
@@ -131,16 +131,16 @@ function DayRowView({ row, todayKey, pillarsOf, actions }: { row: DayRow; todayK
         <span className="text-[13px] leading-5 text-foreground-tertiary">{row.label}</span>
     ) : isToday ? (
         <>
-            <span className="block font-display text-[13px] leading-5 text-accent">今天</span>
-            <span className="block text-[11px] leading-4 text-foreground-tertiary">{getWeekdayLabel(row.dayKey!)}</span>
+            <span className="block font-display text-[12px] leading-5 text-accent">今天</span>
+            <span className="block text-[10.5px] leading-4 text-foreground-tertiary">{getWeekdayLabel(row.dayKey!)}</span>
         </>
     ) : row.dayKey ? (
         <>
-            <span className="block text-[13px] leading-5 text-foreground tabular-nums">
+            <span className="block text-[12.5px] leading-5 text-foreground tabular-nums">
                 <span className="md:hidden">{getMonthDayLabel(row.dayKey).replace('月', '/').replace('日', '')}</span>
                 <span className="hidden md:inline">{getMonthDayLabel(row.dayKey)}</span>
             </span>
-            <span className="block text-[11px] leading-4 text-foreground-tertiary">
+            <span className="block text-[10.5px] leading-4 text-foreground-tertiary">
                 {getWeekdayLabel(row.dayKey)}{datePillars ? <span className="hidden md:inline"> · <GanZhi value={datePillars.day} /></span> : null}
             </span>
         </>
@@ -154,11 +154,11 @@ function DayRowView({ row, todayKey, pillarsOf, actions }: { row: DayRow; todayK
     );
 }
 
-function YearRowView({ row, pillarsOf }: { row: YearRow; pillarsOf: (key: string | null | undefined) => DatePillars | null }) {
+function YearRowView({ row, pillarsOf, paged }: { row: YearRow; pillarsOf: (key: string | null | undefined) => DatePillars | null; paged: boolean }) {
     const pillars = pillarsOf(`${row.year}-06-01`);
     return (
-        <RailRow dashed={row.future} className="pb-6" date={<span className="font-display text-[1.375rem] leading-none text-foreground tabular-nums">{row.year}</span>}>
-            <span className="pt-0.5 text-[13px] text-foreground-tertiary">{pillars ? `${pillars.year}年 · ` : ''}{row.count} 条</span>
+        <RailRow dashed={row.future} className="pb-3" date={<span className="font-display text-[1.25rem] leading-none text-foreground tabular-nums">{row.year}</span>}>
+            <span className="pt-0.5 text-[13px] text-foreground-tertiary">{pillars ? `${pillars.year}年 · ` : ''}{paged ? '本页 ' : ''}{row.count} 条</span>
         </RailRow>
     );
 }
@@ -185,7 +185,8 @@ function buildRows(records: MingRecord[], notesByDay: Map<string, MingNote[]>, s
     const future = dayRows.filter(row => row.future);
     const past = dayRows.filter(row => !row.future && row.dayKey !== todayKey);
     const today = dayRows.find(row => row.dayKey === todayKey);
-    const countInYear = (year: string) => records.filter(record => getRecordDateKey(record).startsWith(year)).length;
+    const undatedIds = new Set(undated.map(record => record.id));
+    const countInYear = (year: string) => records.filter(record => !undatedIds.has(record.id) && getRecordDateKey(record).startsWith(year)).length;
 
     const rows: Row[] = [];
     const pushWithYears = (days: DayRow[], dashed: boolean) => {
@@ -213,15 +214,22 @@ function buildRows(records: MingRecord[], notesByDay: Map<string, MingNote[]>, s
 
 function PinnedStrip({ records, actions }: { records: MingRecord[]; actions: TimelineRecordActions }) {
     return (
-        <section aria-label="置顶" className="-mx-4 flex gap-3 overflow-x-auto px-4 pb-1 md:mx-0 md:px-0">
-            {records.map(record => (
-                <Button key={record.id} unstyled onClick={() => actions.onOpen(record)}
-                    className="flex w-64 shrink-0 flex-col gap-1 rounded-2xl border-[0.5px] border-border bg-surface p-3.5 text-left transition-colors hover:border-border-hover">
-                    <span className="flex items-center gap-1 text-xs text-accent"><Pin className="h-3 w-3" aria-hidden="true" />置顶 · {getRecordCategoryLabel(record)}</span>
-                    <span className="truncate text-[15px] font-medium text-foreground">{record.title}</span>
-                    {record.content ? <span className="line-clamp-2 text-[13px] leading-relaxed text-foreground-secondary">{record.content}</span> : null}
-                </Button>
-            ))}
+        <section aria-label="置顶" className="-mx-4 flex items-center gap-2 overflow-x-auto border-y-[0.5px] border-border bg-background-secondary px-3 py-1.5 md:mx-0 md:rounded-lg md:border">
+            <span className="sticky left-0 z-10 flex shrink-0 items-center gap-1 bg-background-secondary pr-1 text-[11.5px] text-accent">
+                <Pin className="h-3 w-3" aria-hidden="true" />置顶
+            </span>
+            <span aria-hidden="true" className="h-3 w-px shrink-0 bg-border" />
+            <div className="flex min-w-0 items-center gap-3">
+                {records.map((record, index) => (
+                    <span key={record.id} className="flex shrink-0 items-center gap-3">
+                        {index > 0 ? <span aria-hidden="true" className="text-border-hover">·</span> : null}
+                        <Button unstyled onClick={() => actions.onOpen(record)}
+                            className="max-w-[18rem] truncate text-[13px] font-medium text-foreground decoration-border-hover underline-offset-4 hover:underline">
+                            {record.title}
+                        </Button>
+                    </span>
+                ))}
+            </div>
         </section>
     );
 }
@@ -253,7 +261,7 @@ export function RecordsTimeline({
     const pinned = records.filter(record => record.is_pinned);
 
     const pagination = totalPages > 1 ? (
-        <nav aria-label="分页" className="mt-4 flex items-center justify-center gap-3">
+        <nav aria-label="分页" className="mt-2 flex items-center justify-center gap-3">
             <IconButton label="上一页" onClick={() => onPageChange(Math.max(1, page - 1))} disabled={page === 1}>
                 <ChevronLeft className="h-5 w-5" aria-hidden="true" />
             </IconButton>
@@ -272,7 +280,8 @@ export function RecordsTimeline({
         );
     }
 
-    if (!records.length) {
+    // 只有过去几天的小记、没有记录时，时间线仍要显示这些小记。
+    if (!rows.length) {
         const pageEmptied = totalPages > 1;
         return (
             <>
@@ -299,14 +308,14 @@ export function RecordsTimeline({
     }
 
     return (
-        <div className="flex flex-col gap-5">
+        <div className="flex flex-col gap-3">
             {pinned.length ? <PinnedStrip records={pinned} actions={actions} /> : null}
             <ol ref={listRef} aria-label="时间线" className="flex flex-col">
                 {motionRows.map(({ key, item: row }) => (
                     <li key={key} data-motion-key={key}>
-                        {row.kind === 'year' ? <YearRowView row={row} pillarsOf={pillarsOf} /> : row.kind === 'lead' ? (
+                        {row.kind === 'year' ? <YearRowView row={row} pillarsOf={pillarsOf} paged={totalPages > 1} /> : row.kind === 'lead' ? (
                             <RailRow dashed date={<span className="text-[13px] leading-5 text-foreground-tertiary">{row.label}</span>}>
-                                <span className="pt-px text-[13px] text-foreground-tertiary">{row.count} 条</span>
+                                <span className="pt-px text-[13px] text-foreground-tertiary">{totalPages > 1 ? '本页 ' : ''}{row.count} 条</span>
                             </RailRow>
                         ) : <DayRowView row={row} todayKey={todayKey} pillarsOf={pillarsOf} actions={actions} />}
                     </li>

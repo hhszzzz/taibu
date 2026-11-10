@@ -84,6 +84,12 @@ export function stableAgentSeed(runId: string, callId: string) {
     .digest()
     .readUInt32BE(0);
 }
+/** The draw's seed is fixed by the task and the call (stableAgentSeed), so the model is not offered it. */
+function withoutServerSeed<T extends { properties?: Record<string, unknown> }>(schema: T): T {
+  if (!schema.properties?.seed) return schema;
+  const { seed: _seed, seedScope: _seedScope, ...properties } = schema.properties;
+  return { ...schema, properties };
+}
 function textResult(details: unknown): AgentToolResult<unknown> {
   return {
     content: [{ type: "text", text: JSON.stringify(details) }],
@@ -435,7 +441,7 @@ export async function createAgentTools(
     wrap(
       def.name,
       def.name === 'bazi_hepan' ? `${def.description} 已排过或已存的八字直接传 reference，出生信息由服务端从命盘重建。` : def.description,
-      (def.name === 'bazi_hepan' ? pairingParameters(def.inputSchema) : def.inputSchema) as Schema<Record<string, unknown>>,
+      (def.name === 'bazi_hepan' ? pairingParameters(def.inputSchema) : withoutServerSeed(def.inputSchema)) as Schema<Record<string, unknown>>,
       async (args, callId) => {
         const stableArgs: Record<string, unknown> = def.name === 'bazi_hepan' ? await resolvePairing(store, run, args, def.inputSchema) : { ...args };
         if (def.inputSchema.properties?.seed && stableArgs.seed == null)

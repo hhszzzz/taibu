@@ -109,6 +109,7 @@ export const hepanProvider: DataSourceProvider<HepanRow> = {
             person1 ? birthLine(person1, r.person1_name) : '',
             person2 ? birthLine(person2, r.person2_name) : '',
             (result?.overallScore ?? r.compatibility_score) != null ? `- 综合契合度：${result?.overallScore ?? r.compatibility_score}分` : '',
+            '- 注：分数仅为页面速览统计，命理解读须按双方四柱、旺衰、用神与干支关系独立判断，不在结论中给分。',
             dimensionsSummary ? `\n## 各维度分析\n${dimensionsSummary}` : '',
             `\n## 潜在冲突点\n${conflictsSummary}`,
         ].filter(Boolean).join('\n');

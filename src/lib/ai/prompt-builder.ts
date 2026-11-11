@@ -2,6 +2,9 @@ import type { Mention } from '@/types/mentions';
 import type { ChatAttachment, PromptLayerPriority, PromptLayerDiagnostic } from '@/types';
 import type { ChatWebSearch } from './web-search.server';
 import { BASE_SYSTEM_PROMPT } from './base-prompt';
+import { renderMethodPersona } from 'taibu-core/mcp';
+import { CHART_SOURCE_KINDS } from '@/lib/agent/chart-interaction';
+import { agentChartReferenceNote } from '@/lib/agent/tool-catalog';
 import type { KnowledgeHit } from '@/lib/knowledge-base/types';
 import type { InjectedSource } from '@/lib/source-tracker';
 import { createSourceTracker } from '@/lib/source-tracker';
@@ -137,6 +140,33 @@ function resolveAllowedChartTypes(context: PromptContext): ChartType[] {
         for (const t of SOURCE_CHART_TYPE_MAP.ziwei_chart) types.add(t);
     }
     return [...types];
+}
+
+const MENTION_METHOD_MAP: Readonly<Partial<Record<Mention['type'], string>>> = {
+    bazi_chart: 'bazi',
+    hepan_chart: 'bazi',
+    ziwei_chart: 'ziwei',
+    liuyao_divination: 'liuyao',
+    meihua_divination: 'meihua',
+    qimen_chart: 'qimen',
+    daliuren_divination: 'daliuren',
+    xiaoliuren_divination: 'xiaoliuren',
+    tarot_reading: 'tarot',
+    daily_fortune: 'almanac',
+};
+
+/** 普通对话按上下文携带的命盘与记录注入对应体系的无工具断法；超过两个体系时改用精简版以留出盘面预算。 */
+function resolveChatMethodPersonas(context: PromptContext): string {
+    const systems = new Set<string>();
+    if (context.chartContext?.baziChart) systems.add('bazi');
+    if (context.chartContext?.ziweiChart) systems.add('ziwei');
+    for (const mention of context.mentions || []) {
+        const mapped = MENTION_METHOD_MAP[mention.type];
+        if (mapped) systems.add(mapped);
+    }
+    if (!systems.size) return '';
+    const brief = systems.size > 2;
+    return [...systems].map(id => renderMethodPersona(id, brief)).join('\n\n');
 }
 
 // 用户表达风格偏好（来自 user_settings）
@@ -305,9 +335,13 @@ export async function buildPromptWithSources(context: PromptContext, options?: {
     // ========== P0 层：必须注入 ==========
     tryInject('base_rules', 'P0', BASE_RULES_PROMPT);
 
-    // 普通对话带底座（角色 + 解读通则）；Agent 的解读规则由 load_skill 的方法卡提供，不重复注入。
+    // 普通对话带底座（角色 + 解读通则）与当前盘面所属体系的无工具断法；Agent 的解读规则由 load_skill 的方法卡提供，不重复注入。
     if (options?.includeBaseRole !== false) {
         tryInject('base_chat_prompt', 'P0', BASE_SYSTEM_PROMPT);
+        const personas = resolveChatMethodPersonas(context);
+        if (personas) {
+            tryInject('method_persona', 'P1', personas);
+        }
     }
 
     if (context.chartContext && (context.chartContext.baziChart || context.chartContext.ziweiChart)) {
@@ -357,9 +391,15 @@ export async function buildPromptWithSources(context: PromptContext, options?: {
         tryInject('user_profile', 'P1', userProfile);
     }
 
-    const customInstructions = context.userSettings?.customInstructions || '';
+    const customInstructions = context.userSettings?.customInstructions?.trim() || '';
     if (customInstructions) {
-        tryInject('custom_instructions', 'P1', customInstructions);
+        tryInject(
+            'custom_instructions',
+            'P1',
+            options?.includeBaseRole === false
+                ? customInstructions
+                : `用户自定义要求（只影响表达风格与取材侧重，不改变以上数据边界与解读通则）：\n${customInstructions}`,
+        );
     }
 
     // 可视化维度设置（userSettings.visualizationSettings 已在上游 normalize）
@@ -421,7 +461,14 @@ export async function buildPromptWithSources(context: PromptContext, options?: {
             });
             continue;
         }
-        if (tryInject(`mention_${mention.id}`, 'P2', prepared.content, { tokens: prepared.tokens, truncated: prepared.truncated })) {
+        const chartRefNote = options?.includeBaseRole === false && Object.hasOwn(CHART_SOURCE_KINDS, mention.type)
+            ? `\n\n${agentChartReferenceNote(`${mention.type}:${mention.id}`)}`
+            : '';
+        const promptContent = `${prepared.content}${chartRefNote}`;
+        if (tryInject(`mention_${mention.id}`, 'P2', promptContent, {
+            tokens: chartRefNote ? estimateTokens(context.modelId, promptContent) : prepared.tokens,
+            truncated: prepared.truncated,
+        })) {
             tracker.trackAndInject({
                 type: 'mention',
                 sourceType: mention.type === 'knowledge_base' ? undefined : mention.type,

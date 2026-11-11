@@ -164,7 +164,7 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     openChatWithResult(router, {
       text: buildAskTaibuText({
         question,
-        prompt: '请结合这次小六壬课盘，解读落宫、掐数过程与应期。',
+        prompt: '请结合这次小六壬课盘，解读落宫、推演过程与顺阻快慢。',
         questionless: '我起课时没填所问之事。请先看这次小六壬课的落宫，说说顺阻与快慢的基调，再问我这次想问什么；等我回答后再贴题展开。',
         chartAttached: Boolean(savedId),
       }),

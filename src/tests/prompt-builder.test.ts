@@ -591,3 +591,48 @@ test('BYOK prompt budgets use the remaining model context without a fixed token 
     assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 20_000, maxOutput: 200 }), 15_800);
     assert.equal(await pb.calculatePromptBudget(model, false, { contextWindow: 5_000, maxOutput: 12_000 }), 0);
 });
+
+test('ordinary chat injects tool-free method personas for attached charts and guards custom instructions', async () => {
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const res = await pb.buildPromptWithSources({
+        modelId: 'deepseek-chat',
+        userMessage: '看看格局与用神',
+        mentions: [],
+        knowledgeHits: [],
+        userSettings: { customInstructions: '语气简练' },
+        chartContext: { baziChart: buildMinimalBaziChart() as never },
+    });
+    assert.ok(res.diagnostics.some(layer => layer.id === 'method_persona' && layer.included));
+    assert.ok(res.systemPrompt.includes('你是子平法八字命理师'));
+    assert.ok(!res.systemPrompt.includes('## 工具流程'));
+    assert.ok(res.systemPrompt.includes('不改变以上数据边界与解读通则'));
+
+    const monthlyOnly = await pb.buildPromptWithSources({
+        modelId: 'deepseek-chat',
+        userMessage: '看看本月运势',
+        mentions: [{ type: 'monthly_fortune', id: '2026-11', name: '本月运势', preview: '本月运势', resolvedContent: '## 本月运势（2026-11）\n- 综合：平' }],
+        knowledgeHits: [],
+        userSettings: {},
+    });
+    assert.ok(!monthlyOnly.diagnostics.some(layer => layer.id === 'method_persona'));
+});
+
+test('agent prompt appends chart reference notes to chart mentions while skipping chat personas', async () => {
+    const pb = require('../lib/ai/prompt-builder') as typeof import('../lib/ai/prompt-builder');
+    const res = await pb.buildPromptWithSources({
+        modelId: 'deepseek-chat',
+        userMessage: '用子平细看这张盘',
+        mentions: [{
+            type: 'bazi_chart',
+            id: '11111111-1111-4111-8111-111111111111',
+            name: '我的八字',
+            preview: '甲子年',
+            resolvedContent: '# 八字命盘\n- 四柱: 甲子 乙丑 甲子 丙寅',
+        }],
+        knowledgeHits: [],
+        userSettings: {},
+    }, { includeBaseRole: false });
+    assert.ok(!res.diagnostics.some(layer => layer.id === 'method_persona'));
+    assert.match(res.systemPrompt, /命盘引用: bazi_chart:11111111-1111-4111-8111-111111111111/u);
+    assert.ok(!res.sources[0]?.preview.includes('命盘引用:'), 'UI source preview stays clean');
+});

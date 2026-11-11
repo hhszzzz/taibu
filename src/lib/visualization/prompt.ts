@@ -126,7 +126,7 @@ export function buildVisualizationPreferencePrompts(settings?: VisualizationSett
 
     return {
         dimensionsPrompt: settings.selectedDimensions?.length
-            ? `在进行运势分析时，请重点关注以下维度并提供评分：${formatVisualizationDimensions(settings.selectedDimensions)}。`
+            ? `在进行运势分析时，请重点围绕以下维度展开判断：${formatVisualizationDimensions(settings.selectedDimensions)}。`
             : null,
         dayunPrompt: typeof settings.dayunDisplayCount === 'number'
             ? `涉及大运分析时，仅展开最关键的 ${settings.dayunDisplayCount} 个大运周期，不要默认铺开更多周期。`

@@ -40,7 +40,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `ziwei` | 紫微斗数命盘 | 根据出生信息计算紫微命盘，输出十二宫位、星曜分布、四化、大限等信息 | [references/ziwei.md](references/ziwei.md) | [methods/ziwei.md](methods/ziwei.md) |
 | `ziwei_horoscope` | 紫微斗数运限 | 根据出生信息与目标日期计算大限、小限、流年、流月、流日、流时等运限信息 | [references/ziwei_horoscope.md](references/ziwei_horoscope.md) | [methods/ziwei.md](methods/ziwei.md) |
 | `ziwei_flying_star` | 紫微斗数飞星 | 按查询逐条分析命盘宫位的四化飞入、自化、四化落宫与三方四正 | [references/ziwei_flying_star.md](references/ziwei_flying_star.md) | [methods/ziwei.md](methods/ziwei.md) |
-| `liuyao` | 六爻排卦 | 根据问题与起卦信息排出六爻盘面，输出卦象、爻位、用神体系、关系判断与时机提示 | [references/liuyao.md](references/liuyao.md) | [methods/liuyao.md](methods/liuyao.md) |
+| `liuyao` | 六爻排卦 | 根据问题与起卦信息排出六爻盘面，输出本变互卦、四柱空亡、逐爻纳甲六亲六神、世应动变与合冲反伏事实（用神取用与应期由解读方依断法判定） | [references/liuyao.md](references/liuyao.md) | [methods/liuyao.md](methods/liuyao.md) |
 | `meihua` | 梅花易数起卦 | 根据时间、字占、物数、报数等方式起卦，输出起卦信息、卦盘与体用推演 | [references/meihua.md](references/meihua.md) | [methods/meihua.md](methods/meihua.md) |
 | `tarot` | 塔罗抽牌 | 按牌阵抽取塔罗牌，输出各牌位的牌面、正逆位、核心基调、元素与星象 | [references/tarot.md](references/tarot.md) | [methods/tarot.md](methods/tarot.md) |
 | `taiyi` | 太乙排盘 | 支持九星观测，以及采用四库本金镜七十二局立成的现代历法适配年/月/日/时计 | [references/taiyi.md](references/taiyi.md) | [methods/taiyi.md](methods/taiyi.md) |
@@ -50,7 +50,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `daliuren` | 大六壬排盘 | 根据日期时间起课，输出天地盘、四课、三传、神将、课体与时空信息 | [references/daliuren.md](references/daliuren.md) | [methods/daliuren.md](methods/daliuren.md) |
 | `xiaoliuren` | 小六壬占测 | 根据农历月日时辰起课，输出起课信息、推演链与结果信息 | [references/xiaoliuren.md](references/xiaoliuren.md) | [methods/xiaoliuren.md](methods/xiaoliuren.md) |
 | `bazi_relations` | 八字岁运刑冲合害 | 在八字命盘上叠加大运（起运前为小运）、流年、流月或流日，详查它们与原局四柱、与彼此之间的天干五合/相冲与地支六合、三合、半合、三会、六冲、刑、害、破，附岁运并临、伏吟、天克地冲与太岁关系 | [references/bazi_relations.md](references/bazi_relations.md) | [methods/bazi.md](methods/bazi.md) |
-| `bazi_wuxing` | 八字五行旺衰 | 在八字命盘上详查旺衰与生克的事实：月令旺相休囚死与日主得失，月令各藏干透出与否（取格看月令），四个天干各自的通根（本气、中气、余气，无根亦列出），干支自坐与相邻天干的生克，以及缺失五行 | [references/bazi_wuxing.md](references/bazi_wuxing.md) | [methods/bazi.md](methods/bazi.md) |
+| `bazi_wuxing` | 八字五行旺衰 | 在八字命盘上详查旺衰与生克事实（只列因子，不判身强身弱、格局或喜忌）：月令旺相休囚死与日主得失，月令各藏干透出与否（取格看月令），四个天干各自的通根（本气、中气、余气，无根亦列出），干支自坐与相邻天干的生克，以及缺失五行 | [references/bazi_wuxing.md](references/bazi_wuxing.md) | [methods/bazi.md](methods/bazi.md) |
 | `bazi_liunian_scan` | 八字流年扫描 | 在八字命盘上逐年列出一段年份（最多 30 年）的流年干支、所在大运（起运前为小运）、十神，流年与原局、与大运的刑冲合害，以及太岁与岁运提示 | [references/bazi_liunian_scan.md](references/bazi_liunian_scan.md) | [methods/bazi.md](methods/bazi.md) |
 | `ziwei_palace` | 紫微宫位 | 在紫微命盘上聚焦一宫详查：本宫星曜亮度与生年四化、离心/向心自化，空宫借对宫，三方四正，夹宫，宫干四化飞出与十二宫四化飞入 | [references/ziwei_palace.md](references/ziwei_palace.md) | [methods/ziwei.md](methods/ziwei.md) |
 | `qimen_palace` | 奇门宫位详查 | 在奇门盘上详查一宫：指定宫位，或按年月日时干（取天盘，甲取所遁六仪）、九星、八门、八神定位 | [references/qimen_palace.md](references/qimen_palace.md) | [methods/qimen.md](methods/qimen.md) |
@@ -82,7 +82,7 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 | `meihua` | 梅花易数 | 梅花易数断事：以体用生克为纲，参月令旺衰，本卦、互卦、变卦三段推演，依体用诸诀定吉凶，卦象取义并推克应之期。用时间、数字、文字、物象起卦问一件事时使用。 | [methods/meihua.md](methods/meihua.md) |
 | `qimen` | 奇门遁甲 | 奇门遁甲断局：以用神落宫为核心，天盘、地盘、九星、八门、八神五层合参，值符值使定全局，格局、旺衰、空亡入墓定吉凶，给出方位与时机。问一件事可行与否、宜从何方何时行动时使用。 | [methods/qimen.md](methods/qimen.md) |
 | `daliuren` | 大六壬 | 大六壬起课断事：以四课三传为纲，课体定性，生克定量，十二天将与类神取象，日辰旺衰与本命行年参断，三传定事态始末与应期。问具体事情的过程、结局与时间时使用。 | [methods/daliuren.md](methods/daliuren.md) |
-| `xiaoliuren` | 小六壬 | 小六壬掌诀速断：按农历月、日、时三步落宫，以最终落宫定结论，推演链看过程，五行方位时辰作提示。问一件事顺不顺、成不成、快不快，需要简短答复时使用。 | [methods/xiaoliuren.md](methods/xiaoliuren.md) |
+| `xiaoliuren` | 小六壬 | 小六壬掌诀速断：按农历月、日、时三步落宫，以最终落宫定结论，推演链看过程，五行方位与缓急作提示。问一件事顺不顺、成不成、快不快，需要简短答复时使用。 | [methods/xiaoliuren.md](methods/xiaoliuren.md) |
 | `taiyi` | 太乙神数 | 太乙式论时运格局：以所选年、月、日、时计的时空底盘与九星阵列、主客关系判断大势顺逆与主动权归属。问一段时期的整体气象、宜攻宜守时使用。 | [methods/taiyi.md](methods/taiyi.md) |
 | `tarot` | 塔罗 | 韦特塔罗解读：牌阵位置语义、正逆位、大小阿卡纳、元素与数字分布、牌间呼应连成叙事，给出心理洞察与行动建议。问感情、抉择、处境或自我成长，需要启发而非宿命断语时使用。 | [methods/tarot.md](methods/tarot.md) |
 | `astrology` | 西方占星 | 现代西方占星：本命盘看太阳、月亮、上升与行星的星座、宫位、相位，盘面重心与命盘锚点；流运盘看外行星对个人行星与四轴的触发。问性格心理、人生课题与某段时间的成长主题时使用。 | [methods/astrology.md](methods/astrology.md) |
@@ -105,13 +105,13 @@ echo '{"gender":"male","birthYear":1990,"birthMonth":5,"birthDay":20,"birthHour"
 
 - **历法**：生辰类工具默认公历（`calendarType: "solar"`）；用户给的是农历生日时改传 `"lunar"`，闰月再加 `isLeapMonth: true`。`xiaoliuren` 例外，直接接收农历月、日。
 - **时间**：`birthHour` 传 0-23 的钟表小时，早晚子时由引擎处理，不要自行折算时辰。`xiaoliuren` 的 `hour` 用 `hourType` 指明口径：`clock` 为 0-23 小时，`shichen` 为时辰序号 1-12（子=1；手工传农历且给钟点时必传 `hourType: "clock"`）。用户未提供的出生信息应当询问，而非代为假设。
-- **出生时辰未知**：先推时辰、经用户确认后再分析，不要自行填一个时辰，也不要直接按三柱下结论。加载技法 `birth-hour`（推理时柱），用 `bazi_hour_candidates` 列出当天各时辰的候选与区分事实，向用户核对六亲与几件前事的年份逐个排除，剩两三个时可对它们各排一张 `ziwei` 交叉核对；把最可能的一到三个时辰连同依据交给用户确认，提问时写明跳过会失去哪些分析（如紫微宫位、命宫、小运），确认后以该候选给出的 `birthHour`、`birthMinute` 正式排盘，回答里注明时辰是推定并经用户确认的。用户答不上来、不愿推、跳过或超时未回复时，八字类工具省略 `birthHour`，只按年、月、日三柱分析（不给命宫、时柱神煞与小运，起运给出范围），并说明时柱相关的内容没有覆盖，不要重复询问。紫微、占星离不开时辰，必须先推、确认后再排。六爻、梅花、奇门、六壬、塔罗占的是一件事，不用来推出生时辰。
+- **出生时辰未知**：先推时辰、经用户确认后再分析，不要自行填一个时辰，也不要直接按三柱下结论。加载技法 `birth-hour`（推理时柱），先用 `bazi_hour_candidates` 列出当天各时辰的候选与区分事实，再据候选分歧向用户一次核对大致时段、出生地、六亲与两三件前事的年份逐个排除，剩两三个时可对它们各排一张 `ziwei` 交叉核对；把最可能的一到三个时辰连同依据交给用户确认，提问时写明跳过会失去哪些分析（如紫微宫位、命宫、小运），确认后以该候选给出的 `birthHour`、`birthMinute` 正式排盘，回答里注明时辰是推定并经用户确认的。用户答不上来、不愿推、跳过或超时未回复时，八字类工具省略 `birthHour`，只按年、月、日三柱分析（不给命宫、时柱神煞与小运，起运给出范围），并说明时柱相关的内容没有覆盖，不要重复询问。紫微、占星离不开时辰，必须先推、确认后再排。六爻、梅花、奇门、六壬、塔罗占的是一件事，不用来推出生时辰。
 - **占当下**：`qimen`、`daliuren`、`liuyao` 与 `meihua` 的时间起卦需要当前时间时，先取实际的当前时间（有 `current_time` 工具时调用它，消息含【发送时间】时取该时间，命令行用 `date +"%Y-%m-%dT%H:%M:%S"`）再填入参数，不凭印象估计。
 - **日期核实**：用户说「今天/现在」并同时报出农历日期时，先取得实际的当前日期、用 `almanac` 核对公农历对应——农历与公历的映射是查历数据，不能凭记忆换算。口述与核实不符时，指出差异并以核实结果起盘，必要时附口述日期的对照结果。出生生肖、未来日期干支也以 Core 对相应日期的计算为准，不能从公历年份或单日盘面补算。
 - **随机性**：`tarot` 独立调用可传 `seed` 复现抽牌（应用内任务由服务端固定种子，不传 `seed`）；`liuyao` 的 `method: "auto"` 每次结果随机，需要复现时改用 `select`（指定卦名）或 `number`（数字起卦）。
 - **六爻用神**：`yongShenTargets` 必填，按占问主题选择，可多选：事业官职、官司、疾病忧患取 `官鬼`；财运、男问感情取 `妻财`；文书合同、长辈、房产车辆取 `父母`；子女晚辈、健康平安取 `子孙`；合作竞争、朋友取 `兄弟`。
-- **缺所问**：起卦、起课或抽牌时未填所问，不影响排盘；读取这类记录时先陈述盘面，所问未明时先问清，再取用神或取象（已指定用神的按指定目标断），不臆造问题。
-- **detailLevel**：默认输出已够解读；需要完整盘面时在参数中加 `"detailLevel": "full"`（部分工具另有 `"more"`；详查工具的 full 只多附判定口径）。
+- **缺所问**：新起六爻或梅花时若用户未说明所问，先向用户问清所占何事以定 `question`（六爻并据此定 `yongShenTargets`），严禁代填泛化问题或猜测用神；读取已存而未填所问的记录时，先陈述盘面事实，所问未明时先问清再取用神或取象（已指定用神的按指定目标断），不臆造问题。
+- **detailLevel**：默认输出已够基础解读；需要展开完整盘面（如黄历的建除值神与时辰吉凶、梅花的月令细项与判断参考、六爻的全盘暗动空破）时在参数中加 `"detailLevel": "full"`（部分工具另有 `"more"`；详查工具的 full 只多附判定口径）。
 
 ## 其他接入方式
 

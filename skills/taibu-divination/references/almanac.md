@@ -13,6 +13,7 @@
 | `birthDay` | integer | 否 | — | 出生日（1-31；用于推算日主） |
 | `birthHour` | integer | 否 | — | 出生时（0-23；用于推算日主，省略时按 12 时计） |
 | `date` | string | 否 | — | 查询日期（公历 YYYY-MM-DD；省略时取当前日期） |
+| `detailLevel` | enum | 否 | `"default"` | 输出详略（default=基础黄历、冲煞与宜忌；full=追加方位、建除值神、二十八宿、纳音与十二时辰吉凶）；可选值: `default` / `full` |
 
 ## 调用示例
 

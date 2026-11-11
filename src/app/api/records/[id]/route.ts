@@ -84,7 +84,7 @@ export async function PUT(
 
         const existing = await auth.db.tx((trx) => trx
             .selectFrom('ming_records')
-            .select(['id', 'related_chart_type', 'related_chart_id'])
+            .select(['id', 'category', 'related_chart_type', 'related_chart_id'])
             .where('id', '=', id)
             .where('user_id', '=', user.id)
             .executeTakeFirst());
@@ -94,6 +94,7 @@ export async function PUT(
         }
 
         const normalized = normalizeRecordInput(body, 'update', existing as {
+            category: string | null;
             related_chart_type: string | null;
             related_chart_id: string | null;
         });

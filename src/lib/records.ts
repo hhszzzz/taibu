@@ -13,6 +13,7 @@ import { isPlainObject, isValidUUID } from '@/lib/validation';
 // =====================================================
 
 export type RecordCategory = 'general' | 'prediction' | 'event' | 'reflection';
+export type PredictionVerdict = 'hit' | 'miss';
 
 export type NoteMood = 'happy' | 'neutral' | 'sad' | 'anxious' | 'peaceful';
 
@@ -23,6 +24,7 @@ export interface MingRecord {
     content: string | null;
     category: RecordCategory;
     tags: string[];
+    prediction_verdict: PredictionVerdict | null;
     event_date: string | null;
     related_chart_type: string | null;
     related_chart_id: string | null;
@@ -51,6 +53,7 @@ interface RecordInput {
     content?: string | null;
     category?: RecordCategory;
     tags?: string[];
+    prediction_verdict?: PredictionVerdict | null;
     event_date?: string | null;
     related_chart_type?: string | null;
     related_chart_id?: string | null;
@@ -85,6 +88,10 @@ type RecordWriteMode = 'create' | 'update';
 
 function isRecordCategory(value: string): value is RecordCategory {
     return RECORD_CATEGORIES.some((item) => item.value === value);
+}
+
+function isPredictionVerdict(value: unknown): value is PredictionVerdict {
+    return value === 'hit' || value === 'miss';
 }
 
 function hasOwn(obj: Record<string, unknown>, key: string): boolean {
@@ -183,7 +190,7 @@ function normalizeRelatedChartFields(
 export function normalizeRecordInput(
     input: unknown,
     mode: RecordWriteMode,
-    existing?: Pick<MingRecord, 'related_chart_type' | 'related_chart_id'>,
+    existing?: Pick<MingRecord, 'related_chart_type' | 'related_chart_id'> & { category: string | null },
 ): { data: Partial<RecordInput> } | { error: string } {
     if (!isPlainObject(input)) {
         return { error: '请求体不是合法对象' };
@@ -216,6 +223,25 @@ export function normalizeRecordInput(
         } else {
             return { error: '记录分类无效' };
         }
+    }
+
+    const hasPredictionVerdict = hasOwn(input, 'prediction_verdict');
+    if (mode === 'create' || hasPredictionVerdict) {
+        if (input.prediction_verdict == null) {
+            data.prediction_verdict = null;
+        } else if (isPredictionVerdict(input.prediction_verdict)) {
+            data.prediction_verdict = input.prediction_verdict;
+        } else {
+            return { error: '预测印证结果无效' };
+        }
+    }
+
+    const resultingCategory = data.category ?? existing?.category ?? 'general';
+    if (data.prediction_verdict != null && resultingCategory !== 'prediction') {
+        return { error: '只有预测记录可以设置印证结果' };
+    }
+    if (mode === 'update' && hasOwn(input, 'category') && resultingCategory !== 'prediction' && !hasPredictionVerdict) {
+        data.prediction_verdict = null;
     }
 
     if (mode === 'create' || hasOwn(input, 'tags')) {
@@ -377,8 +403,33 @@ export async function getRecords(
     const validRecords = (payload.records ?? []).filter(isValidMingRecord);
     return {
         records: validRecords,
-        total: payload.total || 0,
+        total: payload.total ?? 0,
     };
+}
+
+async function fetchAllPages<T>(
+    fetchPage: (page: number, pageSize: number) => Promise<{ items: T[]; total: number }>,
+): Promise<T[]> {
+    const items: T[] = [];
+    let total = Number.POSITIVE_INFINITY;
+    for (let page = 1; items.length < total; page += 1) {
+        const result = await fetchPage(page, 100);
+        items.push(...result.items);
+        if (page === 1) total = result.total;
+        if (result.items.length === 0) break;
+    }
+    return items;
+}
+
+/** 获取符合筛选条件的全部记录；用于必须完整展示的独立区块。 */
+export async function getAllRecords(
+    filters?: RecordFilters,
+    options: { signal?: AbortSignal } = {},
+): Promise<MingRecord[]> {
+    return fetchAllPages(async (page, pageSize) => {
+        const result = await getRecords(filters, page, pageSize, options);
+        return { items: result.records, total: result.total };
+    });
 }
 
 /**
@@ -447,13 +498,18 @@ export async function getNotesByDate(date: string, options: { signal?: AbortSign
     return (payload.notes ?? []).filter(isValidMingNote);
 }
 
-/** 一段日期内（含两端）的小记，按写入时间倒序；接口一页最多 100 条。 */
+/** 一段日期内（含两端）的全部小记，按接口的写入时间倒序分页读取。 */
 export async function getNotesInRange(startDate: string, endDate: string, options: { signal?: AbortSignal } = {}): Promise<MingNote[]> {
-    const query = new URLSearchParams({ startDate, endDate, pageSize: '100' });
-    const payload = await requestBrowserData<{ notes?: unknown[] }>(`/api/notes?${query.toString()}`, { signal: options.signal }, {
-        fallbackMessage: '请求失败',
+    return fetchAllPages(async (page, pageSize) => {
+        const query = new URLSearchParams({ startDate, endDate, page: String(page), pageSize: String(pageSize) });
+        const payload = await requestBrowserData<{ notes?: unknown[]; total?: number }>(`/api/notes?${query.toString()}`, { signal: options.signal }, {
+            fallbackMessage: '请求失败',
+        });
+        return {
+            items: (payload.notes ?? []).filter(isValidMingNote),
+            total: Number(payload.total ?? 0),
+        };
     });
-    return (payload.notes ?? []).filter(isValidMingNote);
 }
 
 /**
@@ -562,11 +618,6 @@ export function toLocalDateKey(date: Date = new Date()): string {
 // 日期、分类与印证
 // =====================================================
 
-/** 预测的印证结果写成标签，不改表结构；展示时认作状态而不是普通标签。 */
-export const PREDICTION_VERDICT_TAGS = { hit: '已应验', miss: '未应验' } as const;
-
-export type PredictionVerdict = keyof typeof PREDICTION_VERDICT_TAGS;
-
 export const NOTE_MOOD_ICONS = Object.fromEntries(NOTE_MOODS.map(mood => [mood.value, mood.icon])) as Record<NoteMood, string>;
 export const NOTE_MOOD_LABELS = Object.fromEntries(NOTE_MOODS.map(mood => [mood.value, mood.label])) as Record<NoteMood, string>;
 
@@ -633,17 +684,13 @@ export function getRecordCategoryLabel(record: Pick<MingRecord, 'category'>): st
     return RECORD_CATEGORIES.find(item => item.value === getRecordCategory(record))?.label ?? '通用';
 }
 
-export function getRecordVerdict(record: Pick<MingRecord, 'tags'>): PredictionVerdict | null {
-    if (!Array.isArray(record.tags)) return null;
-    if (record.tags.includes(PREDICTION_VERDICT_TAGS.hit)) return 'hit';
-    if (record.tags.includes(PREDICTION_VERDICT_TAGS.miss)) return 'miss';
-    return null;
+export function getRecordVerdict(record: Pick<MingRecord, 'prediction_verdict'>): PredictionVerdict | null {
+    return isPredictionVerdict(record.prediction_verdict) ? record.prediction_verdict : null;
 }
 
-/** 展示用标签：印证结果以状态呈现，不再重复成标签。 */
+/** 标签保持用户输入的原样；印证结果单独存储和展示。 */
 export function getPlainTags(record: Pick<MingRecord, 'tags'>): string[] {
-    return (Array.isArray(record.tags) ? record.tags : [])
-        .filter(tag => tag !== PREDICTION_VERDICT_TAGS.hit && tag !== PREDICTION_VERDICT_TAGS.miss);
+    return Array.isArray(record.tags) ? [...record.tags] : [];
 }
 
 export type PredictionStatus =
@@ -676,11 +723,9 @@ export function getRecordDateLabel(record: Pick<MingRecord, 'category'>): string
     return category === 'prediction' ? '预计应验' : category === 'event' ? '发生于' : '记于';
 }
 
-/** 写印证结果：只改标签，保留 Agent 来源等其它字段。 */
+/** 写印证结果：只改独立状态字段，保留用户标签和其它记录字段。 */
 export function setRecordVerdict(record: MingRecord, verdict: PredictionVerdict | null): Promise<MingRecord> {
-    const tags = getPlainTags(record);
-    if (verdict) tags.push(PREDICTION_VERDICT_TAGS[verdict]);
-    return updateRecord(record.id, { tags });
+    return updateRecord(record.id, { prediction_verdict: verdict });
 }
 
 /** 按小记所属日期分组，组内按写入时间倒序。 */

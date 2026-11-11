@@ -2951,6 +2951,7 @@ BEGIN
     content,
     category,
     tags,
+    prediction_verdict,
     event_date,
     related_chart_type,
     related_chart_id,
@@ -2967,6 +2968,7 @@ BEGIN
       WHEN record.tags IS NULL THEN '{}'::text[]
       ELSE ARRAY(SELECT jsonb_array_elements_text(record.tags))
     END,
+    record.prediction_verdict,
     record.event_date,
     record.related_chart_type,
     record.related_chart_id,
@@ -2978,6 +2980,7 @@ BEGIN
     content text,
     category text,
     tags jsonb,
+    prediction_verdict text,
     event_date date,
     related_chart_type text,
     related_chart_id uuid,
@@ -4054,5 +4057,6 @@ CREATE OR REPLACE VIEW public.ming_records_with_archive_status WITH (security_in
           WHERE ((a.source_type = 'record'::text) AND (a.source_id = (r.id)::text))) AS archived_kb_ids,
     ( SELECT s.conversation_id
            FROM public.agent_runs s
-          WHERE (s.id = r.source_run_id)) AS source_conversation_id
+          WHERE (s.id = r.source_run_id)) AS source_conversation_id,
+    prediction_verdict
    FROM public.ming_records r;

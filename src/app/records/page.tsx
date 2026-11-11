@@ -13,6 +13,7 @@ import {
     createNote,
     deleteNote,
     deleteRecord,
+    getAllRecords,
     getNotesInRange,
     getPredictionStatus,
     getRecord,
@@ -295,7 +296,7 @@ function RecordsContent() {
         }
         if (!quiet) setPredictionsLoading(true);
         try {
-            const { records: nextPredictions } = await getRecords({ category: 'prediction' }, 1, 100, { signal: request.signal });
+            const nextPredictions = await getAllRecords({ category: 'prediction' }, { signal: request.signal });
             if (!isCurrent()) return;
             setPredictions(nextPredictions);
         } catch {

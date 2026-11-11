@@ -888,7 +888,9 @@ CREATE TABLE public.ming_records (
     is_pinned boolean DEFAULT false,
     created_at timestamp with time zone DEFAULT now(),
     updated_at timestamp with time zone DEFAULT now(),
-    source_run_id uuid
+    source_run_id uuid,
+    prediction_verdict text,
+    CONSTRAINT ming_records_prediction_verdict_check CHECK (((prediction_verdict IS NULL) OR ((category = 'prediction'::text) AND (prediction_verdict = ANY (ARRAY['hit'::text, 'miss'::text])))))
 );
 
 CREATE TABLE public.notifications (

@@ -675,6 +675,7 @@ export interface MingRecords {
   created_at: Generated<string | null>;
   updated_at: Generated<string | null>;
   source_run_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  prediction_verdict: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface MingRecordsWithArchiveStatus {
@@ -694,6 +695,7 @@ export interface MingRecordsWithArchiveStatus {
   is_archived: ColumnType<boolean | null, boolean | null | undefined, boolean | null | undefined>;
   archived_kb_ids: ColumnType<unknown | null, unknown | null | undefined, unknown | null | undefined>;
   source_conversation_id: ColumnType<string | null, string | null | undefined, string | null | undefined>;
+  prediction_verdict: ColumnType<string | null, string | null | undefined, string | null | undefined>;
 }
 
 export interface Notifications {

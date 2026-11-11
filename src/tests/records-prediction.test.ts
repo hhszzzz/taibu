@@ -1,10 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  PREDICTION_VERDICT_TAGS,
   daysBetweenDateKeys,
+  getAllRecords,
   getMonthDayLabel,
   getPlainTags,
+  getNotesInRange,
   getPredictionStatus,
   getPredictionStatusText,
   getRecordCategory,
@@ -15,6 +16,7 @@ import {
   getWeekdayChar,
   getWeekdayLabel,
   groupNotesByDay,
+  normalizeRecordInput,
   setRecordVerdict,
   shiftDateKey,
   type MingNote,
@@ -30,6 +32,7 @@ const record = (overrides: Partial<MingRecord> = {}): MingRecord => ({
   content: null,
   category: 'prediction',
   tags: [],
+  prediction_verdict: null,
   event_date: null,
   related_chart_type: null,
   related_chart_id: null,
@@ -57,10 +60,10 @@ test('a prediction without a verdict counts the days to its due date', () => {
   assert.deepEqual(getPredictionStatus(record(), TODAY), { kind: 'open' });
 });
 
-test('verdict tags turn a prediction into hit or miss, and only predictions have a status', () => {
-  assert.deepEqual(getPredictionStatus(record({ tags: [PREDICTION_VERDICT_TAGS.hit] }), TODAY), { kind: 'hit' });
-  assert.deepEqual(getPredictionStatus(record({ tags: ['事业', PREDICTION_VERDICT_TAGS.miss] }), TODAY), { kind: 'miss' });
-  assert.deepEqual(getPredictionStatus(record({ tags: [PREDICTION_VERDICT_TAGS.miss, PREDICTION_VERDICT_TAGS.hit] }), TODAY), { kind: 'hit' });
+test('only the dedicated verdict field changes prediction status', () => {
+  assert.deepEqual(getPredictionStatus(record({ prediction_verdict: 'hit' }), TODAY), { kind: 'hit' });
+  assert.deepEqual(getPredictionStatus(record({ prediction_verdict: 'miss' }), TODAY), { kind: 'miss' });
+  assert.deepEqual(getPredictionStatus(record({ tags: ['已应验'] }), TODAY), { kind: 'open' });
   assert.equal(getPredictionStatus(record({ category: 'event', event_date: '2026-11-22' }), TODAY), null);
   assert.equal(getPredictionStatus(record({ category: 'life' as MingRecord['category'] }), TODAY), null);
 });
@@ -88,9 +91,24 @@ test('a record sits on its event date, else the local day it was written', () =>
   assert.equal(getRecordDateKey(record({ event_date: null })), '2026-10-01');
 });
 
-test('plain tags hide the verdict tags', () => {
-  assert.deepEqual(getPlainTags(record({ tags: ['事业', PREDICTION_VERDICT_TAGS.hit, '八字', PREDICTION_VERDICT_TAGS.miss] })), ['事业', '八字']);
+test('plain tags retain labels that happen to match verdict text', () => {
+  assert.deepEqual(getPlainTags(record({ tags: ['事业', '已应验', '八字', '未应验'] })), ['事业', '已应验', '八字', '未应验']);
   assert.deepEqual(getPlainTags(record({ tags: [] })), []);
+});
+
+test('record input validates verdicts and clears them when leaving prediction category', () => {
+  assert.deepEqual(normalizeRecordInput({ title: '预测', category: 'prediction', prediction_verdict: 'hit' }, 'create'), {
+    data: { title: '预测', content: null, category: 'prediction', tags: [], prediction_verdict: 'hit', event_date: null, related_chart_type: null, related_chart_id: null, is_pinned: false },
+  });
+  assert.deepEqual(normalizeRecordInput({ title: '事件', category: 'event', prediction_verdict: 'hit' }, 'create'), {
+    error: '只有预测记录可以设置印证结果',
+  });
+  assert.deepEqual(normalizeRecordInput({ category: 'event' }, 'update', {
+    category: 'prediction', related_chart_type: null, related_chart_id: null,
+  }), { data: { category: 'event', prediction_verdict: null } });
+  assert.deepEqual(normalizeRecordInput({ prediction_verdict: 'unknown' }, 'update', {
+    category: 'prediction', related_chart_type: null, related_chart_id: null,
+  }), { error: '预测印证结果无效' });
 });
 
 test('unknown legacy categories read as 通用', () => {
@@ -124,23 +142,68 @@ test('notes group by day, newest first inside each day', () => {
   assert.deepEqual(groups.get('2026-11-08')!.map(item => item.id), ['c']);
 });
 
-test('writing a verdict only rewrites the tags', async (t) => {
+test('writing a verdict only updates its dedicated field', async (t) => {
   const originalFetch = global.fetch;
   t.after(() => { global.fetch = originalFetch; });
   const requests: { method?: string; body?: unknown }[] = [];
   global.fetch = async (_input, init) => {
     requests.push({ method: init?.method, body: init?.body ? JSON.parse(String(init.body)) : undefined });
-    return new Response(JSON.stringify(record({ tags: ['事业', PREDICTION_VERDICT_TAGS.miss] })), {
+    return new Response(JSON.stringify(record({ tags: ['事业', '已应验'], prediction_verdict: 'miss' })), {
       status: 200,
       headers: { 'content-type': 'application/json' },
     });
   };
 
-  const updated = await setRecordVerdict(record({ tags: ['事业', PREDICTION_VERDICT_TAGS.hit] }), 'miss');
-  assert.deepEqual(requests[0]?.body, { tags: ['事业', PREDICTION_VERDICT_TAGS.miss] });
+  const updated = await setRecordVerdict(record({ tags: ['事业', '已应验'], prediction_verdict: 'hit' }), 'miss');
+  assert.deepEqual(requests[0]?.body, { prediction_verdict: 'miss' });
   assert.equal(requests[0]?.method, 'PUT');
-  assert.deepEqual(updated.tags, ['事业', PREDICTION_VERDICT_TAGS.miss]);
+  assert.deepEqual(updated.tags, ['事业', '已应验']);
+  assert.equal(updated.prediction_verdict, 'miss');
 
-  await setRecordVerdict(record({ tags: ['事业', PREDICTION_VERDICT_TAGS.miss] }), null);
-  assert.deepEqual(requests[1]?.body, { tags: ['事业'] }, '撤销印证只去掉结果标签');
+  await setRecordVerdict(record({ tags: ['事业', '未应验'], prediction_verdict: 'miss' }), null);
+  assert.deepEqual(requests[1]?.body, { prediction_verdict: null }, '撤销印证保留所有标签');
+});
+
+test('range notes are fetched across all pages', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const requestedPages: string[] = [];
+  global.fetch = async (input) => {
+    const query = new URL(String(input), 'http://local').searchParams;
+    requestedPages.push(query.get('page') ?? '');
+    const page = Number(query.get('page'));
+    const notes = Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => ({
+      id: `note-${(page - 1) * 100 + index}`,
+      user_id: 'user-1',
+      content: 'note',
+      created_at: '2026-11-10T00:00:00.000Z',
+    }));
+    return new Response(JSON.stringify({ notes, total: 101 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  const notes = await getNotesInRange('2026-10-07', '2026-11-10');
+  assert.equal(notes.length, 101);
+  assert.deepEqual(requestedPages, ['1', '2']);
+});
+
+test('all-record reads fetch records beyond the first page', async (t) => {
+  const originalFetch = global.fetch;
+  t.after(() => { global.fetch = originalFetch; });
+  const requestedPages: string[] = [];
+  global.fetch = async (input) => {
+    const query = new URL(String(input), 'http://local').searchParams;
+    requestedPages.push(query.get('page') ?? '');
+    const page = Number(query.get('page'));
+    const records = Array.from({ length: page === 1 ? 100 : 1 }, (_, index) => ({
+      id: `record-${(page - 1) * 100 + index}`,
+      user_id: 'user-1',
+      title: 'Prediction',
+      created_at: '2026-11-10T00:00:00.000Z',
+    }));
+    return new Response(JSON.stringify({ records, total: 101 }), { status: 200, headers: { 'content-type': 'application/json' } });
+  };
+
+  const records = await getAllRecords({ category: 'prediction' });
+  assert.equal(records.length, 101);
+  assert.deepEqual(requestedPages, ['1', '2']);
 });

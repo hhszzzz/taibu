@@ -146,6 +146,7 @@ export function RecordFormModal({
                 // 更新时清空正文或日期要传 null，undefined 会被当成「不修改」。
                 content: content.trim() || null,
                 category,
+                prediction_verdict: category === 'prediction' ? record?.prediction_verdict ?? null : null,
                 event_date: eventDate || null,
                 tags,
             };

@@ -1,6 +1,6 @@
 {
   "name": "taibu-mcp-server",
-  "version": "4.0.1",
+  "version": "4.1.0",
   "description": "TaiBu public MCP Server - Online Streamable HTTP without authentication",
   "license": "MIT",
   "homepage": "https://github.com/hhszzzz/taibu",

@@ -66,6 +66,7 @@ import { searchKnowledgeWithPersistence } from "@/lib/knowledge-base/search";
 import { fetchWebPage, searchWeb, webRouteAvailable } from "./mcp/web-route.server";
 import { WEB_SEARCH_QUERY_MAX } from "./mcp/web-results";
 import { SKILL_FILE_PAGE, loadSkill, readSkillFilePage, type AgentSkillsSession } from "./skills/catalog.server";
+import { renderMethodLines } from "./skills/builtin.server";
 import { SKILL_NAME_MAX, SKILL_PATH_MAX } from "./skills/config";
 import type {
   KnowledgeSearchPersistence,
@@ -701,8 +702,9 @@ export async function createAgentTools(
   if (skills.some(skill => !skill.disable_model_invocation)) tools.push(wrap(AGENT_SKILL_TOOLS.load,
     '加载一个技能或方法的正文：name 为系统提示所列的方法 id（如 bazi、bazi-mangpai、birth-hour、dream）或技能名，也可填刚调用的 Core 工具名以取该体系的默认方法。每个体系首次解读前先加载方法，再按正文的断法、工具流程与输出要求完成任务',
     obj({ name: str({ minLength: 1, maxLength: SKILL_NAME_MAX }) }, { open: true }),
-    async args => {
-      const loaded = await loadSkill(run.user_id, args.name);
+    async (args, _callId, _signal, caller) => {
+      const hasMethodDirectory = caller?.offered ? renderMethodLines(caller.offered) !== undefined : undefined;
+      const loaded = await loadSkill(run.user_id, args.name, hasMethodDirectory === undefined ? undefined : { hasMethodDirectory });
       return { content: [{ type: 'text', text: loaded.text }], details: loaded.details };
     }));
   if (skills.some(skill => skill.files.length)) tools.push(wrap(AGENT_SKILL_TOOLS.read,

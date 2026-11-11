@@ -105,7 +105,7 @@ export function createParallelExtension(kit: MemberKit, session: () => Harness, 
     const roles = kit.roles('parallel');
     const roleOf = (member: AgentCollaborator) => member.profile ?? DEFAULT_AGENT_PROFILE;
     const extension: Extension = { name: 'taibu_parallel', tools: [defineTool({
-        name: 'parallel_analysis', description: `同时交给 1–4 位成员分头处理相互独立的子问题，并等待全部完成。每位成员按角色 agent 工作：${kit.describe('parallel')}。agent 不填即 ${DEFAULT_AGENT_PROFILE}，此时必须填 system（方法 id，同一体系可从不同角度或用不同流派的方法分析，如 bazi 与 bazi-mangpai）；其他角色给了 system 时以该方法为准。先确认每项必要资料完整；成员只完成所给子问题，由当前任务核对与汇总；每位成员的模型用量各自计费。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}，角色 ${roleOf(member)}：${member.focus}）`).join('；')}` : ''}`,
+        name: 'parallel_analysis', description: `同时交给 1–4 位成员分头处理相互独立的子问题，并等待全部完成。每位成员按角色 agent 工作：${kit.describe('parallel')}。agent 不填即 ${DEFAULT_AGENT_PROFILE}，此时必须填 system（方法 id，同一体系可从不同角度或用不同流派的方法分析，如 bazi 与 bazi-mangpai）；其他角色给了 system 时以该方法为准。先确认每项必要资料完整，已排好的盘在 question 中附上盘面关键数据与命盘引用（artifact:… 或 type:id），不要让成员对随机抽牌或摇卦重新调用排盘工具；成员只完成所给子问题，由当前任务核对与汇总；每位成员的模型用量各自计费。${collaborators.length ? `每项必须填写用户配置的 agentId，且包含全部成员：${collaborators.map(member => `${member.id}（${member.name}，角色 ${roleOf(member)}：${member.focus}）`).join('；')}` : ''}`,
         parameters: obj({ tasks: arr(obj({
           agent: opt(stringEnum(roles.map(role => role.name), { description: '成员的角色，默认 specialist' })),
           system: opt(stringEnum(PARALLEL_SYSTEMS, { description: '方法 id；specialist 必填' })),

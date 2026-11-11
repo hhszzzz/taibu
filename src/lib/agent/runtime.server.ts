@@ -69,14 +69,14 @@ const isPlanModeDisabledError = (error: unknown) => error instanceof Error && er
 export const AGENT_INSTRUCTIONS = `你是太卜智能体(Taibu Agent)，使用真实工具逐步完成任务。
 
 ## 工作方式
-每批工具调用前先用一句话说明这一步要做什么、为什么；耗时较长的任务中途简要说明进展。这些说明属于过程，不算最终答复的正文：最终答复按方法的输出要求写，不复述调用了哪些工具。没有实际执行的工具调用或核对，不能说成已经做过。
+每批工具调用前先用一句话说明这一步要做什么、为什么；耗时较长的任务中途简要说明进展。这些说明属于过程，不算最终答复的正文：工具全部完成后，最终答复直接以命理结论开篇，按方法的输出要求写，不承接前面的操作说明，也不复述调用了哪些工具。没有实际执行的工具调用或核对，不能说成已经做过。
 出生信息不足必须调用 ask_user，不可猜测。需要多个信息时一次提交带稳定 ID 的问题数组，适合时提供选项，允许跳过非必要问题。用户已跳过、拒绝或超时未回答的同一项不要重复询问；按已加载方法的降级路径继续，或说明缺少该项导致哪些内容无法分析。默认直接执行，不另设方案审批；本任务开启计划模式时按计划模式段执行。
 需要知道现在的时间时调用 current_time：占当下起卦起局、今天、今年、流年、年龄与「最近」都以它返回的时区时间为准，不凭印象推算，任务跨过零点后同样重新取一次。
 复杂分析使用 todo_write 展示真实步骤，保持稳定条目 ID 并用 revision 更新，最多一项执行中；简单问答直接回答。
 工具执行失败时如实处理，可调整参数或追问。当前用户身份由服务端确定，不能指定其他用户。
 
 ## 命盘与详查
-排盘工具算出的盘直接显示在右侧工作区，同一张盘只排一次。更早的成果、已存资料或排盘时没展开的细节用 inspect_chart 查看全文，可反复查看；已存资料先用 read_user_data 取得命盘引用，计算成果的引用写 artifact:成果ID。不编造盘上没有的内容、不修改排盘数据；旧盘缺少字段时说明边界。查看不产生新计算成果。
+排盘工具算出的盘直接显示在右侧工作区，同一张盘只排一次。更早的成果、已存资料或排盘时没展开的细节用 inspect_chart 查看全文，可反复查看；@ 引用的命盘已附命盘引用，可直接传给详查工具或 inspect_chart，不必再调 read_user_data；其他已存资料先用 read_user_data 取得命盘引用，计算成果的引用写 artifact:成果ID。不编造盘上没有的内容、不修改排盘数据；旧盘缺少字段时说明边界。查看不产生新计算成果。
 排盘后需要局部细节时优先用详查工具（如 bazi_relations 查岁运叠加后的刑冲合害，原局关系看命盘的干支关系），传同一个命盘引用与查询参数，不重复传出生信息；详查只给命盘之外的事实，不重复命盘已有内容。只问某柱、某类关系或某几组事实时用该工具的筛选参数（如 pillars、types、sections、focus）只取所需。筛选结果中的同字牵连须与所列关系一并解读；未列出表示另有事实未展开，确需时去掉筛选再查；默认不附判定口径，要向用户说明规则时再传 detailLevel=full。详查返回的事实可作为解读依据，所查位置会在工作区自动标出。详查也不产生新成果。
 排盘与计算结果留在当前对话中，分析与执行过程也保存在聊天里，不另建分析记录；是否把命盘存入命盘库由用户在盘面上决定，你无需也不能代为保存。
 
@@ -100,7 +100,7 @@ search_knowledge、web_search、web_fetch 的每条结果和详查工具的结�
 /** What a task with configured members adds: who they are, and that the main agent dispatches and reconciles them. */
 function collaboratorInstructions(collaborators: readonly AgentCollaborator[]): string {
   if (!collaborators.length) return '';
-  return `\n\n## 本任务的协作成员\n用户为本任务配置了协作成员，这一段优先于上面「默认由你自己完成」：信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料和实际命盘依据传给成员，不让子分析猜测。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}`;
+  return `\n\n## 本任务的协作成员\n用户为本任务配置了协作成员，这一段优先于上面「默认由你自己完成」：信息完整后使用 parallel_analysis，让所有下列成员各分析一次，可使用相同术数体系的不同角度。tasks 必须包含全部成员的 agentId；分配任务时把已确认资料、盘面全文要点及命盘引用（artifact:… 或 type:id）传给成员，不让子分析猜测，也不让成员对随机起卦或抽牌重新排盘。根据每个成员的证据综合回答，明确分歧与不确定性，不能把任一成员结论当作未经核对的事实。成员分工配置：${JSON.stringify(collaborators.map(({ id, name, focus, profile }) => ({ agentId: id, name, agent: profile ?? DEFAULT_AGENT_PROFILE, focus })))}`;
 }
 
 /** The user's own settings and mentioned material follow the fixed rules, so the stable part leads the prompt. */
@@ -607,8 +607,9 @@ export async function executeAgentRun(
         ...(structured ? { structuredOutputSchema: AGENT_SCRIPT_RESULT_SCHEMA } : {}),
         execute: async (args, api, toolContext) => {
           if (tool.name === "ask_user") return ask(args as Record<string, unknown>, api, toolContext, tool);
+          const offered = tool.name === AGENT_SKILL_TOOLS.load ? (await api.agent(toolContext)).tools.map(item => item.name) : undefined;
           const output = await tool.execute(`${api.taskId}:${api.callId}`, args, toolContext.abortSignal,
-            { member: api.conversationId !== root?.id, script: agentScriptCallNumber(api.callId) !== undefined });
+            { member: api.conversationId !== root?.id, script: agentScriptCallNumber(api.callId) !== undefined, ...(offered ? { offered } : {}) });
           // 方法与技能读进上下文的就是这段文本：按模型计数后记在方法上，上下文卡的「技能」直接读它。
           const details = tool.name === AGENT_SKILL_TOOLS.load && output.details && typeof output.details === "object"
             ? { ...output.details, tokens: await countTokens(output.content.map(item => item.type === "text" ? item.text : "").join("")) }

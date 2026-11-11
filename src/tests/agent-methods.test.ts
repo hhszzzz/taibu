@@ -25,7 +25,7 @@ test('every card loads its own text by id, and every Core tool loads its system 
     assert.equal(loadAnalysisMethod('bazi-mangpai').title, '盲派八字');
     assert.deepEqual(loadAnalysisMethod('bazi-mangpai').tools, loadAnalysisMethod('bazi').tools);
     assert.deepEqual(loadAnalysisMethod('dream').tools, []);
-    assert.equal(loadAnalysisMethod('bazi', '2.3.0').version, '2.3.0');
+    assert.equal(loadAnalysisMethod('bazi', '2.4.0').version, '2.4.0');
     assert.throws(() => loadAnalysisMethod('__proto__'), /分析方法或版本不存在/);
     assert.throws(() => loadAnalysisMethod('bazi', '1.0.0'), /分析方法或版本不存在/);
 });
@@ -38,4 +38,13 @@ test('collaboration members work with a chart-reading card, a school as well as 
     assert.equal(systemTitle('unknown'), 'unknown');
     // A school member loads its own card, not the system default.
     assert.match(memberInstructions({ identity: '你是盲派专项分析助手。', profile: { instructions: '' }, system: 'bazi-mangpai', tools: ['bazi', 'load_skill'] }), /加载 bazi-mangpai（盲派八字）方法/);
+});
+
+test('loadSkill inlines reading principles when the caller has no method directory', async () => {
+    const { loadSkill } = await import('../lib/agent/skills/catalog.server');
+    const withDir = await loadSkill('00000000-0000-4000-8000-000000000001', 'dream', { hasMethodDirectory: true });
+    assert.match(withDir.text, /解读通则见系统提示的方法目录/u);
+    const withoutDir = await loadSkill('00000000-0000-4000-8000-000000000001', 'dream', { hasMethodDirectory: false });
+    assert.doesNotMatch(withoutDir.text, /解读通则见系统提示的方法目录/u);
+    assert.match(withoutDir.text, /## 解读通则\n\n- 断语必须引用盘面证据/u);
 });

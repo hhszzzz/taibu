@@ -5,7 +5,7 @@ import { extensionAllowance } from '../extensions/config';
 import { AGENT_SKILL_TOOLS } from '../tool-catalog';
 import { parseSkillCommand, type SkillCommand } from './config';
 import { skillBody } from './input.server';
-import { getToolSystem } from 'taibu-core/mcp';
+import { getToolSystem, METHOD_PRINCIPLES } from 'taibu-core/mcp';
 import { BUILTIN_SKILL_NAMES, builtinSkillContent, builtinSkills, findBuiltinSkill, renderMethodLines, storedEntry, type SkillEntry } from './builtin.server';
 import { platformSkills, readSkillContent, readSkillFile as readStoredFile, userSkills } from './store.server';
 
@@ -180,13 +180,16 @@ export type SkillLoad = {
 };
 
 /** `load_skill`: the skill's block. A skill only the user may start is refused, as pi leaves it out of the prompt. */
-export async function loadSkill(userId: string, name: string): Promise<SkillLoad> {
+export async function loadSkill(userId: string, name: string, options?: { hasMethodDirectory?: boolean }): Promise<SkillLoad> {
   // 给一个 Core 工具名时取它所属体系的默认方法，模型不必记住体系与方法的对应。
   const skill = await resolveSkillEntry(userId, name, { toolAlias: true });
   if (!skill) throw new SkillUnavailableError(`没有可用的技能「${name}」：以系统提示所列的方法与 available_skills 为准`);
   if (skill.disable_model_invocation) throw new SkillUnavailableError(`技能「${name}」只能由用户在输入框用 /skill:${name} 调用`);
-  const content = await skillText(skill);
-  if (content === undefined) throw new SkillUnavailableError(`技能「${name}」已被删除`);
+  const rawContent = await skillText(skill);
+  if (rawContent === undefined) throw new SkillUnavailableError(`技能「${name}」已被删除`);
+  const content = skill.source === 'builtin' && options?.hasMethodDirectory === false
+    ? rawContent.replace('解读通则见系统提示的方法目录，对每个方法都适用。', `## 解读通则\n\n${METHOD_PRINCIPLES}\n\n`)
+    : rawContent;
   return {
     text: skillBlock(skill, content),
     details: {

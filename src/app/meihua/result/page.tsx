@@ -26,7 +26,7 @@ import { buildMeihuaCanonicalText, type MeihuaOutput, type MeihuaWebBundle } fro
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, buildAskTaibuText, openChatWithResult } from '@/lib/chat/result-handoff';
 
 type MeihuaSession = {
   recordOwnerId?: string | null;
@@ -189,7 +189,12 @@ function MeihuaResultContent({ isCurrent }: { isCurrent: () => boolean }) {
     const savedId = divinationId ?? (userId ? await saveOnce(() => saveRecord(bundle)) : null);
     if (userId && !savedId) showToast('error', '保存失败，卦象未能带入对话');
     openChatWithResult(router, {
-      text: `${question ? `我问的是「${question}」。` : ''}请结合这次梅花易数起卦，解读体用关系、外应、方位与应期。`,
+      text: buildAskTaibuText({
+        question,
+        prompt: '请结合这次梅花易数起卦，解读体用关系、外应、方位与应期。',
+        questionless: '我起卦时没填所问之事。请先看这次梅花易数的卦象与体用，说说体用与三段的吉凶基调，再问我这次想问什么；等我回答后再按卦象取义落到具体事上。',
+        chartAttached: Boolean(savedId),
+      }),
       mentions: savedId ? [{
         type: 'meihua_divination',
         id: savedId,

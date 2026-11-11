@@ -22,7 +22,7 @@ import { AuthModal } from '@/components/auth/AuthModal';
 import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components/layout/HeaderMenuContext';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, buildAskTaibuText, openChatWithResult } from '@/lib/chat/result-handoff';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
 import { saveDivinationAction } from '@/lib/divination/save-client';
@@ -167,7 +167,12 @@ function DaliurenResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         const savedId = divinationId ?? (userId && sessionParams && result ? await saveOnce(() => saveDivinationRecord(sessionParams, result)) : undefined);
         if (userId && sessionParams && result && !savedId) showToast('error', '保存失败，课盘未能带入对话');
         openChatWithResult(router, {
-            text: `${question ? `我问的是「${question}」。` : ''}请结合三传、四课与本命行年，说明这件事的来龙去脉、吉凶与应期。`,
+            text: buildAskTaibuText({
+                question,
+                prompt: '请结合三传、四课与本命行年，说明这件事的来龙去脉、吉凶与应期。',
+                questionless: '我起课时没填所问之事。请先看这一课的课体与四课三传，再问我这次想问什么；等我回答后再取类神、断吉凶与应期。',
+                chartAttached: Boolean(savedId),
+            }),
             mentions: savedId ? [{
                 type: 'daliuren_divination',
                 id: savedId,

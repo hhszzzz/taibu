@@ -36,6 +36,22 @@ test('web Meihua wrapper supports all four exposed methods and preserves canonic
   }
 });
 
+test('web Meihua wrapper casts without a question and omits the empty question line', () => {
+  const bundle = calculateMeihuaBundle({ question: '', date: DATE, method: 'time' });
+
+  assert.equal(bundle.result.question, '');
+  assert.equal(bundle.canonicalText.includes('- 问题:'), false);
+  assert.equal(bundle.canonicalJson.起卦信息.问题, '');
+  assert.ok(bundle.canonicalJson.卦盘.本卦.卦名);
+});
+
+test('web Xiaoliuren wrapper casts without a question', () => {
+  const bundle = calculateXiaoliurenBundle({ date: '2025-08-01T23:00' });
+
+  assert.equal(bundle.result.question, undefined);
+  assert.equal(bundle.canonicalText.includes('- 占问:'), false);
+});
+
 test('web Meihua wrapper reuses core stroke and multi-sentence rules', () => {
   const stroke = calculateMeihuaBundle({
     question: '单字笔画测试',

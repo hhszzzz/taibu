@@ -76,3 +76,21 @@ export function openChatWithResult(
   stashChatHandoff({ text, mentions: payload.mentions });
   router.push('/chat');
 }
+
+/** 问太卜的文案：有问题沿用「我问的是…」；没问题先看盘再问所问；卦象没带上时只说明原因。 */
+export function buildAskTaibuText(input: {
+  question?: string | null;
+  /** 有问题时的后半句，保持各页原有文案。 */
+  prompt: string;
+  /** 无问题时的说明与「先看什么、再问什么」。 */
+  questionless: string;
+  /** 卦象是否随消息附上（有已保存记录 id 时为 true）。 */
+  chartAttached: boolean;
+}): string {
+  const question = input.question?.trim();
+  if (!input.chartAttached) {
+    return `${question ? `我问的是「${question}」。` : ''}卦象没能随消息带上，请先保存成功后再带上卦象。`;
+  }
+  if (question) return `我问的是「${question}」。${input.prompt}`;
+  return input.questionless;
+}

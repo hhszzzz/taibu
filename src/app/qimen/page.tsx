@@ -120,7 +120,7 @@ export default function QimenPage() {
 
                 <div className="flex flex-wrap items-start gap-6">
                     <SanshiFormCard className="flex-[999_1_480px]">
-                        <SanshiField label="占问事项" htmlFor="qimen-question">
+                        <SanshiField label="占问事项（选填）" htmlFor="qimen-question">
                             <Input
                                 id="qimen-question"
                                 type="text"

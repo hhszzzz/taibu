@@ -52,10 +52,6 @@ export default function MeihuaPage() {
 
   const buildInput = (): MeihuaInput | null => {
     const trimmedQuestion = question.trim();
-    if (!trimmedQuestion) {
-      showToast('error', '请填写占问事项');
-      return null;
-    }
     if (!date) {
       showToast('error', '请选择起卦时间');
       return null;
@@ -128,7 +124,7 @@ export default function MeihuaPage() {
         <section className="flex flex-col gap-5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-6">
           <div className="flex flex-wrap gap-4">
             <div className="flex min-w-0 flex-[999_1_320px] flex-col gap-1.5">
-              <label htmlFor="meihua-question" className="text-sm font-medium">占问事项</label>
+              <label htmlFor="meihua-question" className="text-sm font-medium">占问事项 <span className="font-normal text-foreground-secondary">选填</span></label>
               <Input
                 id="meihua-question"
                 value={question}

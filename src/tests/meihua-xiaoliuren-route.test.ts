@@ -99,6 +99,29 @@ test('Meihua and Xiaoliuren calculate actions return canonical web bundles', asy
   assert.equal(xiaoliurenPayload.data.canonicalJson.起课信息.时辰, '子时');
 });
 
+test('Meihua and Xiaoliuren calculate actions accept a missing question', async () => {
+  clearRouteCaches(MEIHUA_ROUTE, XIAOLIUREN_ROUTE);
+  const { POST: postMeihua } = require(MEIHUA_ROUTE) as { POST: PostHandler };
+  const { POST: postXiaoliuren } = require(XIAOLIUREN_ROUTE) as { POST: PostHandler };
+
+  const meihuaResponse = await post(postMeihua, 'http://localhost/api/meihua', {
+    action: 'calculate',
+    input: { date: '2026-04-04T10:30', method: 'time' },
+  });
+  assert.equal(meihuaResponse.status, 200);
+  const meihuaPayload = await meihuaResponse.json();
+  assert.equal(meihuaPayload.data.result.question, '');
+  assert.equal(meihuaPayload.data.canonicalText.includes('- 问题:'), false);
+
+  const xiaoliurenResponse = await post(postXiaoliuren, 'http://localhost/api/xiaoliuren', {
+    action: 'calculate',
+    date: '2025-08-01T23:00',
+  });
+  assert.equal(xiaoliurenResponse.status, 200);
+  const xiaoliurenPayload = await xiaoliurenResponse.json();
+  assert.equal(xiaoliurenPayload.data.result.question, undefined);
+});
+
 test('Meihua save is owner-scoped and recalculates canonical data on the server', async (t) => {
   const input = {
     question: '  保存梅花  ',
@@ -134,6 +157,24 @@ test('Meihua save is owner-scoped and recalculates canonical data on the server'
   const resultData = inserted.result_data;
   assert.ok(resultData && typeof resultData === 'object' && 'canonicalText' in resultData);
   assert.notEqual(resultData.canonicalText, '客户端伪造文本');
+});
+
+test('Meihua save accepts a cast without a question', async (t) => {
+  const input = { question: '', date: '2026-04-04T10:30', method: 'time' as const };
+  const insertCalls: Record<string, unknown>[] = [];
+  const db = createInsertScope('meihua_divinations', 'mh-save-2', (payload) => { insertCalls.push(payload); });
+  mockUserContext(t, [MEIHUA_ROUTE], async () => createMockAuthContext('owner-1', db));
+
+  const { POST } = require(MEIHUA_ROUTE) as { POST: PostHandler };
+  const response = await post(POST, 'http://localhost/api/meihua', {
+    action: 'save',
+    input,
+  });
+  const payload = await response.json();
+
+  assert.equal(response.status, 200);
+  assert.equal(payload.data.divinationId, 'mh-save-2');
+  assert.equal(insertCalls.at(-1)?.question, '');
 });
 
 test('Xiaoliuren save is owner-scoped and recalculates canonical data on the server', async (t) => {

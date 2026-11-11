@@ -26,7 +26,7 @@ import { buildXiaoliurenCanonicalText, type XiaoliurenWebBundle } from '@/lib/di
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
 import { AuthModal } from '@/components/auth/AuthModal';
-import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, buildAskTaibuText, openChatWithResult } from '@/lib/chat/result-handoff';
 
 type XiaoliurenSession = { resultData?: XiaoliurenWebBundle; divinationId?: string; recordOwnerId?: string | null };
 type LoadedSession = XiaoliurenSession & { resultData: XiaoliurenWebBundle };
@@ -162,7 +162,12 @@ function XiaoliurenResultView({ session: storedSession, onRecalculated, isCurren
     const savedId = divinationId ?? (userId ? await saveOnce(saveRecord) : null);
     if (userId && !savedId) showToast('error', '保存失败，课盘未能带入对话');
     openChatWithResult(router, {
-      text: `${question ? `我问的是「${question}」。` : ''}请结合这次小六壬课盘，解读落宫、掐数过程与应期。`,
+      text: buildAskTaibuText({
+        question,
+        prompt: '请结合这次小六壬课盘，解读落宫、掐数过程与应期。',
+        questionless: '我起课时没填所问之事。请先看这次小六壬课的落宫，说说顺阻与快慢的基调，再问我这次想问什么；等我回答后再贴题展开。',
+        chartAttached: Boolean(savedId),
+      }),
       mentions: savedId ? [{
         type: 'xiaoliuren_divination',
         id: savedId,

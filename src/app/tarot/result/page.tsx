@@ -33,7 +33,7 @@ import {
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, buildAskTaibuText, openChatWithResult } from '@/lib/chat/result-handoff';
 import { AuthModal } from '@/components/auth/AuthModal';
 import { AddToKnowledgeBaseModal } from '@/components/knowledge-base/AddToKnowledgeBaseModal';
 import { useKnowledgeBaseFeatureEnabled } from '@/components/knowledge-base/useKnowledgeBaseFeatureEnabled';
@@ -275,7 +275,12 @@ function TarotResultContent() {
         const id = readingId ?? (user ? await saveOnce(persistReading) : null);
         if (user && !id) showToast('error', '保存失败，牌阵未能带入对话');
         openChatWithResult(router, {
-            text: `${question ? `我问的是「${question}」。` : ''}请结合这个${selectedSpread?.name ?? ''}牌阵与牌义，解读牌面与建议。`,
+            text: buildAskTaibuText({
+                question,
+                prompt: `请结合这个${selectedSpread?.name ?? ''}牌阵与牌义，解读牌面与建议。`,
+                questionless: '我抽牌时没填所问之事。请先看这个牌阵的牌面与元素分布，说说整体基调，再问我这次想问什么；等我回答后再串叙事、给建议。',
+                chartAttached: Boolean(id),
+            }),
             mentions: id ? [{
                 type: 'tarot_reading',
                 id,
@@ -362,7 +367,7 @@ function TarotResultContent() {
                 <section aria-label="太卜解读" className="flex scroll-mt-24 flex-wrap items-center gap-x-5 gap-y-3 rounded-2xl border-[0.5px] border-border bg-sidebar px-4 py-4 lg:px-[22px] lg:py-[18px]">
                     <div className="flex min-w-0 flex-[1_1_320px] flex-col gap-1">
                         <h2 className="font-display text-[17px] font-normal">让太卜结合牌阵解读</h2>
-                        <p className="text-sm text-foreground-secondary">带上牌阵与所问之事进入 AI 对话，由太卜在对话里展开解读。</p>
+                        <p className="text-sm text-foreground-secondary">带上牌阵进入 AI 对话；如果还没说明所问，太卜会先看牌阵再询问你。</p>
                     </div>
                     <Button unstyled
                         type="button"

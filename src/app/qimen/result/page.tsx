@@ -24,7 +24,7 @@ import { useHeaderMenu, useHeaderTitle, type HeaderMenuItem } from '@/components
 import { readSessionJSON, scopeResultSession, updateSessionJSON } from '@/lib/cache/session-storage';
 import { useIdentityGuard } from '@/lib/hooks/useIdentityGuard';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, buildAskTaibuText, openChatWithResult } from '@/lib/chat/result-handoff';
 import { useAdminJsonCopy } from '@/lib/admin/useAdminJsonCopy';
 import { CopyTextModal } from '@/components/divination/CopyTextModal';
 import type { ChartTextDetailLevel } from '@/lib/divination/detail-level';
@@ -233,7 +233,12 @@ export default function QimenResultPage() {
         const chartId = result.chartId ?? (userId ? await saveOnce(() => saveChartRecord(result)) : undefined);
         if (userId && !chartId) showToast('error', '保存失败，排盘未能带入对话');
         openChatWithResult(router, {
-            text: `${question ? `我问的是「${question}」。` : ''}请结合这一局奇门遁甲，解读用神、门星神仪的旺衰与格局，并给出应期与行动建议。`,
+            text: buildAskTaibuText({
+                question,
+                prompt: '请结合这一局奇门遁甲，解读用神、门星神仪的旺衰与格局，并给出应期与行动建议。',
+                questionless: '我起局时没填所问之事。请先看这一局的值符值使与全局格局，再问我这次想问什么；等我回答后再定用神、断吉凶与应期。',
+                chartAttached: Boolean(chartId),
+            }),
             mentions: chartId ? [{
                 type: 'qimen_chart',
                 id: chartId,

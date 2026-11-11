@@ -19,13 +19,14 @@ interface LiuyaoResultHeaderProps {
  * 移动端卦名由顶栏承担（useHeaderTitle），所问居中；保存与问太卜在底部操作栏。
  */
 export function LiuyaoResultHeader({ question, yongShenTargets, hexagramName, changedHexagramName, actions, save, onAsk, askDisabled }: LiuyaoResultHeaderProps) {
+    const hasMeta = Boolean(question) || yongShenTargets.length > 0;
     return (
-        <header className={`flex-wrap items-end justify-between gap-4 ${question ? 'flex' : 'hidden lg:flex'}`}>
+        <header className={`flex-wrap items-end justify-between gap-4 ${hasMeta ? 'flex' : 'hidden lg:flex'}`}>
             <div className="flex min-w-0 flex-1 flex-col gap-2">
-                {question && (
+                {hasMeta && (
                     <p className="px-1 text-center text-[0.8125rem] leading-normal text-foreground-secondary lg:px-0 lg:text-left lg:text-sm">
-                        问：{question}
-                        {yongShenTargets.length > 0 && <> · 用神 {yongShenTargets.join('、')}</>}
+                        {question && <>问：{question}</>}
+                        {yongShenTargets.length > 0 && <>{question && ' · '}用神 {yongShenTargets.join('、')}</>}
                     </p>
                 )}
                 <h1 className="hidden font-display text-[1.875rem] font-normal leading-tight lg:block">

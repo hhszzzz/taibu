@@ -87,7 +87,7 @@ export default function DaliurenPage() {
 
                     <div className="flex flex-wrap items-start gap-6">
                         <SanshiFormCard className="flex-[999_1_480px]">
-                            <SanshiField label="占问事项" htmlFor="daliuren-question">
+                            <SanshiField label="占问事项（选填）" htmlFor="daliuren-question">
                                 <Input
                                     id="daliuren-question"
                                     type="text"

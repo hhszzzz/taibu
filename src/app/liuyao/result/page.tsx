@@ -36,7 +36,7 @@ import {
 } from '@/lib/divination/liuyao-result-state';
 import { saveDivinationAction } from '@/lib/divination/save-client';
 import { useSessionBalance } from '@/lib/hooks/useSessionBalance';
-import { createSaveOnce, openChatWithResult } from '@/lib/chat/result-handoff';
+import { createSaveOnce, buildAskTaibuText, openChatWithResult } from '@/lib/chat/result-handoff';
 import { readSessionJSON, scopeResultSession, updateSessionJSON, writeSessionJSON } from '@/lib/cache/session-storage';
 import { useResultIdentity } from '@/lib/hooks/useIdentityGuard';
 import { AuthModal } from '@/components/auth/AuthModal';
@@ -90,10 +90,10 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         resolveResultYongShenState(result?.yongShenTargets, pendingYongShenTargets)
     ), [pendingYongShenTargets, result?.yongShenTargets]);
     const appliedYongShenTargets = yongShenTargetState.appliedTargets;
-    const requiresYongShenTargets = Boolean(result?.question?.trim());
-    const missingYongShenTargets = requiresYongShenTargets && appliedYongShenTargets.length === 0;
+    const hasQuestion = Boolean(result?.question?.trim());
+    const missingYongShenTargets = hasQuestion && appliedYongShenTargets.length === 0;
     const hasAppliedTargets = appliedYongShenTargets.length > 0;
-    const canAnalyze = requiresYongShenTargets && hasAppliedTargets;
+    const canAnalyze = hasAppliedTargets;
     // 盘面展示不依赖 AI 前置条件：未填写问题或尚未选用神时，仍输出完整旺衰/动静/神煞/卦身。
     const liuyaoBundle = useMemo(() => {
         if (!result) return null;
@@ -224,10 +224,9 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         showToast(id ? 'success' : 'error', id ? '已保存到命理记录' : '保存起卦记录失败');
     };
 
-    /** 问太卜：未保存时先落库，再带上卦象进入 AI 对话；无问题或未选用神时先在页内补齐。 */
+    /** 问太卜：未保存时先落库，再带上卦象进入 AI 对话；未选用神时先在页内补齐。 */
     const handleAskTaibu = async () => {
         if (sessionLoading) return;
-        if (!requiresYongShenTargets) { showToast('error', '起卦时未填写所问之事，无法解卦'); return; }
         if (missingYongShenTargets) {
             showToast('error', '请先选择分析目标');
             yongShenPickerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -237,12 +236,19 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
         if (user && !id) showToast('error', '保存失败，卦象未能带入对话');
         const question = result?.question?.trim();
         openChatWithResult(router, {
-            text: `${question ? `我问的是「${question}」。` : ''}请结合这一卦的用神与动变，解读卦象与应期。`,
+            text: buildAskTaibuText({
+                question,
+                prompt: '请结合这一卦的用神与动变，解读卦象与应期。',
+                questionless: hasAppliedTargets
+                    ? '我起卦时没填所问之事，已经选好用神目标。请先看这一卦的卦象与所选目标的用神分析，再问我这次想问什么；等我回答后把结论落到具体事上。'
+                    : '我起卦时没填所问之事。请先看这一卦的卦象（本卦、变卦、动爻与卦辞），再问我这次想问什么；等我回答后再取用神断卦。',
+                chartAttached: Boolean(id),
+            }),
             mentions: id ? [{
                 type: 'liuyao_divination',
                 id,
                 name: `六爻 · ${result?.hexagram.name ?? ''}${hasChangedHexagram && result?.changedHexagram ? `之${result.changedHexagram.name}` : ''}`,
-                preview: question || '六爻起卦',
+                preview: question || '六爻起卦（未填写所问之事）',
             }] : [],
         });
     };

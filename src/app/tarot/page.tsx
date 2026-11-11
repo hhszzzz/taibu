@@ -72,14 +72,14 @@ export default function TarotPage() {
                     <header className="flex flex-col gap-2">
                         <h1 className="hidden font-display text-[2rem] font-normal leading-tight lg:block">塔罗占卜</h1>
                         <p className="text-center text-[0.8125rem] text-foreground-secondary lg:text-left lg:text-[0.9375rem]">
-                            聆听内心的声音。先写下问题，再选择牌阵。
+                            聆听内心的声音。可先写下问题，也可以直接选择牌阵。
                         </p>
                     </header>
 
                     {/* 所问之事；出生日期按钮点开后原位变成日期输入 */}
                     <div className="flex flex-col gap-2">
                         <div className="flex flex-wrap items-center justify-between gap-2">
-                            <label htmlFor="tarot-question" className="text-sm font-medium">你想问什么？</label>
+                            <label htmlFor="tarot-question" className="text-sm font-medium">你想问什么？ <span className="font-normal text-foreground-secondary">选填</span></label>
                             {/* 固定高度与宽度：按钮和日期输入切换时行高与位置不变 */}
                             <div className="flex h-8 min-w-[190px] items-center justify-end">
                                 {showBirthDate ? (

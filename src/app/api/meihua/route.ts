@@ -69,7 +69,7 @@ export async function POST(request: NextRequest) {
           input: { ...body, input: resultData.input, resultData },
           buildInsertPayload: (input, userId) => ({
             user_id: userId,
-            question: input.input!.question.trim(),
+            question: (input.input!.question ?? '').trim(),
             method: input.input!.method ?? 'time',
             cast_datetime: input.input!.date,
             main_hexagram: input.resultData!.result.mainHexagram.name,

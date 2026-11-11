@@ -36,10 +36,6 @@ export function XiaoliurenForm({ initialQuestion = '', initialDate, submitLabel,
     event.preventDefault();
     if (isSubmitting) return;
     const trimmedQuestion = question.trim();
-    if (!trimmedQuestion) {
-      showToast('error', '请填写占问事项');
-      return;
-    }
     if (!date) {
       showToast('error', '请选择起课时间');
       return;
@@ -70,7 +66,7 @@ export function XiaoliurenForm({ initialQuestion = '', initialDate, submitLabel,
       className={`${displayClassName} flex-wrap items-end gap-3.5 rounded-2xl border-[0.5px] border-border bg-surface p-4 sm:p-5`}
     >
       <div className="flex min-w-0 flex-[999_1_320px] flex-col gap-1.5">
-        <label htmlFor={`${fieldId}-question`} className="text-sm font-medium">占问事项</label>
+        <label htmlFor={`${fieldId}-question`} className="text-sm font-medium">占问事项 <span className="font-normal text-foreground-secondary">选填</span></label>
         <Input
           id={`${fieldId}-question`}
           value={question}

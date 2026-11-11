@@ -33,6 +33,12 @@ export const almanacDefinition: ToolDefinition = {
         type: 'string',
         description: "查询日期（公历 YYYY-MM-DD；省略时取当前日期）",
       },
+      detailLevel: {
+        type: 'string',
+        enum: ['default', 'full'],
+        description: '输出详略（default=基础黄历、冲煞与宜忌；full=追加方位、建除值神、二十八宿、纳音与十二时辰吉凶）',
+        default: 'default',
+      },
     },
     required: [],
     allOf: [birthDateTogetherRule],

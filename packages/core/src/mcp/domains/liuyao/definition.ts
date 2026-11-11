@@ -2,7 +2,7 @@ import type { ToolDefinition } from '../../contract.js';
 
 export const liuyaoDefinition: ToolDefinition = {
   name: 'liuyao',
-  description: '六爻排卦 - 根据问题与起卦信息排出六爻盘面，输出卦象、爻位、用神体系、关系判断与时机提示。',
+  description: '六爻排卦 - 根据问题与起卦信息排出六爻盘面，输出本变互卦、四柱空亡、逐爻纳甲六亲六神、世应动变与合冲反伏事实（用神取用与应期由解读方依断法判定）。',
   inputSchema: {
     type: 'object',
     properties: {

@@ -1,13 +1,13 @@
 import {
     calculateLiuyaoBundle,
-    calculateGanZhiTime,
-    calculateKongWangByPillar,
     findHexagram,
-    formatGanZhiTime,
     generateLiuyaoChartText,
+    normalizeYongShenTargets,
+    type LiuQin,
+    type LiuyaoBundle,
     type Yao,
 } from '@/lib/divination/liuyao';
-import { getHexagramText } from '@/lib/divination/hexagram-texts';
+import { toLiuyaoCanonicalText } from 'taibu-core/liuyao';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { applyListFilters } from '@/lib/db/data-source-filters';
@@ -31,6 +31,79 @@ export const buildYaosFromCode = (hexagramCode: string, changedLines: number[]):
         position: index + 1,
     }));
 };
+
+type StoredLiuyaoRecord = {
+    question?: unknown;
+    hexagram_code?: unknown;
+    changed_hexagram_code?: unknown;
+    changed_lines?: unknown;
+    yongshen_targets?: unknown;
+    created_at?: unknown;
+};
+
+export type StoredLiuyaoBundle = {
+    bundle: LiuyaoBundle;
+    question: string;
+    targets: LiuQin[];
+    analyzed: boolean;
+    createdAt: string;
+};
+
+/** 已存六爻记录统一重建盘面：有目标就做用神分析，否则输出全盘事实。 */
+export function buildStoredLiuyaoBundle(row: StoredLiuyaoRecord): StoredLiuyaoBundle | null {
+    const code = typeof row.hexagram_code === 'string' ? row.hexagram_code : '';
+    const hexagram = /^[01]{6}$/.test(code) ? findHexagram(code) : undefined;
+    if (!hexagram) return null;
+    const changedHexagram = typeof row.changed_hexagram_code === 'string' ? findHexagram(row.changed_hexagram_code) : undefined;
+    const changedLines = Array.isArray(row.changed_lines)
+        ? row.changed_lines.filter((line): line is number => typeof line === 'number' && Number.isInteger(line) && line >= 1 && line <= 6)
+        : [];
+    const targets = Array.isArray(row.yongshen_targets) ? normalizeYongShenTargets(row.yongshen_targets) : [];
+    const question = typeof row.question === 'string' ? row.question : '';
+    const createdAt = row.created_at instanceof Date
+        ? row.created_at.toISOString()
+        : typeof row.created_at === 'string' ? row.created_at : '';
+    const date = new Date(createdAt);
+    if (Number.isNaN(date.getTime())) return null;
+    const analyzed = targets.length > 0;
+    const bundle = calculateLiuyaoBundle({
+        yaos: buildYaosFromCode(code, changedLines),
+        hexagram,
+        changedHexagram,
+        question,
+        yongShenTargets: targets,
+        date,
+        requireYongShen: analyzed,
+    });
+    return { bundle, question, targets, analyzed, createdAt };
+}
+
+/** 缺占问或缺用神时的说明；有占问且有目标时不需要。 */
+function storedLiuyaoNote(stored: StoredLiuyaoBundle): string {
+    const asked = stored.question.trim();
+    return [
+        '## 占问说明',
+        asked
+            ? '- 本记录有占问事项，但没有记录用神目标；请按用户的占问事项自行取用神，再按盘面事实解读。'
+            : '- 本记录起卦时未填写所问之事；卦象与起卦时间完整，可正常解读，不是残缺记录。',
+        ...(!asked && stored.targets.length > 0 ? [`- 已记录的用神目标：${stored.targets.join('、')}。`] : []),
+        `- 起卦时间：${stored.createdAt || '未记录'}`,
+        asked
+            ? '- 不要替用户改动所问；按所问取用神解读。'
+            : stored.targets.length > 0
+                ? '- 盘面已按所记录的用神目标分析；所问未明时先问清，再把结论落到具体事上，不要替用户假设问题。'
+                : '- 所问未明时先问清，再按所问取用神解读，期间只陈述盘面事实；不要因缺所问而拒绝看盘，也不要替用户假设问题。',
+    ].join('\n');
+}
+
+/** 已存卦的模型文本：缺占问或缺用神时先放说明，再接盘面。 */
+export function formatStoredLiuyaoText(stored: StoredLiuyaoBundle, detailLevel?: 'default' | 'more' | 'full'): string {
+    const chart = stored.analyzed && !stored.question.trim()
+        ? toLiuyaoCanonicalText(stored.bundle.output)
+        : generateLiuyaoChartText(stored.bundle.output, { detailLevel });
+    if (stored.question.trim() && stored.targets.length > 0) return chart;
+    return `${storedLiuyaoNote(stored)}\n\n${chart}`;
+}
 
 export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
     type: 'liuyao_divination',
@@ -78,64 +151,20 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
     },
 
     formatForAI(r: LiuyaoRow, ctx?: DataSourceQueryContext): string {
-        const changedLines = Array.isArray(r.changed_lines) ? r.changed_lines.filter((v): v is number => typeof v === 'number') : [];
-        const yongShenTargets = Array.isArray(r.yongshen_targets)
-            ? r.yongshen_targets.filter((item): item is '父母' | '兄弟' | '子孙' | '妻财' | '官鬼' =>
-                typeof item === 'string' && ['父母', '兄弟', '子孙', '妻财', '官鬼'].includes(item)
-            )
-            : [];
-        const question = r.question || '';
-        const hasQuestion = question.trim().length > 0;
-        const shouldAnalyze = Boolean(r.hexagram_code) && hasQuestion && yongShenTargets.length > 0;
-        let effectiveGanZhiTime;
-        let effectiveKongWangByPillar;
-        const baseHexagram = findHexagram(r.hexagram_code);
-        const changedHexagram = r.changed_hexagram_code ? findHexagram(r.changed_hexagram_code) : undefined;
-        if (shouldAnalyze && baseHexagram) {
-            const bundle = calculateLiuyaoBundle({
-                yaos: buildYaosFromCode(r.hexagram_code, changedLines),
-                question,
-                date: new Date(r.created_at),
-                yongShenTargets,
-                hexagram: baseHexagram,
-                changedHexagram,
-            });
-
-            return generateLiuyaoChartText(bundle.output, {
-                detailLevel: ctx?.chartPromptDetailLevel,
-            });
-        } else {
-            effectiveGanZhiTime = calculateGanZhiTime(new Date(r.created_at));
-            effectiveKongWangByPillar = calculateKongWangByPillar(effectiveGanZhiTime);
+        const stored = buildStoredLiuyaoBundle(r);
+        if (!stored) {
+            return [
+                '## 六爻占卜',
+                r.question ? `- 问题：${r.question}` : '',
+                `- 本卦：${r.hexagram_code}`,
+                r.changed_hexagram_code ? `- 变卦：${r.changed_hexagram_code}` : '',
+                '- 注：卦码或起卦时间不完整，无法重建完整盘面；请让用户重新起卦或查看原记录。',
+            ].filter(Boolean).join('\n');
         }
-        const ganZhiTime = formatGanZhiTime(effectiveGanZhiTime);
-        const kongWangSummary = `年${effectiveKongWangByPillar.year.xun}（${effectiveKongWangByPillar.year.kongDizhi.join(' ')}）；月${effectiveKongWangByPillar.month.xun}（${effectiveKongWangByPillar.month.kongDizhi.join(' ')}）；日${effectiveKongWangByPillar.day.xun}（${effectiveKongWangByPillar.day.kongDizhi.join(' ')}）；时${effectiveKongWangByPillar.hour.xun}（${effectiveKongWangByPillar.hour.kongDizhi.join(' ')}）`;
-
-        const hexText = baseHexagram ? getHexagramText(baseHexagram.name) : undefined;
-        const changedHexText = changedHexagram ? getHexagramText(changedHexagram.name) : undefined;
-
-        return [
-            '## 六爻占卜',
-            question ? `- 问题：${question}` : '',
-            `- 本卦：${r.hexagram_code}${baseHexagram ? `（${baseHexagram.name}）` : ''}`,
-            r.changed_hexagram_code ? `- 变卦：${r.changed_hexagram_code}${changedHexagram ? `（${changedHexagram.name}）` : ''}` : '',
-            changedLines.length ? `- 动爻：${changedLines.join('、')}` : '',
-            yongShenTargets.length ? `- 分析目标：${yongShenTargets.join('、')}` : '- 分析目标：缺失（历史旧记录）',
-            ganZhiTime ? `- 起卦时间：${ganZhiTime}` : '',
-            kongWangSummary ? `- 旬空（年/月/日/时）：${kongWangSummary}` : '',
-            kongWangSummary ? '- 注：六爻断卦判空亡以”日旬空”为主，年/月/时旬空供参考。' : '',
-            hexText ? `- 本卦卦辞：${hexText.gua}` : '',
-            hexText ? `- 本卦象辞：${hexText.xiang}` : '',
-            changedHexText ? `- 变卦卦辞：${changedHexText.gua}` : '',
-            changedHexText ? `- 变卦象辞：${changedHexText.xiang}` : '',
-            ...(changedLines.length > 0 && hexText?.yao
-                ? changedLines
-                    .map(pos => hexText.yao[pos - 1])
-                    .filter((y): y is NonNullable<typeof y> => Boolean(y))
-                    .map(y => `- 动爻爻辞（${y.name}）：${y.text}`)
-                : []),
-            !hasQuestion ? '- 当前记录未提供明确问题，仅可作为原始卦象记录，不应正式断卦。' : '',
-        ].filter(Boolean).join('\n');
+        return formatStoredLiuyaoText(
+            stored,
+            stored.question.trim() && stored.analyzed ? ctx?.chartPromptDetailLevel : 'full',
+        );
     },
 
     summarize(r: LiuyaoRow): string {

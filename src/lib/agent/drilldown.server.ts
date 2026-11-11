@@ -91,7 +91,10 @@ function liuyaoInputFromStoredRow(row: Record<string, unknown>): Record<string, 
   const targets = Array.isArray(row.yongshen_targets)
     ? row.yongshen_targets.filter((item): item is '父母' | '兄弟' | '子孙' | '妻财' | '官鬼' => typeof item === 'string' && ['父母', '兄弟', '子孙', '妻财', '官鬼'].includes(item))
     : [];
-  if (!/^[01]{6}$/.test(code) || !question || !targets.length) throw new Error('已存结果不完整，无法恢复交互盘面，请查看原记录');
+  if (!/^[01]{6}$/.test(code)) throw new Error('这张六爻记录的卦码不完整，无法逐爻详查；请查看原记录，或让用户重新起卦。');
+  const fullBoard = '请依据消息所附或 inspect_chart 打开的完整盘面（旺衰、动静、空亡、化变、世应）解读';
+  if (!question) throw new Error(`这张六爻记录没有占问事项，无法逐爻详查；${fullBoard}；若用户尚未说明所问，先问清再取用神。不要重新起卦、不要臆造问题。`);
+  if (!targets.length) throw new Error(`这张六爻记录没有记录用神目标，无法逐爻详查；${fullBoard}。不要重新起卦、不要臆造问题。`);
   const changed = Array.isArray(row.changed_lines)
     ? row.changed_lines.filter((line): line is number => typeof line === 'number' && Number.isInteger(line) && line >= 1 && line <= 6)
     : [];

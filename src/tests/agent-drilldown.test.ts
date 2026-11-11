@@ -298,6 +298,28 @@ test('bazi_wuxing 与 bazi_liunian_scan 复用八字成果，紫微与六爻的�
   assert.equal((liuyaoDetails.result.爻详情 as unknown[]).length, 1);
 });
 
+test('无占问的六爻记录可以查看，但逐爻详查会说明缺少什么', async t => {
+  mockChartOwnership(t);
+  const store = new MemoryStore(), run = row(), liuyaoId = randomUUID();
+  const liuyaoRow = {
+    id: liuyaoId, question: '', hexagram_code: '101111', changed_hexagram_code: null,
+    changed_lines: [], yongshen_targets: null, created_at: '2026-02-10T09:30:00.000Z',
+  };
+  t.mock.method(require('../lib/data-sources'), 'getProvider', async () => ({
+    get: async (id: string) => id === liuyaoId ? liuyaoRow : null,
+    formatForAI: async () => '',
+  }));
+  const tools = await createAgentTools(store, run, run.checkpoint);
+  const inspected = await tools.find(item => item.name === 'inspect_chart')!.execute('i1', { reference: 'liuyao_divination:' + liuyaoId });
+  const details = inspected.details as { chartKind?: string; chartReference?: string };
+  assert.equal(details.chartKind, 'liuyao');
+  assert.equal(details.chartReference, 'liuyao_divination:' + liuyaoId);
+  await assert.rejects(
+    () => tools.find(item => item.name === 'liuyao_line')!.execute('l1', { reference: 'liuyao_divination:' + liuyaoId, line: 3 }),
+    /没有占问事项/u,
+  );
+});
+
 test('详查副标题读出新增的查询参数', () => {
   assert.equal(describeDrilldownSelection({ reference: 'x', palace: '命宫', scope: 'yearly', targetDate: '2026-03-13' }), '命宫 · 流年 · 2026-03-13');
   assert.equal(describeDrilldownSelection({ reference: 'x', palace: 1 }), '第 1 宫');

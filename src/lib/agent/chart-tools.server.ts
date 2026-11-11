@@ -11,8 +11,7 @@ import { buildXiaoliurenCanonicalJson as buildXiaoliurenCanonicalJSON } from '@/
 import { buildTarotCanonicalJSON, TAROT_SPREADS } from '@/lib/divination/tarot';
 import { calculateQimenBundle } from '@/lib/divination/qimen';
 import { qimenInputFromRecord } from '@/lib/data-sources/qimen';
-import { calculateLiuyaoBundle, findHexagram } from '@/lib/divination/liuyao';
-import { buildYaosFromCode } from '@/lib/data-sources/liuyao';
+import { buildStoredLiuyaoBundle, formatStoredLiuyaoText } from '@/lib/data-sources/liuyao';
 import { getProvider } from '@/lib/data-sources';
 import { resolveBaziPromptData } from '@/lib/bazi-prompt';
 import { resolveZiweiPromptData } from '@/lib/ziwei-chart-prompt';
@@ -73,14 +72,11 @@ async function storedChart(source: ChartSource, row: Record<string, unknown>, pr
     json = toQimenJson(output); canonicalText = toQimenText(output);
   }
   if (source === 'liuyao_divination') {
-    const code = typeof row.hexagram_code === 'string' ? row.hexagram_code : '';
-    const hexagram = /^[01]{6}$/.test(code) ? findHexagram(code) : undefined;
-    const changedHexagram = typeof row.changed_hexagram_code === 'string' ? findHexagram(row.changed_hexagram_code) : undefined;
-    const targets = Array.isArray(row.yongshen_targets) ? row.yongshen_targets.filter((item): item is '父母' | '兄弟' | '子孙' | '妻财' | '官鬼' => typeof item === 'string' && ['父母', '兄弟', '子孙', '妻财', '官鬼'].includes(item)) : [];
-    if (hexagram && typeof row.question === 'string' && row.question.trim() && targets.length) {
-      const changed = Array.isArray(row.changed_lines) ? row.changed_lines.filter((line): line is number => typeof line === 'number' && Number.isInteger(line) && line >= 1 && line <= 6) : [];
-      const bundle = calculateLiuyaoBundle({ yaos: buildYaosFromCode(code, changed), hexagram, changedHexagram, question: row.question, yongShenTargets: targets, date: new Date(String(row.created_at)) });
-      json = toLiuyaoJson(bundle.output); canonicalText = toLiuyaoText(bundle.output);
+    const stored = buildStoredLiuyaoBundle(row);
+    if (stored) {
+      const complete = Boolean(stored.question.trim()) && stored.analyzed;
+      json = toLiuyaoJson(stored.bundle.output, complete ? undefined : { detailLevel: 'full' });
+      canonicalText = complete ? toLiuyaoText(stored.bundle.output) : formatStoredLiuyaoText(stored, 'full');
     }
   }
   if (!json) throw new Error('已存结果不完整，无法恢复交互盘面，请查看原记录');

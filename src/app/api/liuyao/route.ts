@@ -7,6 +7,7 @@ import { NextRequest } from 'next/server';
 import { jsonError, jsonOk, requireUserContext } from '@/lib/api-utils';
 import { json } from '@/lib/db/sql-helpers';
 import { saveUserOwnedDivinationRecord } from '@/lib/api/divination-pipeline';
+import { invalidateMentionCache } from '@/lib/mentions';
 import type { Hexagram, Yao, LiuQin } from '@/lib/divination/liuyao';
 
 interface LiuyaoRequest {
@@ -103,6 +104,7 @@ export async function POST(request: NextRequest) {
                     .returning('id')
                     .execute());
                 if (data.length === 0) return jsonError('记录不存在或无权限', 404, { success: false });
+                invalidateMentionCache(divinationId);
                 return jsonOk({ success: true, data: { divinationId, yongShenTargets: parsedTargets.targets } });
             }
 

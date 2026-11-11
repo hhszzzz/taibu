@@ -138,7 +138,7 @@ test('every saved chart lookup filters both record ID and current owner', async 
   await assert.rejects(authorizeChartReference(store, run, 'tarot_reading:' + randomUUID()), /不存在或无权访问/);
 });
 
-test('saved charts reuse existing result adapters; Tarot preserves its original draw and old incomplete Liuyao stays explicit', async t => {
+test('saved charts reuse existing result adapters; Tarot preserves its original draw and a questionless Liuyao still opens', async t => {
   const id = randomUUID(), store = new ChartStore(), run = row();
   const definitions = listToolDefinitions();
   const savedRows: Record<string, Record<string, unknown>> = {};
@@ -160,7 +160,19 @@ test('saved charts reuse existing result adapters; Tarot preserves its original 
     if (result.value.kind === 'tarot') assert.deepEqual(result.value.chart.牌阵展开.map(card => [card.塔罗牌, card.状态]), [['愚者', '正位'], ['恋人', '正位'], ['力量', '逆位']]);
   }
   savedRows.liuyao_divination.question = null;
-  await assert.rejects(loadAgentChart(store, run, 'liuyao_divination:' + id), /已存结果不完整/);
+  savedRows.liuyao_divination.yongshen_targets = null;
+  const questionless = await loadAgentChart(store, run, 'liuyao_divination:' + id);
+  assert.equal(questionless.value.kind, 'liuyao');
+  if (questionless.value.kind === 'liuyao') {
+    assert.equal(questionless.value.chart.六爻.length, 6);
+    assert.ok(questionless.value.chart.六爻.every(line => line.旺衰 && line.动静), 'a questionless board keeps strength and movement');
+  }
+  assert.match(questionless.canonicalText, /未填写所问之事/u);
+  assert.match(questionless.canonicalText, /旺衰/u);
+  savedRows.liuyao_divination.yongshen_targets = ['官鬼'];
+  const targetOnly = await loadAgentChart(store, run, 'liuyao_divination:' + id);
+  assert.match(targetOnly.canonicalText, /已记录的用神目标：官鬼/u);
+  assert.match(targetOnly.canonicalText, /## 用神分析/u);
   assert.equal(store.drafts.size, 0, 'inspection does not save new calculations');
 });
 

@@ -94,17 +94,34 @@ test('liuyao result page builder keeps the full board without a question or yong
     assert.match(changingLine?.动静 ?? '', /^明动/u, 'the changing line should be labelled as moving');
 });
 
-test('liuyao bundle still requires a question and yongshen for analysis callers', () => {
+test('liuyao bundle honors explicit yongshen targets without a question', () => {
     const yaos: Yao[] = '101111'.split('').map((value, index) => ({
         type: value === '1' ? 1 : 0,
         change: 'stable',
         position: index + 1,
     }));
-    assert.throws(() => calculateLiuyaoBundle({
+    const bundle = calculateLiuyaoBundle({
         yaos,
         question: '',
         date: new Date('2026-01-01T00:00:00Z'),
         yongShenTargets: ['官鬼'],
         hexagram: findHexagram('101111')!,
+    });
+    assert.deepEqual(bundle.output.yongShen.map(group => group.targetLiuQin), ['官鬼']);
+    assert.ok(buildLiuyaoCanonicalJSON(bundle.output).用神分析.length > 0);
+
+    assert.throws(() => calculateLiuyaoBundle({
+        yaos,
+        question: '',
+        date: new Date('2026-01-01T00:00:00Z'),
+        yongShenTargets: [],
+        hexagram: findHexagram('101111')!,
     }), /请先明确问题后再解卦/u);
+    assert.throws(() => calculateLiuyaoBundle({
+        yaos,
+        question: '问工作',
+        date: new Date('2026-01-01T00:00:00Z'),
+        yongShenTargets: [],
+        hexagram: findHexagram('101111')!,
+    }), /请至少选择一个分析目标/u);
 });

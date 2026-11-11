@@ -881,3 +881,12 @@ test('meihua tool schema should expose method-specific requirements and multi-se
   assert.match(serializedRules, /hexagramName/u);
   assert.doesNotMatch(JSON.stringify(meihua.inputSchema.properties), /zhang_chi|chi_cun|upperClassifier|lowerClassifier/u);
 });
+
+test('meihua casts without a question and omits the empty question line', () => {
+  const result = mcpCore.calculateMeihua({ method: 'time', date: '2026-04-04T10:30:00' });
+
+  assert.equal(result.question, '');
+  const text = mcpCore.toMeihuaText(result, { detailLevel: 'full' });
+  assert.equal(text.includes('- 问题:'), false);
+  assert.match(text, /- 方法: /u);
+});

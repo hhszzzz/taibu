@@ -1137,9 +1137,6 @@ function buildJudgement(
 
 export function calculateMeihua(input: MeihuaInput): MeihuaOutput {
   const question = typeof input.question === 'string' ? input.question.trim() : '';
-  if (!question) {
-    throw new Error('请先明确问题后再起梅花卦');
-  }
 
   const wallClock = parseWallClockDateTime(input.date);
   const analysisDate = toSystemWallClockDate(wallClock);

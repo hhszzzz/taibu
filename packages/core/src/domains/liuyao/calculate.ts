@@ -796,14 +796,15 @@ export function hasInvalidYongShenTargets(targets?: readonly unknown[]): boolean
 }
 
 function resolveYongShenTargets(question: string, targets?: readonly unknown[]): LiuQinType[] {
+  const normalized = normalizeYongShenTargets(targets);
+  // 明确指定了用神就按指定断，所问只用于从文字里自动取用。
+  if (normalized.length > 0) {
+    return normalized;
+  }
   if (!question.trim()) {
     throw new Error('请先明确问题后再解卦');
   }
-  const normalized = normalizeYongShenTargets(targets);
-  if (normalized.length === 0) {
-    throw new Error('请至少选择一个分析目标');
-  }
-  return normalized;
+  throw new Error('请至少选择一个分析目标');
 }
 
 function getLiuShen(dayGan: TianGan): LiuShen[] {

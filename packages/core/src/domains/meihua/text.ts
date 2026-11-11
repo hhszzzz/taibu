@@ -118,7 +118,7 @@ export function renderMeihuaCanonicalText(result: MeihuaOutput, options: MeihuaC
   ));
   const movingLineLabel = traditionalYaoName(result.movingLine, Number.parseInt(result.mainHexagram.code[result.movingLine - 1] ?? '0', 10));
 
-  lines.push(`- 问题: ${result.question}`);
+  if (result.question) lines.push(`- 问题: ${result.question}`);
   if (result.castMeta.inputSnapshot?.date) {
     lines.push(`- 时间: ${formatWallClockLabel(result.castMeta.inputSnapshot.date)}（${formatGanZhiLabel(result)}）`);
   } else {

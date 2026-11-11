@@ -46,12 +46,25 @@ test('liuyao provider asks for yongshen when a question has no targets', async (
     assert.equal(content.includes('不应正式断卦'), false);
 });
 
-test('liuyao provider keeps user-selected yongshen targets when the question is missing', async () => {
+test('liuyao provider keeps user-selected yongshen targets on the AI-safe chart when the question is missing', async () => {
     const content = await liuyaoProvider.formatForAI(row({ yongshen_targets: ['官鬼'] }));
 
     assert.match(content, /已记录的用神目标：官鬼/u);
     assert.match(content, /未填写所问之事/u);
-    assert.match(content, /## 用神分析/u);
+    assert.match(content, /# 六爻盘面/u);
+    assert.doesNotMatch(content, /## 用神分析/u);
+});
+
+test('liuyao provider keeps complete records on the AI-safe chart even when chartPromptDetailLevel is omitted', async () => {
+    const content = await liuyaoProvider.formatForAI(
+        row({ question: '本月事业运势如何？', yongshen_targets: ['官鬼'] }),
+        { caseEventLimit: 50 },
+    );
+
+    assert.match(content, /# 六爻盘面/u);
+    assert.doesNotMatch(content, /# 六爻分析/u);
+    assert.doesNotMatch(content, /## 用神分析/u);
+    assert.doesNotMatch(content, /## 占问说明/u);
 });
 
 test('liuyao provider keeps an incomplete record readable without refusing to interpret', async () => {

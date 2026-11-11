@@ -156,7 +156,16 @@ test('saved charts reuse existing result adapters; Tarot preserves its original 
     const result = await loadAgentChart(store, run, source + ':' + id);
     assert.equal(result.value.kind, CHART_SOURCE_KINDS[source as keyof typeof CHART_SOURCE_KINDS]);
     assert.ok(getChartTargets(result.value).length > 0);
-    if (result.value.kind === 'qimen') assert.equal(result.value.chart.基本信息.局式, '阴遁3局');
+    if (result.value.kind === 'qimen') {
+      assert.equal(result.value.chart.基本信息.局式, '阴遁3局');
+      assert.match(result.canonicalText, /## 补充信息/u);
+    }
+    if (result.value.kind === 'liuyao') {
+      assert.ok(result.value.chart.六爻.every(line => line.旺衰 && line.动静), 'complete saved liuyao opens with full strength and movement');
+      assert.match(result.canonicalText, /# 六爻盘面/u);
+      assert.match(result.canonicalText, /旺衰/u);
+      assert.doesNotMatch(result.canonicalText, /## 用神分析/u);
+    }
     if (result.value.kind === 'tarot') assert.deepEqual(result.value.chart.牌阵展开.map(card => [card.塔罗牌, card.状态]), [['愚者', '正位'], ['恋人', '正位'], ['力量', '逆位']]);
   }
   savedRows.liuyao_divination.question = null;
@@ -172,7 +181,8 @@ test('saved charts reuse existing result adapters; Tarot preserves its original 
   savedRows.liuyao_divination.yongshen_targets = ['官鬼'];
   const targetOnly = await loadAgentChart(store, run, 'liuyao_divination:' + id);
   assert.match(targetOnly.canonicalText, /已记录的用神目标：官鬼/u);
-  assert.match(targetOnly.canonicalText, /## 用神分析/u);
+  assert.match(targetOnly.canonicalText, /# 六爻盘面/u);
+  assert.doesNotMatch(targetOnly.canonicalText, /## 用神分析/u);
   assert.equal(store.drafts.size, 0, 'inspection does not save new calculations');
 });
 

@@ -150,7 +150,7 @@ test('daliuren data source formatForAI should reuse canonical daliuren text', as
   );
 });
 
-test('liuyao data source formatForAI should reuse traditional copy text path when analysis data is complete', async () => {
+test('liuyao data source formatForAI should reuse AI-safe canonical text when analysis data is complete', async () => {
   const { liuyaoProvider } = await import('../lib/data-sources/liuyao');
   const {
     calculateLiuyaoBundle,
@@ -184,10 +184,15 @@ test('liuyao data source formatForAI should reuse traditional copy text path whe
     changedHexagram: findHexagram(row.changed_hexagram_code)!,
   });
 
+  const text = liuyaoProvider.formatForAI(row as never);
   assert.equal(
-    liuyaoProvider.formatForAI(row as never),
-    generateLiuyaoChartText(bundle.output),
+    text,
+    generateLiuyaoChartText(bundle.output, {
+      detailLevel: resolveChartTextDetailLevel('liuyao', undefined),
+    }),
   );
+  assert.match(text, /# 六爻盘面/u);
+  assert.doesNotMatch(text, /## 用神分析/u);
 });
 
 test('ziwei data source formatForAI should rebuild canonical text from stored base fields', async () => {

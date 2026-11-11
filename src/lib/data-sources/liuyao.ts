@@ -7,7 +7,6 @@ import {
     type LiuyaoBundle,
     type Yao,
 } from '@/lib/divination/liuyao';
-import { toLiuyaoCanonicalText } from 'taibu-core/liuyao';
 import type { DataSourceSummary } from '@/lib/data-sources/types';
 import { requireQueryDb, type DataSourceProvider, type DataSourceQueryContext } from '@/lib/data-sources/provider.server';
 import { applyListFilters } from '@/lib/db/data-source-filters';
@@ -91,16 +90,17 @@ function storedLiuyaoNote(stored: StoredLiuyaoBundle): string {
         asked
             ? '- 不要替用户改动所问；按所问取用神解读。'
             : stored.targets.length > 0
-                ? '- 盘面已按所记录的用神目标分析；所问未明时先问清，再把结论落到具体事上，不要替用户假设问题。'
+                ? '- 所问未明时先问清，再按所记录的用神目标结合盘面事实解读，不要替用户假设问题。'
                 : '- 所问未明时先问清，再按所问取用神解读，期间只陈述盘面事实；不要因缺所问而拒绝看盘，也不要替用户假设问题。',
     ].join('\n');
 }
 
-/** 已存卦的模型文本：缺占问或缺用神时先放说明，再接盘面。 */
-export function formatStoredLiuyaoText(stored: StoredLiuyaoBundle, detailLevel?: 'default' | 'more' | 'full'): string {
-    const chart = stored.analyzed && !stored.question.trim()
-        ? toLiuyaoCanonicalText(stored.bundle.output)
-        : generateLiuyaoChartText(stored.bundle.output, { detailLevel });
+/** 已存卦的模型文本：缺占问或缺用神时先放说明，再接 AI-safe 盘面事实。 */
+export function formatStoredLiuyaoText(
+    stored: StoredLiuyaoBundle,
+    detailLevel: 'default' | 'more' | 'full' = 'default',
+): string {
+    const chart = generateLiuyaoChartText(stored.bundle.output, { detailLevel });
     if (stored.question.trim() && stored.targets.length > 0) return chart;
     return `${storedLiuyaoNote(stored)}\n\n${chart}`;
 }
@@ -163,7 +163,7 @@ export const liuyaoProvider: DataSourceProvider<LiuyaoRow> = {
         }
         return formatStoredLiuyaoText(
             stored,
-            stored.question.trim() && stored.analyzed ? ctx?.chartPromptDetailLevel : 'full',
+            stored.question.trim() && stored.analyzed ? (ctx?.chartPromptDetailLevel ?? 'default') : 'full',
         );
     },
 

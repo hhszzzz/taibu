@@ -240,7 +240,7 @@ function LiuyaoResultContent({ isCurrent }: { isCurrent: () => boolean }) {
                 question,
                 prompt: '请结合这一卦的用神与动变，解读卦象与应期。',
                 questionless: hasAppliedTargets
-                    ? '我起卦时没填所问之事，已经选好用神目标。请先看这一卦的卦象与所选目标的用神分析，再问我这次想问什么；等我回答后把结论落到具体事上。'
+                    ? '我起卦时没填所问之事，已经选好用神目标。请先看这一卦的盘面与所选用神目标，再问我这次想问什么；等我回答后结合盘面事实把结论落到具体事上。'
                     : '我起卦时没填所问之事。请先看这一卦的卦象（本卦、变卦、动爻与卦辞），再问我这次想问什么；等我回答后再取用神断卦。',
                 chartAttached: Boolean(id),
             }),

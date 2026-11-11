@@ -4,7 +4,7 @@ import { selectFromDynamic } from '@/lib/db/sql-helpers';
 import { toBaziJson, toBaziText } from 'taibu-core/bazi';
 import { toZiweiJson, toZiweiText } from 'taibu-core/ziwei';
 import { toQimenJson, toQimenText } from 'taibu-core/qimen';
-import { toLiuyaoJson, toLiuyaoText } from 'taibu-core/liuyao';
+import { toLiuyaoJson } from 'taibu-core/liuyao';
 import { toDaliurenJson, type DaliurenOutput } from 'taibu-core/daliuren';
 import { buildMeihuaCanonicalJson as buildMeihuaCanonicalJSON } from '@/lib/divination/meihua';
 import { buildXiaoliurenCanonicalJson as buildXiaoliurenCanonicalJSON } from '@/lib/divination/xiaoliuren';
@@ -57,7 +57,7 @@ async function storedChart(source: ChartSource, row: Record<string, unknown>, pr
   const saved = row.result_data as { result?: unknown } | undefined;
   if (source === 'meihua_divination' && saved?.result) json = buildMeihuaCanonicalJSON(saved.result as Parameters<typeof buildMeihuaCanonicalJSON>[0]);
   if (source === 'xiaoliuren_divination' && saved?.result) json = buildXiaoliurenCanonicalJSON(saved.result as Parameters<typeof buildXiaoliurenCanonicalJSON>[0]);
-  if (source === 'daliuren_divination' && saved) json = toDaliurenJson(saved as DaliurenOutput);
+  if (source === 'daliuren_divination' && saved) json = toDaliurenJson(saved as DaliurenOutput, { detailLevel: 'full' });
   if (source === 'tarot_reading') {
     const metadata = row.metadata as Record<string, unknown> | null;
     const spread = TAROT_SPREADS.find(spread => spread.id === row.spread_id);
@@ -65,22 +65,23 @@ async function storedChart(source: ChartSource, row: Record<string, unknown>, pr
       question: typeof row.question === 'string' ? row.question : undefined, cards: row.cards,
       seed: typeof metadata?.seed === 'string' ? metadata.seed : undefined,
       birthDate: typeof metadata?.birthDate === 'string' ? metadata.birthDate : undefined,
-      numerology: metadata?.numerology as Parameters<typeof buildTarotCanonicalJSON>[0]['numerology'] });
+      numerology: metadata?.numerology as Parameters<typeof buildTarotCanonicalJSON>[0]['numerology'],
+      detailLevel: 'full' });
   }
   if (source === 'qimen_chart') {
     const { output } = await calculateQimenBundle(qimenInputFromRecord(row as Parameters<typeof qimenInputFromRecord>[0]));
-    json = toQimenJson(output); canonicalText = toQimenText(output);
+    const withQuestion = typeof row.question === 'string' && row.question ? { ...output, question: row.question } : output;
+    json = toQimenJson(withQuestion, { detailLevel: 'full' }); canonicalText = toQimenText(withQuestion, { detailLevel: 'full' });
   }
   if (source === 'liuyao_divination') {
     const stored = buildStoredLiuyaoBundle(row);
     if (stored) {
-      const complete = Boolean(stored.question.trim()) && stored.analyzed;
-      json = toLiuyaoJson(stored.bundle.output, complete ? undefined : { detailLevel: 'full' });
-      canonicalText = complete ? toLiuyaoText(stored.bundle.output) : formatStoredLiuyaoText(stored, 'full');
+      json = toLiuyaoJson(stored.bundle.output, { detailLevel: 'full' });
+      canonicalText = formatStoredLiuyaoText(stored, 'full');
     }
   }
   if (!json) throw new Error('已存结果不完整，无法恢复交互盘面，请查看原记录');
-  return { json, canonicalText: canonicalText ?? await provider.formatForAI(row) };
+  return { json, canonicalText: canonicalText ?? await provider.formatForAI(row, { chartPromptDetailLevel: 'full' }) };
 }
 
 export async function loadAgentChart(store: AgentStore, run: AgentRunRow, reference: string) {
@@ -115,8 +116,8 @@ export async function loadAgentChart(store: AgentStore, run: AgentRunRow, refere
   const bazi = parsed.source === 'bazi_chart' ? resolveBaziPromptData(input) : null;
   const ziwei = parsed.source === 'ziwei_chart' ? resolveZiweiPromptData(input) : null;
   const kind = bazi ? 'bazi' : 'ziwei';
-  const json = bazi ? toBaziJson(bazi.output) : ziwei ? toZiweiJson(ziwei.output) : null;
+  const json = bazi ? toBaziJson(bazi.output, { detailLevel: 'full' }) : ziwei ? toZiweiJson(ziwei.output, { detailLevel: 'full' }) : null;
   const value = getAgentChart({ type: 'tool', id: parsed.id, name: kind, title: kind, status: 'completed', output: json });
   if (!value) throw new Error('命盘数据不完整，无法显示');
-  return { reference: normalized, value, canonicalText: bazi ? toBaziText(bazi.output) : toZiweiText(ziwei!.output) };
+  return { reference: normalized, value, canonicalText: bazi ? toBaziText(bazi.output, { detailLevel: 'full' }) : toZiweiText(ziwei!.output, { detailLevel: 'full' }) };
 }

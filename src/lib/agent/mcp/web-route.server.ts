@@ -1,6 +1,7 @@
 import 'server-only';
 import { toLlmContent, type CallToolResult, type Tool } from '@earendil-works/pi-mcp';
 import { systemDb } from '@/lib/db/context.server';
+import { isParallelWebMcpUrl } from './config';
 import { describeMcpError, resolveMcpServer, type ResolvedMcpServer } from './endpoint.server';
 import { mcpPool, type McpPool } from './pool.server';
 import { platformMcpServers, recordMcpServerCheck, type McpServerRow } from './store.server';
@@ -64,8 +65,9 @@ function bounded(schema: PropertySchema | undefined, value: number) {
 }
 
 /** Arguments for a search tool, read from the schema it lists: the query, and the result count when it takes one. */
-export function searchArguments(tool: Tool, query: string, limit: number): Record<string, unknown> {
+export function searchArguments(tool: Tool, query: string, limit: number, parallel = false): Record<string, unknown> {
   const { properties } = inputShape(tool);
+  if (parallel) return { objective: query, search_queries: [Array.from(query).slice(0, 200).join('')] };
   const args: Record<string, unknown> = { [stringArgument(tool, ['query', 'q', 'search_query', 'searchQuery']) ?? 'query']: query };
   const limitKey = LIMIT_KEYS.find((key) => Object.hasOwn(properties, key));
   if (limitKey) args[limitKey] = bounded(properties[limitKey], limit);
@@ -73,7 +75,8 @@ export function searchArguments(tool: Tool, query: string, limit: number): Recor
 }
 
 /** Arguments for a page tool: the address (as a list when it takes several), and the page length when it takes one. */
-export function fetchArguments(tool: Tool, url: string, chars: number): Record<string, unknown> {
+export function fetchArguments(tool: Tool, url: string, chars: number, parallel = false): Record<string, unknown> {
+  if (parallel) return { urls: [url], full_content: true };
   const { properties } = inputShape(tool);
   const args: Record<string, unknown> = {};
   if (Object.hasOwn(properties, 'urls')) args.urls = properties.urls?.type === 'string' ? url : [url];
@@ -95,6 +98,17 @@ function clip(text: string, max: number, marker = '…') {
 const routeTool = (row: McpServerRow, kind: WebRouteKind) => kind === 'search' ? row.search_tool : row.fetch_tool;
 /** Names differ only by `-` or `_` between a service's releases (Tavily's hosted `tavily-search`). */
 const sameToolName = (left: string, right: string) => left.replaceAll('-', '_') === right.replaceAll('-', '_');
+
+/** Parallel returns the same JSON as structured content and as text. Never read the JSON envelope as a webpage. */
+function parallelWebOutput(structured: unknown, text: string): WebToolOutput {
+  let payload = structured;
+  if (payload === undefined) {
+    try { payload = JSON.parse(text); } catch { /* Report the invalid payload below. */ }
+  }
+  if (!payload || typeof payload !== 'object' || !('results' in payload) || !Array.isArray(payload.results))
+    throw new RouteCallError('外部服务返回了无效的联网结果');
+  return { text: '', structured: payload };
+}
 
 type Breaker = { failures: number; restUntil: number; reported: boolean };
 
@@ -174,7 +188,7 @@ export class WebRouter {
    */
   private async route<T>(
     kind: WebRouteKind, signal: AbortSignal | undefined,
-    args: (tool: Tool) => Record<string, unknown>, read: (output: WebToolOutput) => T | null,
+    args: (tool: Tool, parallel: boolean) => Record<string, unknown>, read: (output: WebToolOutput) => T | null,
   ): Promise<T | null> {
     const routes = await this.routes(kind);
     if (!routes.length) throw new WebRouteUnavailableError(`当前没有可用的${KIND_LABELS[kind]}服务`);
@@ -206,13 +220,14 @@ export class WebRouter {
 
   private async call(
     kind: WebRouteKind, row: McpServerRow, resolved: ResolvedMcpServer,
-    args: (tool: Tool) => Record<string, unknown>, signal: AbortSignal | undefined,
+    args: (tool: Tool, parallel: boolean) => Record<string, unknown>, signal: AbortSignal | undefined,
   ): Promise<WebToolOutput> {
     const wanted = routeTool(row, kind)!;
     const { tools } = await this.pool.describe(resolved.endpoint, { signal });
     const tool = tools.find((item) => item.name === wanted) ?? tools.find((item) => sameToolName(item.name, wanted));
     if (!tool) throw new RouteCallError(`外部服务没有「${wanted}」这个工具，请在管理页测试连接后重选`);
-    const result: CallToolResult = await this.pool.callTool(resolved.endpoint, tool.name, args(tool), { signal, timeoutMs: row.timeout_ms });
+    const parallel = isParallelWebMcpUrl(resolved.endpoint.url) && tool.name === (kind === 'search' ? 'web_search' : 'web_fetch');
+    const result: CallToolResult = await this.pool.callTool(resolved.endpoint, tool.name, args(tool, parallel), { signal, timeoutMs: row.timeout_ms });
     const text = resolved.scrub(toLlmContent({ content: result.content }).flatMap((part) => part.type === 'text' ? [part.text] : []).join('\n'));
     // A page that cannot be read is the page's fault; any other error result is the server's.
     if (result.isError) throw new RouteCallError(`外部服务报错：${clip(text.replace(/\s+/gu, ' ').trim(), 300) || '没有说明原因'}`, kind === 'search');
@@ -220,7 +235,7 @@ export class WebRouter {
     if (result.structuredContent !== undefined) {
       try { structured = JSON.parse(resolved.scrub(JSON.stringify(result.structuredContent))); } catch { structured = undefined; }
     }
-    return { text, structured };
+    return parallel ? parallelWebOutput(structured, text) : { text, structured };
   }
 
   /** Up to `limit` results from the first server that finds any; empty when every server answered without one. */
@@ -229,7 +244,7 @@ export class WebRouter {
     if (!text) throw new Error('搜索词不能为空');
     const limit = Math.min(Math.max(Math.trunc(options.limit ?? WEB_SEARCH_LIMIT.default), 1), WEB_SEARCH_LIMIT.max);
     const results = await this.route('search', options.signal,
-      (tool) => searchArguments(tool, text, limit),
+      (tool, parallel) => searchArguments(tool, text, limit, parallel),
       (output) => {
         const found = parseWebSearchResults(output);
         return found.length ? found : null;
@@ -248,7 +263,7 @@ export class WebRouter {
     parsed.hash = '';
     const chars = Math.min(Math.max(Math.trunc(options.maxChars ?? WEB_FETCH_CHARS.default), 1_000), WEB_FETCH_CHARS.max);
     const page = await this.route('fetch', options.signal,
-      (tool) => fetchArguments(tool, parsed.href, chars),
+      (tool, parallel) => fetchArguments(tool, parsed.href, chars, parallel),
       (output) => parseWebPage(output, parsed.href));
     if (!page) throw new Error('没有读到这个网页的正文');
     return { ...page, title: clip(page.title, TITLE_CHARS), content: clip(page.content, chars, '\n…（后文省略）') };

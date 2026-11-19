@@ -113,7 +113,21 @@ export type McpServerInput = {
   sortOrder?: number;
 };
 
+export const PARALLEL_WEB_MCP_URL = 'https://mcp.parallel.ai/mcp';
+
+/** Match the hosted endpoint independently of how the configured URL serializes its query or fragment. */
+export function isParallelWebMcpUrl(url: string): boolean {
+  const endpoint = new URL(url);
+  return `${endpoint.origin}${endpoint.pathname}` === PARALLEL_WEB_MCP_URL;
+}
+
 /** Presets for the administrator's new-server form; the tool names are defaults, the test lists the real ones. */
+type McpServerTemplate = {
+  label: string;
+  input: McpServerInput;
+  secretHeader?: { name: string; placeholder: string };
+};
+
 export const MCP_SERVER_TEMPLATES = {
   exa: {
     label: 'Exa',
@@ -133,4 +147,12 @@ export const MCP_SERVER_TEMPLATES = {
     },
     secretHeader: { name: 'authorization', placeholder: 'Bearer tvly-…' },
   },
-} as const satisfies Record<string, { label: string; input: McpServerInput; secretHeader: { name: string; placeholder: string } }>;
+  parallel: {
+    label: 'Parallel',
+    input: {
+      name: 'parallel', displayName: 'Parallel', url: PARALLEL_WEB_MCP_URL, exposure: 'hidden',
+      searchTool: 'web_search', fetchTool: 'web_fetch', enabled: false,
+      description: '无需 API Key，免费访问有用量限制。启用后，联网搜索词和待读取的网页地址会发送给 Parallel。',
+    },
+  },
+} as const satisfies Record<string, McpServerTemplate>;

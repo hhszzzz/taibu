@@ -128,6 +128,7 @@ Agent 的 `web_search`、`web_fetch` 与普通对话的联网搜索都路由到�
 - 结果自动识别：先读 `structuredContent.results`，再读 Exa、Tavily 这类逐条写 `Title:` / `URL:` 的文本（Exa 读网页的 `# 标题` 也算），最后读 Markdown 链接；只保留 http(s) 地址，同一地址只留一条。搜索每次 5 条（最多 10），每条摘要不超过 1500 字；读网页取请求的那一页（重定向后取服务读到的页），正文默认不超过 8000 字。结果先清除该服务的密钥再交给模型。
 - 引用：`web_fetch` 的结果与搜索结果一样编号，进入回答依据与来源卡片。读网页会把网址发给外部服务，工具说明要求模型不读取含个人信息或密钥的地址；带账号密码的网址直接拒绝。
 - 接入：管理页的 Exa 模板使用 `https://mcp.exa.ai/mcp`，密钥请求头 `x-api-key`，工具 `web_search_exa` / `web_fetch_exa`；Tavily 模板使用 `https://mcp.tavily.com/mcp/`，密钥请求头 `authorization`，值为 `Bearer tvly-…`，工具 `tavily_search` / `tavily_extract`。两者默认「不注册（仅联网路由）」，模型只看到 `web_search` / `web_fetch`，不会同时看到原始工具。
+- Parallel：在管理页「Agent 扩展 → 平台 MCP 服务」选择 Parallel 模板，点击「添加并测试」，连接成功后打开服务开关。模板使用 `https://mcp.parallel.ai/mcp` 和 `web_search` / `web_fetch`，无需 API Key，免费访问有用量限制。服务只用于联网路由，按已有优先级规则调用。开启联网后，Agent 可以主动调用这两个工具，搜索词和待读取的网页地址会发送给 Parallel。关闭服务开关即可停用。
 
 不再读取 `TAVILY_API_KEY`：升级后在管理页接入搜索服务之前，联网搜索不可用。
 

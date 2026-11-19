@@ -188,7 +188,10 @@ export function McpServerManager({ scope, userId, notice, canAdd = true, addLabe
         <div className="settings-actions">
           {scope === 'platform' ? Object.entries(MCP_SERVER_TEMPLATES).map(([key, template]) => (
             <Button key={key} variant="secondary" size="sm" disabled={!addable}
-              onClick={() => setEditor({ input: template.input, secretHeader: template.secretHeader })}>
+              onClick={() => setEditor({
+                input: template.input,
+                secretHeader: 'secretHeader' in template ? template.secretHeader : undefined,
+              })}>
               <Plus size={14} aria-hidden="true" />{template.label}
             </Button>
           )) : null}

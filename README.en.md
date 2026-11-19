@@ -66,7 +66,7 @@ Result pages cast and display; interpretation always happens in AI chat, where a
 - **Workspace**: charts open, scroll and highlight to follow what the model is looking at; cast charts, drilldowns, pairings and hour inference can be expanded, pinned and saved.
 - **Plan and code modes**: research first and act after the user approves; compose tool calls in a sandbox. Low-frequency tools load on demand and long chats can be `/compact`ed.
 - **Collaboration**: members that split and merge work, and persistent background subagents, each with a role (specialist, researcher, verifier or a custom role) that decides its tools, instructions and model.
-- **Extensions**: SKILL.md skills, external MCP connectors, web search and page reading routed through MCP services such as Exa and Tavily, and a choice of when external tools ask for consent.
+- **Extensions**: SKILL.md skills, external MCP connectors, web search and page reading routed through MCP services such as Exa, Tavily, and Parallel, and a choice of when external tools ask for consent.
 - **Schedules, images and evals**: append a turn to a fixed conversation on a schedule (with a built-in daily briefing), text-to-image generation, run telemetry and a multi-model evaluation leaderboard.
 
 See the [Agent manual](docs/manual/Agent.md) for the full behaviour and limits.

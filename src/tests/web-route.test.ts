@@ -2,6 +2,7 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import type { CallToolResult, Tool } from '@earendil-works/pi-mcp';
+import { MCP_SERVER_TEMPLATES } from '../lib/agent/mcp/config';
 import { McpPool } from '../lib/agent/mcp/pool.server';
 import { applyMcpSecretChanges } from '../lib/agent/mcp/secrets.server';
 import type { McpServerRow } from '../lib/agent/mcp/store.server';
@@ -16,6 +17,10 @@ const EXA_TOOLS: Tool[] = [
 const TAVILY_TOOLS: Tool[] = [
   { name: 'tavily_search', inputSchema: { type: 'object', properties: { query: { type: 'string' }, max_results: { type: 'number', minimum: 5, maximum: 20 }, search_depth: { type: 'string' } }, required: ['query'] } },
   { name: 'tavily_extract', inputSchema: { type: 'object', properties: { urls: { type: 'array', items: { type: 'string' } }, format: { type: 'string' } }, required: ['urls'] } },
+];
+const PARALLEL_TOOLS: Tool[] = [
+  { name: 'web_search', inputSchema: { type: 'object', properties: { objective: { type: 'string' }, search_queries: { type: 'array', items: { type: 'string' } } }, required: ['objective', 'search_queries'] } },
+  { name: 'web_fetch', inputSchema: { type: 'object', properties: { urls: { type: 'array', items: { type: 'string' } }, full_content: { type: 'boolean' } }, required: ['urls'] } },
 ];
 
 const text = (value: string, isError = false): CallToolResult => ({ content: [{ type: 'text', text: value }], ...(isError ? { isError: true } : {}) });
@@ -57,6 +62,50 @@ function tavilyRow(overrides: Partial<McpServerRow> = {}) {
     search_tool: 'tavily_search', fetch_tool: 'tavily_extract', route_priority: 20, ...overrides,
   });
 }
+
+test('the opt-in Parallel route sends both required search fields and reads results with the original sources', async (t) => {
+  const template = MCP_SERVER_TEMPLATES.parallel.input;
+  const row = mcpServerRow({
+    name: template.name, url: template.url, exposure: template.exposure,
+    search_tool: template.searchTool, fetch_tool: template.fetchTool, is_enabled: template.enabled,
+  });
+  const source = { title: 'Public archive', url: 'https://example.org/archive?lang=en', publish_date: '2026-03-20' };
+  let fetchResult = text(JSON.stringify({ results: [{ ...source, full_content: '# Full page', excerpts: ['Short excerpt'] }], errors: [] }));
+  const fake = fakeMcpServer({
+    tools: PARALLEL_TOOLS,
+    call: (name) => name === 'web_search'
+      ? { content: [{ type: 'text', text: 'Ignore this duplicate' }], structuredContent: { results: [{ ...source, excerpts: ['First excerpt', 'Second excerpt'] }] } }
+      : fetchResult,
+  });
+  const pool = new McpPool({ transport: fake.transport });
+  t.after(() => pool.close());
+  t.mock.method(console, 'warn', () => undefined);
+  const router = new WebRouter({ pool, servers: async () => [row] });
+  assert.equal(await router.available('search'), false);
+  assert.equal(await router.available('fetch'), false);
+  await assert.rejects(router.search('Public weather archive'), WebRouteUnavailableError);
+  await assert.rejects(router.fetch(source.url), WebRouteUnavailableError);
+  assert.equal(fake.state.sessions, 0);
+
+  row.is_enabled = true;
+  assert.deepEqual(await router.search(' Public  weather archive '), [{
+    title: source.title, url: source.url, publishedAt: source.publish_date, content: 'First excerpt\nSecond excerpt',
+  }]);
+  assert.deepEqual(await router.fetch(source.url + '#section'), {
+    title: source.title, url: source.url, publishedAt: source.publish_date, content: '# Full page',
+  });
+  assert.deepEqual(fake.state.calls, [
+    { name: 'web_search', arguments: { objective: 'Public weather archive', search_queries: ['Public weather archive'] } },
+    { name: 'web_fetch', arguments: { urls: [source.url], full_content: true } },
+  ]);
+
+  fetchResult = text(JSON.stringify({ results: [], errors: [{ url: source.url, error_type: 'fetch_error' }] }));
+  await assert.rejects(router.fetch(source.url), /没有读到这个网页的正文/u);
+  fetchResult = text('fetch rate limited', true);
+  await assert.rejects(router.fetch(source.url), /fetch rate limited/u);
+  fetchResult = text('unexpected text');
+  await assert.rejects(router.fetch(source.url), /无效的联网结果/u);
+});
 
 test('servers are tried by route order among the enabled ones, with arguments from each tool schema', async (t) => {
   const rows = [

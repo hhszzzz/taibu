@@ -143,12 +143,13 @@ function structuredRecords(value: unknown): Draft[] {
     if (!item || typeof item !== 'object') return [];
     const row = item as Record<string, unknown>;
     const highlights = Array.isArray(row.highlights) ? row.highlights.filter((part): part is string => typeof part === 'string').join('\n') : undefined;
-    const snippet = string(row.content) ?? string(highlights) ?? string(row.snippet) ?? string(row.description) ?? string(row.summary);
-    const body = string(row.raw_content) ?? string(row.rawContent) ?? string(row.markdown) ?? string(row.text);
+    const excerpts = Array.isArray(row.excerpts) ? row.excerpts.filter((part): part is string => typeof part === 'string').join('\n') : undefined;
+    const snippet = string(row.content) ?? string(highlights) ?? string(row.snippet) ?? string(row.description) ?? string(row.summary) ?? string(excerpts);
+    const body = string(row.raw_content) ?? string(row.rawContent) ?? string(row.markdown) ?? string(row.text) ?? string(row.full_content);
     return [{
       title: string(row.title) ?? string(row.name),
       url: string(row.url) ?? string(row.link) ?? string(row.href),
-      published: string(row.publishedDate) ?? string(row.published_date) ?? string(row.published),
+      published: string(row.publishedDate) ?? string(row.published_date) ?? string(row.published) ?? string(row.publish_date),
       snippet: snippet ? [snippet] : [], body: body ? [body] : [],
     }];
   });

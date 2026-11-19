@@ -4,7 +4,9 @@ import {
   McpClient, McpConnectionClosedError, McpSessionExpiredError, StreamableHttpTransport,
   type CallToolResult, type Implementation, type McpTransport, type Tool,
 } from '@earendil-works/pi-mcp';
+import { APP_USER_AGENT } from '@/lib/app-user-agent';
 import { mcpAdminFetch, mcpSafeFetch } from '../safe-fetch.server';
+import { PARALLEL_WEB_MCP_URL } from './config';
 
 /** A server ready to connect: the URL with its secret query parameters, and every header including the secret ones. */
 export type McpEndpoint = {
@@ -104,8 +106,12 @@ export class McpPool {
     if (existing) this.drop(endpoint.id, existing);
     this.evict();
     const client = new McpClient({ name: 'taibu-agent', version: '1.0.0', requestTimeoutMs: endpoint.timeoutMs, capabilities: {} });
+    // Use the app identity on every Parallel request while honoring a configured header.
+    const headers = endpoint.url === PARALLEL_WEB_MCP_URL && !Object.keys(endpoint.headers).some(name => name.toLowerCase() === 'user-agent')
+      ? { ...endpoint.headers, 'User-Agent': APP_USER_AGENT }
+      : endpoint.headers;
     const transport = this.options.transport?.(endpoint) ?? new StreamableHttpTransport({
-      url: endpoint.url, headers: endpoint.headers, fetch: endpoint.platform ? mcpAdminFetch : mcpSafeFetch, maxMessageBytes: MAX_MESSAGE_BYTES,
+      url: endpoint.url, headers, fetch: endpoint.platform ? mcpAdminFetch : mcpSafeFetch, maxMessageBytes: MAX_MESSAGE_BYTES,
       // Tasks only call tools: no server-to-client stream to keep open between them.
       openGetStream: false, reconnect: { maxRetries: 1 },
     });

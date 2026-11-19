@@ -20,7 +20,7 @@ export function AgentMcpPanel() {
       scope="platform"
       addLabel="自定义服务"
       notice={notice}
-      empty={{ title: '还没有接入 MCP 服务', detail: '可以从 Exa、Tavily 模板添加，或填写任意 Streamable HTTP 服务的地址。' }}
+      empty={{ title: '还没有接入 MCP 服务', detail: '可以从 Exa、Tavily、Parallel 模板添加，或填写任意 Streamable HTTP 服务的地址。' }}
     />
   );
 }

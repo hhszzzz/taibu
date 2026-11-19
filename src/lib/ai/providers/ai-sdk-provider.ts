@@ -16,7 +16,7 @@ import { resolveThinkingLevel, thinkingRequestFields, THINKING_REQUEST_FIELDS } 
 import { PROMPT_CACHE_SWITCH } from '@/lib/ai/prompt-cache';
 import { modelPromptCacheKey } from '@/lib/ai/prompt-cache.server';
 import { estimateUsage, hasTokens, tokenUsageOf, type TokenUsage } from '@/lib/billing/pricing';
-import packageJson from '../../../../package.json';
+import { APP_USER_AGENT } from '@/lib/app-user-agent';
 
 // AI 请求只需要最小消息结构，避免强制依赖存储/展示字段。
 export type AIRequestMessage = Pick<ChatMessage, 'role' | 'content' | 'model' | 'reasoning'>;
@@ -274,7 +274,7 @@ export function streamWithAISDK(
  * 太卜发出的模型请求一律以 `taibu-agent/<应用版本>` 自报身份，网关日志里认得出是谁、哪个版本在调用。
  * 按 User-Agent 拦截的网关（如上游 CDN 拒绝 Node.js 或 Python 的默认值）把它加入白名单即可，不再冒充浏览器。
  */
-export const MODEL_REQUEST_USER_AGENT = `taibu-agent/${packageJson.version}`;
+export const MODEL_REQUEST_USER_AGENT = APP_USER_AGENT;
 
 function withModelUserAgent(fetcher: typeof globalThis.fetch): typeof globalThis.fetch {
     return (input, init) => {

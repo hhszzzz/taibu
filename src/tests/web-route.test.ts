@@ -2,7 +2,10 @@ import test, { type TestContext } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomBytes } from 'node:crypto';
 import type { CallToolResult, Tool } from '@earendil-works/pi-mcp';
+import { getGlobalDispatcher, MockAgent, setGlobalDispatcher } from 'undici';
+import { APP_USER_AGENT } from '../lib/app-user-agent';
 import { MCP_SERVER_TEMPLATES } from '../lib/agent/mcp/config';
+import { parseMcpServerInput } from '../lib/agent/mcp/input.server';
 import { McpPool } from '../lib/agent/mcp/pool.server';
 import { applyMcpSecretChanges } from '../lib/agent/mcp/secrets.server';
 import type { McpServerRow } from '../lib/agent/mcp/store.server';
@@ -105,6 +108,57 @@ test('the opt-in Parallel route sends both required search fields and reads resu
   await assert.rejects(router.fetch(source.url), /fetch rate limited/u);
   fetchResult = text('unexpected text');
   await assert.rejects(router.fetch(source.url), /无效的联网结果/u);
+});
+
+test('the hosted Parallel route keeps its tool contract and application identity when request settings are edited', async (t) => {
+  const template = MCP_SERVER_TEMPLATES.parallel.input;
+  const origin = new URL(template.url).origin;
+  const previousDispatcher = getGlobalDispatcher();
+  const outbound = new MockAgent();
+  outbound.disableNetConnect();
+  setGlobalDispatcher(outbound);
+  const pool = new McpPool();
+  t.after(async () => {
+    await pool.close();
+    setGlobalDispatcher(previousDispatcher);
+    await outbound.close();
+  });
+
+  const calls: { args: unknown; userAgent: string | null; anonymous: boolean }[] = [];
+  const source = { url: 'https://example.org/archive', excerpts: ['Archive contents'] };
+  outbound.get(origin).intercept({ method: 'POST', path: /^\/mcp\??$/u }).reply(async ({ body, headers }) => {
+    assert.ok(body instanceof ReadableStream);
+    const rpc = await new Response(body).json();
+    if (rpc.id === undefined) return { statusCode: 202 };
+    if (rpc.method === 'tools/call') {
+      const requestHeaders = new Headers(headers as Record<string, string>);
+      calls.push({
+        args: rpc.params.arguments, userAgent: requestHeaders.get('User-Agent'),
+        anonymous: !requestHeaders.has('Authorization') && !requestHeaders.has('X-API-Key'),
+      });
+    }
+    const result = rpc.method === 'initialize'
+      ? { protocolVersion: '2025-11-25', capabilities: { tools: {} }, serverInfo: { name: 'fixture', version: '1.0.0' } }
+      : rpc.method === 'tools/list' ? { tools: PARALLEL_TOOLS } : { content: [], structuredContent: { results: [source] } };
+    return { statusCode: 200, data: { jsonrpc: '2.0', id: rpc.id, result }, responseOptions: { headers: { 'content-type': 'application/json' } } };
+  }).persist();
+
+  for (const [suffix, customAgent] of [['?', ''], ['#', ''], ['', 'platform-gateway/2.0']]) {
+    await t.test(suffix || 'configured User-Agent', async () => {
+      const fields = parseMcpServerInput({ ...template, enabled: true, url: template.url + suffix,
+        ...(customAgent && { headers: { 'User-Agent': customAgent } }),
+      }, 'platform', false);
+      const row = mcpServerRow({ url: fields.url, headers: fields.headers ?? {}, search_tool: fields.searchTool });
+      const router = new WebRouter({ pool, servers: async () => [row] });
+      pool.release(row.id);
+      assert.equal((await router.search('Public archive'))[0]?.content, source.excerpts[0]);
+      assert.deepEqual(calls.at(-1), {
+        args: { objective: 'Public archive', search_queries: ['Public archive'] },
+        userAgent: customAgent ? `${APP_USER_AGENT} ${customAgent}` : APP_USER_AGENT,
+        anonymous: true,
+      });
+    });
+  }
 });
 
 test('servers are tried by route order among the enabled ones, with arguments from each tool schema', async (t) => {

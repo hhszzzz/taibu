@@ -1,7 +1,7 @@
 import 'server-only';
 import { toLlmContent, type CallToolResult, type Tool } from '@earendil-works/pi-mcp';
 import { systemDb } from '@/lib/db/context.server';
-import { PARALLEL_WEB_MCP_URL } from './config';
+import { isParallelWebMcpUrl } from './config';
 import { describeMcpError, resolveMcpServer, type ResolvedMcpServer } from './endpoint.server';
 import { mcpPool, type McpPool } from './pool.server';
 import { platformMcpServers, recordMcpServerCheck, type McpServerRow } from './store.server';
@@ -226,7 +226,7 @@ export class WebRouter {
     const { tools } = await this.pool.describe(resolved.endpoint, { signal });
     const tool = tools.find((item) => item.name === wanted) ?? tools.find((item) => sameToolName(item.name, wanted));
     if (!tool) throw new RouteCallError(`外部服务没有「${wanted}」这个工具，请在管理页测试连接后重选`);
-    const parallel = resolved.endpoint.url === PARALLEL_WEB_MCP_URL && tool.name === (kind === 'search' ? 'web_search' : 'web_fetch');
+    const parallel = isParallelWebMcpUrl(resolved.endpoint.url) && tool.name === (kind === 'search' ? 'web_search' : 'web_fetch');
     const result: CallToolResult = await this.pool.callTool(resolved.endpoint, tool.name, args(tool, parallel), { signal, timeoutMs: row.timeout_ms });
     const text = resolved.scrub(toLlmContent({ content: result.content }).flatMap((part) => part.type === 'text' ? [part.text] : []).join('\n'));
     // A page that cannot be read is the page's fault; any other error result is the server's.

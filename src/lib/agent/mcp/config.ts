@@ -115,6 +115,12 @@ export type McpServerInput = {
 
 export const PARALLEL_WEB_MCP_URL = 'https://mcp.parallel.ai/mcp';
 
+/** Match the hosted endpoint independently of how the configured URL serializes its query or fragment. */
+export function isParallelWebMcpUrl(url: string): boolean {
+  const endpoint = new URL(url);
+  return `${endpoint.origin}${endpoint.pathname}` === PARALLEL_WEB_MCP_URL;
+}
+
 /** Presets for the administrator's new-server form; the tool names are defaults, the test lists the real ones. */
 type McpServerTemplate = {
   label: string;

@@ -35,8 +35,8 @@ type Draft = {
 };
 
 const RECORD_FIELDS = new Set(['Title', 'ID', 'URL']);
-const SNIPPET_LABELS = new Set(['Highlights', 'Content', 'Text', 'Summary', 'Snippet']);
-const LABEL = /^(Title|ID|URL|Published(?: [Dd]ate)?|Author|Favicon|Score|Highlights|Content|Text|Summary|Snippet|Raw Content):(?:[ \t]+(.*))?$/u;
+const SNIPPET_LABELS = new Set(['Highlights', 'Content', 'Text', 'Summary', 'Snippet', 'Snippets']);
+const LABEL = /^(Title|ID|URL|Published(?: [Dd]ate)?|Acquired|Author|Favicon|Score|Highlights|Content|Text|Summary|Snippets?|Raw Content):(?:[ \t]+(.*))?$/u;
 /** A service's way of saying it found nothing, which is not a page's text. */
 const NOTHING_FOUND = /^No (?:search results|results|content) found\b/iu;
 
@@ -117,6 +117,8 @@ function labelledRecords(text: string): Draft[] {
       if (labelled.value) current.snippet.push(labelled.value);
       continue;
     }
+    // Keenable's index date, not the page's publish date.
+    if (labelled && !current.into && labelled.name === 'Acquired') continue;
     if (labelled && !current.into && (labelled.name === 'Published' || labelled.name === 'Author')) {
       if (labelled.name === 'Published') current.published = labelled.value;
       continue;

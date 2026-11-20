@@ -114,6 +114,12 @@ export type McpServerInput = {
 };
 
 /** Presets for the administrator's new-server form; the tool names are defaults, the test lists the real ones. */
+type McpServerTemplate = {
+  label: string;
+  input: McpServerInput;
+  secretHeader?: { name: string; placeholder: string };
+};
+
 export const MCP_SERVER_TEMPLATES = {
   exa: {
     label: 'Exa',
@@ -133,4 +139,12 @@ export const MCP_SERVER_TEMPLATES = {
     },
     secretHeader: { name: 'authorization', placeholder: 'Bearer tvly-…' },
   },
-} as const satisfies Record<string, { label: string; input: McpServerInput; secretHeader: { name: string; placeholder: string } }>;
+  keenable: {
+    label: 'Keenable',
+    input: {
+      name: 'keenable', displayName: 'Keenable', url: 'https://api.keenable.ai/mcp-public', exposure: 'hidden',
+      headers: { 'X-Keenable-Title': 'Taibu' }, searchTool: 'search_web_pages', fetchTool: 'fetch_page_content', enabled: false,
+      description: 'Keenable 联网搜索与网页正文读取。无需 API Key，免费额度按 IP 限流；可加密钥请求头 x-api-key 提高额度。',
+    },
+  },
+} as const satisfies Record<string, McpServerTemplate>;

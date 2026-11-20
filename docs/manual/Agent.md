@@ -127,7 +127,7 @@ Agent 的 `web_search`、`web_fetch` 与普通对话的联网搜索都路由到�
 - 参数按工具列出的输入结构生成：搜索词写入 `query`（或该工具唯一的必填文字参数），条数写入 `numResults`、`max_results` 等并受其上下限约束；网址写入 `urls` 或 `url`，正文长度写入 `maxCharacters` 等。工具名以测试连接列出的为准，`-` 与 `_` 的差别会被忽略（如 Tavily 托管版的 `tavily-search`）。
 - 结果自动识别：先读 `structuredContent.results`，再读 Exa、Tavily 这类逐条写 `Title:` / `URL:` 的文本（Exa 读网页的 `# 标题` 也算），最后读 Markdown 链接；只保留 http(s) 地址，同一地址只留一条。搜索每次 5 条（最多 10），每条摘要不超过 1500 字；读网页取请求的那一页（重定向后取服务读到的页），正文默认不超过 8000 字。结果先清除该服务的密钥再交给模型。
 - 引用：`web_fetch` 的结果与搜索结果一样编号，进入回答依据与来源卡片。读网页会把网址发给外部服务，工具说明要求模型不读取含个人信息或密钥的地址；带账号密码的网址直接拒绝。
-- 接入：管理页的 Exa 模板使用 `https://mcp.exa.ai/mcp`，密钥请求头 `x-api-key`，工具 `web_search_exa` / `web_fetch_exa`；Tavily 模板使用 `https://mcp.tavily.com/mcp/`，密钥请求头 `authorization`，值为 `Bearer tvly-…`，工具 `tavily_search` / `tavily_extract`。两者默认「不注册（仅联网路由）」，模型只看到 `web_search` / `web_fetch`，不会同时看到原始工具。
+- 接入：管理页的 Exa 模板使用 `https://mcp.exa.ai/mcp`，密钥请求头 `x-api-key`，工具 `web_search_exa` / `web_fetch_exa`；Tavily 模板使用 `https://mcp.tavily.com/mcp/`，密钥请求头 `authorization`，值为 `Bearer tvly-…`，工具 `tavily_search` / `tavily_extract`；Keenable 模板使用 `https://api.keenable.ai/mcp-public`，无需密钥（按 IP 限流，可加密钥请求头 `x-api-key` 提高额度），请求头 `X-Keenable-Title: Taibu`，工具 `search_web_pages` / `fetch_page_content`，默认停用，启用后搜索词和网址会发送给 Keenable。三者默认「不注册（仅联网路由）」，模型只看到 `web_search` / `web_fetch`，不会同时看到原始工具。
 
 不再读取 `TAVILY_API_KEY`：升级后在管理页接入搜索服务之前，联网搜索不可用。
 

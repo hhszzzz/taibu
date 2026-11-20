@@ -46,6 +46,22 @@ const TAVILY_SEARCH = [
   '   Description: 一张图',
 ].join('\n');
 
+// keenable-mcp-server's search_web_pages: records joined by a rule, index date, then the snippets.
+const KEENABLE_SEARCH = [
+  ['Title: 甲辰年运势', 'URL: https://example.com/jiachen', 'Published: 2024-02-10', 'Acquired: 2026-11-18', 'Snippets:', '甲辰年天干甲木。', '[...]', '地支辰土。'].join('\n'),
+  ['Title: 第二条', 'URL: https://example.net/2', 'Acquired: 2026-11-03', 'Snippets:', '第一行'].join('\n'),
+].join('\n\n---\n\n');
+
+test('Keenable search records keep their snippets and publish date, without the index date', () => {
+  assert.deepEqual(parseWebSearchResults({ text: KEENABLE_SEARCH }), [
+    { title: '甲辰年运势', url: 'https://example.com/jiachen', publishedAt: '2024-02-10', content: '甲辰年天干甲木。\n[...]\n地支辰土。' },
+    { title: '第二条', url: 'https://example.net/2', content: '第一行' },
+  ]);
+  assert.deepEqual(parseWebPage({ text: 'Title: Example Domain\nURL: https://example.com/\n\n正文第一行' }, 'https://example.com/'), {
+    title: 'Example Domain', url: 'https://example.com/', content: '正文第一行',
+  });
+});
+
 test('Exa search records keep their highlights, a rule inside them, the date and nothing but http(s) addresses', () => {
   assert.deepEqual(parseWebSearchResults({ text: EXA_SEARCH }), [
     {

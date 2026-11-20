@@ -75,7 +75,8 @@ function draftOf(seed: McpEditorSeed, scope: McpServerScope): Draft {
     displayName: input.displayName, name: input.name, url: input.url, description: input.description ?? '',
     exposure: input.exposure ?? 'deferred',
     searchTool: input.searchTool ?? '', fetchTool: input.fetchTool ?? '',
-    routePriority: String(input.routePriority ?? 100), headers: [],
+    routePriority: String(input.routePriority ?? 100),
+    headers: Object.entries(input.headers ?? {}).map(([name, value]) => ({ key: nextKey(), name, value })),
     // 用户连接器默认给一行 Authorization 请求头，填了再保存；平台服务沿用模板。
     secretHeaders: secretHeader
       ? [{ key: nextKey(), name: secretHeader.name, stored: false, value: '', removed: false, placeholder: secretHeader.placeholder }]
